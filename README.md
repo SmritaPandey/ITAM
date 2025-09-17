@@ -1,3 +1,51 @@
+On-Prem Asset Management (Offline/Intranet)
+
+Overview
+---------
+This repository provides an on-premises, offline-capable Asset Management system with:
+- FastAPI backend (PostgreSQL + MinIO for attachments)
+- React PWA frontend with camera barcode scanning
+- Docker Compose deployment (Traefik reverse proxy on port 80)
+
+Quick start
+-----------
+1) Copy `.env.example` to `.env` and adjust if needed.
+
+2) Start the stack:
+```
+docker compose up -d --build
+```
+
+3) Open http://localhost/ and use the UI. API is under `/api`.
+
+Default services
+----------------
+- Reverse proxy: Traefik on port 80
+- Database: Postgres 16
+- Object storage: MinIO (ports 9000/9001); bucket `assets` will be created on first use
+
+Air-gapped install (offline)
+----------------------------
+- Build images where the internet is available:
+```
+docker compose build
+docker save $(docker images --format '{{.Repository}}:{{.Tag}}' | grep -E 'onprem-asset-frontend|backend|traefik|postgres|minio') -o asset-suite-images.tar
+```
+- Move `asset-suite-images.tar` to the offline environment and load:
+```
+docker load -i asset-suite-images.tar
+docker compose up -d
+```
+
+Credentials & Auth
+------------------
+- Create users via `POST /api/users` with a role: Admin, AssetManager, ProcurementManager, ContractManager, CMDBManager, StandardUser.
+- Obtain JWT via `POST /api/auth/login`.
+
+Notes
+-----
+- PinkVerify (ITIL4) requires third-party certification. This system is designed to align with the practice but is not certified out of the box.
+
 # ITAM - IT Asset Management System
 
 A comprehensive IT Asset Management system built with Next.js, Express.js, and MongoDB. This system provides role-based access control, automated hardware scanning, and detailed asset tracking capabilities.

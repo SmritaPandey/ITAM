@@ -1,0 +1,10 @@
+{
+  "name": "On-Prem Asset Management",
+  "short_name": "Assets",
+  "display": "standalone",
+  "start_url": "/",
+  "background_color": "#ffffff",
+  "theme_color": "#0f766e",
+  "icons": []
+}
+

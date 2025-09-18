@@ -1,0 +1,18 @@
+[Unit]
+Description=On-Prem Asset Management
+After=network.target
+
+[Service]
+Type=simple
+User=onprem-asset
+WorkingDirectory=/opt/onprem-asset/backend
+Environment=DATABASE_URL=sqlite:////var/lib/onprem-asset/asset.db
+Environment=STORAGE_BACKEND=filesystem
+Environment=ATTACHMENTS_DIR=/var/lib/onprem-asset/attachments
+Environment=JWT_SECRET=change_me
+ExecStart=/opt/onprem-asset/backend/venv/bin/uvicorn app.main:app --host 0.0.0.0 --port 8080
+Restart=always
+
+[Install]
+WantedBy=multi-user.target
+

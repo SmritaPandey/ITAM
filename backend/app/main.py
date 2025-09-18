@@ -1,5 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
+from starlette.responses import FileResponse
 from .startup import on_startup
 from .routers import assets, users, locations, auth, health, asset_classes, documents, catalogs, procurement, cmdb, vendors_contracts, costs, loans, attributes, reorder, itil_links
 
@@ -29,6 +31,12 @@ app.include_router(loans.router, prefix="/api")
 app.include_router(attributes.router, prefix="/api")
 app.include_router(reorder.router, prefix="/api")
 app.include_router(itil_links.router, prefix="/api")
+
+# Serve frontend build if present (downloadable installer can copy build here)
+try:
+    app.mount("/", StaticFiles(directory="../frontend-dist", html=True), name="static")
+except Exception:
+    pass
 
 @app.on_event("startup")
 async def startup_event():

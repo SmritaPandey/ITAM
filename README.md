@@ -7,22 +7,25 @@ This repository provides an on-premises, offline-capable Asset Management system
 - React PWA frontend with camera barcode scanning
 - Docker Compose deployment (Traefik reverse proxy on port 80)
 
-Quick start
------------
+Installable app (no setup)
+-------------------------
+- Linux one-click install (no internet needed):
+  1. Build offline bundle once on a build machine: `bash packaging/make-offline-bundle.sh`
+  2. Copy `onprem-asset-offline-bundle.tar.gz` to target machine (air-gapped OK)
+  3. Extract and run installer: `tar -xzf onprem-asset-offline-bundle.tar.gz && sudo bash onprem-asset/install.sh`
+  4. Visit `http://<host>:8080/`
+
+Self-host via Docker (optional)
+-------------------------------
 1) Copy `.env.example` to `.env` and adjust if needed.
-
-2) Start the stack:
-```
-docker compose up -d --build
-```
-
-3) Open http://localhost/ and use the UI. API is under `/api`.
+2) `docker compose up -d --build`
+3) Open http://localhost/
 
 Default services
 ----------------
-- Reverse proxy: Traefik on port 80
-- Database: Postgres 16
-- Object storage: MinIO (ports 9000/9001); bucket `assets` will be created on first use
+- Single service binary via Uvicorn on port 8080
+- SQLite database stored under `/var/lib/onprem-asset/asset.db`
+- Attachments stored under `/var/lib/onprem-asset/attachments`
 
 Air-gapped install (offline)
 ----------------------------

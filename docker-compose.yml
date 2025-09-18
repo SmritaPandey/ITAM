@@ -13,51 +13,24 @@ services:
       - backend
       - frontend
 
-  db:
-    image: postgres:16-alpine
-    environment:
-      POSTGRES_USER: ${POSTGRES_USER:-asset}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-assetpass}
-      POSTGRES_DB: ${POSTGRES_DB:-assetdb}
-    volumes:
-      - db_data:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
+  # db removed for downloadable single-binary variant (uses SQLite)
 
-  minio:
-    image: quay.io/minio/minio:RELEASE.2025-01-20T00-00-00Z
-    command: server /data --console-address ":9001"
-    environment:
-      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
-      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minioadmin}
-    volumes:
-      - minio_data:/data
-    ports:
-      - "9000:9000"
-      - "9001:9001"
+  # minio optional for on-prem; single installer uses filesystem storage
 
   backend:
     build:
       context: ./backend
       dockerfile: Dockerfile
     environment:
-      DATABASE_URL: postgresql+psycopg2://${POSTGRES_USER:-asset}:${POSTGRES_PASSWORD:-assetpass}@db:5432/${POSTGRES_DB:-assetdb}
-      S3_ENDPOINT_URL: http://minio:9000
-      S3_ACCESS_KEY: ${MINIO_ROOT_USER:-minioadmin}
-      S3_SECRET_KEY: ${MINIO_ROOT_PASSWORD:-minioadmin}
-      S3_BUCKET: assets
+      DATABASE_URL: sqlite:///./data/asset.db
+      STORAGE_BACKEND: filesystem
+      ATTACHMENTS_DIR: ./data/attachments
       JWT_SECRET: ${JWT_SECRET:-change_me}
       TZ: UTC
     volumes:
       - ./backend/app:/app/app
-    depends_on:
-      db:
-        condition: service_healthy
-      minio:
-        condition: service_started
+      - ./data:/app/data
+    depends_on: []
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.backend.rule=PathPrefix(`/api`) || PathPrefix(`/docs`) || PathPrefix(`/openapi.json`)"
@@ -74,7 +47,5 @@ services:
       - "traefik.http.routers.frontend.rule=PathPrefix(`/`)"
       - "traefik.http.services.frontend.loadbalancer.server.port=5173"
 
-volumes:
-  db_data: {}
-  minio_data: {}
+volumes: {}
 

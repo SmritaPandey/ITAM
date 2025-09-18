@@ -2,7 +2,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from .config import settings
 from .models import Base, ensure_initial_roles, AssetClass
-from .storage import ensure_bucket
+from .storage import ensure_bucket, ensure_fs
 from sqlalchemy import select
 
 engine = create_engine(settings.database_url, pool_pre_ping=True)
@@ -17,4 +17,5 @@ async def on_startup():
             db.add(AssetClass(name="Generic", description="Default asset class"))
             db.commit()
     ensure_bucket()
+    ensure_fs()
 

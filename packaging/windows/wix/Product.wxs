@@ -1,0 +1,58 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Wix xmlns="http://schemas.microsoft.com/wix/2006/wi">
+  <Product Id="*"
+           Name="On-Prem Asset Management"
+           Language="1033"
+           Version="1.0.0"
+           Manufacturer="OnPrem"
+           UpgradeCode="5C6B4E2F-6D20-4E9B-9D34-6A6E1E8E9F10">
+
+    <Package InstallerVersion="500" Compressed="yes" InstallScope="perMachine" />
+
+    <MajorUpgrade DowngradeErrorMessage="A newer version of [ProductName] is already installed." />
+    <MediaTemplate />
+
+    <Feature Id="MainFeature" Title="On-Prem Asset Management" Level="1">
+      <ComponentGroupRef Id="OnPremAssetGroup" />
+    </Feature>
+
+    <Property Id="ARPPRODUCTICON" Value="app.ico" />
+
+    <Directory Id="TARGETDIR" Name="SourceDir">
+      <Directory Id="ProgramFilesFolder">
+        <Directory Id="INSTALLFOLDER" Name="OnPremAsset">
+          <Directory Id="INSTALLDIR" Name="OnPremAsset" />
+        </Directory>
+      </Directory>
+      <Directory Id="CommonAppDataFolder">
+        <Directory Id="APPDATADIR" Name="OnPremAsset">
+          <Directory Id="APPDATAFILES" Name="data" />
+        </Directory>
+      </Directory>
+    </Directory>
+
+    <!-- Create data folders -->
+    <Component Id="DataFolders" Guid="A1D6BEE8-3E55-4F0D-88F0-33A1F6E8C0A1">
+      <CreateFolder Directory="APPDATAFILES" />
+    </Component>
+
+    <Feature Id="DataFeature" Title="Data" Level="1">
+      <ComponentRef Id="DataFolders" />
+    </Feature>
+
+    <!-- Custom actions to install/start and stop/uninstall service via WinSW -->
+    <CustomAction Id="CA_InstallService" Directory="INSTALLDIR"
+                  ExeCommand="[SystemFolder]cmd.exe /c &quot;[INSTALLDIR]OnPremAsset.exe install &amp;&amp; [INSTALLDIR]OnPremAsset.exe start&quot;"
+                  Execute="deferred" Return="ignore" Impersonate="no" />
+    <CustomAction Id="CA_UninstallService" Directory="INSTALLDIR"
+                  ExeCommand="[SystemFolder]cmd.exe /c &quot;[INSTALLDIR]OnPremAsset.exe stop &amp;&amp; [INSTALLDIR]OnPremAsset.exe uninstall&quot;"
+                  Execute="deferred" Return="ignore" Impersonate="no" />
+
+    <InstallExecuteSequence>
+      <Custom Action="CA_InstallService" After="InstallFiles">NOT Installed</Custom>
+      <Custom Action="CA_UninstallService" Before="RemoveFiles">REMOVE = "ALL"</Custom>
+    </InstallExecuteSequence>
+
+  </Product>
+</Wix>
+

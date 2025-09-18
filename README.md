@@ -22,6 +22,12 @@ Installable app (no setup)
   4. Run: `Set-ExecutionPolicy Bypass -Scope Process; .\install.ps1`
   5. Visit `http://localhost:8080/`
 
+- Windows MSI (optional):
+  1. Ensure WiX Toolset is installed and `candle.exe`, `light.exe`, `heat.exe` are on PATH
+  2. Build the Windows bundle first (steps above)
+  3. Build MSI: `powershell -ExecutionPolicy Bypass -File packaging/windows/wix/build-msi.ps1`
+  4. Output: `onprem-asset-setup.msi`
+
 Self-host via Docker (optional)
 -------------------------------
 1) Copy `.env.example` to `.env` and adjust if needed.

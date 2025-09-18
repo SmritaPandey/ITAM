@@ -1,0 +1,16 @@
+<service>
+  <id>OnPremAsset</id>
+  <name>On-Prem Asset Management</name>
+  <description>Asset Management server (offline, intranet)</description>
+  <executable>run-backend.bat</executable>
+  <logpath>%BASE%\logs</logpath>
+  <log mode="roll-by-size">
+    <sizeThreshold>10485760</sizeThreshold>
+    <keepFiles>5</keepFiles>
+  </log>
+  <env name="DATABASE_URL" value="sqlite:///%Base%/data/asset.db" />
+  <env name="STORAGE_BACKEND" value="filesystem" />
+  <env name="ATTACHMENTS_DIR" value="%Base%/data/attachments" />
+  <env name="JWT_SECRET" value="change_me" />
+</service>
+

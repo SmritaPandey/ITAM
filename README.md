@@ -15,6 +15,13 @@ Installable app (no setup)
   3. Extract and run installer: `tar -xzf onprem-asset-offline-bundle.tar.gz && sudo bash onprem-asset/install.sh`
   4. Visit `http://<host>:8080/`
 
+- Windows one-click install (no internet needed):
+  1. Build offline bundle on a build machine: `powershell -ExecutionPolicy Bypass -File packaging/windows/make-windows-bundle.ps1`
+  2. Copy `onprem-asset-windows-offline.zip` to the Windows machine
+  3. Extract zip, open PowerShell as Administrator
+  4. Run: `Set-ExecutionPolicy Bypass -Scope Process; .\install.ps1`
+  5. Visit `http://localhost:8080/`
+
 Self-host via Docker (optional)
 -------------------------------
 1) Copy `.env.example` to `.env` and adjust if needed.

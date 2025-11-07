@@ -1,0 +1,165 @@
+version: '3.8'
+
+services:
+  # MongoDB Database
+  mongodb:
+    image: mongo:6.0
+    container_name: itam-mongodb
+    restart: always
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_ROOT_USERNAME:-admin}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_ROOT_PASSWORD:-changeme}
+      MONGO_INITDB_DATABASE: ${MONGO_DATABASE:-itam_enterprise}
+    volumes:
+      - mongodb_data:/data/db
+      - mongodb_config:/data/configdb
+      - ./backups:/backups
+    ports:
+      - "27017:27017"
+    networks:
+      - itam-network
+    healthcheck:
+      test: echo 'db.runCommand("ping").ok' | mongosh localhost:27017/test --quiet
+      interval: 10s
+      timeout: 10s
+      retries: 5
+      start_period: 40s
+
+  # Redis Cache
+  redis:
+    image: redis:7-alpine
+    container_name: itam-redis
+    restart: always
+    command: redis-server --requirepass ${REDIS_PASSWORD:-changeme}
+    volumes:
+      - redis_data:/data
+    ports:
+      - "6379:6379"
+    networks:
+      - itam-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  # Backend API Server
+  server:
+    build:
+      context: ./server
+      dockerfile: Dockerfile
+    container_name: itam-server
+    restart: always
+    depends_on:
+      mongodb:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      NODE_ENV: ${NODE_ENV:-production}
+      PORT: 3000
+      MONGODB_URI: mongodb://${MONGO_ROOT_USERNAME:-admin}:${MONGO_ROOT_PASSWORD:-changeme}@mongodb:27017/${MONGO_DATABASE:-itam_enterprise}?authSource=admin
+      REDIS_URL: redis://:${REDIS_PASSWORD:-changeme}@redis:6379
+      JWT_SECRET: ${JWT_SECRET}
+      EMAIL_SERVICE: ${EMAIL_SERVICE}
+      EMAIL_USER: ${EMAIL_USER}
+      EMAIL_PASSWORD: ${EMAIL_PASSWORD}
+      ML_SERVICE_URL: http://ml-service:5000
+      CLIENT_URL: ${CLIENT_URL:-http://localhost:3001}
+    volumes:
+      - ./server/uploads:/app/uploads
+      - ./server/logs:/app/logs
+    ports:
+      - "3000:3000"
+    networks:
+      - itam-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # Frontend Client
+  client:
+    build:
+      context: ./client
+      dockerfile: Dockerfile
+      args:
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:3000}
+    container_name: itam-client
+    restart: always
+    depends_on:
+      - server
+    environment:
+      NODE_ENV: ${NODE_ENV:-production}
+      PORT: 3001
+    ports:
+      - "3001:3001"
+    networks:
+      - itam-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3001"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # ML Service
+  ml-service:
+    build:
+      context: ./ml_service
+      dockerfile: Dockerfile
+    container_name: itam-ml-service
+    restart: always
+    environment:
+      FLASK_ENV: ${FLASK_ENV:-production}
+      PORT: 5000
+    volumes:
+      - ./ml_service/models:/app/models
+      - ./ml_service/logs:/app/logs
+    ports:
+      - "5000:5000"
+    networks:
+      - itam-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # Nginx Reverse Proxy
+  nginx:
+    image: nginx:alpine
+    container_name: itam-nginx
+    restart: always
+    depends_on:
+      - server
+      - client
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/ssl:/etc/nginx/ssl:ro
+      - ./nginx/logs:/var/log/nginx
+    ports:
+      - "80:80"
+      - "443:443"
+    networks:
+      - itam-network
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+volumes:
+  mongodb_data:
+    driver: local
+  mongodb_config:
+    driver: local
+  redis_data:
+    driver: local
+
+networks:
+  itam-network:
+    driver: bridge

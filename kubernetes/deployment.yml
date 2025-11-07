@@ -1,0 +1,384 @@
+---
+# MongoDB StatefulSet
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: mongodb
+  namespace: itam
+spec:
+  serviceName: mongodb
+  replicas: 3
+  selector:
+    matchLabels:
+      app: mongodb
+  template:
+    metadata:
+      labels:
+        app: mongodb
+    spec:
+      containers:
+      - name: mongodb
+        image: mongo:6.0
+        ports:
+        - containerPort: 27017
+        env:
+        - name: MONGO_INITDB_ROOT_USERNAME
+          valueFrom:
+            secretKeyRef:
+              name: mongodb-secret
+              key: username
+        - name: MONGO_INITDB_ROOT_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: mongodb-secret
+              key: password
+        volumeMounts:
+        - name: mongodb-data
+          mountPath: /data/db
+        resources:
+          requests:
+            memory: "2Gi"
+            cpu: "1000m"
+          limits:
+            memory: "4Gi"
+            cpu: "2000m"
+  volumeClaimTemplates:
+  - metadata:
+      name: mongodb-data
+    spec:
+      accessModes: [ "ReadWriteOnce" ]
+      storageClassName: fast-ssd
+      resources:
+        requests:
+          storage: 100Gi
+
+---
+# MongoDB Service
+apiVersion: v1
+kind: Service
+metadata:
+  name: mongodb
+  namespace: itam
+spec:
+  selector:
+    app: mongodb
+  ports:
+  - port: 27017
+    targetPort: 27017
+  clusterIP: None
+
+---
+# Redis Deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: redis
+  namespace: itam
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: redis
+  template:
+    metadata:
+      labels:
+        app: redis
+    spec:
+      containers:
+      - name: redis
+        image: redis:7-alpine
+        ports:
+        - containerPort: 6379
+        resources:
+          requests:
+            memory: "512Mi"
+            cpu: "250m"
+          limits:
+            memory: "1Gi"
+            cpu: "500m"
+
+---
+# Redis Service
+apiVersion: v1
+kind: Service
+metadata:
+  name: redis
+  namespace: itam
+spec:
+  selector:
+    app: redis
+  ports:
+  - port: 6379
+    targetPort: 6379
+
+---
+# Server Deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: itam-server
+  namespace: itam
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: itam-server
+  template:
+    metadata:
+      labels:
+        app: itam-server
+    spec:
+      containers:
+      - name: server
+        image: ghcr.io/yourusername/itam-server:latest
+        ports:
+        - containerPort: 3000
+        env:
+        - name: NODE_ENV
+          value: "production"
+        - name: MONGODB_URI
+          valueFrom:
+            secretKeyRef:
+              name: itam-secrets
+              key: mongodb-uri
+        - name: JWT_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: itam-secrets
+              key: jwt-secret
+        - name: REDIS_URL
+          value: "redis://redis:6379"
+        - name: ML_SERVICE_URL
+          value: "http://ml-service:5000"
+        resources:
+          requests:
+            memory: "512Mi"
+            cpu: "250m"
+          limits:
+            memory: "2Gi"
+            cpu: "1000m"
+        livenessProbe:
+          httpGet:
+            path: /api/health
+            port: 3000
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /api/health
+            port: 3000
+          initialDelaySeconds: 10
+          periodSeconds: 5
+
+---
+# Server Service
+apiVersion: v1
+kind: Service
+metadata:
+  name: itam-server
+  namespace: itam
+spec:
+  selector:
+    app: itam-server
+  ports:
+  - port: 3000
+    targetPort: 3000
+  type: ClusterIP
+
+---
+# Client Deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: itam-client
+  namespace: itam
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: itam-client
+  template:
+    metadata:
+      labels:
+        app: itam-client
+    spec:
+      containers:
+      - name: client
+        image: ghcr.io/yourusername/itam-client:latest
+        ports:
+        - containerPort: 3001
+        env:
+        - name: NODE_ENV
+          value: "production"
+        resources:
+          requests:
+            memory: "512Mi"
+            cpu: "250m"
+          limits:
+            memory: "1Gi"
+            cpu: "500m"
+        livenessProbe:
+          httpGet:
+            path: /
+            port: 3001
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /
+            port: 3001
+          initialDelaySeconds: 10
+          periodSeconds: 5
+
+---
+# Client Service
+apiVersion: v1
+kind: Service
+metadata:
+  name: itam-client
+  namespace: itam
+spec:
+  selector:
+    app: itam-client
+  ports:
+  - port: 3001
+    targetPort: 3001
+  type: ClusterIP
+
+---
+# ML Service Deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ml-service
+  namespace: itam
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: ml-service
+  template:
+    metadata:
+      labels:
+        app: ml-service
+    spec:
+      containers:
+      - name: ml-service
+        image: ghcr.io/yourusername/itam-ml-service:latest
+        ports:
+        - containerPort: 5000
+        resources:
+          requests:
+            memory: "1Gi"
+            cpu: "500m"
+          limits:
+            memory: "4Gi"
+            cpu: "2000m"
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 5000
+          initialDelaySeconds: 30
+          periodSeconds: 10
+
+---
+# ML Service Service
+apiVersion: v1
+kind: Service
+metadata:
+  name: ml-service
+  namespace: itam
+spec:
+  selector:
+    app: ml-service
+  ports:
+  - port: 5000
+    targetPort: 5000
+  type: ClusterIP
+
+---
+# Ingress
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: itam-ingress
+  namespace: itam
+  annotations:
+    kubernetes.io/ingress.class: nginx
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/rate-limit: "100"
+spec:
+  tls:
+  - hosts:
+    - yourdomain.com
+    - www.yourdomain.com
+    secretName: itam-tls
+  rules:
+  - host: yourdomain.com
+    http:
+      paths:
+      - path: /api
+        pathType: Prefix
+        backend:
+          service:
+            name: itam-server
+            port:
+              number: 3000
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: itam-client
+            port:
+              number: 3001
+
+---
+# Horizontal Pod Autoscaler - Server
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: itam-server-hpa
+  namespace: itam
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: itam-server
+  minReplicas: 3
+  maxReplicas: 10
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 70
+  - type: Resource
+    resource:
+      name: memory
+      target:
+        type: Utilization
+        averageUtilization: 80
+
+---
+# Horizontal Pod Autoscaler - Client
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: itam-client-hpa
+  namespace: itam
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: itam-client
+  minReplicas: 3
+  maxReplicas: 10
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 70

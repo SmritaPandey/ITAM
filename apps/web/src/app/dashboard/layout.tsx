@@ -195,8 +195,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       {/* Sidebar */}
       <aside className="sidebar">
         <div className="sidebar-brand">
-          <div className="sidebar-brand-icon">AC</div>
-          <span className="sidebar-brand-text">AssetCommand</span>
+          <img src="/favicon.png" alt="ReconAPM" style={{ width: 32, height: 32, borderRadius: 8 }} />
+          <span className="sidebar-brand-text">ReconAPM</span>
         </div>
         <nav className="sidebar-nav">
           {navSections.map((section) => (

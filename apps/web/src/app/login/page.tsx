@@ -127,20 +127,16 @@ export default function LoginPage() {
         transition: "all 0.3s ease",
       }}>
         <div style={{ textAlign: "center", marginBottom: 32 }}>
-          <div style={{
-            width: 56, height: 56, margin: "0 auto 16px",
-            background: "linear-gradient(135deg, #06b6d4, #8b5cf6)",
-            borderRadius: 14, display: "flex", alignItems: "center", justifyContent: "center",
+          <img src="/favicon.png" alt="ReconAPM" style={{
+            width: 56, height: 56, margin: "0 auto 16px", borderRadius: 14, display: "block",
             boxShadow: isLight ? "0 8px 24px rgba(6,182,212,0.2)" : "0 8px 24px rgba(6,182,212,0.3)",
-          }}>
-            <Shield size={28} color="white" />
-          </div>
+          }} />
           <h1 style={{
             fontSize: 22, fontWeight: 700, letterSpacing: "-0.02em",
             background: isLight ? "linear-gradient(135deg, #0e7490, #7c3aed)" : "linear-gradient(135deg, #67e8f9, #a78bfa)",
             WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent",
-          }}>AssetCommand</h1>
-          <p style={{ fontSize: 13, color: "var(--text-tertiary)", marginTop: 4 }}>Enterprise Asset Management Platform</p>
+          }}>ReconAPM</h1>
+          <p style={{ fontSize: 13, color: "var(--text-tertiary)", marginTop: 4 }}>Enterprise IT Asset & Security Management</p>
         </div>
 
         {/* Quick Login Buttons */}

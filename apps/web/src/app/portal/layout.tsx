@@ -64,15 +64,10 @@ export default function PortalLayout({ children }: { children: React.ReactNode }
           padding: "20px 16px", display: "flex", alignItems: "center", gap: 10,
           borderBottom: "1px solid var(--border-primary)",
         }}>
-          <div style={{
-            width: 32, height: 32, borderRadius: 8,
-            background: "linear-gradient(135deg, #8b5cf6, #06b6d4)",
-            display: "flex", alignItems: "center", justifyContent: "center",
-            fontSize: 13, fontWeight: 800, color: "white",
-          }}>AC</div>
+          <img src="/favicon.png" alt="ReconAPM" style={{ width: 32, height: 32, borderRadius: 8 }} />
           <div>
             <div style={{ fontSize: 14, fontWeight: 700, color: "var(--text-primary)", letterSpacing: "-0.01em" }}>Employee Portal</div>
-            <div style={{ fontSize: 9, color: "var(--text-tertiary)", fontWeight: 600, letterSpacing: "0.03em" }}>ASSETCOMMAND</div>
+            <div style={{ fontSize: 9, color: "var(--text-tertiary)", fontWeight: 600, letterSpacing: "0.03em" }}>RECONAPM</div>
           </div>
         </div>
 

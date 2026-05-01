@@ -447,7 +447,7 @@ export default function DiscoveryPage() {
             <div style={{ textAlign: "center", padding: 48, color: "var(--text-tertiary)" }}>
               <Bot size={36} style={{ margin: "0 auto 12px" }} />
               <div style={{ fontSize: 14, fontWeight: 600 }}>No agents registered</div>
-              <p style={{ fontSize: 12 }}>Deploy the AssetCommand agent on endpoints to auto-report inventory</p>
+              <p style={{ fontSize: 12 }}>Deploy the ReconAPM agent on endpoints to auto-report inventory</p>
             </div>
           ) : (
             <table className="data-table">

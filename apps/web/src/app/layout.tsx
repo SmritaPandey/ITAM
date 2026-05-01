@@ -2,17 +2,17 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "AssetCommand | Enterprise Asset Management",
-  description: "Unified IT & Non-IT Asset Monitoring, Network Management, Fleet GPS, CCTV, VDI, Patch Management & ITSM Platform",
+  title: "ReconAPM | Enterprise IT Asset & Security Management",
+  description: "Unified IT & Non-IT Asset Monitoring, Network Management, Fleet GPS, CCTV, VDI, Vulnerability Scanning, Patch Management & ITSM Platform by NeurQ AI Labs",
   icons: {
     icon: "/favicon.png",
     apple: "/favicon.png",
   },
   metadataBase: new URL("https://reconapm.com"),
   openGraph: {
-    title: "AssetCommand — Enterprise Asset Management",
+    title: "ReconAPM — Enterprise IT Asset & Security Management",
     description: "Command every asset. Secure every endpoint. Built for enterprises that demand visibility and control.",
-    siteName: "AssetCommand",
+    siteName: "ReconAPM",
     type: "website",
   },
 };

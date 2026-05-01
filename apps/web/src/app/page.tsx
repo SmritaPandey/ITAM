@@ -72,8 +72,8 @@ export default function LandingPage() {
       {/* NAV */}
       <nav style={{ position: "fixed", top: 0, left: 0, right: 0, zIndex: 100, padding: "14px 40px", display: "flex", alignItems: "center", justifyContent: "space-between", background: L ? "rgba(248,250,252,0.9)" : "rgba(10,14,26,0.9)", backdropFilter: "blur(16px)", borderBottom: `1px solid ${border}` }}>
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-          <div style={{ width: 34, height: 34, borderRadius: 9, background: "linear-gradient(135deg,#06b6d4,#8b5cf6)", display: "flex", alignItems: "center", justifyContent: "center" }}><Shield size={18} color="white" /></div>
-          <span style={{ fontSize: 17, fontWeight: 800, letterSpacing: "-0.03em" }}>AssetCommand</span>
+          <img src="/favicon.png" alt="ReconAPM" style={{ width: 34, height: 34, borderRadius: 9 }} />
+          <span style={{ fontSize: 17, fontWeight: 800, letterSpacing: "-0.03em" }}>ReconAPM</span>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 20 }}>
           {["Features","Modules","Compare","Security","Pricing"].map(t => (
@@ -140,7 +140,7 @@ export default function LandingPage() {
       <section id="modules" style={{ padding: "70px 40px", maxWidth: 1200, margin: "0 auto" }}>
         <div style={{ textAlign: "center", marginBottom: 48 }}>
           <h2 style={{ fontSize: 34, fontWeight: 800, letterSpacing: "-0.03em", marginBottom: 10 }}>12 Modules. One Unified Platform.</h2>
-          <p style={{ fontSize: 15, color: muted, maxWidth: 600, margin: "0 auto" }}>Replace 6+ point solutions with AssetCommand. Every module is deeply integrated — assets flow into tickets, scans trigger patches, and everything feeds the CMDB.</p>
+          <p style={{ fontSize: 15, color: muted, maxWidth: 600, margin: "0 auto" }}>Replace 6+ point solutions with ReconAPM. Every module is deeply integrated — assets flow into tickets, scans trigger patches, and everything feeds the CMDB.</p>
         </div>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(280px,1fr))", gap: 14 }}>
           {MODULES.map(m => {
@@ -165,14 +165,14 @@ export default function LandingPage() {
       <section id="compare" style={{ padding: "60px 40px", maxWidth: 900, margin: "0 auto" }}>
         <div style={{ textAlign: "center", marginBottom: 36 }}>
           <h2 style={{ fontSize: 30, fontWeight: 800, marginBottom: 8 }}>How We Compare</h2>
-          <p style={{ fontSize: 14, color: muted }}>AssetCommand vs. industry leaders — more features at a fraction of the cost.</p>
+          <p style={{ fontSize: 14, color: muted }}>ReconAPM vs. industry leaders — more features at a fraction of the cost.</p>
         </div>
         <div style={{ borderRadius: 14, overflow: "hidden", border: `1px solid ${border}` }}>
           <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
             <thead>
               <tr style={{ background: L ? "#f1f5f9" : "rgba(15,23,42,0.6)" }}>
                 <th style={{ textAlign: "left", padding: "12px 16px", fontWeight: 600 }}>Feature</th>
-                <th style={{ padding: "12px 16px", fontWeight: 700, color: "#06b6d4" }}>AssetCommand</th>
+                <th style={{ padding: "12px 16px", fontWeight: 700, color: "#06b6d4" }}>ReconAPM</th>
                 <th style={{ padding: "12px 16px", fontWeight: 600, color: muted }}>Ivanti</th>
                 <th style={{ padding: "12px 16px", fontWeight: 600, color: muted }}>ManageEngine</th>
               </tr>
@@ -266,8 +266,8 @@ export default function LandingPage() {
       <footer style={{ padding: "32px 40px 20px", borderTop: `1px solid ${border}`, maxWidth: 1200, margin: "0 auto" }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 16 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-            <div style={{ width: 26, height: 26, borderRadius: 7, background: "linear-gradient(135deg,#06b6d4,#8b5cf6)", display: "flex", alignItems: "center", justifyContent: "center" }}><Shield size={13} color="white" /></div>
-            <span style={{ fontSize: 13, fontWeight: 700 }}>AssetCommand</span>
+            <img src="/favicon.png" alt="ReconAPM" style={{ width: 26, height: 26, borderRadius: 7 }} />
+            <span style={{ fontSize: 13, fontWeight: 700 }}>ReconAPM</span>
             <span style={{ fontSize: 11, color: muted, marginLeft: 8 }}>by NeurQ AI Labs</span>
           </div>
           <p style={{ fontSize: 11, color: muted, margin: 0 }}>© 2026 NeurQ AI Labs Pvt Ltd. All rights reserved. Built in India 🇮🇳</p>

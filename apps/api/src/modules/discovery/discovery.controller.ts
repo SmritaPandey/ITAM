@@ -1,0 +1,184 @@
+import { Controller, Get, Post, Patch, Delete, Body, Param, Query, UseGuards, Request } from '@nestjs/common';
+import { ApiTags, ApiBearerAuth, ApiOperation, ApiQuery } from '@nestjs/swagger';
+import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { RolesGuard } from '../auth/guards/roles.guard';
+import { Roles } from '../auth/decorators/roles.decorator';
+import { DiscoveryService } from './discovery.service';
+import { CredentialVaultService } from './credential-vault.service';
+
+@ApiTags('discovery')
+@ApiBearerAuth()
+@UseGuards(JwtAuthGuard, RolesGuard)
+@Controller('discovery')
+export class DiscoveryController {
+  constructor(
+    private discoveryService: DiscoveryService,
+    private credentialVault: CredentialVaultService,
+  ) {}
+
+  // ─── Subnet Detection ────────────────────────────────────────
+
+  @Get('subnets')
+  @Roles('Tenant Admin', 'IT Admin')
+  @ApiOperation({ summary: 'Detect local network subnets' })
+  getSubnets() {
+    return this.discoveryService.getLocalSubnets();
+  }
+
+  // ─── Scan Jobs ────────────────────────────────────────────────
+
+  @Post('scans')
+  @Roles('Tenant Admin', 'IT Admin')
+  @ApiOperation({ summary: 'Trigger a network scan (PING_SWEEP, TCP_PORT_SCAN, SNMP_DISCOVERY, FULL_SCAN)' })
+  async createScan(@Request() req: any, @Body() body: {
+    subnet: string; scanType?: string; name?: string; portRange?: string; credentialId?: string;
+  }) {
+    return this.discoveryService.createScan(req.user.tenantId, req.user.sub, body);
+  }
+
+  @Get('scans')
+  @Roles('Tenant Admin', 'IT Admin')
+  @ApiOperation({ summary: 'List scan jobs' })
+  @ApiQuery({ name: 'page', required: false })
+  @ApiQuery({ name: 'limit', required: false })
+  async findAllScans(@Request() req: any, @Query('page') page = 1, @Query('limit') limit = 20) {
+    return this.discoveryService.findAllScans(req.user.tenantId, page, limit);
+  }
+
+  @Get('scans/:id')
+  @Roles('Tenant Admin', 'IT Admin')
+  @ApiOperation({ summary: 'Get scan results with discovered devices' })
+  async findScan(@Request() req: any, @Param('id') id: string) {
+    return this.discoveryService.findScanById(id, req.user.tenantId);
+  }
+
+  // ─── Discovered Devices ───────────────────────────────────────
+
+  @Get('pending')
+  @Roles('Tenant Admin', 'IT Admin')
+  @ApiOperation({ summary: 'List devices pending review' })
+  async getPendingDevices(@Request() req: any) {
+    return this.discoveryService.findPendingDevices(req.user.tenantId);
+  }
+
+  @Post('devices/:id/approve')
+  @Roles('Tenant Admin', 'IT Admin')
+  @ApiOperation({ summary: 'Approve discovered device → create asset' })
+  async approveDevice(@Request() req: any, @Param('id') id: string, @Body() body: {
+    name: string; assetTypeId: string;
+  }) {
+    return this.discoveryService.approveDevice(id, req.user.tenantId, req.user.sub, body);
+  }
+
+  @Post('devices/:id/ignore')
+  @Roles('Tenant Admin', 'IT Admin')
+  @ApiOperation({ summary: 'Ignore a discovered device' })
+  async ignoreDevice(@Request() req: any, @Param('id') id: string) {
+    return this.discoveryService.ignoreDevice(id, req.user.tenantId);
+  }
+
+  @Post('devices/:id/enrich')
+  @Roles('Tenant Admin', 'IT Admin')
+  @ApiOperation({ summary: 'Run WMI/SSH/SNMP enrichment scan on discovered device' })
+  async enrichDevice(@Request() req: any, @Param('id') id: string, @Body() body: { credentialId?: string }) {
+    return this.discoveryService.enrichDevice(id, req.user.tenantId, body.credentialId);
+  }
+
+  // ─── Credential Vault ─────────────────────────────────────────
+
+  @Get('credentials')
+  @Roles('Tenant Admin', 'IT Admin')
+  @ApiOperation({ summary: 'List scan credentials (metadata only, no secrets)' })
+  async listCredentials(@Request() req: any) {
+    return this.credentialVault.findAll(req.user.tenantId);
+  }
+
+  @Post('credentials')
+  @Roles('Tenant Admin')
+  @ApiOperation({ summary: 'Create encrypted scan credential' })
+  async createCredential(@Request() req: any, @Body() body: {
+    name: string; type: string; credentials: Record<string, any>; scope?: any;
+  }) {
+    return this.credentialVault.create(req.user.tenantId, req.user.sub, body);
+  }
+
+  @Patch('credentials/:id')
+  @Roles('Tenant Admin')
+  @ApiOperation({ summary: 'Update scan credential' })
+  async updateCredential(@Request() req: any, @Param('id') id: string, @Body() body: any) {
+    return this.credentialVault.update(id, req.user.tenantId, body);
+  }
+
+  @Delete('credentials/:id')
+  @Roles('Tenant Admin')
+  @ApiOperation({ summary: 'Delete scan credential' })
+  async deleteCredential(@Request() req: any, @Param('id') id: string) {
+    return this.credentialVault.delete(id, req.user.tenantId);
+  }
+
+  // ─── Agent Management ─────────────────────────────────────────
+
+  @Get('agents')
+  @Roles('Tenant Admin', 'IT Admin')
+  @ApiOperation({ summary: 'List registered discovery agents' })
+  async listAgents(@Request() req: any) {
+    return this.discoveryService.listAgents(req.user.tenantId);
+  }
+
+  @Get('agents/:id')
+  @Roles('Tenant Admin', 'IT Admin')
+  @ApiOperation({ summary: 'Get agent details + system info' })
+  async getAgent(@Request() req: any, @Param('id') id: string) {
+    return this.discoveryService.getAgent(id, req.user.tenantId);
+  }
+
+  @Post('agents/register')
+  @Roles('Tenant Admin', 'IT Admin')
+  @ApiOperation({ summary: 'Register / re-register a discovery agent' })
+  async registerAgent(@Request() req: any, @Body() body: {
+    hostname: string; platform: string; agentVersion: string;
+    ipAddress: string; macAddress?: string; systemInfo?: any;
+  }) {
+    return this.discoveryService.registerAgent(req.user.tenantId, body);
+  }
+
+  @Post('agents/:id/heartbeat')
+  @Roles('Tenant Admin', 'IT Admin')
+  @ApiOperation({ summary: 'Agent heartbeat — confirm alive + push data' })
+  async agentHeartbeat(@Request() req: any, @Param('id') id: string, @Body() body?: { systemInfo?: any }) {
+    return this.discoveryService.agentHeartbeat(id, req.user.tenantId, body);
+  }
+
+  // ─── Scheduled Scans ──────────────────────────────────────────
+
+  @Get('schedules')
+  @Roles('Tenant Admin', 'IT Admin')
+  @ApiOperation({ summary: 'List scheduled scans' })
+  async listSchedules(@Request() req: any) {
+    return this.discoveryService.listSchedules(req.user.tenantId);
+  }
+
+  @Post('schedules')
+  @Roles('Tenant Admin', 'IT Admin')
+  @ApiOperation({ summary: 'Create a scheduled scan (cron-based)' })
+  async createSchedule(@Request() req: any, @Body() body: {
+    name: string; subnet: string; scanType: string; schedule: string;
+    scanWindow?: any; credentialId?: string;
+  }) {
+    return this.discoveryService.createSchedule(req.user.tenantId, req.user.sub, body);
+  }
+
+  @Patch('schedules/:id')
+  @Roles('Tenant Admin', 'IT Admin')
+  @ApiOperation({ summary: 'Update scheduled scan' })
+  async updateSchedule(@Request() req: any, @Param('id') id: string, @Body() body: any) {
+    return this.discoveryService.updateSchedule(id, req.user.tenantId, body);
+  }
+
+  @Delete('schedules/:id')
+  @Roles('Tenant Admin', 'IT Admin')
+  @ApiOperation({ summary: 'Delete scheduled scan' })
+  async deleteSchedule(@Request() req: any, @Param('id') id: string) {
+    return this.discoveryService.deleteSchedule(id, req.user.tenantId);
+  }
+}

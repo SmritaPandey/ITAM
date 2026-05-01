@@ -1,0 +1,62 @@
+# AssetCommand — Production Docker Compose
+# Usage: docker compose -f docker-compose.prod.yml up -d
+
+version: '3.8'
+
+services:
+  # ─── PostgreSQL Database ───────────────────────────────────────
+  postgres:
+    image: postgres:16-alpine
+    container_name: assetcommand-db
+    restart: unless-stopped
+    ports:
+      - "5434:5432"
+    environment:
+      POSTGRES_DB: assetcommand
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-AssetCmd@2026}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ─── NestJS API Backend ────────────────────────────────────────
+  api:
+    build:
+      context: ./apps/api
+      dockerfile: Dockerfile
+    container_name: assetcommand-api
+    restart: unless-stopped
+    ports:
+      - "4100:4100"
+    environment:
+      DATABASE_URL: postgresql://postgres:${DB_PASSWORD:-AssetCmd@2026}@postgres:5432/assetcommand
+      JWT_SECRET: ${JWT_SECRET:-assetcommand-jwt-secret-change-in-production}
+      PORT: 4100
+      NODE_ENV: production
+      VAULT_ENCRYPTION_KEY: ${VAULT_KEY:-assetcommand-default-vault-key-32!}
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  # ─── Next.js Frontend ─────────────────────────────────────────
+  web:
+    build:
+      context: ./apps/web
+      dockerfile: Dockerfile
+    container_name: assetcommand-web
+    restart: unless-stopped
+    ports:
+      - "3100:3100"
+    environment:
+      NEXT_PUBLIC_API_URL: http://api:4100/api/v1
+      PORT: 3100
+    depends_on:
+      - api
+
+volumes:
+  pgdata:
+    driver: local

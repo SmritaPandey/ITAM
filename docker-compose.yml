@@ -1,0 +1,47 @@
+services:
+  postgres:
+    image: postgis/postgis:16-3.4
+    platform: linux/amd64
+    container_name: assetcommand-postgres
+    restart: unless-stopped
+    ports:
+      - "5434:5432"
+    environment:
+      POSTGRES_USER: assetcommand
+      POSTGRES_PASSWORD: assetcommand_dev
+      POSTGRES_DB: assetcommand
+    volumes:
+      - ./docker-data/postgres:/var/lib/postgresql/data
+      - ./infra/docker/init-extensions.sql:/docker-entrypoint-initdb.d/init-extensions.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U assetcommand"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: assetcommand-redis
+    restart: unless-stopped
+    ports:
+      - "6380:6379"
+    command: redis-server --appendonly yes
+    volumes:
+      - ./docker-data/redis:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  meilisearch:
+    image: getmeili/meilisearch:v1.11
+    container_name: assetcommand-meilisearch
+    restart: unless-stopped
+    ports:
+      - "7700:7700"
+    environment:
+      MEILI_ENV: development
+      MEILI_MASTER_KEY: assetcommand_dev_key
+    volumes:
+      - ./docker-data/meilisearch:/meili_data

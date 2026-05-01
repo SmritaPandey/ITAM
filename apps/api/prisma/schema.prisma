@@ -1,0 +1,1410 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================================================
+// TENANT & AUTH
+// ============================================================================
+
+enum TenantStatus {
+  ACTIVE
+  SUSPENDED
+  TRIAL
+  CANCELLED
+}
+
+enum TenantPlan {
+  STARTER
+  PROFESSIONAL
+  ENTERPRISE
+  ON_PREMISE
+}
+
+model Tenant {
+  id        String       @id @default(uuid()) @db.Uuid
+  name      String
+  slug      String       @unique
+  domain    String?
+  plan      TenantPlan   @default(STARTER)
+  status    TenantStatus @default(ACTIVE)
+  logoUrl   String?      @map("logo_url")
+  settings  Json         @default("{}")
+  createdAt DateTime     @default(now()) @map("created_at")
+  updatedAt DateTime     @updatedAt @map("updated_at")
+
+  sites       Site[]
+  departments Department[]
+  users       User[]
+  roles       Role[]
+  assets      Asset[]
+  assetTypes  AssetType[]
+  tickets     Ticket[]
+  auditLogs   AuditLog[]
+  apiKeys     ApiKey[]
+  scanJobs    ScanJob[]
+  discoveredDevices DiscoveredDevice[]
+  licenses    License[]
+  notifications Notification[]
+  automationRules AutomationRule[]
+  monitoredDevices MonitoredDevice[]
+  patches     Patch[]
+  agents      Agent[]
+  scanCredentials ScanCredential[]
+  scheduledScans  ScheduledScan[]
+  knowledgeArticles KnowledgeArticle[]
+  slaPolicies     SlaPolicy[]
+  scheduledReports ScheduledReport[]
+  workOrders      WorkOrder[]
+  scriptLibrary   ScriptLibrary[]
+  networkConfigs  NetworkConfig[]
+  patchDeployments PatchDeployment[]
+  scanResults     ScanResult[]
+  vendors         Vendor[]
+  contracts       Contract[]
+  purchaseOrders  PurchaseOrder[]
+  assetCheckouts  AssetCheckout[]
+  changeRequests  ChangeRequest[]
+  problems        Problem[]
+  assetAttestations AssetAttestation[]
+  notificationChannels NotificationChannel[]
+
+  @@map("tenants")
+}
+
+model Site {
+  id        String   @id @default(uuid()) @db.Uuid
+  tenantId  String   @map("tenant_id") @db.Uuid
+  name      String
+  address   String?
+  city      String?
+  state     String?
+  country   String?
+  zipCode   String?  @map("zip_code")
+  latitude  Float?
+  longitude Float?
+  timezone  String   @default("UTC")
+  isHq      Boolean  @default(false) @map("is_hq")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  tenant      Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  departments Department[]
+  users       User[]
+  assets      Asset[]
+
+  @@index([tenantId])
+  @@map("sites")
+}
+
+model Department {
+  id         String   @id @default(uuid()) @db.Uuid
+  tenantId   String   @map("tenant_id") @db.Uuid
+  siteId     String?  @map("site_id") @db.Uuid
+  name       String
+  code       String?
+  parentId   String?  @map("parent_id") @db.Uuid
+  costCenter String?  @map("cost_center")
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
+
+  tenant   Tenant      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  site     Site?       @relation(fields: [siteId], references: [id])
+  parent   Department? @relation("DeptHierarchy", fields: [parentId], references: [id])
+  children Department[] @relation("DeptHierarchy")
+  users    User[]
+  assets   Asset[]
+
+  @@index([tenantId])
+  @@map("departments")
+}
+
+enum UserStatus {
+  ACTIVE
+  INACTIVE
+  LOCKED
+  PENDING
+}
+
+model User {
+  id           String     @id @default(uuid()) @db.Uuid
+  tenantId     String     @map("tenant_id") @db.Uuid
+  email        String
+  passwordHash String?    @map("password_hash")
+  firstName    String     @map("first_name")
+  lastName     String     @map("last_name")
+  phone        String?
+  avatarUrl    String?    @map("avatar_url")
+  departmentId String?    @map("department_id") @db.Uuid
+  siteId       String?    @map("site_id") @db.Uuid
+  roleId       String     @map("role_id") @db.Uuid
+  status       UserStatus @default(ACTIVE)
+  mfaEnabled   Boolean    @default(false) @map("mfa_enabled")
+  mfaSecret    String?    @map("mfa_secret")
+  lastLoginAt  DateTime?  @map("last_login_at")
+  lastLoginIp  String?    @map("last_login_ip")
+  preferences  Json       @default("{}") @map("preferences")
+  createdAt    DateTime   @default(now()) @map("created_at")
+  updatedAt    DateTime   @updatedAt @map("updated_at")
+  deletedAt    DateTime?  @map("deleted_at")
+
+  tenant        Tenant      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  department    Department? @relation(fields: [departmentId], references: [id])
+  site          Site?       @relation(fields: [siteId], references: [id])
+  role          Role        @relation(fields: [roleId], references: [id])
+  assignedAssets Asset[]    @relation("AssetAssignee")
+  managedAssets  Asset[]    @relation("AssetManager")
+  createdAssets  Asset[]    @relation("AssetCreator")
+  ticketsCreated  Ticket[]  @relation("TicketRequester")
+  ticketsAssigned Ticket[]  @relation("TicketAssignee")
+  auditLogs      AuditLog[]
+  apiKeys        ApiKey[]
+  refreshTokens  RefreshToken[]
+  comments       TicketComment[] @relation("CommentAuthor")
+  triggeredScans ScanJob[]       @relation("ScanTriggeredBy")
+  notifications  Notification[]
+  createdRules   AutomationRule[] @relation("RuleCreator")
+
+  @@unique([tenantId, email])
+  @@index([tenantId])
+  @@index([email])
+  @@map("users")
+}
+
+model Role {
+  id          String   @id @default(uuid()) @db.Uuid
+  tenantId    String   @map("tenant_id") @db.Uuid
+  name        String
+  description String?
+  isSystem    Boolean  @default(false) @map("is_system")
+  permissions Json     @default("[]")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  users  User[]
+
+  @@unique([tenantId, name])
+  @@index([tenantId])
+  @@map("roles")
+}
+
+model RefreshToken {
+  id        String   @id @default(uuid()) @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  tokenHash String   @unique @map("token_hash")
+  expiresAt DateTime @map("expires_at")
+  createdAt DateTime @default(now()) @map("created_at")
+  revokedAt DateTime? @map("revoked_at")
+  ipAddress String?  @map("ip_address")
+  userAgent String?  @map("user_agent")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("refresh_tokens")
+}
+
+model ApiKey {
+  id        String    @id @default(uuid()) @db.Uuid
+  tenantId  String    @map("tenant_id") @db.Uuid
+  userId    String    @map("user_id") @db.Uuid
+  name      String
+  keyHash   String    @unique @map("key_hash")
+  keyPrefix String    @map("key_prefix")
+  scopes    Json      @default("[]")
+  expiresAt DateTime? @map("expires_at")
+  lastUsedAt DateTime? @map("last_used_at")
+  createdAt DateTime  @default(now()) @map("created_at")
+  revokedAt DateTime? @map("revoked_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@map("api_keys")
+}
+
+// ============================================================================
+// AUDIT LOG (Append-Only)
+// ============================================================================
+
+enum AuditSeverity {
+  INFO
+  WARNING
+  CRITICAL
+}
+
+enum AuditOutcome {
+  SUCCESS
+  FAILURE
+}
+
+model AuditLog {
+  id           String        @id @default(uuid()) @db.Uuid
+  tenantId     String        @map("tenant_id") @db.Uuid
+  timestamp    DateTime      @default(now())
+  actorId      String?       @map("actor_id") @db.Uuid
+  actorIp      String?       @map("actor_ip")
+  actorAgent   String?       @map("actor_agent")
+  action       String
+  resourceType String        @map("resource_type")
+  resourceId   String?       @map("resource_id")
+  resourceName String?       @map("resource_name")
+  before       Json?
+  after        Json?
+  metadata     Json?
+  outcome      AuditOutcome  @default(SUCCESS)
+  severity     AuditSeverity @default(INFO)
+  module       String
+  hash         String?
+  prevHash     String?       @map("prev_hash")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  actor  User?  @relation(fields: [actorId], references: [id])
+
+  @@index([tenantId, timestamp])
+  @@index([tenantId, action])
+  @@index([tenantId, resourceType, resourceId])
+  @@map("audit_logs")
+}
+
+// ============================================================================
+// ASSET MANAGEMENT (CMDB Core)
+// ============================================================================
+
+model AssetType {
+  id               String   @id @default(uuid()) @db.Uuid
+  tenantId         String   @map("tenant_id") @db.Uuid
+  name             String
+  parentId         String?  @map("parent_id") @db.Uuid
+  icon             String?
+  color            String?
+  isItAsset        Boolean  @default(true) @map("is_it_asset")
+  customFieldsSchema Json   @default("[]") @map("custom_fields_schema")
+  createdAt        DateTime @default(now()) @map("created_at")
+  updatedAt        DateTime @updatedAt @map("updated_at")
+
+  tenant   Tenant     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  parent   AssetType? @relation("AssetTypeHierarchy", fields: [parentId], references: [id])
+  children AssetType[] @relation("AssetTypeHierarchy")
+  assets   Asset[]
+
+  @@unique([tenantId, name])
+  @@index([tenantId])
+  @@map("asset_types")
+}
+
+enum AssetStatus {
+  DISCOVERED
+  ACTIVE
+  IN_MAINTENANCE
+  IN_STORAGE
+  RESERVED
+  RETIRED
+  DISPOSED
+  LOST
+  PENDING_REVIEW
+}
+
+enum DiscoverySource {
+  AGENT
+  SNMP
+  WMI
+  SSH
+  CLOUD_AWS
+  CLOUD_AZURE
+  CLOUD_GCP
+  ACTIVE_DIRECTORY
+  MANUAL
+  CSV_IMPORT
+  API
+  ONVIF
+}
+
+model Asset {
+  id              String          @id @default(uuid()) @db.Uuid
+  tenantId        String          @map("tenant_id") @db.Uuid
+  assetTypeId     String          @map("asset_type_id") @db.Uuid
+  // Identity
+  assetTag        String?         @map("asset_tag")
+  name            String
+  serialNumber    String?         @map("serial_number")
+  barcode         String?
+  // Classification
+  category        String?
+  subCategory     String?         @map("sub_category")
+  manufacturer    String?
+  model           String?
+  // Location
+  siteId          String?         @map("site_id") @db.Uuid
+  departmentId    String?         @map("department_id") @db.Uuid
+  floor           String?
+  room            String?
+  rack            String?
+  position        String?
+  // Ownership
+  assignedToId    String?         @map("assigned_to_id") @db.Uuid
+  managedById     String?         @map("managed_by_id") @db.Uuid
+  // Lifecycle
+  status          AssetStatus     @default(DISCOVERED)
+  procurementDate DateTime?       @map("procurement_date")
+  deploymentDate  DateTime?       @map("deployment_date")
+  warrantyExpiry  DateTime?       @map("warranty_expiry")
+  eolDate         DateTime?       @map("eol_date")
+  disposalDate    DateTime?       @map("disposal_date")
+  // Financial
+  purchasePrice   Decimal?        @map("purchase_price") @db.Decimal(12, 2)
+  currentValue    Decimal?        @map("current_value") @db.Decimal(12, 2)
+  salvageValue    Decimal?        @map("salvage_value") @db.Decimal(12, 2)
+  usefulLifeMonths Int?           @map("useful_life_months")
+  depreciationMethod String?      @map("depreciation_method") // STRAIGHT_LINE, DECLINING_BALANCE
+  poNumber        String?         @map("po_number")
+  invoiceNumber   String?         @map("invoice_number")
+  // Lease
+  leaseStartDate  DateTime?       @map("lease_start_date")
+  leaseEndDate    DateTime?       @map("lease_end_date")
+  leaseVendor     String?         @map("lease_vendor")
+  monthlyLeaseCost Decimal?       @map("monthly_lease_cost") @db.Decimal(12, 2)
+  leaseContractId String?         @map("lease_contract_id") @db.Uuid
+  vendorId        String?         @map("vendor_id") @db.Uuid
+  // Network (IT assets)
+  ipAddress       String?         @map("ip_address")
+  macAddress      String?         @map("mac_address")
+  hostname        String?
+  fqdn            String?
+  // GPS (Fleet assets) - stored as floats; PostGIS queries via raw SQL
+  latitude        Float?
+  longitude       Float?
+  // Flexible attributes
+  customFields    Json            @default("{}") @map("custom_fields")
+  tags            String[]        @default([])
+  // Discovery
+  discoverySource DiscoverySource? @map("discovery_source")
+  lastScannedAt   DateTime?       @map("last_scanned_at")
+  agentId         String?         @map("agent_id")
+  // Meta
+  parentAssetId   String?         @map("parent_asset_id") @db.Uuid
+  notes           String?
+  createdById     String?         @map("created_by_id") @db.Uuid
+  createdAt       DateTime        @default(now()) @map("created_at")
+  updatedAt       DateTime        @updatedAt @map("updated_at")
+  deletedAt       DateTime?       @map("deleted_at")
+
+  tenant       Tenant      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  assetType    AssetType   @relation(fields: [assetTypeId], references: [id])
+  site         Site?       @relation(fields: [siteId], references: [id])
+  department   Department? @relation(fields: [departmentId], references: [id])
+  assignedTo   User?       @relation("AssetAssignee", fields: [assignedToId], references: [id])
+  managedBy    User?       @relation("AssetManager", fields: [managedById], references: [id])
+  createdBy    User?       @relation("AssetCreator", fields: [createdById], references: [id])
+  parentAsset  Asset?      @relation("AssetHierarchy", fields: [parentAssetId], references: [id])
+  childAssets  Asset[]     @relation("AssetHierarchy")
+
+  hardwareDetails   HardwareDetail?
+  osDetails         OsDetail?
+  securityPosture   SecurityPosture?
+  softwareInstalls  SoftwareInstallation[]
+  assetHistory      AssetHistory[]
+  tickets           TicketAsset[]
+  workOrders        WorkOrder[]
+  patchDeployments  PatchDeployment[]
+  checkouts         AssetCheckout[]
+  attestations      AssetAttestation[]
+  sourceRelations   AssetRelationship[] @relation("RelSource")
+  targetRelations   AssetRelationship[] @relation("RelTarget")
+
+  @@unique([tenantId, assetTag])
+  @@index([tenantId])
+  @@index([tenantId, status])
+  @@index([tenantId, assetTypeId])
+  @@index([tenantId, ipAddress])
+  @@index([tenantId, macAddress])
+  @@index([tenantId, serialNumber])
+  @@index([tenantId, hostname])
+  @@map("assets")
+}
+
+enum RelationshipType {
+  DEPENDS_ON
+  COMPONENT_OF
+  CONNECTED_TO
+  RUNS_ON
+  USED_BY
+  BACKUP_OF
+}
+
+model AssetRelationship {
+  id               String           @id @default(uuid()) @db.Uuid
+  tenantId         String           @map("tenant_id") @db.Uuid
+  sourceAssetId    String           @map("source_asset_id") @db.Uuid
+  targetAssetId    String           @map("target_asset_id") @db.Uuid
+  relationshipType RelationshipType @map("relationship_type")
+  properties       Json             @default("{}")
+  createdAt        DateTime         @default(now()) @map("created_at")
+
+  sourceAsset Asset @relation("RelSource", fields: [sourceAssetId], references: [id], onDelete: Cascade)
+  targetAsset Asset @relation("RelTarget", fields: [targetAssetId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@map("asset_relationships")
+}
+
+model AssetHistory {
+  id          String   @id @default(uuid()) @db.Uuid
+  tenantId    String   @map("tenant_id") @db.Uuid
+  assetId     String   @map("asset_id") @db.Uuid
+  eventType   String   @map("event_type")
+  description String?
+  performedBy String?  @map("performed_by")
+  details     Json     @default("{}")
+  timestamp   DateTime @default(now())
+
+  asset Asset @relation(fields: [assetId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, assetId])
+  @@map("asset_history")
+}
+
+// ============================================================================
+// IT ASSET DETAIL TABLES
+// ============================================================================
+
+model HardwareDetail {
+  id             String  @id @default(uuid()) @db.Uuid
+  assetId        String  @unique @map("asset_id") @db.Uuid
+  cpuModel       String? @map("cpu_model")
+  cpuCores       Int?    @map("cpu_cores")
+  cpuSpeedGhz    Float?  @map("cpu_speed_ghz")
+  ramTotalGb     Float?  @map("ram_total_gb")
+  ramType        String? @map("ram_type")
+  diskTotalGb    Float?  @map("disk_total_gb")
+  diskType       String? @map("disk_type")
+  diskHealth     String? @map("disk_health")
+  gpuModel       String? @map("gpu_model")
+  gpuVramGb      Float?  @map("gpu_vram_gb")
+  biosVersion    String? @map("bios_version")
+  biosVendor     String? @map("bios_vendor")
+  tpmVersion     String? @map("tpm_version")
+  tpmEnabled     Boolean? @map("tpm_enabled")
+  formFactor     String? @map("form_factor")
+
+  asset Asset @relation(fields: [assetId], references: [id], onDelete: Cascade)
+
+  @@map("hardware_details")
+}
+
+model OsDetail {
+  id             String    @id @default(uuid()) @db.Uuid
+  assetId        String    @unique @map("asset_id") @db.Uuid
+  osName         String?   @map("os_name")
+  osVersion      String?   @map("os_version")
+  osBuild        String?   @map("os_build")
+  osArchitecture String?   @map("os_architecture")
+  installDate    DateTime? @map("install_date")
+  lastBoot       DateTime? @map("last_boot")
+  uptimeDays     Int?      @map("uptime_days")
+
+  asset Asset @relation(fields: [assetId], references: [id], onDelete: Cascade)
+
+  @@map("os_details")
+}
+
+model SecurityPosture {
+  id                   String    @id @default(uuid()) @db.Uuid
+  assetId              String    @unique @map("asset_id") @db.Uuid
+  avInstalled          Boolean?  @map("av_installed")
+  avName               String?   @map("av_name")
+  avVersion            String?   @map("av_version")
+  avDefinitionsDate    DateTime? @map("av_definitions_date")
+  avRealtimeProtection Boolean?  @map("av_realtime_protection")
+  firewallEnabled      Boolean?  @map("firewall_enabled")
+  encryptionEnabled    Boolean?  @map("encryption_enabled")
+  encryptionType       String?   @map("encryption_type")
+  encryptionPercent    Int?      @map("encryption_percent")
+  complianceScore      Int?      @map("compliance_score")
+  lastAssessedAt       DateTime? @map("last_assessed_at")
+
+  asset Asset @relation(fields: [assetId], references: [id], onDelete: Cascade)
+
+  @@map("security_postures")
+}
+
+model SoftwareCatalog {
+  id            String   @id @default(uuid()) @db.Uuid
+  tenantId      String   @map("tenant_id") @db.Uuid
+  name          String
+  publisher     String?
+  category      String?
+  isBlacklisted Boolean  @default(false) @map("is_blacklisted")
+  latestVersion String?  @map("latest_version")
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  installations SoftwareInstallation[]
+
+  @@unique([tenantId, name, publisher])
+  @@index([tenantId])
+  @@map("software_catalog")
+}
+
+model SoftwareInstallation {
+  id           String    @id @default(uuid()) @db.Uuid
+  tenantId     String    @map("tenant_id") @db.Uuid
+  assetId      String    @map("asset_id") @db.Uuid
+  softwareId   String    @map("software_id") @db.Uuid
+  version      String?
+  installDate  DateTime? @map("install_date")
+  installPath  String?   @map("install_path")
+  lastUsedAt   DateTime? @map("last_used_at")
+
+  asset    Asset           @relation(fields: [assetId], references: [id], onDelete: Cascade)
+  software SoftwareCatalog @relation(fields: [softwareId], references: [id])
+
+  @@index([tenantId, assetId])
+  @@map("software_installations")
+}
+
+// ============================================================================
+// ITSM / TICKETING
+// ============================================================================
+
+enum TicketType {
+  INCIDENT
+  PROBLEM
+  CHANGE
+  SERVICE_REQUEST
+  MAINTENANCE
+}
+
+enum TicketStatus {
+  NEW
+  OPEN
+  IN_PROGRESS
+  PENDING
+  ON_HOLD
+  RESOLVED
+  CLOSED
+  CANCELLED
+}
+
+enum TicketPriority {
+  CRITICAL
+  HIGH
+  MEDIUM
+  LOW
+}
+
+model Ticket {
+  id              String         @id @default(uuid()) @db.Uuid
+  tenantId        String         @map("tenant_id") @db.Uuid
+  ticketNumber    String         @map("ticket_number")
+  type            TicketType     @default(INCIDENT)
+  category        String?
+  subCategory     String?        @map("sub_category")
+  subject         String
+  description     String?
+  priority        TicketPriority @default(MEDIUM)
+  status          TicketStatus   @default(NEW)
+  requesterId     String         @map("requester_id") @db.Uuid
+  assignedToId    String?        @map("assigned_to_id") @db.Uuid
+  assignedGroup   String?        @map("assigned_group")
+  responseDueAt   DateTime?      @map("response_due_at")
+  resolutionDueAt DateTime?      @map("resolution_due_at")
+  respondedAt     DateTime?      @map("responded_at")
+  resolvedAt      DateTime?      @map("resolved_at")
+  closedAt        DateTime?      @map("closed_at")
+  satisfactionScore Int?         @map("satisfaction_score")
+  parentTicketId  String?        @map("parent_ticket_id") @db.Uuid
+  createdAt       DateTime       @default(now()) @map("created_at")
+  updatedAt       DateTime       @updatedAt @map("updated_at")
+
+  tenant       Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  requester    User          @relation("TicketRequester", fields: [requesterId], references: [id])
+  assignedTo   User?         @relation("TicketAssignee", fields: [assignedToId], references: [id])
+  parentTicket Ticket?       @relation("TicketHierarchy", fields: [parentTicketId], references: [id])
+  childTickets Ticket[]      @relation("TicketHierarchy")
+  comments     TicketComment[]
+  assets       TicketAsset[]
+  workOrders   WorkOrder[]
+
+  @@unique([tenantId, ticketNumber])
+  @@index([tenantId, status])
+  @@index([tenantId, assignedToId])
+  @@index([tenantId, requesterId])
+  @@map("tickets")
+}
+
+// ─── Work Orders ──────────────────────────────────────
+model WorkOrder {
+  id              String   @id @default(uuid()) @db.Uuid
+  tenantId        String   @map("tenant_id") @db.Uuid
+  workOrderNumber String   @map("work_order_number")
+  ticketId        String?  @map("ticket_id") @db.Uuid
+  assetId         String?  @map("asset_id") @db.Uuid
+  title           String
+  description     String?
+  type            String   @default("MAINTENANCE") // MAINTENANCE, REPAIR, INSTALLATION, INSPECTION
+  priority        String   @default("MEDIUM")
+  status          String   @default("CREATED")     // CREATED, ASSIGNED, IN_PROGRESS, COMPLETED, VERIFIED, CANCELLED
+  assignedToId    String?  @map("assigned_to_id") @db.Uuid
+  scheduledStart  DateTime? @map("scheduled_start")
+  scheduledEnd    DateTime? @map("scheduled_end")
+  actualStart     DateTime? @map("actual_start")
+  actualEnd       DateTime? @map("actual_end")
+  laborHours      Float?   @map("labor_hours")
+  materialCost    Float?   @map("material_cost")
+  notes           String?
+  completedById   String?  @map("completed_by_id") @db.Uuid
+  verifiedById    String?  @map("verified_by_id") @db.Uuid
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  tenant          Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  ticket          Ticket?  @relation(fields: [ticketId], references: [id])
+  asset           Asset?   @relation(fields: [assetId], references: [id])
+
+  @@unique([tenantId, workOrderNumber])
+  @@index([tenantId, status])
+  @@map("work_orders")
+}
+
+model TicketComment {
+  id         String   @id @default(uuid()) @db.Uuid
+  ticketId   String   @map("ticket_id") @db.Uuid
+  authorId   String   @map("author_id") @db.Uuid
+  content    String
+  isInternal Boolean  @default(false) @map("is_internal")
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  ticket Ticket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  author User   @relation("CommentAuthor", fields: [authorId], references: [id])
+
+  @@index([ticketId])
+  @@map("ticket_comments")
+}
+
+model TicketAsset {
+  id       String @id @default(uuid()) @db.Uuid
+  ticketId String @map("ticket_id") @db.Uuid
+  assetId  String @map("asset_id") @db.Uuid
+
+  ticket Ticket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  asset  Asset  @relation(fields: [assetId], references: [id], onDelete: Cascade)
+
+  @@unique([ticketId, assetId])
+  @@map("ticket_assets")
+}
+
+// ─── Discovery Engine ────────────────────────────────
+
+enum ScanStatus {
+  PENDING
+  RUNNING
+  COMPLETED
+  FAILED
+  CANCELLED
+}
+
+enum ScanType {
+  PING_SWEEP
+  ARP_SCAN
+  PORT_SCAN
+  SNMP_DISCOVERY
+  FULL_SCAN
+}
+
+model ScanJob {
+  id          String     @id @default(uuid()) @db.Uuid
+  tenantId    String     @map("tenant_id") @db.Uuid
+  name        String?
+  scanType    ScanType   @default(PING_SWEEP) @map("scan_type")
+  subnet      String                             // e.g. "192.168.1.0/24"
+  portRange   String?    @map("port_range")      // e.g. "22,80,443,3389"
+  status      ScanStatus @default(PENDING)
+  startedAt   DateTime?  @map("started_at")
+  completedAt DateTime?  @map("completed_at")
+  devicesFound Int       @default(0) @map("devices_found")
+  newDevices   Int       @default(0) @map("new_devices")
+  errorMessage String?   @map("error_message")
+  triggeredById String?  @map("triggered_by_id") @db.Uuid
+  createdAt   DateTime   @default(now()) @map("created_at")
+
+  tenant      Tenant     @relation(fields: [tenantId], references: [id])
+  triggeredBy User?      @relation("ScanTriggeredBy", fields: [triggeredById], references: [id])
+  discoveries DiscoveredDevice[]
+
+  @@index([tenantId])
+  @@map("scan_jobs")
+}
+
+model DiscoveredDevice {
+  id           String   @id @default(uuid()) @db.Uuid
+  tenantId     String   @map("tenant_id") @db.Uuid
+  scanJobId    String   @map("scan_job_id") @db.Uuid
+  ipAddress    String   @map("ip_address")
+  macAddress   String?  @map("mac_address")
+  hostname     String?
+  openPorts    String?  @map("open_ports")         // JSON array "[{port:22,service:'SSH'}]"
+  osGuess      String?  @map("os_guess")
+  osInfo       String?  @map("os_info")
+  services     String?                              // JSON array of detected services
+  manufacturer String?
+  deviceType   String?  @map("device_type")        // Server, Workstation, Printer, etc.
+  status       String   @default("PENDING_REVIEW") // PENDING_REVIEW, APPROVED, IGNORED, MERGED
+  enrichmentData Json?  @map("enrichment_data")   // Raw WMI/SSH/SNMP collection results
+  enrichmentStatus String @default("BASIC") @map("enrichment_status") // BASIC, ENRICHED, FAILED
+  approvedAssetId String? @map("approved_asset_id") @db.Uuid
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  tenant       Tenant   @relation(fields: [tenantId], references: [id])
+  scanJob      ScanJob  @relation(fields: [scanJobId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@index([scanJobId])
+  @@map("discovered_devices")
+}
+
+// ─── License Management ──────────────────────────────
+
+enum LicenseType {
+  PER_SEAT
+  PER_DEVICE
+  SITE
+  ENTERPRISE
+  SUBSCRIPTION
+  CONCURRENT
+  OPEN_SOURCE
+}
+
+enum LicenseModel {
+  PERPETUAL
+  ANNUAL
+  MONTHLY
+  USAGE_BASED
+  FREEMIUM
+}
+
+model License {
+  id             String       @id @default(uuid()) @db.Uuid
+  tenantId       String       @map("tenant_id") @db.Uuid
+  softwareName   String       @map("software_name")
+  vendor         String?
+  version        String?
+  licenseKey     String?      @map("license_key")
+  licenseType    LicenseType  @default(PER_SEAT) @map("license_type")
+  licenseModel   LicenseModel @default(ANNUAL) @map("license_model")
+  totalSeats     Int          @default(1) @map("total_seats")
+  usedSeats      Int          @default(0) @map("used_seats")
+  purchaseDate   DateTime?    @map("purchase_date")
+  expiryDate     DateTime?    @map("expiry_date")
+  renewalCost    Decimal?     @map("renewal_cost") @db.Decimal(12, 2)
+  purchaseCost   Decimal?     @map("purchase_cost") @db.Decimal(12, 2)
+  poNumber       String?      @map("po_number")
+  notes          String?
+  status         String       @default("ACTIVE") // ACTIVE, EXPIRED, REVOKED
+  // Metering
+  actualUsage      Int?        @map("actual_usage")       // actual installations found
+  lastMeasuredAt   DateTime?   @map("last_measured_at")
+  complianceStatus String?     @map("compliance_status")  // COMPLIANT, OVER_LICENSED, UNDER_LICENSED, UNKNOWN
+  createdAt      DateTime     @default(now()) @map("created_at")
+  updatedAt      DateTime     @updatedAt @map("updated_at")
+
+  tenant         Tenant       @relation(fields: [tenantId], references: [id])
+  assignments    LicenseAssignment[]
+
+  @@index([tenantId])
+  @@map("licenses")
+}
+
+model LicenseAssignment {
+  id          String   @id @default(uuid()) @db.Uuid
+  licenseId   String   @map("license_id") @db.Uuid
+  userId      String?  @map("user_id") @db.Uuid
+  assetId     String?  @map("asset_id") @db.Uuid
+  assignedAt  DateTime @default(now()) @map("assigned_at")
+  revokedAt   DateTime? @map("revoked_at")
+
+  license     License  @relation(fields: [licenseId], references: [id], onDelete: Cascade)
+
+  @@index([licenseId])
+  @@map("license_assignments")
+}
+
+// ─── Notifications ───────────────────────────────────
+
+model Notification {
+  id          String   @id @default(uuid()) @db.Uuid
+  tenantId    String   @map("tenant_id") @db.Uuid
+  userId      String   @map("user_id") @db.Uuid
+  title       String
+  message     String
+  type        String   @default("INFO")    // INFO, WARNING, ALERT, SUCCESS
+  module      String?                       // tickets, discovery, licenses, assets, etc.
+  resourceId  String?  @map("resource_id")
+  isRead      Boolean  @default(false) @map("is_read")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  tenant      Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, isRead])
+  @@index([tenantId])
+  @@map("notifications")
+}
+
+// ─── Automation Engine ───────────────────────────────
+
+enum RuleStatus {
+  ACTIVE
+  PAUSED
+  DRAFT
+}
+
+model AutomationRule {
+  id               String     @id @default(uuid()) @db.Uuid
+  tenantId         String     @map("tenant_id") @db.Uuid
+  name             String
+  description      String?
+  triggerModule    String     @map("trigger_module")
+  triggerEvent     String     @map("trigger_event")
+  condition        String?
+  actionModule     String     @map("action_module")
+  actionType       String     @map("action_type")
+  actionConfig     Json       @default("{}") @map("action_config")
+  status           RuleStatus @default(DRAFT)
+  runCount         Int        @default(0) @map("run_count")
+  lastRunAt        DateTime?  @map("last_run_at")
+  cooldownMinutes  Int        @default(0) @map("cooldown_minutes")
+  lastTriggeredAt  DateTime?  @map("last_triggered_at")
+  chainedRuleId    String?    @map("chained_rule_id") @db.Uuid
+  dedupKey         String?    @map("dedup_key")
+  createdById      String?    @map("created_by_id") @db.Uuid
+  createdAt        DateTime   @default(now()) @map("created_at")
+  updatedAt        DateTime   @updatedAt @map("updated_at")
+
+  tenant         Tenant     @relation(fields: [tenantId], references: [id])
+  createdBy      User?      @relation("RuleCreator", fields: [createdById], references: [id])
+  executions     AutomationExecution[]
+
+  @@index([tenantId])
+  @@map("automation_rules")
+}
+
+model AutomationExecution {
+  id          String   @id @default(uuid()) @db.Uuid
+  ruleId      String   @map("rule_id") @db.Uuid
+  status      String   @default("SUCCESS") // SUCCESS, FAILED, SKIPPED
+  input       Json?
+  output      Json?
+  errorMsg    String?  @map("error_msg")
+  duration    Int?                           // milliseconds
+  executedAt  DateTime @default(now()) @map("executed_at")
+
+  rule        AutomationRule @relation(fields: [ruleId], references: [id], onDelete: Cascade)
+
+  @@index([ruleId])
+  @@map("automation_executions")
+}
+
+// ─── Monitoring: Cameras, NMS Devices, VDI VMs ──────────────────────────────
+enum MonitoredDeviceType {
+  CAMERA
+  NETWORK_DEVICE
+  VIRTUAL_MACHINE
+}
+
+model MonitoredDevice {
+  id          String              @id @default(uuid()) @db.Uuid
+  tenantId    String              @map("tenant_id") @db.Uuid
+  type        MonitoredDeviceType
+  name        String
+  location    String?
+  ipAddress   String?             @map("ip_address")
+  status      String              @default("ONLINE")   // ONLINE, OFFLINE, WARNING, STOPPED
+  config      Json                @default("{}")        // type-specific: resolution, cameraType, host, os, etc.
+  metrics     Json                @default("{}")        // cpu, ram, disk, latency, throughput, storage, etc.
+  lastSeen    DateTime?           @map("last_seen")
+  createdAt   DateTime            @default(now()) @map("created_at")
+  updatedAt   DateTime            @updatedAt @map("updated_at")
+
+  tenant      Tenant              @relation(fields: [tenantId], references: [id])
+
+  @@index([tenantId, type])
+  @@map("monitored_devices")
+}
+
+// ─── Patch Management ───────────────────────────────────────────────────────
+model Patch {
+  id              String   @id @default(uuid()) @db.Uuid
+  tenantId        String   @map("tenant_id") @db.Uuid
+  patchId         String   @map("patch_id")             // e.g. KB5034441
+  title           String
+  severity        String   @default("Medium")           // Critical, High, Medium, Low
+  status          String   @default("Pending")           // Deployed, Pending, Scheduled, Failed
+  category        String   @default("Security")
+  affectedAssets  Int      @default(0) @map("affected_assets")
+  deployedDate    DateTime? @map("deployed_date")
+  notes           String?
+  lastScanAt      DateTime? @map("last_scan_at")
+  scanSource      String?   @map("scan_source")          // MANUAL, AGENT, SCHEDULED
+  scanOutput      Json      @default("{}") @map("scan_output")
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  tenant          Tenant   @relation(fields: [tenantId], references: [id])
+  deployments     PatchDeployment[]
+
+  @@index([tenantId])
+  @@index([tenantId, status])
+  @@map("patches")
+}
+
+// ─── Patch Deployments (per-asset tracking) ─────────────────────────────────
+model PatchDeployment {
+  id          String    @id @default(uuid()) @db.Uuid
+  tenantId    String    @map("tenant_id") @db.Uuid
+  patchId     String    @map("patch_id") @db.Uuid
+  assetId     String    @map("asset_id") @db.Uuid
+  status      String    @default("PENDING")    // PENDING, DEPLOYING, DEPLOYED, FAILED
+  output      String?   @db.Text
+  deployedAt  DateTime? @map("deployed_at")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+
+  tenant      Tenant    @relation(fields: [tenantId], references: [id])
+  patch       Patch     @relation(fields: [patchId], references: [id], onDelete: Cascade)
+  asset       Asset     @relation(fields: [assetId], references: [id], onDelete: Cascade)
+
+  @@unique([patchId, assetId])
+  @@index([tenantId])
+  @@map("patch_deployments")
+}
+
+// ─── Discovery Agents ───────────────────────────────────────────────────────
+model Agent {
+  id            String    @id @default(uuid()) @db.Uuid
+  tenantId      String    @map("tenant_id") @db.Uuid
+  hostname      String
+  platform      String    // windows, linux, darwin
+  agentVersion  String    @map("agent_version")
+  ipAddress     String    @map("ip_address")
+  macAddress    String?   @map("mac_address")
+  status        String    @default("ONLINE")  // ONLINE, OFFLINE, STALE
+  lastHeartbeat DateTime? @map("last_heartbeat")
+  assetId       String?   @map("asset_id") @db.Uuid
+  systemInfo    Json      @default("{}") @map("system_info")
+  createdAt     DateTime  @default(now()) @map("created_at")
+  updatedAt     DateTime  @updatedAt @map("updated_at")
+
+  tenant        Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@map("agents")
+}
+
+// ─── Scan Credentials (Vault) ───────────────────────────────────────────────
+model ScanCredential {
+  id            String    @id @default(uuid()) @db.Uuid
+  tenantId      String    @map("tenant_id") @db.Uuid
+  name          String
+  type          String    // SSH_PASSWORD, SSH_KEY, SNMP_V2C, SNMP_V3, WMI, WINRM
+  encryptedData String    @map("encrypted_data") // AES-256 encrypted JSON blob
+  scope         Json      @default("{}") // { subnets: ["10.0.0.0/24"] }
+  lastUsedAt    DateTime? @map("last_used_at")
+  createdById   String    @map("created_by_id") @db.Uuid
+  createdAt     DateTime  @default(now()) @map("created_at")
+  updatedAt     DateTime  @updatedAt @map("updated_at")
+
+  tenant        Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@map("scan_credentials")
+}
+
+// ─── Scheduled Scans ────────────────────────────────────────────────────────
+model ScheduledScan {
+  id            String    @id @default(uuid()) @db.Uuid
+  tenantId      String    @map("tenant_id") @db.Uuid
+  name          String
+  subnet        String
+  scanType      String    @default("PING_SWEEP") @map("scan_type")
+  credentialId  String?   @map("credential_id") @db.Uuid
+  schedule      String    // cron expression: "0 2 * * *"
+  scanWindow    Json?     @map("scan_window") // { startHour: 22, endHour: 6 }
+  isActive      Boolean   @default(true) @map("is_active")
+  lastRunAt     DateTime? @map("last_run_at")
+  nextRunAt     DateTime? @map("next_run_at")
+  createdById   String    @map("created_by_id") @db.Uuid
+  createdAt     DateTime  @default(now()) @map("created_at")
+  updatedAt     DateTime  @updatedAt @map("updated_at")
+
+  tenant        Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@map("scheduled_scans")
+}
+
+// ─── Knowledge Base ─────────────────────────────────────────────────────────
+model KnowledgeArticle {
+  id            String    @id @default(uuid()) @db.Uuid
+  tenantId      String    @map("tenant_id") @db.Uuid
+  title         String
+  content       String
+  category      String    @default("General")
+  tags          String[]  @default([])
+  status        String    @default("PUBLISHED") // DRAFT, PUBLISHED, ARCHIVED
+  viewCount     Int       @default(0) @map("view_count")
+  helpfulCount  Int       @default(0) @map("helpful_count")
+  authorId      String    @map("author_id") @db.Uuid
+  createdAt     DateTime  @default(now()) @map("created_at")
+  updatedAt     DateTime  @updatedAt @map("updated_at")
+
+  tenant        Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@map("knowledge_articles")
+}
+
+// ─── SLA Policies ────────────────────────────────────────────────────────────
+model SlaPolicy {
+  id                String   @id @default(uuid()) @db.Uuid
+  tenantId          String   @map("tenant_id") @db.Uuid
+  name              String                              // e.g. "Critical SLA", "High SLA"
+  priority          String                              // CRITICAL, HIGH, MEDIUM, LOW
+  responseHours     Int      @map("response_hours")     // hours to first response
+  resolutionHours   Int      @map("resolution_hours")   // hours to resolution
+  escalationHours   Int?     @map("escalation_hours")   // hours before auto-escalation
+  businessHoursOnly Boolean  @default(true) @map("business_hours_only")
+  isDefault         Boolean  @default(false) @map("is_default")
+  createdAt         DateTime @default(now()) @map("created_at")
+  updatedAt         DateTime @updatedAt @map("updated_at")
+
+  tenant            Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, priority])
+  @@index([tenantId])
+  @@map("sla_policies")
+}
+
+// ─── Scheduled Reports ──────────────────────────────────────────────────────
+model ScheduledReport {
+  id            String   @id @default(uuid()) @db.Uuid
+  tenantId      String   @map("tenant_id") @db.Uuid
+  name          String                             // "Weekly Executive Report"
+  reportType    String   @map("report_type")       // assets, tickets, licenses, executive, compliance
+  schedule      String                             // Cron expression e.g. "0 8 * * 1" (Mon 8am)
+  format        String   @default("CSV")           // CSV, JSON, PDF
+  recipients    String[] @default([])              // Email addresses
+  filters       Json     @default("{}") @map("filters")  // Report-specific filters
+  isActive      Boolean  @default(true) @map("is_active")
+  lastRunAt     DateTime? @map("last_run_at")
+  nextRunAt     DateTime? @map("next_run_at")
+  createdById   String?  @map("created_by_id") @db.Uuid
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  tenant        Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@map("scheduled_reports")
+}
+
+// ─── Script Library (Automation) ────────────────────────────────────────────
+model ScriptLibrary {
+  id            String   @id @default(uuid()) @db.Uuid
+  tenantId      String   @map("tenant_id") @db.Uuid
+  name          String
+  description   String?
+  scriptContent String   @map("script_content")      // Script body (PowerShell/Bash/Python)
+  platform      String   @default("BASH")            // BASH, POWERSHELL, PYTHON
+  category      String   @default("REMEDIATION")     // REMEDIATION, DIAGNOSTICS, DEPLOYMENT, MAINTENANCE
+  approvalStatus String  @default("PENDING") @map("approval_status") // PENDING, APPROVED, REJECTED
+  approvedById  String?  @map("approved_by_id") @db.Uuid
+  approvedAt    DateTime? @map("approved_at")
+  timeoutSeconds Int     @default(300) @map("timeout_seconds")
+  runCount      Int      @default(0) @map("run_count")
+  lastRunAt     DateTime? @map("last_run_at")
+  createdById   String?  @map("created_by_id") @db.Uuid
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  tenant        Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@map("script_library")
+}
+
+// ─── Network Config Backup ──────────────────────────────────────────────────
+model NetworkConfig {
+  id            String   @id @default(uuid()) @db.Uuid
+  tenantId      String   @map("tenant_id") @db.Uuid
+  deviceId      String   @map("device_id")            // Reference to network device
+  deviceName    String   @map("device_name")
+  configText    String   @map("config_text")           // Full config text
+  version       Int      @default(1)
+  configHash    String   @map("config_hash")           // SHA256 hash for drift detection
+  changesSummary String? @map("changes_summary")       // Diff from previous version
+  backedUpAt    DateTime @default(now()) @map("backed_up_at")
+  backedUpById  String?  @map("backed_up_by_id") @db.Uuid
+  isBaseline    Boolean  @default(false) @map("is_baseline") // Compliance baseline config
+
+  tenant        Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, deviceId])
+  @@map("network_configs")
+}
+
+// ─── Unified Scan Results ───────────────────────────────────────────────────
+model ScanResult {
+  id          String    @id @default(uuid()) @db.Uuid
+  tenantId    String    @map("tenant_id") @db.Uuid
+  scanType    String    @map("scan_type")       // NMAP, SNMP, SSH, ARP, TRACEROUTE, SSL, PATCH
+  targetType  String    @map("target_type")     // SUBNET, DEVICE, HOST, URL
+  target      String                             // e.g. "192.168.1.0/24" or device ID
+  status      String    @default("RUNNING")      // RUNNING, COMPLETED, FAILED
+  startedAt   DateTime  @default(now()) @map("started_at")
+  completedAt DateTime? @map("completed_at")
+  duration    Float?                              // seconds
+  summary     Json      @default("{}")           // { hostsUp: 5, portsFound: 23, ... }
+  rawOutput   String?   @db.Text                 // full output for audit
+  results     Json      @default("[]")           // structured results array
+  triggeredBy String    @map("triggered_by")     // user ID or "SCHEDULED"
+  createdAt   DateTime  @default(now()) @map("created_at")
+
+  tenant      Tenant    @relation(fields: [tenantId], references: [id])
+
+  @@index([tenantId, scanType])
+  @@index([tenantId, status])
+  @@map("scan_results")
+}
+
+// ─── Vendor & Procurement ──────────────────────────────────────────────────
+model Vendor {
+  id              String    @id @default(uuid()) @db.Uuid
+  tenantId        String    @map("tenant_id") @db.Uuid
+  name            String
+  email           String?
+  phone           String?
+  website         String?
+  address         String?
+  category        String?   // HARDWARE, SOFTWARE, SERVICES, CLOUD, TELECOM
+  rating          Int?      @default(0) // 1-5 stars
+  slaScore        Float?    @map("sla_score") // 0-100%
+  contactPerson   String?   @map("contact_person")
+  taxId           String?   @map("tax_id")
+  paymentTerms    String?   @map("payment_terms") // NET_30, NET_60, etc.
+  status          String    @default("ACTIVE") // ACTIVE, INACTIVE, BLACKLISTED
+  notes           String?
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
+
+  tenant          Tenant    @relation(fields: [tenantId], references: [id])
+  contracts       Contract[]
+  purchaseOrders  PurchaseOrder[]
+
+  @@index([tenantId])
+  @@map("vendors")
+}
+
+model Contract {
+  id              String    @id @default(uuid()) @db.Uuid
+  tenantId        String    @map("tenant_id") @db.Uuid
+  vendorId        String    @map("vendor_id") @db.Uuid
+  contractNumber  String?   @map("contract_number")
+  title           String
+  type            String    // WARRANTY, MAINTENANCE, LEASE, LICENSE, SUPPORT, AMC
+  startDate       DateTime  @map("start_date")
+  endDate         DateTime  @map("end_date")
+  value           Decimal?  @db.Decimal(12, 2)
+  currency        String    @default("INR")
+  autoRenew       Boolean   @default(false) @map("auto_renew")
+  renewalAlertDays Int      @default(30) @map("renewal_alert_days")
+  status          String    @default("ACTIVE") // ACTIVE, EXPIRED, PENDING_RENEWAL, CANCELLED
+  attachments     Json      @default("[]")  // file paths
+  terms           String?   @db.Text
+  notes           String?
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
+
+  tenant          Tenant    @relation(fields: [tenantId], references: [id])
+  vendor          Vendor    @relation(fields: [vendorId], references: [id])
+
+  @@index([tenantId])
+  @@index([tenantId, status])
+  @@map("contracts")
+}
+
+model PurchaseOrder {
+  id              String    @id @default(uuid()) @db.Uuid
+  tenantId        String    @map("tenant_id") @db.Uuid
+  vendorId        String    @map("vendor_id") @db.Uuid
+  poNumber        String    @map("po_number")
+  status          String    @default("DRAFT") // DRAFT, SUBMITTED, APPROVED, PARTIALLY_RECEIVED, RECEIVED, CANCELLED
+  requestedById   String    @map("requested_by_id") @db.Uuid
+  approvedById    String?   @map("approved_by_id") @db.Uuid
+  totalAmount     Decimal   @default(0) @map("total_amount") @db.Decimal(12, 2)
+  currency        String    @default("INR")
+  shippingAddress String?   @map("shipping_address")
+  expectedDelivery DateTime? @map("expected_delivery")
+  receivedDate    DateTime? @map("received_date")
+  notes           String?
+  approvedAt      DateTime? @map("approved_at")
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
+
+  tenant          Tenant    @relation(fields: [tenantId], references: [id])
+  vendor          Vendor    @relation(fields: [vendorId], references: [id])
+  items           PurchaseOrderItem[]
+
+  @@unique([tenantId, poNumber])
+  @@index([tenantId])
+  @@index([tenantId, status])
+  @@map("purchase_orders")
+}
+
+model PurchaseOrderItem {
+  id              String    @id @default(uuid()) @db.Uuid
+  poId            String    @map("po_id") @db.Uuid
+  description     String
+  assetTypeId     String?   @map("asset_type_id") @db.Uuid
+  quantity        Int       @default(1)
+  unitPrice       Decimal   @default(0) @map("unit_price") @db.Decimal(12, 2)
+  totalPrice      Decimal   @default(0) @map("total_price") @db.Decimal(12, 2)
+  receivedQty     Int       @default(0) @map("received_qty")
+
+  purchaseOrder   PurchaseOrder @relation(fields: [poId], references: [id], onDelete: Cascade)
+
+  @@index([poId])
+  @@map("purchase_order_items")
+}
+
+// ─── Asset Check-in / Check-out ────────────────────────────────────────────
+model AssetCheckout {
+  id              String    @id @default(uuid()) @db.Uuid
+  tenantId        String    @map("tenant_id") @db.Uuid
+  assetId         String    @map("asset_id") @db.Uuid
+  userId          String    @map("user_id") @db.Uuid       // checked out TO
+  checkedOutById  String    @map("checked_out_by_id") @db.Uuid // checked out BY
+  checkedOutAt    DateTime  @default(now()) @map("checked_out_at")
+  expectedReturn  DateTime? @map("expected_return")
+  actualReturn    DateTime? @map("actual_return")
+  condition       String    @default("GOOD") // GOOD, FAIR, DAMAGED, LOST
+  notes           String?
+  status          String    @default("CHECKED_OUT") // CHECKED_OUT, RETURNED, OVERDUE
+
+  tenant          Tenant    @relation(fields: [tenantId], references: [id])
+  asset           Asset     @relation(fields: [assetId], references: [id])
+
+  @@index([tenantId])
+  @@index([tenantId, status])
+  @@map("asset_checkouts")
+}
+
+// ─── Change Management (ITIL) ──────────────────────────────────────────────
+model ChangeRequest {
+  id              String    @id @default(uuid()) @db.Uuid
+  tenantId        String    @map("tenant_id") @db.Uuid
+  changeNumber    String    @map("change_number")
+  title           String
+  description     String?   @db.Text
+  type            String    @default("NORMAL") // STANDARD, NORMAL, EMERGENCY
+  category        String?   // INFRASTRUCTURE, SOFTWARE, NETWORK, SECURITY, DATABASE
+  priority        String    @default("MEDIUM") // LOW, MEDIUM, HIGH, CRITICAL
+  risk            String    @default("MEDIUM") // LOW, MEDIUM, HIGH, CRITICAL
+  status          String    @default("DRAFT") // DRAFT, SUBMITTED, APPROVED, REJECTED, IN_PROGRESS, COMPLETED, FAILED, ROLLED_BACK, CANCELLED
+  requestedById   String    @map("requested_by_id") @db.Uuid
+  approvedById    String?   @map("approved_by_id") @db.Uuid
+  implementedById String?   @map("implemented_by_id") @db.Uuid
+  scheduledStart  DateTime? @map("scheduled_start")
+  scheduledEnd    DateTime? @map("scheduled_end")
+  actualStart     DateTime? @map("actual_start")
+  actualEnd       DateTime? @map("actual_end")
+  impactAnalysis  String?   @map("impact_analysis") @db.Text
+  rollbackPlan    String?   @map("rollback_plan") @db.Text
+  testPlan        String?   @map("test_plan") @db.Text
+  affectedAssets  Json      @default("[]") @map("affected_assets")
+  affectedServices Json     @default("[]") @map("affected_services")
+  relatedTickets  Json      @default("[]") @map("related_tickets")
+  closureNotes    String?   @map("closure_notes") @db.Text
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
+
+  tenant          Tenant    @relation(fields: [tenantId], references: [id])
+
+  @@unique([tenantId, changeNumber])
+  @@index([tenantId, status])
+  @@map("change_requests")
+}
+
+// ─── Problem Management (ITIL) ─────────────────────────────────────────────
+model Problem {
+  id              String    @id @default(uuid()) @db.Uuid
+  tenantId        String    @map("tenant_id") @db.Uuid
+  problemNumber   String    @map("problem_number")
+  title           String
+  description     String?   @db.Text
+  priority        String    @default("MEDIUM") // LOW, MEDIUM, HIGH, CRITICAL
+  status          String    @default("OPEN") // OPEN, ROOT_CAUSE_IDENTIFIED, KNOWN_ERROR, RESOLVED, CLOSED
+  category        String?
+  rootCause       String?   @map("root_cause") @db.Text
+  workaround      String?   @db.Text
+  resolution      String?   @db.Text
+  affectedAssets  Json      @default("[]") @map("affected_assets")
+  relatedTickets  Json      @default("[]") @map("related_tickets")
+  relatedChanges  Json      @default("[]") @map("related_changes")
+  assignedToId    String?   @map("assigned_to_id") @db.Uuid
+  identifiedAt    DateTime? @map("identified_at")
+  resolvedAt      DateTime? @map("resolved_at")
+  isKnownError    Boolean   @default(false) @map("is_known_error")
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
+
+  tenant          Tenant    @relation(fields: [tenantId], references: [id])
+
+  @@unique([tenantId, problemNumber])
+  @@index([tenantId, status])
+  @@index([tenantId, isKnownError])
+  @@map("problems")
+}
+
+// ─── Asset Attestation ─────────────────────────────────────────────────────
+model AssetAttestation {
+  id              String    @id @default(uuid()) @db.Uuid
+  tenantId        String    @map("tenant_id") @db.Uuid
+  assetId         String    @map("asset_id") @db.Uuid
+  userId          String    @map("user_id") @db.Uuid
+  campaignName    String?   @map("campaign_name")
+  requestedAt     DateTime  @default(now()) @map("requested_at")
+  respondedAt     DateTime? @map("responded_at")
+  response        String?   // CONFIRMED, LOST, TRANSFERRED, NO_RESPONSE
+  notes           String?
+
+  tenant          Tenant    @relation(fields: [tenantId], references: [id])
+  asset           Asset     @relation(fields: [assetId], references: [id])
+
+  @@index([tenantId])
+  @@index([tenantId, response])
+  @@map("asset_attestations")
+}
+
+// ─── Notification Channels ─────────────────────────────────────────────────
+model NotificationChannel {
+  id              String    @id @default(uuid()) @db.Uuid
+  tenantId        String    @map("tenant_id") @db.Uuid
+  name            String
+  type            String    // EMAIL, SLACK, TEAMS, WEBHOOK
+  config          Json      @default("{}") // { webhookUrl, channel, smtpHost, etc. }
+  isActive        Boolean   @default(true) @map("is_active")
+  events          Json      @default("[]") // which events trigger this channel
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
+
+  tenant          Tenant    @relation(fields: [tenantId], references: [id])
+
+  @@index([tenantId])
+  @@map("notification_channels")
+}

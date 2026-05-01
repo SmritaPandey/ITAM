@@ -25,13 +25,13 @@ export default function PortalLayout({ children }: { children: React.ReactNode }
 
   useEffect(() => {
     const token = localStorage.getItem("accessToken");
-    if (!token) { router.push("/"); return; }
+    if (!token) { router.push("/login"); return; }
     try {
       const payload = JSON.parse(atob(token.split(".")[1]));
       // If admin tries to access portal, redirect to dashboard
       if (payload.role !== "Employee") { router.push("/dashboard"); return; }
       setUser(payload);
-    } catch { router.push("/"); }
+    } catch { router.push("/login"); }
   }, [router]);
 
   useEffect(() => {
@@ -47,7 +47,7 @@ export default function PortalLayout({ children }: { children: React.ReactNode }
     localStorage.removeItem("refreshToken");
     localStorage.removeItem("userRole");
     localStorage.removeItem("userEmail");
-    router.push("/");
+    router.push("/login");
   }
 
   if (!user) return null;

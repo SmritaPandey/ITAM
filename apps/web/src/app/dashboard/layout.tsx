@@ -109,13 +109,13 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
   useEffect(() => {
     const token = localStorage.getItem("accessToken");
-    if (!token) { router.push("/"); return; }
+    if (!token) { router.push("/login"); return; }
     try {
       const payload = JSON.parse(atob(token.split(".")[1]));
       // Redirect staff to portal
       if (payload.role === "Employee") { router.push("/portal"); return; }
       setUser(payload);
-    } catch { router.push("/"); }
+    } catch { router.push("/login"); }
 
     // Fetch ticket count for badge
     fetch(`${API}/tickets?limit=1`, { headers: { Authorization: `Bearer ${token}` } })
@@ -151,7 +151,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
   function handleLogout() {
     localStorage.removeItem("accessToken");
-    router.push("/");
+    router.push("/login");
   }
 
   async function markAllRead() {

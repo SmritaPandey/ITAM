@@ -162,7 +162,7 @@ export default function DashboardPage() {
             </div>
           </div>
           <div style={{ height: 260 }}>
-            <ResponsiveContainer width="100%" height="100%">
+            <ResponsiveContainer width="100%" height="100%" minWidth={0}>
               <BarChart data={typeData} barSize={32}>
                 <CartesianGrid strokeDasharray="3 3" stroke="rgba(42,49,80,0.5)" vertical={false} />
                 <XAxis dataKey="name" tick={{ fill: "#64748b", fontSize: 11 }} axisLine={false} tickLine={false} />
@@ -192,7 +192,7 @@ export default function DashboardPage() {
             </div>
           </div>
           <div style={{ height: 260, display: "flex", alignItems: "center", justifyContent: "center" }}>
-            <ResponsiveContainer width="100%" height="100%">
+            <ResponsiveContainer width="100%" height="100%" minWidth={0}>
               <PieChart>
                 <Pie data={pieData} dataKey="value" cx="50%" cy="50%" innerRadius={60} outerRadius={90} paddingAngle={4} strokeWidth={0}>
                   {pieData.map((entry: any, i: number) => <Cell key={i} fill={entry.color} />)}
@@ -224,7 +224,7 @@ export default function DashboardPage() {
             <span className="badge green"><Wifi size={10} /> Healthy</span>
           </div>
           <div style={{ height: 200 }}>
-            <ResponsiveContainer width="100%" height="100%">
+            <ResponsiveContainer width="100%" height="100%" minWidth={0}>
               <AreaChart data={networkHealth}>
                 <defs>
                   <linearGradient id="areaGrad" x1="0" y1="0" x2="0" y2="1">
@@ -252,7 +252,7 @@ export default function DashboardPage() {
             <span className="badge amber"><AlertTriangle size={10} /> 3 Critical</span>
           </div>
           <div style={{ height: 200 }}>
-            <ResponsiveContainer width="100%" height="100%">
+            <ResponsiveContainer width="100%" height="100%" minWidth={0}>
               <BarChart data={patchCompliance} barSize={20}>
                 <CartesianGrid strokeDasharray="3 3" stroke="rgba(42,49,80,0.5)" vertical={false} />
                 <XAxis dataKey="name" tick={{ fill: "#64748b", fontSize: 11 }} axisLine={false} tickLine={false} />
@@ -356,7 +356,7 @@ export default function DashboardPage() {
           </div>
         </div>
         <div style={{ height: 200 }}>
-          <ResponsiveContainer width="100%" height="100%">
+          <ResponsiveContainer width="100%" height="100%" minWidth={0}>
             <LineChart data={weeklyTrend}>
               <CartesianGrid strokeDasharray="3 3" stroke="rgba(42,49,80,0.5)" vertical={false} />
               <XAxis dataKey="day" tick={{ fill: "#64748b", fontSize: 11 }} axisLine={false} tickLine={false} />

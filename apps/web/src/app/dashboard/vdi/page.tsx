@@ -66,7 +66,7 @@ export default function VDIPage() {
       <div className="card" style={{ marginBottom: 16 }}>
         <div className="card-header"><div className="card-title">Host Resource Utilization</div></div>
         <div style={{ height: 180 }}>
-          <ResponsiveContainer width="100%" height="100%">
+          <ResponsiveContainer width="100%" height="100%" minWidth={0}>
             <BarChart data={resourceUsage} barSize={24}>
               <CartesianGrid strokeDasharray="3 3" stroke="rgba(42,49,80,0.5)" vertical={false} />
               <XAxis dataKey="host" tick={{ fill: "#64748b", fontSize: 11 }} axisLine={false} tickLine={false} />

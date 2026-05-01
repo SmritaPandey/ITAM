@@ -80,7 +80,7 @@ export default function ReportsPage() {
             <div><div className="card-title">Asset Lifecycle (6 Months)</div><div className="card-subtitle">Assets created vs retired</div></div>
           </div>
           <div style={{ height: 220 }}>
-            <ResponsiveContainer width="100%" height="100%">
+            <ResponsiveContainer width="100%" height="100%" minWidth={0}>
               <BarChart data={monthlyAssets} barSize={18}>
                 <CartesianGrid strokeDasharray="3 3" stroke="rgba(42,49,80,0.5)" vertical={false} />
                 <XAxis dataKey="month" tick={{ fill: "#64748b", fontSize: 11 }} axisLine={false} tickLine={false} />
@@ -97,7 +97,7 @@ export default function ReportsPage() {
             <div><div className="card-title">Cost Distribution</div><div className="card-subtitle">Total: ₹{(totalCost / 100000).toFixed(1)} Lakhs</div></div>
           </div>
           <div style={{ height: 220, display: "flex", alignItems: "center" }}>
-            <ResponsiveContainer width="100%" height="100%">
+            <ResponsiveContainer width="100%" height="100%" minWidth={0}>
               <PieChart>
                 <Pie data={costBreakdown} dataKey="value" cx="50%" cy="50%" innerRadius={55} outerRadius={85} paddingAngle={3} strokeWidth={0}>
                   {costBreakdown.map((d, i) => <Cell key={i} fill={d.color} />)}
@@ -123,7 +123,7 @@ export default function ReportsPage() {
           <div><div className="card-title">Ticket Volume (6 Months)</div><div className="card-subtitle">Opened vs closed</div></div>
         </div>
         <div style={{ height: 180 }}>
-          <ResponsiveContainer width="100%" height="100%">
+          <ResponsiveContainer width="100%" height="100%" minWidth={0}>
             <AreaChart data={ticketTrend}>
               <defs>
                 <linearGradient id="openGrad" x1="0" y1="0" x2="0" y2="1">

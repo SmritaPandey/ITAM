@@ -10,8 +10,9 @@ import {
   Sun, Moon, Menu,
 } from "lucide-react";
 
+import { apiFetch, safeFetch, getToken } from "@/lib/api";
+
 const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4100/api/v1";
-function getToken() { return typeof window !== "undefined" ? localStorage.getItem("accessToken") || "" : ""; }
 
 const navSections = [
   {
@@ -121,15 +122,15 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     } catch { router.push("/login"); }
 
     // Fetch ticket count for badge
-    fetch(`${API}/tickets?limit=1`, { headers: { Authorization: `Bearer ${token}` } })
-      .then(r => r.json()).then(d => setTicketCount(d.total || 0)).catch(() => {});
+    safeFetch("/tickets?limit=1").then(d => setTicketCount(d?.total || 0));
 
     // Fetch real notifications
-    fetch(`${API}/notifications?limit=10`, { headers: { Authorization: `Bearer ${token}` } })
-      .then(r => r.json()).then(d => {
+    safeFetch("/notifications?limit=10").then(d => {
+      if (d) {
         setNotifications(d.data || []);
         setUnreadCount(d.unread || 0);
-      }).catch(() => {});
+      }
+    });
   }, [router]);
 
   // Close mobile sidebar on navigation
@@ -163,8 +164,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   }
 
   async function markAllRead() {
-    const token = getToken();
-    await fetch(`${API}/notifications/read-all`, { method: "POST", headers: { Authorization: `Bearer ${token}` } });
+    await apiFetch("/notifications/read-all", { method: "POST" });
     setNotifications(prev => prev.map(n => ({ ...n, isRead: true })));
     setUnreadCount(0);
   }
@@ -183,12 +183,11 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     const nav = navSections.flatMap(s => s.items).filter(i => i.name.toLowerCase().includes(q));
 
     const timer = setTimeout(() => {
-      const token = getToken();
       setSearching(true);
       Promise.all([
-        fetch(`${API}/assets?search=${encodeURIComponent(searchQuery)}&limit=5`, { headers: { Authorization: `Bearer ${token}` } }).then(r => r.json()).catch(() => ({ data: [] })),
-        fetch(`${API}/tickets?search=${encodeURIComponent(searchQuery)}&limit=5`, { headers: { Authorization: `Bearer ${token}` } }).then(r => r.json()).catch(() => ({ data: [] })),
-        fetch(`${API}/users?search=${encodeURIComponent(searchQuery)}&limit=5`, { headers: { Authorization: `Bearer ${token}` } }).then(r => r.json()).catch(() => ({ data: [] })),
+        safeFetch(`/assets?search=${encodeURIComponent(searchQuery)}&limit=5`).then(d => d || { data: [] }),
+        safeFetch(`/tickets?search=${encodeURIComponent(searchQuery)}&limit=5`).then(d => d || { data: [] }),
+        safeFetch(`/users?search=${encodeURIComponent(searchQuery)}&limit=5`).then(d => d || { data: [] }),
       ]).then(([a, t, u]) => {
         setSearchResults({ nav, assets: a.data || [], tickets: t.data || [], users: u.data || [] });
       }).finally(() => setSearching(false));

@@ -20,7 +20,7 @@ async function bootstrap() {
   app.enableCors({
     origin: process.env.CORS_ORIGIN
       ? process.env.CORS_ORIGIN.split(',').map(s => s.trim())
-      : ['http://localhost:3000', 'http://localhost:3100'],
+      : ['http://localhost:3000', 'http://localhost:3100', 'https://reconapm.com', 'https://www.reconapm.com'],
     credentials: true,
   });
 

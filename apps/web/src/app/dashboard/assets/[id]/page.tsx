@@ -7,7 +7,7 @@ import {
   FileText, AlertTriangle, CheckCircle2, Info, Trash2
 } from "lucide-react";
 import EditAssetPanel from "@/components/EditAssetPanel";
-import { apiFetch, getToken, getApiBase } from "@/lib/api";
+import { apiFetch } from "@/lib/api";
 
 const STATUS_BADGE: Record<string, string> = {
   ACTIVE: "green", DISCOVERED: "blue", IN_MAINTENANCE: "amber",
@@ -31,10 +31,7 @@ export default function AssetDetailPage() {
   const [showEdit, setShowEdit] = useState(false);
 
   function loadAsset() {
-    fetch(`${getApiBase()}/assets/${params.id}`, {
-      headers: { Authorization: `Bearer ${getToken()}` },
-    })
-      .then(r => r.json())
+    apiFetch(`/assets/${params.id}`)
       .then(setAsset)
       .catch(console.error)
       .finally(() => setLoading(false));
@@ -80,7 +77,7 @@ export default function AssetDetailPage() {
           </div>
           <div style={{ display: "flex", gap: 8 }}>
             <button className="btn btn-secondary" onClick={() => setShowEdit(true)}>Edit</button>
-            <button className="btn btn-primary" onClick={() => { if(confirm('Delete this asset?')) { fetch(`${getApiBase()}/assets/${asset.id}`, { method: 'DELETE', headers: { Authorization: `Bearer ${getToken()}` } }).then(() => router.push('/dashboard/assets')); } }}><Trash2 size={14} /> Delete</button>
+            <button className="btn btn-primary" onClick={() => { if(confirm('Delete this asset?')) { apiFetch(`/assets/${asset.id}`, { method: 'DELETE' }).then(() => router.push('/dashboard/assets')); } }}><Trash2 size={14} /> Delete</button>
           </div>
         </div>
       </div>

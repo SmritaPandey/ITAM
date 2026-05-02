@@ -4,7 +4,7 @@ import { useRouter } from "next/navigation";
 import { Search, Plus, Filter, Download, RefreshCw, ChevronLeft, ChevronRight, Upload } from "lucide-react";
 import CreateAssetPanel from "@/components/CreateAssetPanel";
 import ImportAssetsPanel from "@/components/ImportAssetsPanel";
-import { apiFetch, getToken, getApiBase } from "@/lib/api";
+import { apiFetch } from "@/lib/api";
 
 const STATUS_BADGE: Record<string, string> = {
   ACTIVE: "green", DISCOVERED: "blue", IN_MAINTENANCE: "amber",
@@ -26,8 +26,8 @@ export default function AssetsPage() {
     const params = new URLSearchParams({ page: String(p), limit: "15" });
     if (s) params.set("search", s);
     if (st) params.set("status", st);
-    fetch(`${getApiBase()}/assets?${params}`, { headers: { Authorization: `Bearer ${getToken()}` } })
-      .then(r => r.json()).then(setAssets).catch(console.error).finally(() => setLoading(false));
+    apiFetch(`/assets?${params}`)
+      .then(setAssets).catch(console.error).finally(() => setLoading(false));
   }
 
   useEffect(() => { load(1); }, []);

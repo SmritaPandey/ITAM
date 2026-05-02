@@ -1,6 +1,6 @@
 /**
  * Shared API fetch utility for all dashboard pages.
- * Handles authentication, error responses, and token refresh.
+ * Handles authentication, error responses, and automatic token refresh.
  */
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4100/api/v1";
@@ -14,10 +14,63 @@ export function getApiBase(): string {
   return API_BASE;
 }
 
+// ─── Token Refresh Logic ──────────────────────────────────────
+let isRefreshing = false;
+let refreshPromise: Promise<string | null> | null = null;
+
+/**
+ * Attempt to refresh the access token using the stored refresh token.
+ * Uses a lock so concurrent 401s don't fire multiple refresh requests.
+ */
+async function tryRefreshToken(): Promise<string | null> {
+  // If already refreshing, wait for the in-flight request
+  if (isRefreshing && refreshPromise) {
+    return refreshPromise;
+  }
+
+  const refreshToken = typeof window !== "undefined"
+    ? localStorage.getItem("refreshToken")
+    : null;
+
+  if (!refreshToken) return null;
+
+  isRefreshing = true;
+  refreshPromise = (async () => {
+    try {
+      const res = await fetch(`${API_BASE}/auth/refresh`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ refreshToken }),
+      });
+
+      if (!res.ok) return null;
+
+      const data = await res.json();
+      if (data.accessToken) {
+        localStorage.setItem("accessToken", data.accessToken);
+        if (data.refreshToken) {
+          localStorage.setItem("refreshToken", data.refreshToken);
+        }
+        return data.accessToken as string;
+      }
+      return null;
+    } catch {
+      return null;
+    } finally {
+      isRefreshing = false;
+      refreshPromise = null;
+    }
+  })();
+
+  return refreshPromise;
+}
+
+// ─── Main API Fetch ───────────────────────────────────────────
+
 /**
  * Authenticated fetch wrapper.
- * - Throws on non-OK responses (so try/catch catches them)
- * - Redirects to /login on 401 (token expired)
+ * - Auto-refreshes token on 401 and retries the request once
+ * - Redirects to /login only if refresh also fails
  * - Returns parsed JSON on success
  */
 export async function apiFetch<T = any>(path: string, opts?: RequestInit): Promise<T> {
@@ -32,12 +85,36 @@ export async function apiFetch<T = any>(path: string, opts?: RequestInit): Promi
   });
 
   if (res.status === 401) {
-    // Token expired — redirect to login
-    if (typeof window !== "undefined") {
-      localStorage.removeItem("accessToken");
-      localStorage.removeItem("refreshToken");
-      window.location.href = "/login";
+    // Try to refresh the token
+    const newToken = await tryRefreshToken();
+
+    if (newToken) {
+      // Retry the original request with the new token
+      const retryRes = await fetch(`${API_BASE}${path}`, {
+        ...opts,
+        headers: {
+          Authorization: `Bearer ${newToken}`,
+          "Content-Type": "application/json",
+          ...opts?.headers,
+        },
+      });
+
+      if (retryRes.ok) {
+        return retryRes.json();
+      }
+
+      // If retry also fails with 401, session is truly dead
+      if (retryRes.status === 401) {
+        forceLogout();
+        throw new Error("Session expired. Please log in again.");
+      }
+
+      const body = await retryRes.json().catch(() => ({}));
+      throw new Error(body.message || `API Error ${retryRes.status}: ${retryRes.statusText}`);
     }
+
+    // Refresh failed — session expired
+    forceLogout();
     throw new Error("Session expired. Please log in again.");
   }
 
@@ -47,6 +124,19 @@ export async function apiFetch<T = any>(path: string, opts?: RequestInit): Promi
   }
 
   return res.json();
+}
+
+/**
+ * Force logout — clear all auth state and redirect to login.
+ */
+function forceLogout() {
+  if (typeof window !== "undefined") {
+    localStorage.removeItem("accessToken");
+    localStorage.removeItem("refreshToken");
+    localStorage.removeItem("userRole");
+    localStorage.removeItem("userEmail");
+    window.location.href = "/login";
+  }
 }
 
 /**

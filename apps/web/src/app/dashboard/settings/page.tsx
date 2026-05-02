@@ -4,7 +4,7 @@ import {
   Settings, Globe, Bell, Shield, Database, Mail,
   Clock, Palette, Save, ToggleLeft, ToggleRight, Key, Server, Lock, Loader2, CheckCircle2
 } from "lucide-react";
-import { apiFetch, getToken, getApiBase } from "@/lib/api";
+import { apiFetch } from "@/lib/api";
 
 interface SettingsSection { id: string; label: string; icon: React.ReactNode; }
 
@@ -30,8 +30,8 @@ export default function SettingsPage() {
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
-    fetch(`${getApiBase()}/settings`, { headers: { Authorization: `Bearer ${getToken()}` } })
-      .then(r => r.json()).then(data => {
+    apiFetch("/settings")
+      .then(data => {
         setSettings(prev => ({ ...prev, ...data }));
       }).catch(() => {}).finally(() => setLoading(false));
   }, []);
@@ -39,9 +39,8 @@ export default function SettingsPage() {
   async function handleSave() {
     setSaving(true);
     try {
-      await fetch(`${getApiBase()}/settings`, {
+      await apiFetch("/settings", {
         method: "PATCH",
-        headers: { Authorization: `Bearer ${getToken()}`, "Content-Type": "application/json" },
         body: JSON.stringify(settings),
       });
       setSaved(true);

@@ -4,7 +4,7 @@ import {
   Monitor, Cpu, MemoryStick, Power, CheckCircle2, RefreshCw, Loader2
 } from "lucide-react";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip } from "recharts";
-import { getApiBase, getToken } from "@/lib/api";
+import { apiFetch } from "@/lib/api";
 import SafeChart from "@/components/SafeChart";
 
 export default function VDIPage() {
@@ -13,8 +13,7 @@ export default function VDIPage() {
   const [selectedVM, setSelectedVM] = useState<any>(null);
 
   function refresh() {
-    fetch(`${getApiBase()}/monitoring/vdi`, { headers: { Authorization: `Bearer ${getToken()}` } })
-      .then(r => r.json()).then(setData).catch(console.error).finally(() => setLoading(false));
+    apiFetch("/monitoring/vdi").then(setData).catch(console.error).finally(() => setLoading(false));
   }
   useEffect(() => { refresh(); }, []);
 

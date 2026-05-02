@@ -1,7 +1,7 @@
 "use client";
 import { useEffect, useState, useRef, useCallback } from "react";
 import { Search, ZoomIn, ZoomOut, Maximize2, Activity, Package, Server, Monitor, Printer, Wifi, Truck, Armchair } from "lucide-react";
-import { getApiBase, getToken } from "@/lib/api";
+import { apiFetch } from "@/lib/api";
 
 interface Node { id: string; name: string; type: string; status: string; x: number; y: number; vx: number; vy: number; }
 interface Edge { from: string; to: string; label: string; }
@@ -33,8 +33,7 @@ export default function CMDBPage() {
   const nodesRef = useRef<Node[]>([]);
 
   useEffect(() => {
-    fetch(`${getApiBase()}/assets?limit=50`, { headers: { Authorization: `Bearer ${getToken()}` } })
-      .then(r => r.json())
+    apiFetch("/assets?limit=50")
       .then(d => {
         setAssets(d.data || []);
         buildGraph(d.data || []);

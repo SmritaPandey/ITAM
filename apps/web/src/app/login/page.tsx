@@ -17,8 +17,9 @@ const QUICK_LOGINS = [
 
 export default function LoginPage() {
   const router = useRouter();
-  const [email, setEmail] = useState("admin@acme.com");
-  const [password, setPassword] = useState("Admin@123");
+  const isDev = process.env.NODE_ENV === 'development';
+  const [email, setEmail] = useState(isDev ? "admin@acme.com" : "");
+  const [password, setPassword] = useState(isDev ? "Admin@123" : "");
   const [showPw, setShowPw] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");

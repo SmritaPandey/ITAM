@@ -3,7 +3,7 @@ import { useEffect, useState, useCallback } from "react";
 import {
   Shield, AlertTriangle, CheckCircle2, XCircle, Clock, Eye, RefreshCw,
   Plus, Loader2, ChevronDown, Filter, Activity, Cpu, HardDrive,
-  Wifi, Usb, Package, Lock, Trash2, Power
+  Wifi, Usb, Package, Lock, Trash2, Power, Scan, Server
 } from "lucide-react";
 import { apiFetch } from "@/lib/api";
 import { PageHelp } from "@/components/HelpSystem";
@@ -34,7 +34,7 @@ const ACTION_LABELS: Record<string, string> = {
 };
 
 export default function CompliancePage() {
-  const [tab, setTab] = useState<"overview" | "changes" | "policies">("overview");
+  const [tab, setTab] = useState<"overview" | "changes" | "policies" | "agentless">("overview");
   const [dashboard, setDashboard] = useState<any>(null);
   const [changes, setChanges] = useState<any>({ data: [], total: 0 });
   const [policies, setPolicies] = useState<any[]>([]);
@@ -45,6 +45,11 @@ export default function CompliancePage() {
   const [newPolicy, setNewPolicy] = useState({ name: "", description: "", category: "RAM_CHANGE", severity: "WARNING", action: "ALERT_ONLY" });
   const [reviewModal, setReviewModal] = useState<any>(null);
   const [reviewNote, setReviewNote] = useState("");
+  const [scanTarget, setScanTarget] = useState("");
+  const [scanUser, setScanUser] = useState("");
+  const [scanPass, setScanPass] = useState("");
+  const [scanning, setScanning] = useState(false);
+  const [scanResult, setScanResult] = useState<any>(null);
 
   const refresh = useCallback(async () => {
     try {
@@ -123,12 +128,12 @@ export default function CompliancePage() {
 
       {/* Tabs */}
       <div style={{ display: "flex", gap: 4, marginBottom: 16 }}>
-        {(["overview", "changes", "policies"] as const).map(t => (
+        {(["overview", "changes", "policies", "agentless"] as const).map(t => (
           <button key={t} onClick={() => setTab(t)}
             className={`btn ${tab === t ? "btn-primary" : "btn-secondary"}`}
             style={{ fontSize: 12, padding: "6px 16px", textTransform: "capitalize" }}>
-            {t === "overview" ? <Activity size={12} /> : t === "changes" ? <Eye size={12} /> : <Shield size={12} />}
-            {t}
+            {t === "overview" ? <Activity size={12} /> : t === "changes" ? <Eye size={12} /> : t === "agentless" ? <Scan size={12} /> : <Shield size={12} />}
+            {t === "agentless" ? "Agentless Scan" : t}
           </button>
         ))}
       </div>
@@ -418,6 +423,137 @@ export default function CompliancePage() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* ════════ AGENTLESS SCAN TAB ════════ */}
+      {tab === "agentless" && (
+        <>
+          <div className="card" style={{ padding: 20, marginBottom: 16 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 14 }}>
+              <Server size={18} style={{ color: "var(--brand-400)" }} />
+              <h3 style={{ fontSize: 14, fontWeight: 700 }}>Agentless Compliance Scan</h3>
+            </div>
+            <p style={{ fontSize: 12, color: "var(--text-secondary)", marginBottom: 16 }}>
+              Scan remote endpoints via SSH without deploying an agent. The server connects to the target,
+              collects system info (CPU, RAM, disks, services, firewall), and evaluates it against your
+              compliance policies — the same way agent heartbeats work.
+            </p>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12, marginBottom: 14 }}>
+              <div>
+                <label style={{ fontSize: 12, fontWeight: 600, marginBottom: 4, display: "block" }}>Target IP(s)</label>
+                <input value={scanTarget} onChange={e => setScanTarget(e.target.value)}
+                  placeholder="192.168.1.10 or 10.0.0.5, 10.0.0.6"
+                  style={{ width: "100%", padding: "8px 12px", borderRadius: 8, background: "var(--bg-input)", border: "1px solid var(--border-primary)", color: "var(--text-primary)", fontSize: 12 }} />
+                <span style={{ fontSize: 10, color: "var(--text-tertiary)" }}>Comma-separated for batch scan</span>
+              </div>
+              <div>
+                <label style={{ fontSize: 12, fontWeight: 600, marginBottom: 4, display: "block" }}>SSH Username</label>
+                <input value={scanUser} onChange={e => setScanUser(e.target.value)}
+                  placeholder="root or admin"
+                  style={{ width: "100%", padding: "8px 12px", borderRadius: 8, background: "var(--bg-input)", border: "1px solid var(--border-primary)", color: "var(--text-primary)", fontSize: 12 }} />
+              </div>
+              <div>
+                <label style={{ fontSize: 12, fontWeight: 600, marginBottom: 4, display: "block" }}>SSH Password</label>
+                <input type="password" value={scanPass} onChange={e => setScanPass(e.target.value)}
+                  placeholder="••••••••"
+                  style={{ width: "100%", padding: "8px 12px", borderRadius: 8, background: "var(--bg-input)", border: "1px solid var(--border-primary)", color: "var(--text-primary)", fontSize: 12 }} />
+              </div>
+            </div>
+            <button className="btn btn-primary" disabled={!scanTarget || !scanUser || scanning}
+              onClick={async () => {
+                setScanning(true); setScanResult(null);
+                try {
+                  const targets = scanTarget.split(",").map(t => t.trim()).filter(Boolean);
+                  if (targets.length === 1) {
+                    const res = await apiFetch("/compliance/agentless/scan", { method: "POST", body: JSON.stringify({ target: targets[0], username: scanUser, password: scanPass }) });
+                    setScanResult(res);
+                  } else {
+                    const res = await apiFetch("/compliance/agentless/batch", { method: "POST", body: JSON.stringify({ targets, username: scanUser, password: scanPass }) });
+                    setScanResult(res);
+                  }
+                  refresh();
+                } catch (e: any) { setScanResult({ success: false, error: e.message }); }
+                finally { setScanning(false); }
+              }}>
+              {scanning ? <><Loader2 size={14} style={{ animation: "spin 1s linear infinite" }} /> Scanning...</> : <><Scan size={14} /> Run Compliance Scan</>}
+            </button>
+          </div>
+
+          {scanResult && (
+            <div className="card" style={{ padding: 16 }}>
+              <h3 style={{ fontSize: 14, fontWeight: 700, marginBottom: 12 }}>Scan Results</h3>
+              {scanResult.results ? (
+                /* Batch results */
+                <>
+                  <div style={{ display: "flex", gap: 12, marginBottom: 14 }}>
+                    <span className="badge green">{scanResult.successful} successful</span>
+                    {scanResult.failed > 0 && <span className="badge red">{scanResult.failed} failed</span>}
+                  </div>
+                  {scanResult.results.map((r: any, i: number) => (
+                    <div key={i} className="card" style={{ padding: 12, marginBottom: 8 }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                        <div>
+                          <span style={{ fontWeight: 700, fontSize: 13 }}>{r.hostname || r.target}</span>
+                          <code style={{ fontSize: 11, marginLeft: 8, color: "var(--brand-400)" }}>{r.target}</code>
+                          {r.mode && <span className="badge cyan" style={{ fontSize: 9, marginLeft: 6 }}>{r.mode}</span>}
+                        </div>
+                        {r.success ? (
+                          <span className="badge green">{r.changesDetected} change{r.changesDetected !== 1 ? "s" : ""}</span>
+                        ) : (
+                          <span className="badge red">Failed: {r.error}</span>
+                        )}
+                      </div>
+                      {r.snapshot && (
+                        <div style={{ display: "flex", gap: 16, marginTop: 8, fontSize: 11, color: "var(--text-secondary)" }}>
+                          <span>CPU: {r.snapshot.cores} cores</span>
+                          <span>RAM: {Math.round(r.snapshot.ramMb / 1024)}GB</span>
+                          <span>Disks: {r.snapshot.disks}</span>
+                          <span>Services: {r.snapshot.services}</span>
+                          <span>Firewall: {r.snapshot.firewall ? "✅" : "❌"}</span>
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </>
+              ) : scanResult.success ? (
+                /* Single result */
+                <div className="card" style={{ padding: 12 }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+                    <div>
+                      <span style={{ fontWeight: 700, fontSize: 13 }}>{scanResult.hostname}</span>
+                      <code style={{ fontSize: 11, marginLeft: 8, color: "var(--brand-400)" }}>{scanResult.target}</code>
+                      <span className="badge cyan" style={{ fontSize: 9, marginLeft: 6 }}>agentless</span>
+                    </div>
+                    <span className="badge green">{scanResult.changesDetected} change{scanResult.changesDetected !== 1 ? "s" : ""} detected</span>
+                  </div>
+                  {scanResult.snapshot && (
+                    <div style={{ display: "flex", gap: 16, fontSize: 11, color: "var(--text-secondary)" }}>
+                      <span>CPU: {scanResult.snapshot.cores} cores</span>
+                      <span>RAM: {Math.round(scanResult.snapshot.ramMb / 1024)}GB</span>
+                      <span>Disks: {scanResult.snapshot.disks}</span>
+                      <span>Services: {scanResult.snapshot.services}</span>
+                      <span>Firewall: {scanResult.snapshot.firewall ? "✅" : "❌"}</span>
+                    </div>
+                  )}
+                  {scanResult.changes?.length > 0 && (
+                    <div style={{ marginTop: 10, borderTop: "1px solid var(--border-primary)", paddingTop: 10 }}>
+                      {scanResult.changes.map((c: any) => (
+                        <div key={c.id} style={{ display: "flex", justifyContent: "space-between", fontSize: 12, padding: "4px 0" }}>
+                          <span>{c.summary}</span>
+                          <span className={`badge ${SEVERITY_COLORS[c.severity]?.badge}`}>{c.severity}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div className="card" style={{ padding: 12, background: "rgba(239,68,68,0.06)" }}>
+                  <span style={{ color: "#ef4444", fontWeight: 600 }}>Scan failed: {scanResult.error}</span>
+                </div>
+              )}
+            </div>
+          )}
+        </>
       )}
 
       <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>

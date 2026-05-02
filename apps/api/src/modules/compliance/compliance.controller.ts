@@ -111,4 +111,25 @@ export class ComplianceController {
   async getAgentTimeline(@Request() req: any, @Param('id') id: string) {
     return this.complianceService.getAgentTimeline(id, req.user.tenantId);
   }
+
+  // ─── Agentless Scanning ────────────────────────────────────
+  @Post('agentless/scan')
+  @Roles('Tenant Admin', 'IT Admin')
+  @ApiOperation({ summary: 'Run agentless compliance scan via SSH on a single target' })
+  async agentlessScan(@Request() req: any, @Body() body: {
+    target: string; username: string; password?: string;
+    privateKeyPath?: string; credentialId?: string;
+  }) {
+    return this.complianceService.agentlessScan(req.user.tenantId, body);
+  }
+
+  @Post('agentless/batch')
+  @Roles('Tenant Admin', 'IT Admin')
+  @ApiOperation({ summary: 'Run agentless compliance scan on multiple targets' })
+  async agentlessBatchScan(@Request() req: any, @Body() body: {
+    targets: string[]; username: string; password?: string;
+    privateKeyPath?: string; credentialId?: string;
+  }) {
+    return this.complianceService.agentlessBatchScan(req.user.tenantId, body);
+  }
 }

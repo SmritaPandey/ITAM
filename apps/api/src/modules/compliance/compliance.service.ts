@@ -1,6 +1,7 @@
 import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../common/database/prisma.service';
 import { EventBusService } from '../../common/events/event-bus.service';
+import { SshScanner } from '../../common/scanners/ssh.scanner';
 
 interface ChangeDetection {
   category: string;
@@ -526,5 +527,171 @@ export class ComplianceService {
       });
     }
     return { message: `Created ${templates.length} default policies`, count: templates.length };
+  }
+
+  // ═══════════════════════════════════════════════════════════════
+  // AGENTLESS COMPLIANCE SCAN — SSH into remote hosts
+  // ═══════════════════════════════════════════════════════════════
+
+  /**
+   * Convert SshScanResult to the same snapshot format the agent uses,
+   * so the diff engine works identically for both modes.
+   */
+  private normalizeSshToSnapshot(ssh: any): any {
+    // Parse memory (e.g., "7.6Gi" → MB)
+    const parseMemGb = (s: string) => {
+      if (!s) return 0;
+      const num = parseFloat(s);
+      if (s.includes('Gi') || s.includes('G')) return Math.round(num * 1024);
+      if (s.includes('Mi') || s.includes('M')) return Math.round(num);
+      return Math.round(num);
+    };
+
+    return {
+      collectedAt: new Date().toISOString(),
+      agentVersion: 'agentless-ssh',
+      hardware: {
+        cpuModel: ssh.cpuInfo?.model || 'Unknown',
+        cpuCores: ssh.cpuInfo?.cores || 0,
+        totalRamMb: parseMemGb(ssh.memoryInfo?.total || '0'),
+        freeRamMb: parseMemGb(ssh.memoryInfo?.free || '0'),
+        usedRamMb: parseMemGb(ssh.memoryInfo?.used || '0'),
+        ramUsagePercent: ssh.memoryInfo?.percent || 0,
+        diskDrives: (ssh.diskUsage || []).map((d: any) => ({
+          mount: d.mount, totalGb: d.size, usedGb: d.used, freeGb: d.available, usedPercent: d.percent,
+        })),
+      },
+      operatingSystem: {
+        platform: 'linux',
+        type: ssh.osInfo?.distro || 'Linux',
+        release: ssh.osInfo?.kernel || '',
+        arch: ssh.osInfo?.arch || '',
+        hostname: ssh.hostname || ssh.ip,
+        uptime: 0,
+      },
+      network: {
+        interfaces: [], // SSH doesn't easily enumerate MACs like the agent
+        hostname: ssh.hostname || ssh.ip,
+      },
+      security: {
+        firewallEnabled: ssh.firewallStatus ? ssh.firewallStatus.includes('active') || ssh.firewallStatus.includes('enabled') : false,
+      },
+      software: (ssh.runningServices || []).map((s: any) => ({
+        name: s.name, version: s.status || '',
+      })),
+      services: ssh.runningServices || [],
+      usbDevices: [],
+    };
+  }
+
+  /**
+   * Run an agentless compliance scan on a target IP via SSH.
+   * Creates a virtual agent record if one doesn't exist.
+   */
+  async agentlessScan(tenantId: string, data: {
+    target: string;
+    username: string;
+    password?: string;
+    privateKeyPath?: string;
+    credentialId?: string;
+  }) {
+    const { target } = data;
+    this.logger.log(`Starting agentless compliance scan: ${target}`);
+
+    // Resolve credentials from vault if credentialId provided
+    let creds = { username: data.username, password: data.password, privateKeyPath: data.privateKeyPath };
+    if (data.credentialId) {
+      const stored = await this.prisma.scanCredential.findFirst({
+        where: { id: data.credentialId, tenantId },
+      });
+      if (stored) {
+        const c = JSON.parse(stored.encryptedData) as any;
+        creds = { username: c.username || data.username, password: c.password, privateKeyPath: c.privateKeyPath };
+      }
+    }
+
+    // Run SSH scan
+    const sshResult = await SshScanner.scan(target, creds, 45000);
+    if (sshResult.error) {
+      return { success: false, error: sshResult.error, target };
+    }
+
+    // Normalize to agent snapshot format
+    const snapshot = this.normalizeSshToSnapshot(sshResult);
+    const hostname = sshResult.hostname || target;
+
+    // Find or create a virtual agent for this target
+    let agent = await this.prisma.agent.findFirst({
+      where: { tenantId, ipAddress: target },
+    });
+
+    if (!agent) {
+      agent = await this.prisma.agent.create({
+        data: {
+          tenantId,
+          hostname,
+          platform: 'linux',
+          agentVersion: 'agentless-ssh',
+          ipAddress: target,
+          status: 'ONLINE',
+          lastHeartbeat: new Date(),
+          systemInfo: snapshot,
+        },
+      });
+      this.logger.log(`Created virtual agent for ${hostname} (${target})`);
+    } else {
+      await this.prisma.agent.update({
+        where: { id: agent.id },
+        data: { lastHeartbeat: new Date(), status: 'ONLINE', systemInfo: snapshot, hostname },
+      });
+    }
+
+    // Run through the same compliance engine as agent heartbeats
+    const results = await this.processHeartbeat(tenantId, agent.id, agent, snapshot);
+
+    return {
+      success: true,
+      target,
+      hostname,
+      agentId: agent.id,
+      mode: 'agentless',
+      snapshot: {
+        cpu: snapshot.hardware.cpuModel,
+        cores: snapshot.hardware.cpuCores,
+        ramMb: snapshot.hardware.totalRamMb,
+        disks: snapshot.hardware.diskDrives?.length || 0,
+        services: snapshot.services?.length || 0,
+        firewall: snapshot.security.firewallEnabled,
+      },
+      changesDetected: results.length,
+      changes: results.map((r: any) => ({ id: r.id, summary: r.summary, severity: r.severity, status: r.status })),
+    };
+  }
+
+  /**
+   * Batch agentless scan — scan multiple IPs with the same credentials
+   */
+  async agentlessBatchScan(tenantId: string, data: {
+    targets: string[];
+    username: string;
+    password?: string;
+    privateKeyPath?: string;
+    credentialId?: string;
+  }) {
+    const results = [];
+    for (const target of data.targets) {
+      try {
+        const result = await this.agentlessScan(tenantId, { ...data, target });
+        results.push(result);
+      } catch (err: any) {
+        results.push({ success: false, target, error: err.message });
+      }
+    }
+    return {
+      total: data.targets.length,
+      successful: results.filter(r => r.success).length,
+      failed: results.filter(r => !r.success).length,
+      results,
+    };
   }
 }

@@ -1,15 +1,15 @@
 "use client";
 import { useEffect, useState } from "react";
 import { Package, Monitor, MapPin, Building, Calendar, Loader2 } from "lucide-react";
-import { getApiBase, getToken } from "@/lib/api";
+import { apiFetch } from "@/lib/api";
 
 export default function MyAssetsPage() {
   const [assets, setAssets] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    fetch(`${getApiBase()}/assets?limit=50`, { headers: { Authorization: `Bearer ${getToken()}` } })
-      .then(r => r.json()).then(d => setAssets(d.data || [])).catch(console.error).finally(() => setLoading(false));
+    apiFetch("/assets?limit=50")
+      .then(d => setAssets(d.data || [])).catch(console.error).finally(() => setLoading(false));
   }, []);
 
   return (

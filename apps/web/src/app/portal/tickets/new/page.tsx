@@ -5,7 +5,7 @@ import {
   Ticket, ArrowLeft, Send, AlertTriangle, HelpCircle,
   Package, Wrench, Loader2, CheckCircle2
 } from "lucide-react";
-import { getApiBase, getToken } from "@/lib/api";
+import { apiFetch } from "@/lib/api";
 
 const CATEGORIES = [
   { value: "Hardware", icon: <Package size={18} />, color: "#06b6d4", desc: "Laptop, printer, monitor, peripherals" },
@@ -32,12 +32,11 @@ export default function RaiseTicketPage() {
     setSubmitting(true);
     setError("");
     try {
-      const res = await fetch(`${getApiBase()}/tickets`, {
+      const result = await apiFetch("/tickets", {
         method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${getToken()}` },
         body: JSON.stringify(form),
       });
-      if (!res.ok) throw new Error("Failed to create ticket");
+      if (!result) throw new Error("Failed to create ticket");
       setSuccess(true);
       setTimeout(() => router.push("/portal/tickets"), 1500);
     } catch (err: any) {

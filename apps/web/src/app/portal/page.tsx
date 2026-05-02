@@ -2,13 +2,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Package, Ticket, Plus, ArrowRight, CheckCircle2, Clock, AlertTriangle, Loader2 } from "lucide-react";
-
-const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4100/api/v1";
-function getToken() { return typeof window !== "undefined" ? localStorage.getItem("accessToken") || "" : ""; }
-
-function apiFetch(path: string) {
-  return fetch(`${API}${path}`, { headers: { Authorization: `Bearer ${getToken()}` } }).then(r => r.json());
-}
+import { apiFetch, getToken } from "@/lib/api";
 
 export default function PortalDashboard() {
   const router = useRouter();

@@ -6,8 +6,8 @@ import {
   Bell, Shield, ChevronDown, Search
 } from "lucide-react";
 
-const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4100/api/v1";
-function getToken() { return typeof window !== "undefined" ? localStorage.getItem("accessToken") || "" : ""; }
+
+// Portal layout doesn't make API calls — token used only for JWT decode
 
 const portalNav = [
   { name: "My Dashboard", icon: LayoutDashboard, href: "/portal" },

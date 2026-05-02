@@ -117,7 +117,7 @@ export default function LoginPage() {
       </button>
 
       <div style={{
-        width: 420, padding: 40, borderRadius: 16,
+        width: "min(420px, 92vw)", padding: "clamp(20px, 5vw, 40px)", borderRadius: 16,
         background: isLight ? "rgba(255, 255, 255, 0.85)" : "rgba(26, 31, 53, 0.7)",
         backdropFilter: "blur(20px)",
         border: isLight ? "1px solid rgba(226, 232, 240, 0.8)" : "1px solid rgba(42, 49, 80, 0.6)",

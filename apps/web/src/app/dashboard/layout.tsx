@@ -7,7 +7,7 @@ import {
   BarChart3, Zap, Users, Building2, Package, LogOut, User,
   AlertTriangle, CheckCircle2, Info, Clock, X, Radar, Key, FileText, BookOpen,
   Headphones, UserCircle, Wrench, Scan, ShoppingCart, GitBranch, AlertOctagon,
-  Sun, Moon,
+  Sun, Moon, Menu,
 } from "lucide-react";
 
 const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4100/api/v1";
@@ -91,6 +91,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const notifRef = useRef<HTMLDivElement>(null);
   const profileRef = useRef<HTMLDivElement>(null);
   const [theme, setTheme] = useState<"dark" | "light">("dark");
+  const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
 
   // Hydrate theme from localStorage
   useEffect(() => {
@@ -128,6 +129,11 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         setUnreadCount(d.unread || 0);
       }).catch(() => {});
   }, [router]);
+
+  // Close mobile sidebar on navigation
+  useEffect(() => {
+    setMobileSidebarOpen(false);
+  }, [pathname]);
 
   // Close dropdowns on outside click
   useEffect(() => {
@@ -192,8 +198,12 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
   return (
     <div className="app-layout">
+      {/* Mobile Sidebar Overlay */}
+      {mobileSidebarOpen && (
+        <div className="sidebar-overlay" onClick={() => setMobileSidebarOpen(false)} />
+      )}
       {/* Sidebar */}
-      <aside className="sidebar">
+      <aside className={`sidebar${mobileSidebarOpen ? " sidebar-open" : ""}`}>
         <div className="sidebar-brand">
           <img src="/favicon.png" alt="ReconAPM" style={{ width: 32, height: 32, borderRadius: 8 }} />
           <span className="sidebar-brand-text">ReconAPM</span>
@@ -224,6 +234,9 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       <main className="main-content">
         {/* Top Bar */}
         <header className="topbar">
+          <button className="topbar-btn mobile-menu-btn" onClick={() => setMobileSidebarOpen(!mobileSidebarOpen)}>
+            <Menu size={20} />
+          </button>
           <div className="topbar-search" onClick={() => setShowSearch(true)} style={{ cursor: "pointer" }}>
             <Search size={15} style={{ color: "var(--text-tertiary)", flexShrink: 0 }} />
             <input placeholder="Search assets, tickets, users..." readOnly style={{ cursor: "pointer" }} />
@@ -355,7 +368,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           }} />
           <div style={{
             position: "fixed", top: "15%", left: "50%", transform: "translateX(-50%)",
-            width: 560, maxHeight: "60vh", background: "var(--bg-card)",
+            width: "min(560px, 92vw)", maxHeight: "60vh", background: "var(--bg-card)",
             border: "1px solid var(--border-primary)", borderRadius: 16,
             boxShadow: "0 24px 80px rgba(0,0,0,0.5)", zIndex: 2001,
             overflow: "hidden",

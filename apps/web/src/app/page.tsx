@@ -70,12 +70,12 @@ export default function LandingPage() {
     <div style={{ minHeight: "100vh", background: bg, color: txt, fontFamily: "'Inter',system-ui,sans-serif", transition: "background 0.3s, color 0.3s" }}>
 
       {/* NAV */}
-      <nav style={{ position: "fixed", top: 0, left: 0, right: 0, zIndex: 100, padding: "14px 40px", display: "flex", alignItems: "center", justifyContent: "space-between", background: L ? "rgba(248,250,252,0.9)" : "rgba(10,14,26,0.9)", backdropFilter: "blur(16px)", borderBottom: `1px solid ${border}` }}>
+      <nav className="landing-nav" style={{ position: "fixed", top: 0, left: 0, right: 0, zIndex: 100, padding: "14px 40px", display: "flex", alignItems: "center", justifyContent: "space-between", background: L ? "rgba(248,250,252,0.9)" : "rgba(10,14,26,0.9)", backdropFilter: "blur(16px)", borderBottom: `1px solid ${border}` }}>
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
           <img src="/favicon.png" alt="ReconAPM" style={{ width: 34, height: 34, borderRadius: 9 }} />
           <span style={{ fontSize: 17, fontWeight: 800, letterSpacing: "-0.03em" }}>ReconAPM</span>
         </div>
-        <div style={{ display: "flex", alignItems: "center", gap: 20 }}>
+        <div className="landing-nav-links" style={{ display: "flex", alignItems: "center", gap: 20 }}>
           {["Features","Modules","Compare","Security","Pricing"].map(t => (
             <a key={t} href={`#${t.toLowerCase()}`} style={{ fontSize: 13, fontWeight: 500, color: muted, textDecoration: "none" }}>{t}</a>
           ))}
@@ -114,8 +114,8 @@ export default function LandingPage() {
       </section>
 
       {/* KPIs */}
-      <section id="features" style={{ padding: "40px 40px 60px", maxWidth: 1100, margin: "0 auto" }}>
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(6,1fr)", gap: 12 }}>
+      <section id="features" className="landing-section" style={{ padding: "40px 40px 60px", maxWidth: 1100, margin: "0 auto" }}>
+        <div className="landing-features-grid" style={{ display: "grid", gridTemplateColumns: "repeat(6,1fr)", gap: 12 }}>
           {KPIS.map(k => (
             <div key={k.label} style={{ textAlign: "center", padding: 20, borderRadius: 12, background: card, border: `1px solid ${border}` }}>
               <div style={{ fontSize: 28, fontWeight: 800, color: "#06b6d4" }}>{k.value}</div>
@@ -137,12 +137,12 @@ export default function LandingPage() {
       </div>
 
       {/* ALL 12 MODULES */}
-      <section id="modules" style={{ padding: "70px 40px", maxWidth: 1200, margin: "0 auto" }}>
+      <section id="modules" className="landing-section" style={{ padding: "70px 40px", maxWidth: 1200, margin: "0 auto" }}>
         <div style={{ textAlign: "center", marginBottom: 48 }}>
           <h2 style={{ fontSize: 34, fontWeight: 800, letterSpacing: "-0.03em", marginBottom: 10 }}>12 Modules. One Unified Platform.</h2>
           <p style={{ fontSize: 15, color: muted, maxWidth: 600, margin: "0 auto" }}>Replace 6+ point solutions with ReconAPM. Every module is deeply integrated — assets flow into tickets, scans trigger patches, and everything feeds the CMDB.</p>
         </div>
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(280px,1fr))", gap: 14 }}>
+        <div className="landing-modules-grid" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(280px,1fr))", gap: 14 }}>
           {MODULES.map(m => {
             const Icon = m.icon;
             return (
@@ -274,7 +274,19 @@ export default function LandingPage() {
         </div>
       </footer>
 
-      <style>{`@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');`}</style>
+      <style>{`
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+        @media (max-width: 768px) {
+          .landing-nav { padding: 10px 16px !important; }
+          .landing-nav-links a { display: none; }
+          .landing-section { padding: 40px 16px !important; }
+          .landing-features-grid { grid-template-columns: repeat(3, 1fr) !important; }
+          .landing-modules-grid { grid-template-columns: 1fr !important; }
+        }
+        @media (max-width: 480px) {
+          .landing-features-grid { grid-template-columns: repeat(2, 1fr) !important; }
+        }
+      `}</style>
     </div>
   );
 }

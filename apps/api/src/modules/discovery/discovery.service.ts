@@ -7,6 +7,7 @@ import { promisify } from 'util';
 import * as os from 'os';
 import * as dns from 'dns';
 import * as net from 'net';
+import { SshScanner } from '../../common/scanners/ssh.scanner';
 
 const execAsync = promisify(exec);
 
@@ -506,9 +507,9 @@ export class DiscoveryService {
   }
 
   /**
-   * Enrich a discovered device with WMI/SSH/SNMP data
-   * In production, this would connect via SSH/WMI and collect real data.
-   * For now, generates realistic enrichment data based on device type.
+   * Enrich a discovered device with real SSH/SNMP data.
+   * - With credentials: Uses SshScanner for deep endpoint interrogation
+   * - Without credentials: Uses port-scan fingerprinting + ARP data
    */
   async enrichDevice(deviceId: string, tenantId: string, credentialId?: string) {
     const device = await this.prisma.discoveredDevice.findFirst({
@@ -516,56 +517,90 @@ export class DiscoveryService {
     });
     if (!device) throw new NotFoundException('Device not found');
 
-    // Simulate enrichment data collection
-    const isWindows = device.osGuess?.toLowerCase().includes('windows');
-    const isLinux = !isWindows;
-    const enrichmentData = {
+    let enrichmentData: any = {
       collectedAt: new Date().toISOString(),
-      method: credentialId ? 'SSH/WMI' : 'SNMP',
-      hardware: {
-        cpuModel: isWindows ? 'Intel Core i7-13700K' : 'AMD EPYC 7543P',
-        cpuCores: isWindows ? 16 : 32,
-        cpuFrequency: isWindows ? '3.40 GHz' : '2.80 GHz',
-        totalRamMb: isWindows ? 32768 : 65536,
-        diskDrives: [
-          { model: 'Samsung SSD 980 PRO', sizeGb: 512, type: 'SSD', health: 'GOOD' },
-          ...(isLinux ? [{ model: 'Seagate Barracuda ST2000DM008', sizeGb: 2000, type: 'HDD', health: 'GOOD' }] : []),
-        ],
-        biosVersion: isWindows ? 'American Megatrends v2.10' : 'Dell BIOS 2.8.0',
-        motherboard: isWindows ? 'ASUS Z790-P' : 'Dell PowerEdge R750xs',
-        networkAdapters: [
-          { name: 'eth0', macAddress: device.macAddress, speed: '1 Gbps', ipAddress: device.ipAddress },
-        ],
-      },
-      operatingSystem: {
-        name: isWindows ? 'Windows 11 Enterprise' : 'Ubuntu Server 22.04 LTS',
-        version: isWindows ? '10.0.22631' : '22.04.3',
-        architecture: 'x86_64',
-        kernel: isWindows ? '10.0.22631.2861' : '5.15.0-91-generic',
-        lastBoot: new Date(Date.now() - 5 * 24 * 3600000).toISOString(),
-        uptimeDays: 5,
-      },
-      security: {
-        firewallEnabled: true,
-        antivirusInstalled: true,
-        antivirusProduct: isWindows ? 'Microsoft Defender' : 'ClamAV',
-        antivirusUpToDate: true,
-        encryptionEnabled: isWindows ? true : false,
-        encryptionMethod: isWindows ? 'BitLocker' : null,
-        lastPatchDate: new Date(Date.now() - 7 * 24 * 3600000).toISOString(),
-        openVulnerabilities: 0, // Real count populated after vulnerability scan
-      },
-      software: [
-        { name: isWindows ? 'Microsoft Office 365' : 'LibreOffice', version: isWindows ? '16.0.17' : '7.6.4' },
-        { name: isWindows ? 'Google Chrome' : 'Firefox', version: isWindows ? '121.0.6167' : '121.0' },
-        { name: 'Node.js', version: '20.11.0' },
-        { name: isWindows ? 'Visual Studio Code' : 'vim', version: isWindows ? '1.86.0' : '9.0' },
-      ],
-      users: [
-        { username: 'admin', lastLogin: new Date(Date.now() - 3600000).toISOString(), isAdmin: true },
-        { username: 'user1', lastLogin: new Date(Date.now() - 86400000).toISOString(), isAdmin: false },
-      ],
+      method: 'PORT_FINGERPRINT',
     };
+
+    // ─── Try SSH-based deep scan if credentials provided ─────────
+    if (credentialId) {
+      const cred = await this.prisma.scanCredential.findFirst({
+        where: { id: credentialId, tenantId },
+      });
+
+      if (cred) {
+        const credData = cred.encryptedData ? JSON.parse(cred.encryptedData as string) : {} as any;
+        try {
+          const sshResult = await SshScanner.scan(device.ipAddress, {
+            username: credData.username,
+            password: credData.password,
+            privateKeyPath: credData.privateKeyPath,
+          });
+
+          if (!sshResult.error) {
+            enrichmentData = {
+              collectedAt: new Date().toISOString(),
+              method: 'SSH',
+              hardware: {
+                cpuModel: sshResult.cpuInfo?.model || 'Unknown',
+                cpuCores: sshResult.cpuInfo?.cores || 0,
+                totalRamMb: sshResult.memoryInfo ? this.parseMemoryToMb(sshResult.memoryInfo.total) : 0,
+                diskDrives: (sshResult.diskUsage || []).map((d: any) => ({
+                  filesystem: d.filesystem, sizeGb: d.size, used: d.used,
+                  available: d.available, percentUsed: d.percent, mount: d.mount,
+                })),
+              },
+              operatingSystem: {
+                name: sshResult.osInfo?.distro || 'Linux',
+                kernel: sshResult.osInfo?.kernel || 'unknown',
+                architecture: sshResult.osInfo?.arch || 'unknown',
+                hostname: sshResult.hostname,
+                uptime: sshResult.uptime,
+              },
+              network: {
+                openPorts: sshResult.openPorts || [],
+                firewallStatus: sshResult.firewallStatus || 'unknown',
+              },
+              security: {
+                firewallStatus: sshResult.firewallStatus || 'unknown',
+                pendingPatches: sshResult.pendingPatches?.length || 0,
+                patchList: sshResult.pendingPatches || [],
+              },
+              software: {
+                installedPackages: sshResult.installedPackages || 0,
+                runningServices: sshResult.runningServices || [],
+              },
+              users: {
+                accounts: sshResult.users || [],
+                lastLogins: sshResult.lastLogins || [],
+              },
+            };
+            this.logger.log(`Device ${device.ipAddress} enriched via SSH — ${sshResult.cpuInfo?.cores || '?'} cores, ${sshResult.diskUsage?.length || 0} disks`);
+          } else {
+            this.logger.warn(`SSH enrichment failed for ${device.ipAddress}: ${sshResult.error}`);
+            enrichmentData.sshError = sshResult.error;
+          }
+        } catch (err: any) {
+          this.logger.warn(`SSH enrichment exception for ${device.ipAddress}: ${err.message}`);
+          enrichmentData.sshError = err.message;
+        }
+      }
+    }
+
+    // ─── Fallback: Port-scan fingerprinting ──────────────────────
+    if (enrichmentData.method === 'PORT_FINGERPRINT') {
+      const openPorts = await this.scanPorts(device.ipAddress);
+      const classification = this.classifyDevice(openPorts, device.macAddress || undefined);
+
+      enrichmentData.hardware = { detectedType: classification.deviceType };
+      enrichmentData.operatingSystem = { osGuess: classification.osGuess };
+      enrichmentData.network = {
+        openPorts: openPorts.map(p => ({ port: p.port, service: p.service })),
+        services: classification.services,
+      };
+
+      this.logger.log(`Device ${device.ipAddress} enriched via port scan — ${openPorts.length} ports, type: ${classification.deviceType}`);
+    }
 
     const updated = await this.prisma.discoveredDevice.update({
       where: { id: deviceId },
@@ -575,19 +610,27 @@ export class DiscoveryService {
       },
     });
 
-    this.logger.log(`Device ${device.ipAddress} enriched with ${Object.keys(enrichmentData).length} data categories`);
-
     return {
       device: updated,
       enrichmentSummary: {
-        cpuCores: enrichmentData.hardware.cpuCores,
-        ramMb: enrichmentData.hardware.totalRamMb,
-        diskCount: enrichmentData.hardware.diskDrives.length,
-        osName: enrichmentData.operatingSystem.name,
-        softwareCount: enrichmentData.software.length,
-        vulnerabilities: enrichmentData.security.openVulnerabilities,
-        firewallEnabled: enrichmentData.security.firewallEnabled,
+        method: enrichmentData.method,
+        cpuCores: enrichmentData.hardware?.cpuCores || enrichmentData.hardware?.detectedType || null,
+        ramMb: enrichmentData.hardware?.totalRamMb || null,
+        diskCount: enrichmentData.hardware?.diskDrives?.length || null,
+        osName: enrichmentData.operatingSystem?.name || enrichmentData.operatingSystem?.osGuess || null,
+        openPorts: enrichmentData.network?.openPorts?.length || 0,
+        firewallStatus: enrichmentData.security?.firewallStatus || enrichmentData.network?.firewallStatus || null,
       },
     };
+  }
+
+  /** Parse memory strings like "7.6G" or "512M" to MB */
+  private parseMemoryToMb(memStr: string): number {
+    const num = parseFloat(memStr);
+    if (isNaN(num)) return 0;
+    if (memStr.includes('G') || memStr.includes('g')) return Math.round(num * 1024);
+    if (memStr.includes('T') || memStr.includes('t')) return Math.round(num * 1024 * 1024);
+    if (memStr.includes('M') || memStr.includes('m')) return Math.round(num);
+    return Math.round(num);
   }
 }

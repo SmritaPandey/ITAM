@@ -1,9 +1,7 @@
 "use client";
 import { useState, useEffect } from "react";
 import { X, Save, Package } from "lucide-react";
-
-const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4100/api/v1";
-function getToken() { return typeof window !== "undefined" ? localStorage.getItem("accessToken") || "" : ""; }
+import { apiFetch } from "@/lib/api";
 
 interface CreateAssetPanelProps {
   open: boolean;
@@ -26,14 +24,13 @@ export default function CreateAssetPanel({ open, onClose, onCreated }: CreateAss
 
   useEffect(() => {
     // Load asset types
-    fetch(`${API}/assets?limit=1`, { headers: { Authorization: `Bearer ${getToken()}` } })
-      .then(r => r.json())
+    apiFetch("/assets?limit=1")
       .then(d => {
         const types = (d.data || []).map((a: any) => a.assetType).filter(Boolean);
         const unique = Array.from(new Map(types.map((t: any) => [t.id, t])).values()) as any[];
         setAssetTypes(unique);
         if (unique.length > 0) setAssetTypeId(unique[0].id);
-      });
+      }).catch(() => {});
   }, [open]);
 
   function handleChange(key: string, value: string) {
@@ -48,12 +45,10 @@ export default function CreateAssetPanel({ open, onClose, onCreated }: CreateAss
 
     setSubmitting(true);
     try {
-      const res = await fetch(`${API}/assets`, {
+      await apiFetch("/assets", {
         method: "POST",
-        headers: { Authorization: `Bearer ${getToken()}`, "Content-Type": "application/json" },
         body: JSON.stringify({ ...form, assetTypeId }),
       });
-      if (!res.ok) throw new Error(await res.text());
       setForm(INITIAL);
       onCreated();
       onClose();

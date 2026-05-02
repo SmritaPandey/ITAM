@@ -1,9 +1,7 @@
 "use client";
 import { useState, useEffect } from "react";
 import { X, Save, Package } from "lucide-react";
-
-const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4100/api/v1";
-function getToken() { return typeof window !== "undefined" ? localStorage.getItem("accessToken") || "" : ""; }
+import { apiFetch } from "@/lib/api";
 
 interface EditAssetPanelProps {
   open: boolean;
@@ -40,12 +38,10 @@ export default function EditAssetPanel({ open, asset, onClose, onUpdated }: Edit
     if (!form.name?.trim()) { setError("Asset name is required"); return; }
     setSubmitting(true);
     try {
-      const res = await fetch(`${API}/assets/${asset.id}`, {
+      await apiFetch(`/assets/${asset.id}`, {
         method: "PATCH",
-        headers: { Authorization: `Bearer ${getToken()}`, "Content-Type": "application/json" },
         body: JSON.stringify(form),
       });
-      if (!res.ok) throw new Error(await res.text());
       onUpdated();
       onClose();
     } catch (err: any) {

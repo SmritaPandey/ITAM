@@ -1,9 +1,7 @@
 "use client";
 import { useState, useRef } from "react";
 import { X, Upload, FileText, CheckCircle2, AlertTriangle, Download } from "lucide-react";
-
-const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4100/api/v1";
-function getToken() { return typeof window !== "undefined" ? localStorage.getItem("accessToken") || "" : ""; }
+import { apiFetch } from "@/lib/api";
 
 interface ImportPanelProps {
   open: boolean;
@@ -52,12 +50,10 @@ export default function ImportAssetsPanel({ open, onClose, onImported }: ImportP
   async function handleImport() {
     setImporting(true);
     try {
-      const res = await fetch(`${API}/assets/bulk-import`, {
+      const data = await apiFetch("/assets/bulk-import", {
         method: "POST",
-        headers: { Authorization: `Bearer ${getToken()}`, "Content-Type": "application/json" },
         body: JSON.stringify({ assets: rows }),
       });
-      const data = await res.json();
       setResult(data);
       setStep("result");
       if (data.imported > 0) onImported();

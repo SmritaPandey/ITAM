@@ -1,9 +1,7 @@
 "use client";
 import { useState } from "react";
 import { X, Send, AlertTriangle } from "lucide-react";
-
-const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4100/api/v1";
-function getToken() { return typeof window !== "undefined" ? localStorage.getItem("accessToken") || "" : ""; }
+import { apiFetch } from "@/lib/api";
 
 interface CreateTicketPanelProps {
   open: boolean;
@@ -30,12 +28,10 @@ export default function CreateTicketPanel({ open, onClose, onCreated }: CreateTi
 
     setSubmitting(true);
     try {
-      const res = await fetch(`${API}/tickets`, {
+      await apiFetch("/tickets", {
         method: "POST",
-        headers: { Authorization: `Bearer ${getToken()}`, "Content-Type": "application/json" },
         body: JSON.stringify(form),
       });
-      if (!res.ok) throw new Error(await res.text());
       setForm({ subject: "", description: "", type: "SERVICE_REQUEST", priority: "MEDIUM", category: "" });
       onCreated();
       onClose();

@@ -449,12 +449,34 @@ export class MonitoringService {
       where: { id, tenantId, type: 'CAMERA' },
     });
     if (!camera) throw new NotFoundException('Camera not found');
-    const events = [
-      { type: 'motion_detected', timestamp: new Date(Date.now() - 3600000), zone: 'Zone A', confidence: 92 },
-      { type: 'recording_started', timestamp: new Date(Date.now() - 7200000), duration: '01:30:00' },
-      { type: camera.status === 'OFFLINE' ? 'camera_offline' : 'health_check', timestamp: new Date(Date.now() - 1800000), status: camera.status },
-    ];
-    return { cameraId: id, cameraName: camera.name, events };
+
+    // Pull real audit log entries for this device
+    const auditEvents = await this.prisma.auditLog.findMany({
+      where: { tenantId, resourceId: id },
+      orderBy: { timestamp: 'desc' },
+      take: 20,
+      select: { action: true, timestamp: true, metadata: true, actorId: true },
+    });
+
+    // Build events from real data + device state
+    const events: any[] = auditEvents.map(e => ({
+      type: e.action,
+      timestamp: e.timestamp,
+      details: e.metadata,
+      userId: e.actorId,
+    }));
+
+    // Add current status as a live event
+    events.unshift({
+      type: camera.status === 'OFFLINE' ? 'camera_offline' : 'health_check',
+      timestamp: camera.lastSeen || new Date(),
+      status: camera.status,
+      details: camera.status === 'OFFLINE'
+        ? `Camera went offline. Last seen: ${camera.lastSeen?.toISOString() || 'unknown'}`
+        : `Camera is ${camera.status}. Recording: ${(camera.config as any)?.recording ? 'Yes' : 'No'}`,
+    });
+
+    return { cameraId: id, cameraName: camera.name, events, total: events.length };
   }
 
   // ─── Network Devices (NMS) ──────────────────────────────────────

@@ -2,7 +2,7 @@
 import { useEffect, useState, useRef } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import {
-  LayoutDashboard, Monitor, Server, Truck, Ticket, Network, Shield,
+  LayoutDashboard, Monitor, Server, Truck, Ticket, Network, Shield, ShieldCheck,
   Settings, Bell, Search, ChevronDown, Camera, MonitorPlay,
   BarChart3, Zap, Users, Building2, Package, LogOut, User,
   AlertTriangle, CheckCircle2, Info, Clock, X, Radar, Key, FileText, BookOpen,
@@ -39,7 +39,7 @@ const navSections = [
       { name: "Patch Mgmt", icon: Shield, href: "/dashboard/patches", badge: null },
       { name: "Network (NMS)", icon: Network, href: "/dashboard/network", badge: null },
       { name: "Security Scan", icon: Scan, href: "/dashboard/scanning", badge: null },
-      { name: "Compliance", icon: Shield, href: "/dashboard/compliance", badge: null },
+      { name: "Compliance", icon: ShieldCheck, href: "/dashboard/compliance", badge: null },
       { name: "Procurement", icon: ShoppingCart, href: "/dashboard/procurement", badge: null },
       { name: "Changes", icon: GitBranch, href: "/dashboard/changes", badge: null },
       { name: "Problems", icon: AlertOctagon, href: "/dashboard/problems", badge: null },

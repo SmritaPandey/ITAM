@@ -83,6 +83,45 @@ export default function ReportsPage() {
   const avgResHours = tickets.avgResolutionHours || 0;
   const scheduledReports = REPORT_TEMPLATES.filter(r => r.type === "Scheduled").length;
 
+  function downloadCSV(filename: string, headers: string[], rows: any[][]) {
+    const csv = [headers.join(","), ...rows.map(r => r.map(v => `"${String(v ?? "").replace(/"/g, '""')}"`).join(","))].join("\n");
+    const blob = new Blob([csv], { type: "text/csv" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a"); a.href = url; a.download = filename; a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  function exportReport(id: string) {
+    switch (id) {
+      case "inv":
+        downloadCSV("asset_inventory.csv",
+          ["Category", "Count"],
+          (assets.byType || []).map((t: any) => [t.category || "Other", t.count]));
+        break;
+      case "sla":
+        downloadCSV("ticket_sla.csv",
+          ["Status", "Count"],
+          (tickets.byStatus || []).map((s: any) => [s.status, s.count]));
+        break;
+      case "license":
+        downloadCSV("license_utilization.csv",
+          ["Total", "Compliant", "Over-used", "Expiring", "Total Spend"],
+          [[licenses.total, licenses.compliant, licenses.overused, licenses.expiring, licenses.totalSpend]]);
+        break;
+      case "audit":
+        apiFetch("/audit-logs?limit=500").then((d: any) => {
+          downloadCSV("audit_trail.csv",
+            ["Time", "User", "Action", "Resource", "IP"],
+            (d.data || []).map((l: any) => [l.createdAt, l.userName || l.userId, l.action, l.resourceType, l.ipAddress || ""]));
+        }).catch(console.error);
+        break;
+      default:
+        downloadCSV(`report_${id}.csv`,
+          ["Month", "Assets Added", "Tickets Opened", "Tickets Resolved"],
+          trendData.map(d => [d.month, d.assetsAdded || 0, d.created || 0, d.resolved || 0]));
+    }
+  }
+
   return (
     <>
       <div className="page-header">
@@ -211,7 +250,7 @@ export default function ReportsPage() {
                 <span className="badge gray">{r.format}</span>
               </div>
             </div>
-            <button className="btn btn-secondary" style={{ padding: "4px 10px", fontSize: 11 }}><Download size={11} /> Export</button>
+            <button className="btn btn-secondary" style={{ padding: "4px 10px", fontSize: 11 }} onClick={() => exportReport(r.id)}><Download size={11} /> Export</button>
           </div>
         ))}
       </div>

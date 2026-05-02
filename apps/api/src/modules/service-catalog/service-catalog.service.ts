@@ -10,12 +10,12 @@ export class ServiceCatalogService {
     const tenant = await this.prisma.tenant.findUnique({ where: { id: tenantId } });
     const settings = (tenant?.settings as any) || {};
     return settings.serviceCatalog || [
-      { id: '1', name: 'New Laptop Request', category: 'Hardware', description: 'Request a new laptop for an employee', sla: '5 business days', approvalRequired: true, icon: 'laptop' },
-      { id: '2', name: 'Software Installation', category: 'Software', description: 'Request installation of approved software', sla: '2 business days', approvalRequired: false, icon: 'download' },
-      { id: '3', name: 'VPN Access', category: 'Access', description: 'Request VPN access for remote work', sla: '1 business day', approvalRequired: true, icon: 'shield' },
-      { id: '4', name: 'Email Distribution List', category: 'Email', description: 'Request creation/modification of email DL', sla: '1 business day', approvalRequired: false, icon: 'mail' },
-      { id: '5', name: 'Password Reset', category: 'Access', description: 'Reset password for any enterprise application', sla: '4 hours', approvalRequired: false, icon: 'key' },
-      { id: '6', name: 'Office Relocation', category: 'Facility', description: 'Request office/desk relocation', sla: '3 business days', approvalRequired: true, icon: 'map-pin' },
+      { id: 'sc-default-001-laptop', name: 'New Laptop Request', category: 'Hardware', description: 'Request a new laptop for an employee', sla: '5 business days', approvalRequired: true, icon: 'laptop' },
+      { id: 'sc-default-002-software', name: 'Software Installation', category: 'Software', description: 'Request installation of approved software', sla: '2 business days', approvalRequired: false, icon: 'download' },
+      { id: 'sc-default-003-vpn', name: 'VPN Access', category: 'Access', description: 'Request VPN access for remote work', sla: '1 business day', approvalRequired: true, icon: 'shield' },
+      { id: 'sc-default-004-email', name: 'Email Distribution List', category: 'Email', description: 'Request creation/modification of email DL', sla: '1 business day', approvalRequired: false, icon: 'mail' },
+      { id: 'sc-default-005-password', name: 'Password Reset', category: 'Access', description: 'Reset password for any enterprise application', sla: '4 hours', approvalRequired: false, icon: 'key' },
+      { id: 'sc-default-006-relocation', name: 'Office Relocation', category: 'Facility', description: 'Request office/desk relocation', sla: '3 business days', approvalRequired: true, icon: 'map-pin' },
     ];
   }
 

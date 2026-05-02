@@ -50,6 +50,8 @@ export default function CompliancePage() {
   const [scanPass, setScanPass] = useState("");
   const [scanning, setScanning] = useState(false);
   const [scanResult, setScanResult] = useState<any>(null);
+  const [credentials, setCredentials] = useState<any[]>([]);
+  const [selectedCred, setSelectedCred] = useState("");
 
   const refresh = useCallback(async () => {
     try {
@@ -60,6 +62,8 @@ export default function CompliancePage() {
         apiFetch("/compliance/policies/templates"),
       ]);
       setDashboard(d); setChanges(c); setPolicies(p); setTemplates(t);
+      // Fetch credential vault for agentless tab
+      try { const creds = await apiFetch("/discovery/credentials"); setCredentials(Array.isArray(creds) ? creds : creds.data || []); } catch {}
     } catch (e) { console.error(e); } finally { setLoading(false); }
   }, [statusFilter]);
 
@@ -141,6 +145,22 @@ export default function CompliancePage() {
       {/* ════════ OVERVIEW TAB ════════ */}
       {tab === "overview" && dashboard && (
         <>
+          {/* Empty state when no agents */}
+          {dashboard.agentCount === 0 && dashboard.total === 0 && (
+            <div className="card" style={{ padding: 48, textAlign: "center", marginBottom: 20 }}>
+              <Shield size={48} style={{ margin: "0 auto 16px", color: "var(--brand-400)", opacity: 0.6 }} />
+              <h3 style={{ fontSize: 18, fontWeight: 700, marginBottom: 8 }}>No Endpoints Monitored Yet</h3>
+              <p style={{ fontSize: 13, color: "var(--text-secondary)", maxWidth: 520, margin: "0 auto 20px" }}>
+                Deploy the <strong>ReconAPM Agent</strong> on staff machines or use the <strong>Agentless Scan</strong> tab to SSH into servers.
+                Once endpoints report in, the compliance engine will automatically detect unauthorized changes and enforce your policies.
+              </p>
+              <div style={{ display: "flex", gap: 10, justifyContent: "center" }}>
+                <button className="btn btn-primary" onClick={() => setTab("agentless")}><Scan size={14} /> Run Agentless Scan</button>
+                <button className="btn btn-secondary" onClick={() => setTab("policies")}><Shield size={14} /> Configure Policies</button>
+              </div>
+            </div>
+          )}
+
           {/* Score + Stats */}
           <div style={{ display: "grid", gridTemplateColumns: "200px 1fr", gap: 16, marginBottom: 20 }}>
             {/* Compliance Score Gauge */}
@@ -150,16 +170,18 @@ export default function CompliancePage() {
                   <path d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
                     fill="none" stroke="var(--bg-elevated)" strokeWidth="3" />
                   <path d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
-                    fill="none" stroke={scoreColor} strokeWidth="3"
-                    strokeDasharray={`${score}, 100`} strokeLinecap="round" />
+                    fill="none" stroke={dashboard.agentCount === 0 ? "var(--text-tertiary)" : scoreColor} strokeWidth="3"
+                    strokeDasharray={`${dashboard.agentCount === 0 ? 0 : score}, 100`} strokeLinecap="round" />
                 </svg>
                 <div style={{ position: "absolute", inset: 0, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center" }}>
-                  <span style={{ fontSize: 28, fontWeight: 800, color: scoreColor }}>{score}%</span>
+                  <span style={{ fontSize: 28, fontWeight: 800, color: dashboard.agentCount === 0 ? "var(--text-tertiary)" : scoreColor }}>
+                    {dashboard.agentCount === 0 ? "—" : `${score}%`}
+                  </span>
                 </div>
               </div>
               <div style={{ fontSize: 12, fontWeight: 700, marginTop: 8 }}>Compliance Score</div>
               <div style={{ fontSize: 10, color: "var(--text-tertiary)" }}>
-                {dashboard.compliantAgents}/{dashboard.agentCount} agents clean
+                {dashboard.agentCount === 0 ? "No agents yet" : `${dashboard.compliantAgents}/${dashboard.agentCount} agents clean`}
               </div>
             </div>
 
@@ -438,6 +460,22 @@ export default function CompliancePage() {
               collects system info (CPU, RAM, disks, services, firewall), and evaluates it against your
               compliance policies — the same way agent heartbeats work.
             </p>
+            {credentials.length > 0 && (
+              <div style={{ marginBottom: 14 }}>
+                <label style={{ fontSize: 12, fontWeight: 600, marginBottom: 4, display: "block" }}>Use Saved Credentials</label>
+                <select value={selectedCred} onChange={e => {
+                  setSelectedCred(e.target.value);
+                  if (e.target.value) {
+                    const c = credentials.find((cr: any) => cr.id === e.target.value);
+                    if (c) { setScanUser(c.username || ""); setScanPass(""); }
+                  }
+                }}
+                  style={{ width: "100%", padding: "8px 12px", borderRadius: 8, background: "var(--bg-input)", border: "1px solid var(--border-primary)", color: "var(--text-primary)", fontSize: 12 }}>
+                  <option value="">— Enter manually —</option>
+                  {credentials.map((c: any) => <option key={c.id} value={c.id}>{c.name} ({c.type})</option>)}
+                </select>
+              </div>
+            )}
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12, marginBottom: 14 }}>
               <div>
                 <label style={{ fontSize: 12, fontWeight: 600, marginBottom: 4, display: "block" }}>Target IP(s)</label>

@@ -31,6 +31,7 @@ import { ScanningModule } from './modules/scanning/scanning.module';
 import { ProcurementModule } from './modules/procurement/procurement.module';
 import { ChangesModule } from './modules/changes/changes.module';
 import { ProblemsModule } from './modules/problems/problems.module';
+import { ComplianceModule } from './modules/compliance/compliance.module';
 
 @Module({
   imports: [
@@ -74,6 +75,7 @@ import { ProblemsModule } from './modules/problems/problems.module';
     ProcurementModule,
     ChangesModule,
     ProblemsModule,
+    ComplianceModule,
     HealthModule,
   ],
   providers: [

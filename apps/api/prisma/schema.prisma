@@ -72,6 +72,9 @@ model Tenant {
   problems        Problem[]
   assetAttestations AssetAttestation[]
   notificationChannels NotificationChannel[]
+  endpointPolicies    EndpointPolicy[]
+  endpointChanges     EndpointChange[]
+  agentBaselines      AgentBaseline[]
 
   @@map("tenants")
 }
@@ -1001,6 +1004,8 @@ model Agent {
   updatedAt     DateTime  @updatedAt @map("updated_at")
 
   tenant        Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  changes       EndpointChange[]
+  baseline      AgentBaseline?
 
   @@index([tenantId])
   @@map("agents")
@@ -1408,3 +1413,77 @@ model NotificationChannel {
   @@index([tenantId])
   @@map("notification_channels")
 }
+
+// ============================================================================
+// ENDPOINT COMPLIANCE & CHANGE DETECTION
+// ============================================================================
+
+model EndpointPolicy {
+  id              String    @id @default(uuid()) @db.Uuid
+  tenantId        String    @map("tenant_id") @db.Uuid
+  name            String
+  description     String?
+  category        String    // HARDWARE_CHANGE, SOFTWARE_INSTALL, SOFTWARE_REMOVE, USB_DEVICE, NETWORK_CHANGE, PROCESS_BLOCKED, RAM_CHANGE, DISK_CHANGE
+  severity        String    @default("WARNING") // INFO, WARNING, CRITICAL
+  action          String    @default("ALERT_ONLY") // ALERT_ONLY, REQUIRE_APPROVAL, AUTO_BLOCK
+  matchPattern    Json      @default("{}") @map("match_pattern") // e.g. {"maxRamGb":16}, {"blockedSoftware":["BitTorrent"]}
+  scope           Json      @default("{}") // {"platforms":["windows"],"hostnames":["HR-*"],"all":true}
+  isActive        Boolean   @default(true) @map("is_active")
+  isSystem        Boolean   @default(false) @map("is_system") // pre-built templates
+  createdById     String?   @map("created_by_id") @db.Uuid
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
+
+  tenant          Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  changes         EndpointChange[]
+
+  @@index([tenantId])
+  @@index([tenantId, category])
+  @@map("endpoint_policies")
+}
+
+model EndpointChange {
+  id              String    @id @default(uuid()) @db.Uuid
+  tenantId        String    @map("tenant_id") @db.Uuid
+  agentId         String    @map("agent_id") @db.Uuid
+  policyId        String?   @map("policy_id") @db.Uuid
+  category        String    // HARDWARE_CHANGE, SOFTWARE_INSTALL, SOFTWARE_REMOVE, USB_DEVICE, NETWORK_CHANGE, PROCESS_BLOCKED, RAM_CHANGE, DISK_CHANGE
+  changeType      String    @map("change_type") // ADDED, REMOVED, MODIFIED
+  severity        String    @default("INFO") // INFO, WARNING, CRITICAL
+  summary         String    // Human-readable: "RAM changed from 8GB to 16GB"
+  previousValue   Json?     @map("previous_value") // snapshot of the previous state
+  newValue        Json?     @map("new_value") // snapshot of the new state
+  status          String    @default("PENDING_REVIEW") // PENDING_REVIEW, APPROVED, REJECTED, AUTO_ALLOWED, VIOLATION
+  reviewedById    String?   @map("reviewed_by_id") @db.Uuid
+  reviewedAt      DateTime? @map("reviewed_at")
+  reviewNote      String?   @map("review_note")
+  hostname        String?   // Denormalized for fast filtering
+  ipAddress       String?   @map("ip_address")
+  platform        String?
+  createdAt       DateTime  @default(now()) @map("created_at")
+
+  tenant          Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  agent           Agent     @relation(fields: [agentId], references: [id], onDelete: Cascade)
+  policy          EndpointPolicy? @relation(fields: [policyId], references: [id])
+
+  @@index([tenantId])
+  @@index([tenantId, status])
+  @@index([tenantId, agentId])
+  @@index([tenantId, severity])
+  @@map("endpoint_changes")
+}
+
+model AgentBaseline {
+  id              String    @id @default(uuid()) @db.Uuid
+  tenantId        String    @map("tenant_id") @db.Uuid
+  agentId         String    @unique @map("agent_id") @db.Uuid
+  snapshot        Json      @default("{}")
+  snapshotAt      DateTime  @default(now()) @map("snapshot_at")
+
+  tenant          Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  agent           Agent     @relation(fields: [agentId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@map("agent_baselines")
+}
+

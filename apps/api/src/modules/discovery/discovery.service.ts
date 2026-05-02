@@ -1,6 +1,7 @@
 import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../common/database/prisma.service';
 import { EventBusService } from '../../common/events/event-bus.service';
+import { ComplianceService } from '../compliance/compliance.service';
 import { exec } from 'child_process';
 import { promisify } from 'util';
 import * as os from 'os';
@@ -25,6 +26,7 @@ export class DiscoveryService {
   constructor(
     private prisma: PrismaService,
     private eventBus: EventBusService,
+    private complianceService: ComplianceService,
   ) {}
 
   /**
@@ -413,10 +415,22 @@ export class DiscoveryService {
   async agentHeartbeat(id: string, tenantId: string, data?: { systemInfo?: any }) {
     const agent = await this.prisma.agent.findFirst({ where: { id, tenantId } });
     if (!agent) throw new NotFoundException('Agent not found');
-    return this.prisma.agent.update({
+
+    const updated = await this.prisma.agent.update({
       where: { id },
       data: { lastHeartbeat: new Date(), status: 'ONLINE', ...(data?.systemInfo ? { systemInfo: data.systemInfo } : {}) },
     });
+
+    // Run compliance change detection if snapshot provided
+    if (data?.systemInfo) {
+      try {
+        await this.complianceService.processHeartbeat(tenantId, id, agent, data.systemInfo);
+      } catch (err) {
+        this.logger.warn(`Compliance check failed for agent ${agent.hostname}: ${err.message}`);
+      }
+    }
+
+    return updated;
   }
 
   // ─── Scheduled Scans ──────────────────────────────────────────

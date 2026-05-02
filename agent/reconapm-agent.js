@@ -31,7 +31,7 @@ const { execSync } = require('child_process');
 const https = require('https');
 const http = require('http');
 
-const VERSION = '1.0.0';
+const VERSION = '1.1.0';
 
 // ─── Parse Args ─────────────────────────────────────────────
 const args = process.argv.slice(2);
@@ -231,6 +231,68 @@ function getSecurityInfo() {
   return info;
 }
 
+function getUsbDevices() {
+  const platform = os.platform();
+  try {
+    if (platform === 'darwin') {
+      const output = exec('system_profiler SPUSBDataType -json 2>/dev/null | head -c 5000');
+      try {
+        const data = JSON.parse(output);
+        const items = data.SPUSBDataType || [];
+        const devices = [];
+        function walk(list) {
+          for (const item of list) {
+            if (item._name && !item._name.includes('Hub')) {
+              devices.push({ name: item._name, vendor: item.manufacturer || '', serial: item.serial_num || '', type: 'USB' });
+            }
+            if (item._items) walk(item._items);
+          }
+        }
+        walk(items);
+        return devices;
+      } catch { return []; }
+    } else if (platform === 'linux') {
+      const output = exec('lsusb 2>/dev/null');
+      return output.split('\n').filter(l => l && !l.includes('hub')).map(l => {
+        const match = l.match(/ID\s+(\S+)\s+(.*)/);
+        return { name: match ? match[2] : l, vendor: match ? match[1] : '', serial: '', type: 'USB' };
+      });
+    } else if (platform === 'win32') {
+      const output = exec('wmic path Win32_USBControllerDevice get Dependent /format:list 2>nul');
+      return output.split('\n').filter(l => l.includes('Dependent')).slice(0, 15).map(l => ({
+        name: l.split('=')[1]?.trim() || 'USB Device', vendor: '', serial: '', type: 'USB',
+      }));
+    }
+  } catch {}
+  return [];
+}
+
+function getRunningServices() {
+  const platform = os.platform();
+  try {
+    if (platform === 'darwin') {
+      return exec('launchctl list 2>/dev/null | head -20').split('\n').slice(1).map(l => {
+        const parts = l.split('\t');
+        return { name: parts[2] || parts[0], pid: parts[0], status: parts[1] === '0' ? 'running' : 'stopped' };
+      }).filter(s => s.name);
+    } else if (platform === 'linux') {
+      return exec('systemctl list-units --type=service --state=running --no-pager 2>/dev/null | head -20').split('\n').slice(1).map(l => {
+        const parts = l.trim().split(/\s+/);
+        return { name: parts[0]?.replace('.service', ''), status: 'running' };
+      }).filter(s => s.name && !s.name.startsWith('●'));
+    } else if (platform === 'win32') {
+      return exec('sc query type= service state= all 2>nul | findstr SERVICE_NAME STATE').split('\n')
+        .reduce((acc, line, i, arr) => {
+          if (line.includes('SERVICE_NAME') && arr[i+1]) {
+            acc.push({ name: line.split(':')[1]?.trim(), status: arr[i+1].includes('RUNNING') ? 'running' : 'stopped' });
+          }
+          return acc;
+        }, []).slice(0, 20);
+    }
+  } catch {}
+  return [];
+}
+
 function collectSystemInfo() {
   const cpus = os.cpus();
   const totalMem = os.totalmem();
@@ -272,6 +334,8 @@ function collectSystemInfo() {
     security: getSecurityInfo(),
     software: getInstalledSoftware(),
     processes: getRunningProcesses(),
+    usbDevices: getUsbDevices(),
+    services: getRunningServices(),
   };
 }
 

@@ -39,6 +39,7 @@ const navSections = [
       { name: "Patch Mgmt", icon: Shield, href: "/dashboard/patches", badge: null },
       { name: "Network (NMS)", icon: Network, href: "/dashboard/network", badge: null },
       { name: "Security Scan", icon: Scan, href: "/dashboard/scanning", badge: null },
+      { name: "Compliance", icon: Shield, href: "/dashboard/compliance", badge: null },
       { name: "Procurement", icon: ShoppingCart, href: "/dashboard/procurement", badge: null },
       { name: "Changes", icon: GitBranch, href: "/dashboard/changes", badge: null },
       { name: "Problems", icon: AlertOctagon, href: "/dashboard/problems", badge: null },

@@ -539,7 +539,7 @@ export class DiscoveryService {
         encryptionEnabled: isWindows ? true : false,
         encryptionMethod: isWindows ? 'BitLocker' : null,
         lastPatchDate: new Date(Date.now() - 7 * 24 * 3600000).toISOString(),
-        openVulnerabilities: Math.floor(Math.random() * 5),
+        openVulnerabilities: 0, // Real count populated after vulnerability scan
       },
       software: [
         { name: isWindows ? 'Microsoft Office 365' : 'LibreOffice', version: isWindows ? '16.0.17' : '7.6.4' },

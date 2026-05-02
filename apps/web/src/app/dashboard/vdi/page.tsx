@@ -10,6 +10,7 @@ import SafeChart from "@/components/SafeChart";
 export default function VDIPage() {
   const [data, setData] = useState<any>({ data: [], total: 0, running: 0, stopped: 0, avgCpu: 0, avgRam: 0 });
   const [loading, setLoading] = useState(true);
+  const [selectedVM, setSelectedVM] = useState<any>(null);
 
   function refresh() {
     fetch(`${getApiBase()}/monitoring/vdi`, { headers: { Authorization: `Bearer ${getToken()}` } })
@@ -87,7 +88,7 @@ export default function VDIPage() {
               const cfg = vm.config || {};
               const met = vm.metrics || {};
               return (
-                <tr key={vm.id}>
+                <tr key={vm.id} style={{ cursor: "pointer" }} onClick={() => setSelectedVM(vm)}>
                   <td>
                     <div style={{ fontWeight: 600, color: "var(--text-primary)" }}>{vm.name}</div>
                     <div style={{ fontSize: 10, color: "var(--text-tertiary)" }}>{cfg.purpose || "—"}</div>
@@ -106,6 +107,47 @@ export default function VDIPage() {
           </tbody>
         </table>
       </div>
+
+      {/* Detail Panel */}
+      {selectedVM && (() => {
+        const cfg = selectedVM.config || {};
+        const met = selectedVM.metrics || {};
+        return (
+          <>
+            <div onClick={() => setSelectedVM(null)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", zIndex: 1000, backdropFilter: "blur(4px)" }} />
+            <div style={{ position: "fixed", top: 0, right: 0, bottom: 0, width: "min(480px, 92vw)", background: "var(--bg-card)", zIndex: 1001, borderLeft: "1px solid var(--border-primary)", display: "flex", flexDirection: "column", animation: "slideIn 0.2s ease-out" }}>
+              <div style={{ padding: "16px 20px", borderBottom: "1px solid var(--border-primary)", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                <div>
+                  <h2 style={{ fontSize: 16, fontWeight: 700, margin: 0 }}>{selectedVM.name}</h2>
+                  <p style={{ fontSize: 11, color: "var(--text-tertiary)", margin: 0 }}>{cfg.os || "Virtual Machine"} • {cfg.host || "Unknown Host"}</p>
+                </div>
+                <button onClick={() => setSelectedVM(null)} className="btn btn-secondary" style={{ padding: "4px 8px" }}>✕</button>
+              </div>
+              <div style={{ flex: 1, overflowY: "auto", padding: 20 }}>
+                <div style={{ display: "grid", gap: 12 }}>
+                  <VRow label="Status" value={<span className={`badge ${selectedVM.status === "ONLINE" ? "green" : "gray"}`}>{selectedVM.status === "ONLINE" ? "Running" : "Stopped"}</span>} />
+                  <VRow label="Operating System" value={cfg.os || "—"} />
+                  <VRow label="Purpose" value={cfg.purpose || "—"} />
+                  <VRow label="Assigned User" value={cfg.user || cfg.assignedUser || "Unassigned"} />
+                  <VRow label="Host Server" value={cfg.host || selectedVM.location || "—"} />
+                  <VRow label="Pool" value={cfg.pool || "Default"} />
+                  <VRow label="IP Address" value={selectedVM.ipAddress || "—"} />
+                  <div style={{ fontSize: 12, fontWeight: 700, color: "var(--text-primary)", marginTop: 8, borderBottom: "1px solid var(--border-primary)", paddingBottom: 4 }}>Resources</div>
+                  <VRow label="CPU Usage" value={<UsageBar value={met.cpu || 0} />} />
+                  <VRow label="RAM Usage" value={<UsageBar value={met.ram || 0} />} />
+                  <VRow label="Disk Usage" value={<UsageBar value={met.disk || 0} />} />
+                  <VRow label="vCPUs" value={cfg.vcpus || "—"} />
+                  <VRow label="RAM Allocated" value={cfg.ramMb ? `${cfg.ramMb} MB` : "—"} />
+                  <VRow label="Disk Allocated" value={cfg.diskGb ? `${cfg.diskGb} GB` : "—"} />
+                  <VRow label="Uptime" value={met.uptime || "—"} />
+                  <VRow label="Last Seen" value={selectedVM.lastSeen ? new Date(selectedVM.lastSeen).toLocaleString() : "Never"} />
+                </div>
+              </div>
+            </div>
+            <style>{`@keyframes slideIn { from { transform: translateX(100%); } to { transform: translateX(0); } }`}</style>
+          </>
+        );
+      })()}
     </>
   );
 }
@@ -118,6 +160,15 @@ function UsageBar({ value }: { value: number }) {
         <div style={{ width: `${value}%`, height: "100%", background: color, borderRadius: 3, transition: "width 0.3s" }} />
       </div>
       <span style={{ fontSize: 10, color: "var(--text-tertiary)", minWidth: 28 }}>{value}%</span>
+    </div>
+  );
+}
+
+function VRow({ label, value }: { label: string; value: any }) {
+  return (
+    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+      <span style={{ fontSize: 12, color: "var(--text-tertiary)" }}>{label}</span>
+      <span style={{ fontSize: 13, fontWeight: 500 }}>{typeof value === "string" ? value : value}</span>
     </div>
   );
 }

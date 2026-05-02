@@ -11,6 +11,7 @@ export default function LicensesPage() {
   const [compliance, setCompliance] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [showAdd, setShowAdd] = useState(false);
+  const [selectedLicense, setSelectedLicense] = useState<any>(null);
   const [form, setForm] = useState({
     softwareName: "", vendor: "", version: "", totalSeats: 1,
     licenseType: "PER_SEAT", licenseModel: "ANNUAL",
@@ -136,7 +137,7 @@ export default function LicensesPage() {
                 const isOverused = l.usedSeats > l.totalSeats;
                 const isExpired = l.expiryDate && new Date(l.expiryDate) < new Date();
                 return (
-                  <tr key={l.id}>
+                  <tr key={l.id} style={{ cursor: "pointer" }} onClick={() => setSelectedLicense(l)}>
                     <td>
                       <div style={{ fontWeight: 600, color: "var(--text-primary)", fontSize: 13 }}>{l.softwareName}</div>
                       {l.version && <div style={{ fontSize: 10, color: "var(--text-tertiary)" }}>v{l.version}</div>}
@@ -174,6 +175,61 @@ export default function LicensesPage() {
           </table>
         )}
       </div>
+
+      {/* Detail Panel */}
+      {selectedLicense && (() => {
+        const l = selectedLicense;
+        const usage = l.totalSeats > 0 ? Math.round((l.usedSeats / l.totalSeats) * 100) : 0;
+        const isOverused = l.usedSeats > l.totalSeats;
+        const isExpired = l.expiryDate && new Date(l.expiryDate) < new Date();
+        const daysLeft = l.expiryDate ? Math.ceil((new Date(l.expiryDate).getTime() - Date.now()) / (1000 * 60 * 60 * 24)) : null;
+        return (
+          <>
+            <div onClick={() => setSelectedLicense(null)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", zIndex: 1000, backdropFilter: "blur(4px)" }} />
+            <div style={{ position: "fixed", top: 0, right: 0, bottom: 0, width: "min(480px, 92vw)", background: "var(--bg-card)", zIndex: 1001, borderLeft: "1px solid var(--border-primary)", display: "flex", flexDirection: "column", animation: "slideIn 0.2s ease-out" }}>
+              <div style={{ padding: "16px 20px", borderBottom: "1px solid var(--border-primary)", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                <div>
+                  <h2 style={{ fontSize: 16, fontWeight: 700, margin: 0 }}>{l.softwareName}</h2>
+                  <p style={{ fontSize: 11, color: "var(--text-tertiary)", margin: 0 }}>{l.vendor || "Unknown vendor"} • v{l.version || "N/A"}</p>
+                </div>
+                <button onClick={() => setSelectedLicense(null)} className="btn btn-secondary" style={{ padding: "4px 8px" }}>✕</button>
+              </div>
+              <div style={{ flex: 1, overflowY: "auto", padding: 20 }}>
+                <div style={{ display: "grid", gap: 12 }}>
+                  <LRow label="Status" value={<span className={`badge ${isExpired ? "red" : isOverused ? "amber" : "green"}`}>{isExpired ? "EXPIRED" : isOverused ? "OVERUSED" : "COMPLIANT"}</span>} />
+                  <LRow label="License Type" value={l.licenseType?.replace("_", " ") || "—"} />
+                  <LRow label="License Model" value={l.licenseModel || "—"} />
+                  <LRow label="Vendor" value={l.vendor || "—"} />
+                  <LRow label="Version" value={l.version || "—"} />
+                  <div style={{ fontSize: 12, fontWeight: 700, color: "var(--text-primary)", marginTop: 8, borderBottom: "1px solid var(--border-primary)", paddingBottom: 4 }}>Seat Usage</div>
+                  <LRow label="Used Seats" value={l.usedSeats} />
+                  <LRow label="Total Seats" value={l.totalSeats} />
+                  <LRow label="Utilization" value={<span style={{ color: isOverused ? "#ef4444" : usage > 80 ? "#f59e0b" : "#10b981", fontWeight: 600 }}>{usage}%</span>} />
+                  <div style={{ fontSize: 12, fontWeight: 700, color: "var(--text-primary)", marginTop: 8, borderBottom: "1px solid var(--border-primary)", paddingBottom: 4 }}>Financial</div>
+                  <LRow label="Purchase Cost" value={l.purchaseCost ? `₹${Number(l.purchaseCost).toLocaleString()}` : "—"} />
+                  <LRow label="Renewal Cost" value={l.renewalCost ? `₹${Number(l.renewalCost).toLocaleString()}` : "—"} />
+                  <div style={{ fontSize: 12, fontWeight: 700, color: "var(--text-primary)", marginTop: 8, borderBottom: "1px solid var(--border-primary)", paddingBottom: 4 }}>Dates</div>
+                  <LRow label="Purchase Date" value={l.purchaseDate ? new Date(l.purchaseDate).toLocaleDateString() : "—"} />
+                  <LRow label="Expiry Date" value={l.expiryDate ? new Date(l.expiryDate).toLocaleDateString() : "Perpetual"} />
+                  {daysLeft !== null && <LRow label="Days Remaining" value={<span style={{ color: daysLeft < 0 ? "#ef4444" : daysLeft < 30 ? "#f59e0b" : "#10b981", fontWeight: 600 }}>{daysLeft < 0 ? `Expired ${Math.abs(daysLeft)}d ago` : `${daysLeft} days`}</span>} />}
+                  <LRow label="License Key" value={l.licenseKey ? `${l.licenseKey.substring(0, 12)}...` : "—"} />
+                  <LRow label="Created" value={new Date(l.createdAt).toLocaleString()} />
+                </div>
+              </div>
+            </div>
+            <style>{`@keyframes slideIn { from { transform: translateX(100%); } to { transform: translateX(0); } }`}</style>
+          </>
+        );
+      })()}
     </>
+  );
+}
+
+function LRow({ label, value }: { label: string; value: any }) {
+  return (
+    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+      <span style={{ fontSize: 12, color: "var(--text-tertiary)" }}>{label}</span>
+      <span style={{ fontSize: 13, fontWeight: 500 }}>{typeof value === "string" || typeof value === "number" ? value : value}</span>
+    </div>
   );
 }

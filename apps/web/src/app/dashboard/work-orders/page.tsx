@@ -133,7 +133,7 @@ export default function WorkOrdersPage() {
                 IN_PROGRESS: ["COMPLETED", "CANCELLED"], COMPLETED: ["VERIFIED"],
               };
               return (
-                <tr key={wo.id}>
+                <tr key={wo.id} style={{ cursor: "pointer" }} onClick={() => setSelectedWO(wo)}>
                   <td>
                     <div style={{ fontWeight: 600, color: "var(--text-primary)" }}>{wo.title}</div>
                     <div style={{ fontSize: 11, color: "var(--text-tertiary)", fontFamily: "monospace" }}>{wo.workOrderNumber}</div>
@@ -176,6 +176,51 @@ export default function WorkOrdersPage() {
         </table>
       </div>
 
+      {/* Detail Panel */}
+      {selectedWO && (() => {
+        const wo = selectedWO;
+        const sc = STATUS_CONFIG[wo.status] || STATUS_CONFIG.CREATED;
+        return (
+          <>
+            <div onClick={() => setSelectedWO(null)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", zIndex: 1000, backdropFilter: "blur(4px)" }} />
+            <div style={{ position: "fixed", top: 0, right: 0, bottom: 0, width: "min(520px, 92vw)", background: "var(--bg-card)", zIndex: 1001, borderLeft: "1px solid var(--border-primary)", display: "flex", flexDirection: "column", animation: "slideIn 0.2s ease-out" }}>
+              <div style={{ padding: "16px 20px", borderBottom: "1px solid var(--border-primary)", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                <div>
+                  <h2 style={{ fontSize: 16, fontWeight: 700, margin: 0 }}>{wo.title}</h2>
+                  <p style={{ fontSize: 11, color: "var(--text-tertiary)", margin: 0, fontFamily: "monospace" }}>{wo.workOrderNumber}</p>
+                </div>
+                <button onClick={() => setSelectedWO(null)} className="btn btn-secondary" style={{ padding: "4px 8px" }}>✕</button>
+              </div>
+              <div style={{ flex: 1, overflowY: "auto", padding: 20 }}>
+                <div style={{ display: "grid", gap: 12 }}>
+                  <WRow label="Status" value={<span style={{ display: "inline-flex", alignItems: "center", gap: 4, padding: "3px 10px", borderRadius: 6, fontSize: 11, fontWeight: 600, background: sc.bg, color: sc.color }}>{sc.icon} {wo.status.replace("_", " ")}</span>} />
+                  <WRow label="Type" value={<span className={`badge ${TYPE_BADGE[wo.type] || "gray"}`}>{wo.type}</span>} />
+                  <WRow label="Priority" value={<span className={`badge ${wo.priority === "HIGH" || wo.priority === "CRITICAL" ? "red" : wo.priority === "MEDIUM" ? "amber" : "gray"}`}>{wo.priority}</span>} />
+                  {wo.description && (
+                    <div>
+                      <div style={{ fontSize: 12, color: "var(--text-tertiary)", marginBottom: 4 }}>Description</div>
+                      <div style={{ fontSize: 13, color: "var(--text-primary)", lineHeight: 1.5, background: "var(--bg-elevated)", padding: 12, borderRadius: 8 }}>{wo.description}</div>
+                    </div>
+                  )}
+                  <div style={{ fontSize: 12, fontWeight: 700, color: "var(--text-primary)", marginTop: 8, borderBottom: "1px solid var(--border-primary)", paddingBottom: 4 }}>Schedule & Cost</div>
+                  <WRow label="Scheduled Start" value={wo.scheduledStart ? new Date(wo.scheduledStart).toLocaleString() : "—"} />
+                  <WRow label="Scheduled End" value={wo.scheduledEnd ? new Date(wo.scheduledEnd).toLocaleString() : "—"} />
+                  <WRow label="Actual Start" value={wo.actualStart ? new Date(wo.actualStart).toLocaleString() : "—"} />
+                  <WRow label="Actual End" value={wo.actualEnd ? new Date(wo.actualEnd).toLocaleString() : "—"} />
+                  <WRow label="Labor Hours" value={wo.laborHours ? `${wo.laborHours}h` : "—"} />
+                  <WRow label="Material Cost" value={wo.materialCost ? `₹${Number(wo.materialCost).toLocaleString()}` : "—"} />
+                  <div style={{ fontSize: 12, fontWeight: 700, color: "var(--text-primary)", marginTop: 8, borderBottom: "1px solid var(--border-primary)", paddingBottom: 4 }}>Assignment</div>
+                  <WRow label="Assigned To" value={wo.assignedTo ? `${wo.assignedTo.firstName} ${wo.assignedTo.lastName}` : "Unassigned"} />
+                  <WRow label="Linked Asset" value={wo.asset ? wo.asset.name : "—"} />
+                  <WRow label="Created" value={new Date(wo.createdAt).toLocaleString()} />
+                </div>
+              </div>
+            </div>
+            <style>{`@keyframes slideIn { from { transform: translateX(100%); } to { transform: translateX(0); } }`}</style>
+          </>
+        );
+      })()}
+
       {/* Create Modal */}
       {showCreate && (
         <>
@@ -216,5 +261,14 @@ export default function WorkOrdersPage() {
         </>
       )}
     </>
+  );
+}
+
+function WRow({ label, value }: { label: string; value: any }) {
+  return (
+    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+      <span style={{ fontSize: 12, color: "var(--text-tertiary)" }}>{label}</span>
+      <span style={{ fontSize: 13, fontWeight: 500 }}>{typeof value === "string" ? value : value}</span>
+    </div>
   );
 }

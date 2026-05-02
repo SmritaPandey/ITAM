@@ -491,7 +491,12 @@ export class MonitoringService {
         const a = nodes[i].ip?.split('.').slice(0, 3).join('.');
         const b = nodes[j].ip?.split('.').slice(0, 3).join('.');
         if (a && b && a === b) {
-          links.push({ source: nodes[i].id, target: nodes[j].id, bandwidth: '1Gbps', utilization: Math.round(Math.random() * 80) });
+          // Derive utilization from device metrics (latency-based estimate) or default to 0
+          const metricsA = (devices.find(d => d.id === nodes[i].id)?.metrics as any) || {};
+          const metricsB = (devices.find(d => d.id === nodes[j].id)?.metrics as any) || {};
+          const avgLatency = ((metricsA.latency || 0) + (metricsB.latency || 0)) / 2;
+          const utilization = avgLatency > 0 ? Math.min(Math.round(avgLatency * 2), 100) : 0;
+          links.push({ source: nodes[i].id, target: nodes[j].id, bandwidth: '1Gbps', utilization });
         }
       }
     }

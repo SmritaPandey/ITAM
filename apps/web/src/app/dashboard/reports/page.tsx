@@ -2,123 +2,172 @@
 import { useEffect, useState } from "react";
 import {
   FileText, Download, BarChart3, PieChart as PieIcon, Calendar, Clock,
-  Filter, TrendingUp, Package, Ticket, Shield, ChevronRight
+  Filter, TrendingUp, Package, Ticket, Shield, ChevronRight, Loader2, AlertTriangle
 } from "lucide-react";
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
   PieChart, Pie, Cell, AreaChart, Area
 } from "recharts";
-import { apiFetch, getToken, getApiBase } from "@/lib/api";
+import { apiFetch } from "@/lib/api";
 import SafeChart from "@/components/SafeChart";
 
 const REPORT_TEMPLATES = [
-  { id: "inv", name: "Asset Inventory Summary", icon: <Package size={18} />, desc: "Full asset register with types, locations, and values", type: "Scheduled", frequency: "Weekly", lastRun: "Apr 28, 2026", format: "PDF", color: "#06b6d4" },
-  { id: "patch", name: "Patch Compliance Report", icon: <Shield size={18} />, desc: "Security patch status across all endpoints", type: "Scheduled", frequency: "Monthly", lastRun: "Apr 1, 2026", format: "XLSX", color: "#10b981" },
-  { id: "sla", name: "Ticket SLA Performance", icon: <Ticket size={18} />, desc: "Response and resolution times vs SLA targets", type: "On-demand", frequency: "—", lastRun: "Apr 25, 2026", format: "PDF", color: "#8b5cf6" },
-  { id: "license", name: "License Utilization", icon: <FileText size={18} />, desc: "Software license usage and renewal forecasts", type: "Scheduled", frequency: "Quarterly", lastRun: "Mar 31, 2026", format: "PDF", color: "#f59e0b" },
-  { id: "fleet", name: "Fleet Telemetry Summary", icon: <TrendingUp size={18} />, desc: "GPS tracking, mileage, and maintenance alerts", type: "On-demand", frequency: "—", lastRun: "Apr 20, 2026", format: "PDF", color: "#ef4444" },
-  { id: "audit", name: "Audit Trail Export", icon: <Clock size={18} />, desc: "Full audit log with SHA-256 hash chain verification", type: "On-demand", frequency: "—", lastRun: "Apr 29, 2026", format: "CSV", color: "#3b82f6" },
+  { id: "inv", name: "Asset Inventory Summary", icon: <Package size={18} />, desc: "Full asset register with types, locations, and values", type: "Scheduled", frequency: "Weekly", format: "PDF", color: "#06b6d4" },
+  { id: "patch", name: "Patch Compliance Report", icon: <Shield size={18} />, desc: "Security patch status across all endpoints", type: "Scheduled", frequency: "Monthly", format: "XLSX", color: "#10b981" },
+  { id: "sla", name: "Ticket SLA Performance", icon: <Ticket size={18} />, desc: "Response and resolution times vs SLA targets", type: "On-demand", frequency: "—", format: "PDF", color: "#8b5cf6" },
+  { id: "license", name: "License Utilization", icon: <FileText size={18} />, desc: "Software license usage and renewal forecasts", type: "Scheduled", frequency: "Quarterly", format: "PDF", color: "#f59e0b" },
+  { id: "fleet", name: "Fleet Telemetry Summary", icon: <TrendingUp size={18} />, desc: "GPS tracking, mileage, and maintenance alerts", type: "On-demand", frequency: "—", format: "PDF", color: "#ef4444" },
+  { id: "audit", name: "Audit Trail Export", icon: <Clock size={18} />, desc: "Full audit log with SHA-256 hash chain verification", type: "On-demand", frequency: "—", format: "CSV", color: "#3b82f6" },
 ];
 
-const monthlyAssets = [
-  { month: "Nov", created: 12, retired: 2 }, { month: "Dec", created: 8, retired: 5 },
-  { month: "Jan", created: 15, retired: 3 }, { month: "Feb", created: 10, retired: 4 },
-  { month: "Mar", created: 18, retired: 6 }, { month: "Apr", created: 7, retired: 1 },
-];
-
-const ticketTrend = [
-  { month: "Nov", opened: 25, closed: 22 }, { month: "Dec", opened: 18, closed: 20 },
-  { month: "Jan", opened: 30, closed: 28 }, { month: "Feb", opened: 22, closed: 25 },
-  { month: "Mar", opened: 35, closed: 30 }, { month: "Apr", opened: 15, closed: 12 },
-];
-
-const costBreakdown = [
-  { name: "Hardware", value: 850000, color: "#06b6d4" },
-  { name: "Software", value: 320000, color: "#8b5cf6" },
-  { name: "Fleet", value: 2100000, color: "#10b981" },
-  { name: "Facility", value: 180000, color: "#f59e0b" },
-];
+const CAT_COLORS: Record<string, string> = {
+  Hardware: "#06b6d4", Software: "#8b5cf6", Fleet: "#10b981", Facility: "#f59e0b",
+  IT: "#06b6d4", "Non-IT": "#f59e0b", Vehicle: "#10b981", Other: "#64748b",
+};
 
 export default function ReportsPage() {
-  const [stats, setStats] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
   const [execReport, setExecReport] = useState<any>(null);
+  const [trendData, setTrendData] = useState<any[]>([]);
 
   useEffect(() => {
-    const token = getToken();
-    const headers = { Authorization: `Bearer ${token}` };
     Promise.all([
-      fetch(`${getApiBase()}/assets/dashboard`, { headers }).then(r => r.json()),
-      fetch(`${getApiBase()}/reports/executive`, { headers }).then(r => r.json()),
-    ]).then(([s, e]) => { setStats(s); setExecReport(e); }).catch(console.error);
+      apiFetch("/reports/executive"),
+      apiFetch("/reports/trend"),
+    ]).then(([exec, trend]) => {
+      setExecReport(exec);
+      setTrendData(Array.isArray(trend) ? trend : []);
+    }).catch(err => {
+      console.error(err);
+      setError("Failed to load report data");
+    }).finally(() => setLoading(false));
   }, []);
 
-  const totalCost = costBreakdown.reduce((s, d) => s + d.value, 0);
+  if (loading) return (
+    <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "60vh", color: "var(--text-tertiary)" }}>
+      <Loader2 size={24} style={{ animation: "spin 1s linear infinite" }} />
+      <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+    </div>
+  );
+
+  // Derive chart data from real API
+  const assets = execReport?.assets || {};
+  const tickets = execReport?.tickets || {};
+  const licenses = execReport?.licenses || {};
+
+  // Asset lifecycle chart from trend data
+  const assetLifecycle = trendData.map(d => ({
+    month: d.month,
+    created: d.assetsAdded || 0,
+    retired: 0, // No retire tracking yet — show 0 instead of fake
+  }));
+
+  // Ticket volume chart from trend data
+  const ticketVolume = trendData.map(d => ({
+    month: d.month,
+    opened: d.created || 0,
+    closed: d.resolved || 0,
+  }));
+
+  // Cost breakdown from real asset categories
+  const costData = (assets.byType || []).map((t: any, i: number) => ({
+    name: t.category || "Other",
+    value: t.count || 0,
+    color: Object.values(CAT_COLORS)[i % Object.values(CAT_COLORS).length],
+  })).filter((d: any) => d.value > 0);
+
+  const totalAssetValue = assets.totalValue || 0;
+  const totalAssets = assets.total || 0;
+  const openTickets = tickets.open || 0;
+  const avgResHours = tickets.avgResolutionHours || 0;
+  const scheduledReports = REPORT_TEMPLATES.filter(r => r.type === "Scheduled").length;
 
   return (
     <>
       <div className="page-header">
         <div>
           <h1 className="page-title">Reports & Analytics</h1>
-          <p className="page-subtitle">Scheduled and on-demand analytics reports</p>
+          <p className="page-subtitle">Executive insights powered by live data</p>
         </div>
         <button className="btn btn-primary"><FileText size={14} /> Create Report</button>
       </div>
 
-      {/* Quick Stats */}
+      {error && (
+        <div className="card" style={{ marginBottom: 16, padding: "12px 16px", border: "1px solid rgba(239,68,68,0.3)", background: "rgba(239,68,68,0.06)" }}>
+          <span style={{ color: "#ef4444", fontSize: 13, fontWeight: 600 }}><AlertTriangle size={14} style={{ verticalAlign: "middle" }} /> {error}</span>
+        </div>
+      )}
+
+      {/* Quick Stats — Real Data */}
       <div className="stats-grid" style={{ gridTemplateColumns: "repeat(4, 1fr)" }}>
-        <div className="stat-card"><div className="stat-icon cyan"><BarChart3 size={22} /></div><div className="stat-content"><div className="stat-label">Reports Generated</div><div className="stat-value">47</div></div></div>
-        <div className="stat-card"><div className="stat-icon green"><Calendar size={22} /></div><div className="stat-content"><div className="stat-label">Scheduled</div><div className="stat-value">3</div></div></div>
-        <div className="stat-card"><div className="stat-icon purple"><Download size={22} /></div><div className="stat-content"><div className="stat-label">Downloads This Month</div><div className="stat-value">12</div></div></div>
-        <div className="stat-card"><div className="stat-icon amber"><TrendingUp size={22} /></div><div className="stat-content"><div className="stat-label">Total Asset Value</div><div className="stat-value">₹{(totalCost / 100000).toFixed(1)}L</div></div></div>
+        <div className="stat-card"><div className="stat-icon cyan"><Package size={22} /></div><div className="stat-content"><div className="stat-label">Total Assets</div><div className="stat-value">{totalAssets}</div></div></div>
+        <div className="stat-card"><div className="stat-icon green"><Ticket size={22} /></div><div className="stat-content"><div className="stat-label">Open Tickets</div><div className="stat-value">{openTickets}</div></div></div>
+        <div className="stat-card"><div className="stat-icon purple"><Clock size={22} /></div><div className="stat-content"><div className="stat-label">Avg Resolution</div><div className="stat-value">{avgResHours}h</div></div></div>
+        <div className="stat-card"><div className="stat-icon amber"><TrendingUp size={22} /></div><div className="stat-content"><div className="stat-label">Total Asset Value</div><div className="stat-value">₹{totalAssetValue > 100000 ? `${(totalAssetValue / 100000).toFixed(1)}L` : totalAssetValue.toLocaleString()}</div></div></div>
       </div>
 
-      {/* Charts */}
+      {/* Charts — Real API Data */}
       <div className="charts-grid-equal" style={{ marginBottom: 16 }}>
         <div className="card">
           <div className="card-header">
-            <div><div className="card-title">Asset Lifecycle (6 Months)</div><div className="card-subtitle">Assets created vs retired</div></div>
+            <div><div className="card-title">Asset Lifecycle (6 Months)</div><div className="card-subtitle">Assets created per month</div></div>
           </div>
-          <SafeChart height={220}>
-<BarChart data={monthlyAssets} barSize={18}>
+          {assetLifecycle.length > 0 ? (
+            <SafeChart height={220}>
+              <BarChart data={assetLifecycle} barSize={18}>
                 <CartesianGrid strokeDasharray="3 3" stroke="rgba(42,49,80,0.5)" vertical={false} />
                 <XAxis dataKey="month" tick={{ fill: "#64748b", fontSize: 11 }} axisLine={false} tickLine={false} />
                 <YAxis tick={{ fill: "#64748b", fontSize: 11 }} axisLine={false} tickLine={false} />
                 <Tooltip contentStyle={{ background: "#1a1f35", border: "1px solid #2a3150", borderRadius: 8, fontSize: 12 }} />
                 <Bar dataKey="created" fill="#06b6d4" radius={[4, 4, 0, 0]} name="Created" />
-                <Bar dataKey="retired" fill="#ef4444" radius={[4, 4, 0, 0]} name="Retired" />
               </BarChart>
-</SafeChart>
+            </SafeChart>
+          ) : (
+            <div style={{ height: 220, display: "flex", alignItems: "center", justifyContent: "center", color: "var(--text-tertiary)", fontSize: 12 }}>
+              <BarChart3 size={16} style={{ marginRight: 6 }} /> No asset trend data yet
+            </div>
+          )}
         </div>
         <div className="card">
           <div className="card-header">
-            <div><div className="card-title">Cost Distribution</div><div className="card-subtitle">Total: ₹{(totalCost / 100000).toFixed(1)} Lakhs</div></div>
+            <div><div className="card-title">Assets by Category</div><div className="card-subtitle">{totalAssets} total assets</div></div>
           </div>
-          <SafeChart height={220}>
-<PieChart>
-                <Pie data={costBreakdown} dataKey="value" cx="50%" cy="50%" innerRadius={55} outerRadius={85} paddingAngle={3} strokeWidth={0}>
-                  {costBreakdown.map((d, i) => <Cell key={i} fill={d.color} />)}
-                </Pie>
-                <Tooltip contentStyle={{ background: "#1a1f35", border: "1px solid #2a3150", borderRadius: 8, fontSize: 12 }} formatter={(v: any) => `₹${(Number(v) / 1000).toFixed(0)}K`} />
-              </PieChart>
-</SafeChart>
-          <div style={{ display: "flex", gap: 12, justifyContent: "center", flexWrap: "wrap" }}>
-            {costBreakdown.map(d => (
-              <div key={d.name} style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 10, color: "var(--text-secondary)" }}>
-                <span style={{ width: 6, height: 6, borderRadius: 2, background: d.color, display: "inline-block" }} />
-                {d.name} (₹{(d.value / 1000).toFixed(0)}K)
+          {costData.length > 0 ? (
+            <>
+              <SafeChart height={220}>
+                <PieChart>
+                  <Pie data={costData} dataKey="value" cx="50%" cy="50%" innerRadius={55} outerRadius={85} paddingAngle={3} strokeWidth={0}>
+                    {costData.map((d: any, i: number) => <Cell key={i} fill={d.color} />)}
+                  </Pie>
+                  <Tooltip contentStyle={{ background: "#1a1f35", border: "1px solid #2a3150", borderRadius: 8, fontSize: 12 }} />
+                </PieChart>
+              </SafeChart>
+              <div style={{ display: "flex", gap: 12, justifyContent: "center", flexWrap: "wrap" }}>
+                {costData.map((d: any) => (
+                  <div key={d.name} style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 10, color: "var(--text-secondary)" }}>
+                    <span style={{ width: 6, height: 6, borderRadius: 2, background: d.color, display: "inline-block" }} />
+                    {d.name} ({d.value})
+                  </div>
+                ))}
               </div>
-            ))}
-          </div>
+            </>
+          ) : (
+            <div style={{ height: 220, display: "flex", alignItems: "center", justifyContent: "center", color: "var(--text-tertiary)", fontSize: 12 }}>
+              No category data
+            </div>
+          )}
         </div>
       </div>
 
-      {/* Ticket Trend */}
+      {/* Ticket Trend — Real API Data */}
       <div className="card" style={{ marginBottom: 16 }}>
         <div className="card-header">
-          <div><div className="card-title">Ticket Volume (6 Months)</div><div className="card-subtitle">Opened vs closed</div></div>
+          <div><div className="card-title">Ticket Volume (6 Months)</div><div className="card-subtitle">Opened vs resolved</div></div>
         </div>
-        <SafeChart height={180}>
-<AreaChart data={ticketTrend}>
+        {ticketVolume.length > 0 ? (
+          <SafeChart height={180}>
+            <AreaChart data={ticketVolume}>
               <defs>
                 <linearGradient id="openGrad" x1="0" y1="0" x2="0" y2="1">
                   <stop offset="0%" stopColor="#8b5cf6" stopOpacity={0.2} />
@@ -134,14 +183,19 @@ export default function ReportsPage() {
               <YAxis tick={{ fill: "#64748b", fontSize: 11 }} axisLine={false} tickLine={false} />
               <Tooltip contentStyle={{ background: "#1a1f35", border: "1px solid #2a3150", borderRadius: 8, fontSize: 12 }} />
               <Area type="monotone" dataKey="opened" stroke="#8b5cf6" fill="url(#openGrad)" strokeWidth={2} name="Opened" />
-              <Area type="monotone" dataKey="closed" stroke="#10b981" fill="url(#closeGrad)" strokeWidth={2} name="Closed" />
+              <Area type="monotone" dataKey="closed" stroke="#10b981" fill="url(#closeGrad)" strokeWidth={2} name="Resolved" />
             </AreaChart>
-</SafeChart>
+          </SafeChart>
+        ) : (
+          <div style={{ height: 180, display: "flex", alignItems: "center", justifyContent: "center", color: "var(--text-tertiary)", fontSize: 12 }}>
+            No ticket trend data yet
+          </div>
+        )}
       </div>
 
       {/* Report Templates */}
       <h2 style={{ fontSize: 16, fontWeight: 700, marginBottom: 12, color: "var(--text-primary)" }}>Report Templates</h2>
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(380px, 1fr))", gap: 12 }}>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(340px, 1fr))", gap: 12 }}>
         {REPORT_TEMPLATES.map(r => (
           <div key={r.id} className="card" style={{ display: "flex", gap: 14, alignItems: "center" }}>
             <div style={{
@@ -157,10 +211,7 @@ export default function ReportsPage() {
                 <span className="badge gray">{r.format}</span>
               </div>
             </div>
-            <div style={{ display: "flex", flexDirection: "column", gap: 4, alignItems: "flex-end" }}>
-              <button className="btn btn-secondary" style={{ padding: "4px 10px", fontSize: 11 }}><Download size={11} /> Export</button>
-              <span style={{ fontSize: 9, color: "var(--text-tertiary)" }}>Last: {r.lastRun}</span>
-            </div>
+            <button className="btn btn-secondary" style={{ padding: "4px 10px", fontSize: 11 }}><Download size={11} /> Export</button>
           </div>
         ))}
       </div>

@@ -27,7 +27,6 @@ export class FleetService {
   }
 
   async getGeofences(tenantId: string) {
-    // Geofences stored in tenant settings or as JSON — simplified approach
     const tenant = await this.prisma.tenant.findUnique({ where: { id: tenantId } });
     const settings = (tenant?.settings as any) || {};
     return settings.geofences || [];
@@ -47,7 +46,6 @@ export class FleetService {
   }
 
   async getAlerts(tenantId: string) {
-    // Return recent notifications of type 'fleet'
     return this.prisma.notification.findMany({
       where: { user: { tenantId }, type: 'ALERT' },
       take: 20,
@@ -61,28 +59,37 @@ export class FleetService {
     });
     if (!vehicle) return { trips: [] };
 
-    // Simulated trip data — in production, fetched from GPS telematics device
+    // Return deterministic trip data derived from the vehicle's stored position
+    // In production, these would come from a GPS telematics table
     const baseLat = vehicle.latitude || 28.6139;
     const baseLng = vehicle.longitude || 77.2090;
     const trips = [];
+
     for (let i = 0; i < 5; i++) {
       const startTime = new Date(Date.now() - (i + 1) * 24 * 3600 * 1000);
-      const endTime = new Date(startTime.getTime() + (2 + Math.random() * 4) * 3600 * 1000);
+      const durationHours = 2 + (i % 3); // Deterministic: 2,3,4,2,3 hours
+      const endTime = new Date(startTime.getTime() + durationHours * 3600 * 1000);
+      const numPoints = 15;
       const points = [];
-      const numPoints = 10 + Math.floor(Math.random() * 20);
+
       for (let j = 0; j < numPoints; j++) {
+        // Deterministic offsets based on index to create a realistic path
+        const angle = (j / numPoints) * Math.PI * 2;
+        const radius = 0.02 + (i * 0.005);
         points.push({
-          lat: baseLat + (Math.random() - 0.5) * 0.1,
-          lng: baseLng + (Math.random() - 0.5) * 0.1,
-          speed: Math.floor(20 + Math.random() * 60),
+          lat: baseLat + Math.sin(angle) * radius,
+          lng: baseLng + Math.cos(angle) * radius,
+          speed: 30 + (j % 5) * 10, // Deterministic speed pattern: 30,40,50,60,70
           timestamp: new Date(startTime.getTime() + j * ((endTime.getTime() - startTime.getTime()) / numPoints)),
         });
       }
+
+      const distanceKm = Math.round(radius * 111 * numPoints * 10) / 10; // Approximate from lat degrees
       trips.push({
-        id: `trip-${vehicleId}-${i}`,
+        id: `trip-${vehicleId.substring(0, 8)}-${i}`,
         vehicleId,
         startTime, endTime,
-        distanceKm: Math.round((5 + Math.random() * 50) * 10) / 10,
+        distanceKm: distanceKm || 15 + i * 5,
         maxSpeed: Math.max(...points.map(p => p.speed)),
         avgSpeed: Math.round(points.reduce((s, p) => s + p.speed, 0) / points.length),
         points,
@@ -97,18 +104,22 @@ export class FleetService {
     });
     if (!vehicle) return null;
 
-    // In production, this would query real-time GPS feed
+    // Return the actual stored position — no random jitter
+    const lastUpdated = vehicle.updatedAt || new Date();
+    const isStale = (Date.now() - new Date(lastUpdated).getTime()) > 3600 * 1000; // >1 hour old
+
     return {
       vehicleId,
       vehicleName: vehicle.name,
-      latitude: vehicle.latitude ? vehicle.latitude + (Math.random() - 0.5) * 0.001 : null,
-      longitude: vehicle.longitude ? vehicle.longitude + (Math.random() - 0.5) * 0.001 : null,
-      speed: Math.floor(Math.random() * 80),
-      heading: Math.floor(Math.random() * 360),
+      latitude: vehicle.latitude,
+      longitude: vehicle.longitude,
+      speed: 0, // Real speed would come from GPS telematics feed
+      heading: 0,
       status: vehicle.status,
-      lastUpdated: new Date().toISOString(),
-      ignition: Math.random() > 0.3 ? 'ON' : 'OFF',
-      fuelLevel: Math.floor(30 + Math.random() * 70),
+      lastUpdated: lastUpdated.toISOString ? (lastUpdated as Date).toISOString() : String(lastUpdated),
+      ignition: vehicle.status === 'ACTIVE' ? 'ON' : 'OFF',
+      fuelLevel: null, // No fuel sensor — show null instead of fake
+      stale: isStale,
     };
   }
 }

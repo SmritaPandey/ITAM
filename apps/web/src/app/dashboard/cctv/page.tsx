@@ -7,6 +7,7 @@ export default function CCTVPage() {
   const [data, setData] = useState<any>({ data: [], total: 0, online: 0, recording: 0, alerts: 0 });
   const [loading, setLoading] = useState(true);
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
+  const [selectedCam, setSelectedCam] = useState<any>(null);
 
   function refresh() {
     fetch(`${getApiBase()}/monitoring/cameras`, { headers: { Authorization: `Bearer ${getToken()}` } })
@@ -44,53 +45,104 @@ export default function CCTVPage() {
         <div className="stat-card"><div className="stat-icon red"><AlertTriangle size={22} /></div><div className="stat-content"><div className="stat-label">Alerts</div><div className="stat-value">{data.alerts}</div></div></div>
       </div>
 
-      <div style={{ display: "grid", gridTemplateColumns: viewMode === "grid" ? "repeat(auto-fill, minmax(340px, 1fr))" : "1fr", gap: 12 }}>
-        {cameras.map((cam: any) => {
-          const cfg = cam.config || {};
-          const met = cam.metrics || {};
-          return (
-            <div key={cam.id} className="card" style={{ overflow: "hidden" }}>
-              <div style={{
-                height: viewMode === "grid" ? 160 : 100,
-                background: cam.status === "ONLINE" ? "linear-gradient(135deg, #0a0e1a 0%, #1a1f35 100%)" : "linear-gradient(135deg, #1a0a0a 0%, #2d1515 100%)",
-                display: "flex", alignItems: "center", justifyContent: "center",
-                position: "relative", borderRadius: "8px 8px 0 0", margin: "-16px -16px 12px",
-              }}>
-                <div style={{ textAlign: "center" }}>
-                  {cam.status === "ONLINE" ? (
-                    <><Camera size={28} style={{ color: "rgba(6,182,212,0.4)" }} /><div style={{ fontSize: 9, color: "rgba(6,182,212,0.5)", marginTop: 4 }}>LIVE FEED</div></>
-                  ) : (
-                    <><AlertTriangle size={28} style={{ color: "rgba(239,68,68,0.5)" }} /><div style={{ fontSize: 9, color: "rgba(239,68,68,0.6)", marginTop: 4 }}>OFFLINE</div></>
-                  )}
-                </div>
-                {cfg.recording && (
-                  <div style={{ position: "absolute", top: 8, right: 8, display: "flex", alignItems: "center", gap: 4 }}>
-                    <span style={{ width: 6, height: 6, borderRadius: "50%", background: "#ef4444", animation: "pulse 2s infinite" }} />
-                    <span style={{ fontSize: 9, color: "rgba(239,68,68,0.8)", fontWeight: 600 }}>REC</span>
+      {cameras.length === 0 ? (
+        <div className="card" style={{ textAlign: "center", padding: 60, color: "var(--text-tertiary)" }}>
+          <Camera size={40} style={{ marginBottom: 12, opacity: 0.3 }} />
+          <div style={{ fontSize: 14, fontWeight: 600 }}>No cameras configured</div>
+          <div style={{ fontSize: 12, marginTop: 4 }}>Add CCTV cameras via Network Monitoring to start surveillance tracking.</div>
+        </div>
+      ) : (
+        <div style={{ display: "grid", gridTemplateColumns: viewMode === "grid" ? "repeat(auto-fill, minmax(340px, 1fr))" : "1fr", gap: 12 }}>
+          {cameras.map((cam: any) => {
+            const cfg = cam.config || {};
+            const met = cam.metrics || {};
+            return (
+              <div key={cam.id} className="card" style={{ overflow: "hidden", cursor: "pointer" }} onClick={() => setSelectedCam(cam)}>
+                <div style={{
+                  height: viewMode === "grid" ? 160 : 100,
+                  background: cam.status === "ONLINE" ? "linear-gradient(135deg, #0a0e1a 0%, #1a1f35 100%)" : "linear-gradient(135deg, #1a0a0a 0%, #2d1515 100%)",
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                  position: "relative", borderRadius: "8px 8px 0 0", margin: "-16px -16px 12px",
+                }}>
+                  <div style={{ textAlign: "center" }}>
+                    {cam.status === "ONLINE" ? (
+                      <><Camera size={28} style={{ color: "rgba(6,182,212,0.4)" }} /><div style={{ fontSize: 9, color: "rgba(6,182,212,0.5)", marginTop: 4 }}>LIVE FEED</div></>
+                    ) : (
+                      <><AlertTriangle size={28} style={{ color: "rgba(239,68,68,0.5)" }} /><div style={{ fontSize: 9, color: "rgba(239,68,68,0.6)", marginTop: 4 }}>OFFLINE</div></>
+                    )}
                   </div>
-                )}
-                <div style={{ position: "absolute", top: 8, left: 8 }}>
-                  <span className="badge gray" style={{ fontSize: 9, backdropFilter: "blur(4px)", background: "rgba(0,0,0,0.4)" }}>{cfg.resolution || "—"}</span>
+                  {cfg.recording && (
+                    <div style={{ position: "absolute", top: 8, right: 8, display: "flex", alignItems: "center", gap: 4 }}>
+                      <span style={{ width: 6, height: 6, borderRadius: "50%", background: "#ef4444", animation: "pulse 2s infinite" }} />
+                      <span style={{ fontSize: 9, color: "rgba(239,68,68,0.8)", fontWeight: 600 }}>REC</span>
+                    </div>
+                  )}
+                  <div style={{ position: "absolute", top: 8, left: 8 }}>
+                    <span className="badge gray" style={{ fontSize: 9, backdropFilter: "blur(4px)", background: "rgba(0,0,0,0.4)" }}>{cfg.resolution || "—"}</span>
+                  </div>
+                </div>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+                  <div>
+                    <div style={{ fontSize: 14, fontWeight: 600, color: "var(--text-primary)" }}>{cam.name}</div>
+                    <div style={{ fontSize: 11, color: "var(--text-tertiary)", display: "flex", alignItems: "center", gap: 4 }}><MapPin size={10} /> {cam.location}</div>
+                  </div>
+                  <span className={`badge ${cam.status === "ONLINE" ? "green" : "red"}`}>{cam.status}</span>
+                </div>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8, fontSize: 11 }}>
+                  <div><span style={{ color: "var(--text-tertiary)" }}>Type</span><br /><span style={{ fontWeight: 500 }}>{cfg.cameraType || "—"}</span></div>
+                  <div><span style={{ color: "var(--text-tertiary)" }}>Storage</span><br /><span style={{ fontWeight: 500 }}>{met.storage || 0}%</span></div>
+                  <div><span style={{ color: "var(--text-tertiary)" }}>Health</span><br /><span style={{ fontWeight: 500, color: met.health > 90 ? "var(--success)" : met.health > 0 ? "var(--warning)" : "var(--text-tertiary)" }}>{met.health || 0}%</span></div>
                 </div>
               </div>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
-                <div>
-                  <div style={{ fontSize: 14, fontWeight: 600, color: "var(--text-primary)" }}>{cam.name}</div>
-                  <div style={{ fontSize: 11, color: "var(--text-tertiary)", display: "flex", alignItems: "center", gap: 4 }}><MapPin size={10} /> {cam.location}</div>
-                </div>
-                <span className={`badge ${cam.status === "ONLINE" ? "green" : "red"}`}>{cam.status}</span>
+            );
+          })}
+        </div>
+      )}
+
+      {/* Detail Panel */}
+      {selectedCam && (
+        <>
+          <div onClick={() => setSelectedCam(null)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", zIndex: 1000, backdropFilter: "blur(4px)" }} />
+          <div style={{ position: "fixed", top: 0, right: 0, bottom: 0, width: "min(480px, 92vw)", background: "var(--bg-card)", zIndex: 1001, borderLeft: "1px solid var(--border-primary)", display: "flex", flexDirection: "column", animation: "slideIn 0.2s ease-out" }}>
+            <div style={{ padding: "16px 20px", borderBottom: "1px solid var(--border-primary)", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <div>
+                <h2 style={{ fontSize: 16, fontWeight: 700, margin: 0 }}>{selectedCam.name}</h2>
+                <p style={{ fontSize: 11, color: "var(--text-tertiary)", margin: 0 }}>{selectedCam.ipAddress || "No IP"} • {selectedCam.location || "No location"}</p>
               </div>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8, fontSize: 11 }}>
-                <div><span style={{ color: "var(--text-tertiary)" }}>Type</span><br /><span style={{ fontWeight: 500 }}>{cfg.cameraType || "—"}</span></div>
-                <div><span style={{ color: "var(--text-tertiary)" }}>Storage</span><br /><span style={{ fontWeight: 500 }}>{met.storage || 0}%</span></div>
-                <div><span style={{ color: "var(--text-tertiary)" }}>Health</span><br /><span style={{ fontWeight: 500, color: met.health > 90 ? "var(--success)" : met.health > 0 ? "var(--warning)" : "var(--danger)" }}>{met.health || 0}%</span></div>
+              <button onClick={() => setSelectedCam(null)} className="btn btn-secondary" style={{ padding: "4px 8px" }}>✕</button>
+            </div>
+            <div style={{ flex: 1, overflowY: "auto", padding: 20 }}>
+              <div style={{ display: "grid", gap: 12 }}>
+                <DRow label="Status" value={<span className={`badge ${selectedCam.status === "ONLINE" ? "green" : "red"}`}>{selectedCam.status}</span>} />
+                <DRow label="IP Address" value={selectedCam.ipAddress || "—"} />
+                <DRow label="Location" value={selectedCam.location || "—"} />
+                <DRow label="Camera Type" value={selectedCam.config?.cameraType || "—"} />
+                <DRow label="Resolution" value={selectedCam.config?.resolution || "—"} />
+                <DRow label="Recording" value={selectedCam.config?.recording ? "Active" : "Inactive"} />
+                <DRow label="RTSP URL" value={selectedCam.config?.rtspUrl || `rtsp://${selectedCam.ipAddress}:554/stream1`} />
+                <DRow label="PTZ Support" value={selectedCam.config?.ptzSupport ? "Yes" : "No"} />
+                <DRow label="Zone" value={selectedCam.config?.zone || "—"} />
+                <DRow label="Storage Used" value={`${selectedCam.metrics?.storage || 0}%`} />
+                <DRow label="Health Score" value={`${selectedCam.metrics?.health || 0}%`} />
+                <DRow label="Last Seen" value={selectedCam.lastSeen ? new Date(selectedCam.lastSeen).toLocaleString() : "Never"} />
               </div>
             </div>
-          );
-        })}
-      </div>
+          </div>
+          <style>{`@keyframes slideIn { from { transform: translateX(100%); } to { transform: translateX(0); } }`}</style>
+        </>
+      )}
+
       <style>{`@keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }
         @keyframes spin { to { transform: rotate(360deg); } }`}</style>
     </>
+  );
+}
+
+function DRow({ label, value }: { label: string; value: any }) {
+  return (
+    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+      <span style={{ fontSize: 12, color: "var(--text-tertiary)" }}>{label}</span>
+      <span style={{ fontSize: 13, fontWeight: 500, maxWidth: "60%", textAlign: "right", wordBreak: "break-all" }}>{typeof value === "string" ? value : value}</span>
+    </div>
   );
 }

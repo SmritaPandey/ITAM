@@ -72,19 +72,19 @@ export class FleetService {
       const numPoints = 15;
       const points = [];
 
+      const tripRadius = 0.02 + (i * 0.005);
       for (let j = 0; j < numPoints; j++) {
         // Deterministic offsets based on index to create a realistic path
         const angle = (j / numPoints) * Math.PI * 2;
-        const radius = 0.02 + (i * 0.005);
         points.push({
-          lat: baseLat + Math.sin(angle) * radius,
-          lng: baseLng + Math.cos(angle) * radius,
+          lat: baseLat + Math.sin(angle) * tripRadius,
+          lng: baseLng + Math.cos(angle) * tripRadius,
           speed: 30 + (j % 5) * 10, // Deterministic speed pattern: 30,40,50,60,70
           timestamp: new Date(startTime.getTime() + j * ((endTime.getTime() - startTime.getTime()) / numPoints)),
         });
       }
 
-      const distanceKm = Math.round(radius * 111 * numPoints * 10) / 10; // Approximate from lat degrees
+      const distanceKm = Math.round(tripRadius * 111 * numPoints * 10) / 10; // Approximate from lat degrees
       trips.push({
         id: `trip-${vehicleId.substring(0, 8)}-${i}`,
         vehicleId,
@@ -116,7 +116,7 @@ export class FleetService {
       speed: 0, // Real speed would come from GPS telematics feed
       heading: 0,
       status: vehicle.status,
-      lastUpdated: lastUpdated.toISOString ? (lastUpdated as Date).toISOString() : String(lastUpdated),
+      lastUpdated: new Date(lastUpdated).toISOString(),
       ignition: vehicle.status === 'ACTIVE' ? 'ON' : 'OFF',
       fuelLevel: null, // No fuel sensor — show null instead of fake
       stale: isStale,

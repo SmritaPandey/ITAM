@@ -1,12 +1,23 @@
-# ReconAPM — Local LAN Deployment
-# Usage: docker compose -f docker-compose.prod.yml up -d
+# ═══════════════════════════════════════════════════════════════════
+# ReconAPM — Full Local LAN Deployment
+# ═══════════════════════════════════════════════════════════════════
 #
-# This deploys the full stack on your local server.
-# The API container uses HOST NETWORK mode so it can scan your LAN directly.
+# USAGE:
+#   1. First time (with demo data):
+#      SERVER_IP=192.168.1.50 SEED_DB=true docker compose -f docker-compose.prod.yml up -d --build
 #
-# Prerequisites:
-#   - Docker & Docker Compose installed
-#   - nmap is included in the API container image
+#   2. Production (no seed):
+#      SERVER_IP=192.168.1.50 docker compose -f docker-compose.prod.yml up -d --build
+#
+#   3. View logs:
+#      docker compose -f docker-compose.prod.yml logs -f api
+#
+#   4. Stop:
+#      docker compose -f docker-compose.prod.yml down
+#
+# After startup, open: http://<SERVER_IP>:3100
+# Login: admin@acme.com / Admin@123 (if seeded)
+# ═══════════════════════════════════════════════════════════════════
 
 services:
   # ─── PostgreSQL Database ───────────────────────────────────────
@@ -19,9 +30,10 @@ services:
     environment:
       POSTGRES_DB: assetcommand
       POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: ${DB_PASSWORD:-AssetCmd@2026}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-ReconAPM@2026}
     volumes:
       - pgdata:/var/lib/postgresql/data
+      - ./infra/docker/init-extensions.sql:/docker-entrypoint-initdb.d/init-extensions.sql
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres"]
       interval: 10s
@@ -29,7 +41,7 @@ services:
       retries: 5
 
   # ─── NestJS API Backend ────────────────────────────────────────
-  # Uses host network for direct LAN access (scanning, ping, ARP)
+  # Uses HOST NETWORK for direct LAN scanning (ping, nmap, arp)
   api:
     build:
       context: ./apps/api
@@ -38,11 +50,14 @@ services:
     restart: unless-stopped
     network_mode: host
     environment:
-      DATABASE_URL: postgresql://postgres:${DB_PASSWORD:-AssetCmd@2026}@localhost:5434/assetcommand
-      JWT_SECRET: ${JWT_SECRET:-reconapm-jwt-secret-change-in-production}
-      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:-reconapm-jwt-refresh-change-in-production}
+      DATABASE_URL: postgresql://postgres:${DB_PASSWORD:-ReconAPM@2026}@localhost:5434/assetcommand
+      JWT_SECRET: ${JWT_SECRET:-reconapm-jwt-secret-2026-change-me}
+      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:-reconapm-refresh-secret-2026-change-me}
+      JWT_EXPIRATION: "15m"
+      JWT_REFRESH_EXPIRATION: "7d"
       PORT: 4100
       NODE_ENV: production
+      SEED_DB: ${SEED_DB:-false}
       CORS_ORIGIN: "http://localhost:3100,http://${SERVER_IP:-0.0.0.0}:3100"
     depends_on:
       postgres:
@@ -59,9 +74,6 @@ services:
     restart: unless-stopped
     ports:
       - "3100:3100"
-    environment:
-      NEXT_PUBLIC_API_URL: http://${SERVER_IP:-localhost}:4100/api/v1
-      PORT: 3100
     depends_on:
       - api
 

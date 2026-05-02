@@ -4,7 +4,7 @@ WORKDIR /app
 COPY package.json ./
 COPY prisma ./prisma/
 
-# Force dev deps install regardless of NODE_ENV
+# Install all deps (including dev for build + prisma generate)
 RUN npm install --include=dev
 
 RUN npx prisma generate
@@ -29,9 +29,14 @@ RUN apk add --no-cache \
     traceroute \
     curl
 
+# Copy built app + prisma + seed + tsconfig (for ts-node seed)
 COPY --from=builder /app/dist ./dist
 COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/prisma ./prisma
 COPY --from=builder /app/package.json ./
+COPY --from=builder /app/tsconfig.json ./
+COPY docker-entrypoint.sh /app/docker-entrypoint.sh
+RUN chmod +x /app/docker-entrypoint.sh
+
 EXPOSE ${PORT:-4100}
-CMD ["sh", "-c", "npx prisma migrate deploy && node dist/src/main.js"]
+ENTRYPOINT ["/app/docker-entrypoint.sh"]

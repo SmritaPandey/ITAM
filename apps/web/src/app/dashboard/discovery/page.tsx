@@ -6,6 +6,7 @@ import {
   ArrowRight, Eye, EyeOff, Network, Shield, Key, Calendar, Bot, Trash2
 } from "lucide-react";
 import { apiFetch } from "@/lib/api";
+import { PageHelp, Tip } from "@/components/HelpSystem";
 
 const SCAN_TYPES = [
   { value: "PING_SWEEP", label: "Ping Sweep", desc: "ICMP host alive check" },
@@ -135,9 +136,13 @@ export default function DiscoveryPage() {
         </button>
       </div>
 
+      <PageHelp id="discovery" title="How Network Discovery Works">
+        Enter a subnet (e.g., <strong>192.168.1.0/24</strong>) and select a scan type. <strong>Ping Sweep</strong> is the fastest — it finds alive hosts. <strong>Full Scan</strong> combines all methods for maximum coverage. After scanning, review discovered devices in the <strong>Pending Review</strong> tab and approve them to add as managed assets. You can also deploy the <strong>ReconAPM Agent</strong> on staff machines for automatic inventory collection.
+      </PageHelp>
+
       {/* Scan Type Selector */}
       <div className="card" style={{ marginBottom: 20 }}>
-        <h3 style={{ fontSize: 14, fontWeight: 700, marginBottom: 12 }}>Scan Configuration</h3>
+        <h3 style={{ fontSize: 14, fontWeight: 700, marginBottom: 12 }}>Scan Configuration <Tip text="Choose a scan type, then click Scan on a detected subnet or enter a custom one. Ping Sweep is fastest (~30s). Full Scan is most thorough (~5 min)." /></h3>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 8, marginBottom: 16 }}>
           {SCAN_TYPES.map(t => (
             <button key={t.value} onClick={() => setScanType(t.value)}

@@ -8,6 +8,7 @@ import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip
 } from "recharts";
 import { getApiBase, getToken } from "@/lib/api";
+import { PageHelp } from "@/components/HelpSystem";
 import SafeChart from "@/components/SafeChart";
 
 const STATUS_COLORS: Record<string, string> = { ONLINE: "green", WARNING: "amber", OFFLINE: "red" };
@@ -70,6 +71,10 @@ export default function NetworkPage() {
           </button>
         </div>
       </div>
+
+      <PageHelp id="network" title="Network Monitoring (NMS)">
+        Monitor switches, routers, firewalls, and other network devices. Click <strong>Auto-Discover</strong> to pull devices from your asset database, or <strong>Scan Network</strong> to run nmap discovery. Devices are health-checked automatically — you&apos;ll see green (online), amber (warning), or red (offline) status badges.
+      </PageHelp>
 
       {/* Scan Result Banner */}
       {scanResult && (

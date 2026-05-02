@@ -6,6 +6,7 @@ import {
   AlertTriangle, Server, Search,
 } from "lucide-react";
 import { apiFetch } from "@/lib/api";
+import { PageHelp } from "@/components/HelpSystem";
 
 const SCAN_ICONS: Record<string, any> = { NMAP: Scan, SNMP: Router, SSH: Terminal, ARP: Wifi, TRACEROUTE: Globe, SSL: Lock };
 const SCAN_COLORS: Record<string, string> = { NMAP: "#ef4444", SNMP: "#8b5cf6", SSH: "#06b6d4", ARP: "#f59e0b", TRACEROUTE: "#3b82f6", SSL: "#10b981" };
@@ -75,6 +76,10 @@ export default function ScanningPage() {
           <p className="page-subtitle">{available}/{total} tools available • {history.length} scans completed</p>
         </div>
       </div>
+
+      <PageHelp id="scanning" title="Security Scanning">
+        Select a scanner type below and enter a target IP or subnet. <strong>Nmap</strong> provides the deepest inspection (ports, OS detection, services). <strong>ARP</strong> discovers devices at Layer 2. <strong>SSL/TLS</strong> validates certificates. Results appear in the scan history table below. Scanners marked &quot;Unavailable&quot; need to be installed on the server.
+      </PageHelp>
 
       {/* Capabilities Grid */}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(240px, 1fr))", gap: 12, marginBottom: 20 }}>

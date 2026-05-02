@@ -5,6 +5,7 @@ import {
   Loader2, RefreshCw, DollarSign
 } from "lucide-react";
 import { apiFetch } from "@/lib/api";
+import { PageHelp } from "@/components/HelpSystem";
 
 export default function LicensesPage() {
   const [licenses, setLicenses] = useState<any[]>([]);
@@ -68,6 +69,10 @@ export default function LicensesPage() {
           </button>
         </div>
       </div>
+
+      <PageHelp id="licenses" title="License Management">
+        Track software licenses across your organization. The compliance bar shows <strong>seat utilization</strong> — green is healthy, amber is nearing capacity, red means overused. Click <strong>Add License</strong> to register new software, and click any row for full details including expiry dates, costs, and license keys.
+      </PageHelp>
 
       {/* Compliance Stats */}
       {compliance && (

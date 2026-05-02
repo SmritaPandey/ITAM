@@ -5,6 +5,7 @@ import {
   ArrowRight, ChevronDown, Calendar, User, Package, DollarSign, Loader2,
 } from "lucide-react";
 import { apiFetch } from "@/lib/api";
+import { PageHelp } from "@/components/HelpSystem";
 
 const STATUS_CONFIG: Record<string, { color: string; bg: string; icon: any }> = {
   CREATED: { color: "#94a3b8", bg: "rgba(148,163,184,0.12)", icon: <Clock size={14} /> },
@@ -79,6 +80,10 @@ export default function WorkOrdersPage() {
           <button className="btn btn-primary" onClick={() => setShowCreate(true)}><Plus size={14} /> Create Work Order</button>
         </div>
       </div>
+
+      <PageHelp id="workorders" title="Work Orders">
+        Create and track maintenance, repair, and installation tasks. Work orders follow the lifecycle: <strong>Created → Assigned → In Progress → Completed → Verified</strong>. Click the status filter chips to view by stage. Click any row for full details including schedule, cost tracking, and assignment info.
+      </PageHelp>
 
       {/* Stats */}
       <div className="stats-grid" style={{ gridTemplateColumns: "repeat(5, 1fr)" }}>

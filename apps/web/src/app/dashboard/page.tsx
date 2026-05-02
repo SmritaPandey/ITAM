@@ -11,6 +11,7 @@ import {
 
 import { apiFetch } from "@/lib/api";
 import SafeChart from "@/components/SafeChart";
+import { QuickStart, Tip } from "@/components/HelpSystem";
 
 // Color palette for charts
 const CHART_COLORS = ["#06b6d4", "#8b5cf6", "#3b82f6", "#10b981", "#f59e0b", "#ef4444", "#ec4899"];
@@ -170,6 +171,9 @@ export default function DashboardPage() {
           </button>
         </div>
       </div>
+
+      {/* Onboarding Quick Start */}
+      <QuickStart />
 
       {/* Stat Cards */}
       <div className="stats-grid">

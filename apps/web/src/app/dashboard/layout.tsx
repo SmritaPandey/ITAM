@@ -62,6 +62,7 @@ const navSections = [
       { name: "Reports", icon: BarChart3, href: "/dashboard/reports", badge: null },
       { name: "Users", icon: Users, href: "/dashboard/users", badge: null },
       { name: "Audit Logs", icon: FileText, href: "/dashboard/audit-logs", badge: null },
+      { name: "Help & Docs", icon: BookOpen, href: "/dashboard/help", badge: null },
       { name: "Settings", icon: Settings, href: "/dashboard/settings", badge: null },
     ],
   },

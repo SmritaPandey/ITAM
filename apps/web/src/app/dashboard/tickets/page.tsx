@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { Plus, MessageSquare, Shield, Clock, AlertTriangle, CheckCircle2 } from "lucide-react";
 import CreateTicketPanel from "@/components/CreateTicketPanel";
 import { apiFetch } from "@/lib/api";
+import { PageHelp } from "@/components/HelpSystem";
 
 const PRIORITY_BADGE: Record<string, string> = { CRITICAL: "red", HIGH: "amber", MEDIUM: "blue", LOW: "gray" };
 const STATUS_BADGE: Record<string, string> = { NEW: "blue", OPEN: "cyan", IN_PROGRESS: "purple", PENDING: "amber", RESOLVED: "green", CLOSED: "gray" };
@@ -47,6 +48,10 @@ export default function TicketsPage() {
         </div>
         <button className="btn btn-primary" onClick={() => setShowCreate(true)}><Plus size={14} /> New Ticket</button>
       </div>
+
+      <PageHelp id="tickets" title="Ticket Management">
+        Create tickets for incidents, service requests, and changes. Each ticket tracks <strong>SLA compliance</strong> automatically — green means on track, amber is at risk, red is breached. Click any ticket to view details, add comments, and update status. End users can also submit tickets via the <strong>Self-Service Portal</strong> at /portal.
+      </PageHelp>
 
       {/* Quick Stats + SLA panel */}
       <div className="stats-grid" style={{ gridTemplateColumns: "repeat(5, 1fr)", marginBottom: 8 }}>

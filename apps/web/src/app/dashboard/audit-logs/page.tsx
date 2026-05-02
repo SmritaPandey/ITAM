@@ -4,12 +4,7 @@ import {
   Shield, FileText, CheckCircle2, AlertTriangle, Search,
   Loader2, RefreshCw, User, Clock, Filter, ChevronDown
 } from "lucide-react";
-
-const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4100/api/v1";
-function getToken() { return typeof window !== "undefined" ? localStorage.getItem("accessToken") || "" : ""; }
-function apiFetch(path: string) {
-  return fetch(`${API}${path}`, { headers: { Authorization: `Bearer ${getToken()}` } }).then(r => r.json());
-}
+import { apiFetch } from "@/lib/api";
 
 const ACTION_COLORS: Record<string, string> = {
   CREATE: "#10b981", UPDATE: "#3b82f6", DELETE: "#ef4444",

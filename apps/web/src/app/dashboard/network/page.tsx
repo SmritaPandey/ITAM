@@ -7,9 +7,7 @@ import {
 import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer
 } from "recharts";
-
-const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4100/api/v1";
-function getToken() { return typeof window !== "undefined" ? localStorage.getItem("accessToken") || "" : ""; }
+import { getApiBase, getToken } from "@/lib/api";
 
 const STATUS_COLORS: Record<string, string> = { ONLINE: "green", WARNING: "amber", OFFLINE: "red" };
 
@@ -30,7 +28,7 @@ export default function NetworkPage() {
   const [discovering, setDiscovering] = useState(false);
 
   function refresh() {
-    fetch(`${API}/monitoring/network`, { headers: { Authorization: `Bearer ${getToken()}` } })
+    fetch(`${getApiBase()}/monitoring/network`, { headers: { Authorization: `Bearer ${getToken()}` } })
       .then(r => r.json()).then(setData).catch(console.error).finally(() => setLoading(false));
   }
   useEffect(() => { refresh(); }, []);
@@ -53,11 +51,11 @@ export default function NetworkPage() {
         </div>
         <div style={{ display: "flex", gap: 8 }}>
           <button className="btn btn-secondary" onClick={refresh}><RefreshCw size={14} /></button>
-          <button className="btn btn-secondary" onClick={async () => { setDiscovering(true); try { const r = await fetch(`${API}/monitoring/network/auto-discover`, { method: 'POST', headers: { Authorization: `Bearer ${getToken()}` } }).then(r => r.json()); setScanResult({ message: `Auto-discovered ${r.created} devices from ${r.total} assets` }); refresh(); } catch {} finally { setDiscovering(false); } }} disabled={discovering}>
+          <button className="btn btn-secondary" onClick={async () => { setDiscovering(true); try { const r = await fetch(`${getApiBase()}/monitoring/network/auto-discover`, { method: 'POST', headers: { Authorization: `Bearer ${getToken()}` } }).then(r => r.json()); setScanResult({ message: `Auto-discovered ${r.created} devices from ${r.total} assets` }); refresh(); } catch {} finally { setDiscovering(false); } }} disabled={discovering}>
             {discovering ? <><Loader2 size={14} style={{ animation: 'spin 1s linear infinite' }} /> Discovering...</> : <><Zap size={14} /> Auto-Discover</>}
           </button>
           <button className="btn btn-secondary" onClick={() => router.push('/dashboard/network/configs')}><FileCode size={14} /> Config Backup</button>
-          <button className="btn btn-primary" onClick={async () => { setScanning(true); setScanResult(null); try { const r = await fetch(`${API}/monitoring/network/scan`, { method: 'POST', headers: { Authorization: `Bearer ${getToken()}` } }).then(r => r.json()); setScanResult(r); refresh(); } catch {} finally { setScanning(false); } }} disabled={scanning}>
+          <button className="btn btn-primary" onClick={async () => { setScanning(true); setScanResult(null); try { const r = await fetch(`${getApiBase()}/monitoring/network/scan`, { method: 'POST', headers: { Authorization: `Bearer ${getToken()}` } }).then(r => r.json()); setScanResult(r); refresh(); } catch {} finally { setScanning(false); } }} disabled={scanning}>
             {scanning ? <><Loader2 size={14} style={{ animation: 'spin 1s linear infinite' }} /> Scanning...</> : <><Scan size={14} /> Scan Network</>}
           </button>
         </div>

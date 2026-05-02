@@ -1,9 +1,7 @@
 "use client";
 import { useEffect, useState } from "react";
 import { Camera, Video, Eye, AlertTriangle, CheckCircle2, Clock, MapPin, Shield, Grid3X3, Loader2, RefreshCw } from "lucide-react";
-
-const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4100/api/v1";
-function getToken() { return typeof window !== "undefined" ? localStorage.getItem("accessToken") || "" : ""; }
+import { getApiBase, getToken } from "@/lib/api";
 
 export default function CCTVPage() {
   const [data, setData] = useState<any>({ data: [], total: 0, online: 0, recording: 0, alerts: 0 });
@@ -11,7 +9,7 @@ export default function CCTVPage() {
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
 
   function refresh() {
-    fetch(`${API}/monitoring/cameras`, { headers: { Authorization: `Bearer ${getToken()}` } })
+    fetch(`${getApiBase()}/monitoring/cameras`, { headers: { Authorization: `Bearer ${getToken()}` } })
       .then(r => r.json()).then(setData).catch(console.error).finally(() => setLoading(false));
   }
   useEffect(() => { refresh(); }, []);

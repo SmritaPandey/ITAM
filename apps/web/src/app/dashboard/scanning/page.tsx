@@ -5,12 +5,7 @@ import {
   CheckCircle2, XCircle, Loader2, Clock, Eye, Play, ChevronDown,
   AlertTriangle, Server, Search,
 } from "lucide-react";
-
-const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4100/api/v1";
-function getToken() { return typeof window !== "undefined" ? localStorage.getItem("accessToken") || "" : ""; }
-function apiFetch(path: string, opts?: RequestInit) {
-  return fetch(`${API}${path}`, { ...opts, headers: { Authorization: `Bearer ${getToken()}`, "Content-Type": "application/json", ...opts?.headers } }).then(r => r.json());
-}
+import { apiFetch } from "@/lib/api";
 
 const SCAN_ICONS: Record<string, any> = { NMAP: Scan, SNMP: Router, SSH: Terminal, ARP: Wifi, TRACEROUTE: Globe, SSL: Lock };
 const SCAN_COLORS: Record<string, string> = { NMAP: "#ef4444", SNMP: "#8b5cf6", SSH: "#06b6d4", ARP: "#f59e0b", TRACEROUTE: "#3b82f6", SSL: "#10b981" };

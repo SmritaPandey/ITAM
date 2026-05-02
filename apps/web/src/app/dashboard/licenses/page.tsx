@@ -4,12 +4,7 @@ import {
   Key, Plus, AlertTriangle, CheckCircle2, Clock, XCircle,
   Loader2, RefreshCw, DollarSign
 } from "lucide-react";
-
-const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4100/api/v1";
-function getToken() { return typeof window !== "undefined" ? localStorage.getItem("accessToken") || "" : ""; }
-function apiFetch(path: string, opts?: RequestInit) {
-  return fetch(`${API}${path}`, { ...opts, headers: { Authorization: `Bearer ${getToken()}`, "Content-Type": "application/json", ...opts?.headers } }).then(r => r.json());
-}
+import { apiFetch } from "@/lib/api";
 
 export default function LicensesPage() {
   const [licenses, setLicenses] = useState<any[]>([]);

@@ -5,12 +5,7 @@ import {
   Wrench, Users, Mail, Loader2, ChevronRight, CheckCircle2, Clock,
   Search, AlertTriangle, Plus, Monitor, Server, Package
 } from "lucide-react";
-
-const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4100/api/v1";
-function getToken() { return typeof window !== "undefined" ? localStorage.getItem("accessToken") || "" : ""; }
-function apiFetch(path: string, opts?: RequestInit) {
-  return fetch(`${API}${path}`, { ...opts, headers: { Authorization: `Bearer ${getToken()}`, "Content-Type": "application/json", ...opts?.headers } }).then(r => r.json());
-}
+import { apiFetch } from "@/lib/api";
 
 const CATEGORY_ICONS: Record<string, any> = {
   HARDWARE: Laptop, SOFTWARE: Monitor, NETWORK: Network, ACCESS: Shield,

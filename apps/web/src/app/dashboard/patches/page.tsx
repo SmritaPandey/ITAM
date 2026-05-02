@@ -8,12 +8,7 @@ import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   PieChart, Pie, Cell, AreaChart, Area
 } from "recharts";
-
-const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4100/api/v1";
-function getToken() { return typeof window !== "undefined" ? localStorage.getItem("accessToken") || "" : ""; }
-function apiFetch(path: string, opts?: RequestInit) {
-  return fetch(`${API}${path}`, { ...opts, headers: { Authorization: `Bearer ${getToken()}`, "Content-Type": "application/json", ...opts?.headers } }).then(r => r.json());
-}
+import { apiFetch } from "@/lib/api";
 
 const SEV_COLORS: Record<string, string> = { Critical: "red", High: "amber", Medium: "purple", Low: "gray" };
 const STATUS_COLORS: Record<string, string> = { Deployed: "green", Pending: "amber", Scheduled: "cyan", Failed: "red" };

@@ -1,16 +1,14 @@
 "use client";
 import { useEffect, useState } from "react";
 import { Monitor, Cpu, HardDrive, Wifi } from "lucide-react";
-
-const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4100/api/v1";
-function getToken() { return typeof window !== "undefined" ? localStorage.getItem("accessToken") || "" : ""; }
+import { getApiBase, getToken } from "@/lib/api";
 
 export default function ITAssetsPage() {
   const [assets, setAssets] = useState<any>({ data: [], total: 0 });
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    fetch(`${API}/assets?limit=50`, { headers: { Authorization: `Bearer ${getToken()}` } })
+    fetch(`${getApiBase()}/assets?limit=50`, { headers: { Authorization: `Bearer ${getToken()}` } })
       .then(r => r.json())
       .then(data => {
         // Filter IT assets only (those with IP or hostname)

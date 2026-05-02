@@ -8,9 +8,7 @@ import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   PieChart, Pie, Cell, AreaChart, Area
 } from "recharts";
-
-const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4100/api/v1";
-function getToken() { return typeof window !== "undefined" ? localStorage.getItem("accessToken") || "" : ""; }
+import { apiFetch, getToken, getApiBase } from "@/lib/api";
 
 const REPORT_TEMPLATES = [
   { id: "inv", name: "Asset Inventory Summary", icon: <Package size={18} />, desc: "Full asset register with types, locations, and values", type: "Scheduled", frequency: "Weekly", lastRun: "Apr 28, 2026", format: "PDF", color: "#06b6d4" },
@@ -48,8 +46,8 @@ export default function ReportsPage() {
     const token = getToken();
     const headers = { Authorization: `Bearer ${token}` };
     Promise.all([
-      fetch(`${API}/assets/dashboard`, { headers }).then(r => r.json()),
-      fetch(`${API}/reports/executive`, { headers }).then(r => r.json()),
+      fetch(`${getApiBase()}/assets/dashboard`, { headers }).then(r => r.json()),
+      fetch(`${getApiBase()}/reports/executive`, { headers }).then(r => r.json()),
     ]).then(([s, e]) => { setStats(s); setExecReport(e); }).catch(console.error);
   }, []);
 

@@ -5,10 +5,7 @@ import {
   Clock, CheckCircle2, AlertTriangle, BookOpen, Headphones,
   Laptop, Server, Printer, Truck, HardDrive,
 } from "lucide-react";
-
-const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4100/api/v1";
-function getToken() { return typeof window !== "undefined" ? localStorage.getItem("accessToken") || "" : ""; }
-function apiFetch(path: string) { return fetch(`${API}${path}`, { headers: { Authorization: `Bearer ${getToken()}` } }).then(r => r.json()); }
+import { apiFetch } from "@/lib/api";
 
 const ASSET_ICONS: Record<string, any> = {
   Laptop: <Laptop size={18} />, Server: <Server size={18} />, Printer: <Printer size={18} />,

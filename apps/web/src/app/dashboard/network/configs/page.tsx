@@ -5,12 +5,7 @@ import {
   AlertTriangle, RefreshCw, ArrowLeft,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
-
-const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4100/api/v1";
-function getToken() { return typeof window !== "undefined" ? localStorage.getItem("accessToken") || "" : ""; }
-function apiFetch(path: string, opts?: any) {
-  return fetch(`${API}${path}`, { headers: { Authorization: `Bearer ${getToken()}`, "Content-Type": "application/json" }, ...opts }).then(r => r.json());
-}
+import { apiFetch } from "@/lib/api";
 
 export default function NetworkConfigPage() {
   const router = useRouter();

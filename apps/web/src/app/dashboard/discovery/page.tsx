@@ -5,12 +5,7 @@ import {
   Server, Printer, HelpCircle, Loader2, RefreshCw, Plus, Search,
   ArrowRight, Eye, EyeOff, Network, Shield, Key, Calendar, Bot, Trash2
 } from "lucide-react";
-
-const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4100/api/v1";
-function getToken() { return typeof window !== "undefined" ? localStorage.getItem("accessToken") || "" : ""; }
-function apiFetch(path: string, opts?: RequestInit) {
-  return fetch(`${API}${path}`, { ...opts, headers: { Authorization: `Bearer ${getToken()}`, "Content-Type": "application/json", ...opts?.headers } }).then(r => r.json());
-}
+import { apiFetch } from "@/lib/api";
 
 const SCAN_TYPES = [
   { value: "PING_SWEEP", label: "Ping Sweep", desc: "ICMP host alive check" },

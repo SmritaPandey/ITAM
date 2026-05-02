@@ -4,16 +4,14 @@ import {
   Monitor, Cpu, MemoryStick, Power, CheckCircle2, RefreshCw, Loader2
 } from "lucide-react";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
-
-const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4100/api/v1";
-function getToken() { return typeof window !== "undefined" ? localStorage.getItem("accessToken") || "" : ""; }
+import { getApiBase, getToken } from "@/lib/api";
 
 export default function VDIPage() {
   const [data, setData] = useState<any>({ data: [], total: 0, running: 0, stopped: 0, avgCpu: 0, avgRam: 0 });
   const [loading, setLoading] = useState(true);
 
   function refresh() {
-    fetch(`${API}/monitoring/vdi`, { headers: { Authorization: `Bearer ${getToken()}` } })
+    fetch(`${getApiBase()}/monitoring/vdi`, { headers: { Authorization: `Bearer ${getToken()}` } })
       .then(r => r.json()).then(setData).catch(console.error).finally(() => setLoading(false));
   }
   useEffect(() => { refresh(); }, []);

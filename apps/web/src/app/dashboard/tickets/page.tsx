@@ -3,10 +3,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Plus, MessageSquare, Shield, Clock, AlertTriangle, CheckCircle2 } from "lucide-react";
 import CreateTicketPanel from "@/components/CreateTicketPanel";
-
-const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4100/api/v1";
-function getToken() { return typeof window !== "undefined" ? localStorage.getItem("accessToken") || "" : ""; }
-function apiFetch(path: string) { return fetch(`${API}${path}`, { headers: { Authorization: `Bearer ${getToken()}` } }).then(r => r.json()); }
+import { apiFetch } from "@/lib/api";
 
 const PRIORITY_BADGE: Record<string, string> = { CRITICAL: "red", HIGH: "amber", MEDIUM: "blue", LOW: "gray" };
 const STATUS_BADGE: Record<string, string> = { NEW: "blue", OPEN: "cyan", IN_PROGRESS: "purple", PENDING: "amber", RESOLVED: "green", CLOSED: "gray" };

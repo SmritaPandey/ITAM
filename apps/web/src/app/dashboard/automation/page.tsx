@@ -5,12 +5,7 @@ import {
   ArrowRight, AlertTriangle, Package, Ticket, Shield, Bell, Eye, Settings,
   Loader2, RefreshCw, Code, ShieldCheck, XCircle,
 } from "lucide-react";
-
-const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4100/api/v1";
-function getToken() { return typeof window !== "undefined" ? localStorage.getItem("accessToken") || "" : ""; }
-function apiFetch(path: string, opts?: RequestInit) {
-  return fetch(`${API}${path}`, { ...opts, headers: { Authorization: `Bearer ${getToken()}`, "Content-Type": "application/json", ...opts?.headers } }).then(r => r.json());
-}
+import { apiFetch } from "@/lib/api";
 
 const MODULE_ICONS: Record<string, React.ReactNode> = {
   Assets: <Package size={14} />, Tickets: <Ticket size={14} />, Patches: <Shield size={14} />,
@@ -395,7 +390,6 @@ export default function AutomationPage() {
           )}
         </>
       )}
-
 
       <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
     </>

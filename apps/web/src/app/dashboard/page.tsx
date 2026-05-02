@@ -9,20 +9,7 @@ import {
   PieChart, Pie, Cell, AreaChart, Area, LineChart, Line
 } from "recharts";
 
-const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4100/api/v1";
-
-function getToken() {
-  if (typeof window === "undefined") return "";
-  return localStorage.getItem("accessToken") || "";
-}
-
-async function apiFetch(path: string) {
-  const res = await fetch(`${API}${path}`, {
-    headers: { Authorization: `Bearer ${getToken()}` },
-  });
-  if (!res.ok) throw new Error("API error");
-  return res.json();
-}
+import { apiFetch } from "@/lib/api";
 
 // Color palette for charts
 const CHART_COLORS = ["#06b6d4", "#8b5cf6", "#3b82f6", "#10b981", "#f59e0b", "#ef4444", "#ec4899"];

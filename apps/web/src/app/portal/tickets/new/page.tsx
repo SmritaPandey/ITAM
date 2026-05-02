@@ -5,9 +5,7 @@ import {
   Ticket, ArrowLeft, Send, AlertTriangle, HelpCircle,
   Package, Wrench, Loader2, CheckCircle2
 } from "lucide-react";
-
-const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4100/api/v1";
-function getToken() { return typeof window !== "undefined" ? localStorage.getItem("accessToken") || "" : ""; }
+import { getApiBase, getToken } from "@/lib/api";
 
 const CATEGORIES = [
   { value: "Hardware", icon: <Package size={18} />, color: "#06b6d4", desc: "Laptop, printer, monitor, peripherals" },
@@ -34,7 +32,7 @@ export default function RaiseTicketPage() {
     setSubmitting(true);
     setError("");
     try {
-      const res = await fetch(`${API}/tickets`, {
+      const res = await fetch(`${getApiBase()}/tickets`, {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${getToken()}` },
         body: JSON.stringify(form),

@@ -5,9 +5,7 @@ import {
   ArrowLeft, ChevronRight, MessageSquare, Send, Clock, User,
   AlertTriangle, CheckCircle2, Circle, Tag, Package, Activity
 } from "lucide-react";
-
-const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4100/api/v1";
-function getToken() { return typeof window !== "undefined" ? localStorage.getItem("accessToken") || "" : ""; }
+import { apiFetch, getToken, getApiBase } from "@/lib/api";
 
 const PRIORITY_COLORS: Record<string, string> = {
   CRITICAL: "red", HIGH: "amber", MEDIUM: "purple", LOW: "green",
@@ -28,7 +26,7 @@ export default function TicketDetailPage() {
   const [statusChanging, setStatusChanging] = useState(false);
 
   function loadTicket() {
-    fetch(`${API}/tickets/${params.id}`, { headers: { Authorization: `Bearer ${getToken()}` } })
+    fetch(`${getApiBase()}/tickets/${params.id}`, { headers: { Authorization: `Bearer ${getToken()}` } })
       .then(r => r.json()).then(setTicket).catch(console.error).finally(() => setLoading(false));
   }
 
@@ -39,7 +37,7 @@ export default function TicketDetailPage() {
     if (!comment.trim()) return;
     setSubmitting(true);
     try {
-      await fetch(`${API}/tickets/${params.id}/comments`, {
+      await fetch(`${getApiBase()}/tickets/${params.id}/comments`, {
         method: "POST",
         headers: { Authorization: `Bearer ${getToken()}`, "Content-Type": "application/json" },
         body: JSON.stringify({ content: comment }),
@@ -53,7 +51,7 @@ export default function TicketDetailPage() {
   async function handleStatusChange(status: string) {
     setStatusChanging(true);
     try {
-      await fetch(`${API}/tickets/${params.id}/status`, {
+      await fetch(`${getApiBase()}/tickets/${params.id}/status`, {
         method: "PATCH",
         headers: { Authorization: `Bearer ${getToken()}`, "Content-Type": "application/json" },
         body: JSON.stringify({ status }),

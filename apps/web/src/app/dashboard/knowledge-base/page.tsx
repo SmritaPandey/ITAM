@@ -1,12 +1,7 @@
 "use client";
 import { useEffect, useState } from "react";
 import { BookOpen, Search, ThumbsUp, Eye, Tag, Loader2, Plus } from "lucide-react";
-
-const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4100/api/v1";
-function getToken() { return typeof window !== "undefined" ? localStorage.getItem("accessToken") || "" : ""; }
-function apiFetch(path: string, opts?: RequestInit) {
-  return fetch(`${API}${path}`, { ...opts, headers: { Authorization: `Bearer ${getToken()}`, "Content-Type": "application/json", ...opts?.headers } }).then(r => r.json());
-}
+import { apiFetch } from "@/lib/api";
 
 const CAT_COLORS: Record<string, string> = {
   "IT Support": "#06b6d4", "Network": "#8b5cf6", "Security": "#ef4444", "General": "#10b981",

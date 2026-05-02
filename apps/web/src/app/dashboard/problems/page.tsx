@@ -5,12 +5,7 @@ import {
   CheckCircle2, AlertTriangle, Eye, BookOpen, Clock,
   Search, Bug, ShieldAlert, ArrowRight, XCircle,
 } from "lucide-react";
-
-const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4100/api/v1";
-function getToken() { return typeof window !== "undefined" ? localStorage.getItem("accessToken") || "" : ""; }
-function apiFetch(path: string, opts?: any) {
-  return fetch(`${API}${path}`, { ...opts, headers: { Authorization: `Bearer ${getToken()}`, "Content-Type": "application/json", ...opts?.headers } }).then(r => r.json());
-}
+import { apiFetch } from "@/lib/api";
 
 const STATUS_CONFIG: Record<string, { color: string; bg: string; badge: string; icon: any; label: string }> = {
   OPEN:                   { color: "#f59e0b", bg: "rgba(245,158,11,0.12)", badge: "amber", icon: <AlertOctagon size={12} />, label: "Open" },

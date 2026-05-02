@@ -5,12 +5,7 @@ import {
   AlertTriangle, XCircle, ArrowRight, RotateCcw, Loader2, X,
   ChevronRight, Send, ShieldCheck, Zap, Eye, FileText,
 } from "lucide-react";
-
-const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4100/api/v1";
-function getToken() { return typeof window !== "undefined" ? localStorage.getItem("accessToken") || "" : ""; }
-function apiFetch(path: string, opts?: any) {
-  return fetch(`${API}${path}`, { ...opts, headers: { Authorization: `Bearer ${getToken()}`, "Content-Type": "application/json", ...opts?.headers } }).then(r => r.json());
-}
+import { apiFetch } from "@/lib/api";
 
 const STATUS_CONFIG: Record<string, { color: string; bg: string; badge: string; icon: any; label: string }> = {
   DRAFT:        { color: "#94a3b8", bg: "rgba(148,163,184,0.12)", badge: "gray", icon: <FileText size={12} />, label: "Draft" },

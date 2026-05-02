@@ -4,12 +4,7 @@ import {
   Upload, FileSpreadsheet, ArrowRight, ArrowLeft, CheckCircle2,
   AlertTriangle, X, Download, Columns, Loader2, FileCheck,
 } from "lucide-react";
-
-const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4100/api/v1";
-function getToken() { return typeof window !== "undefined" ? localStorage.getItem("accessToken") || "" : ""; }
-function apiFetch(path: string, opts?: any) {
-  return fetch(`${API}${path}`, { headers: { Authorization: `Bearer ${getToken()}`, "Content-Type": "application/json" }, ...opts }).then(r => r.json());
-}
+import { apiFetch } from "@/lib/api";
 
 const TARGET_FIELDS = [
   { key: "name", label: "Asset Name", required: true },

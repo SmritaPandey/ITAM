@@ -4,9 +4,7 @@ import { useRouter } from "next/navigation";
 import { Search, Plus, Filter, Download, RefreshCw, ChevronLeft, ChevronRight, Upload } from "lucide-react";
 import CreateAssetPanel from "@/components/CreateAssetPanel";
 import ImportAssetsPanel from "@/components/ImportAssetsPanel";
-
-const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4100/api/v1";
-function getToken() { return typeof window !== "undefined" ? localStorage.getItem("accessToken") || "" : ""; }
+import { apiFetch, getToken, getApiBase } from "@/lib/api";
 
 const STATUS_BADGE: Record<string, string> = {
   ACTIVE: "green", DISCOVERED: "blue", IN_MAINTENANCE: "amber",
@@ -28,7 +26,7 @@ export default function AssetsPage() {
     const params = new URLSearchParams({ page: String(p), limit: "15" });
     if (s) params.set("search", s);
     if (st) params.set("status", st);
-    fetch(`${API}/assets?${params}`, { headers: { Authorization: `Bearer ${getToken()}` } })
+    fetch(`${getApiBase()}/assets?${params}`, { headers: { Authorization: `Bearer ${getToken()}` } })
       .then(r => r.json()).then(setAssets).catch(console.error).finally(() => setLoading(false));
   }
 

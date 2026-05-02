@@ -2,9 +2,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Ticket, Plus, Clock, CheckCircle2, MessageSquare, Loader2 } from "lucide-react";
-
-const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4100/api/v1";
-function getToken() { return typeof window !== "undefined" ? localStorage.getItem("accessToken") || "" : ""; }
+import { getApiBase, getToken } from "@/lib/api";
 
 export default function MyTicketsPage() {
   const router = useRouter();
@@ -12,7 +10,7 @@ export default function MyTicketsPage() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    fetch(`${API}/tickets?limit=50`, { headers: { Authorization: `Bearer ${getToken()}` } })
+    fetch(`${getApiBase()}/tickets?limit=50`, { headers: { Authorization: `Bearer ${getToken()}` } })
       .then(r => r.json()).then(d => setTickets(d.data || [])).catch(console.error).finally(() => setLoading(false));
   }, []);
 

@@ -3,9 +3,7 @@ import { useEffect, useState } from "react";
 import { Truck, MapPin, Activity, Fuel, AlertTriangle, Navigation, Eye } from "lucide-react";
 import { useRouter } from "next/navigation";
 import dynamic from "next/dynamic";
-
-const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4100/api/v1";
-function getToken() { return typeof window !== "undefined" ? localStorage.getItem("accessToken") || "" : ""; }
+import { getApiBase, getToken } from "@/lib/api";
 
 // Dynamically import Leaflet map to avoid SSR issues
 const FleetMap = dynamic(() => import("@/components/FleetMap"), { ssr: false });
@@ -17,7 +15,7 @@ export default function FleetPage() {
   const [selectedVehicle, setSelectedVehicle] = useState<any>(null);
 
   useEffect(() => {
-    fetch(`${API}/assets?limit=50`, { headers: { Authorization: `Bearer ${getToken()}` } })
+    fetch(`${getApiBase()}/assets?limit=50`, { headers: { Authorization: `Bearer ${getToken()}` } })
       .then(r => r.json())
       .then(d => {
         const fleet = (d.data || []).filter((a: any) => a.latitude && a.longitude);

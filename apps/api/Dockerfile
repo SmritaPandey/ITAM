@@ -16,6 +16,19 @@ RUN npx nest build
 FROM node:20-alpine
 WORKDIR /app
 ENV NODE_ENV=production
+
+# Install network scanning tools for LAN discovery
+RUN apk add --no-cache \
+    nmap \
+    nmap-scripts \
+    iputils \
+    net-tools \
+    bind-tools \
+    openssh-client \
+    net-snmp-tools \
+    traceroute \
+    curl
+
 COPY --from=builder /app/dist ./dist
 COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/prisma ./prisma

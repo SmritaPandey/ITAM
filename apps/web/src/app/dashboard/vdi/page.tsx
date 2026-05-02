@@ -3,8 +3,9 @@ import { useEffect, useState } from "react";
 import {
   Monitor, Cpu, MemoryStick, Power, CheckCircle2, RefreshCw, Loader2
 } from "lucide-react";
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip } from "recharts";
 import { getApiBase, getToken } from "@/lib/api";
+import SafeChart from "@/components/SafeChart";
 
 export default function VDIPage() {
   const [data, setData] = useState<any>({ data: [], total: 0, running: 0, stopped: 0, avgCpu: 0, avgRam: 0 });
@@ -63,9 +64,8 @@ export default function VDIPage() {
       {/* Host Resources */}
       <div className="card" style={{ marginBottom: 16 }}>
         <div className="card-header"><div className="card-title">Host Resource Utilization</div></div>
-        <div style={{ height: 180 }}>
-          <ResponsiveContainer width="100%" height="100%" minWidth={0}>
-            <BarChart data={resourceUsage} barSize={24}>
+        <SafeChart height={180}>
+<BarChart data={resourceUsage} barSize={24}>
               <CartesianGrid strokeDasharray="3 3" stroke="rgba(42,49,80,0.5)" vertical={false} />
               <XAxis dataKey="host" tick={{ fill: "#64748b", fontSize: 11 }} axisLine={false} tickLine={false} />
               <YAxis domain={[0, 100]} tick={{ fill: "#64748b", fontSize: 11 }} axisLine={false} tickLine={false} />
@@ -73,8 +73,7 @@ export default function VDIPage() {
               <Bar dataKey="cpu" fill="#06b6d4" radius={[4, 4, 0, 0]} name="CPU %" />
               <Bar dataKey="ram" fill="#8b5cf6" radius={[4, 4, 0, 0]} name="RAM %" />
             </BarChart>
-          </ResponsiveContainer>
-        </div>
+</SafeChart>
       </div>
 
       {/* VM Table */}

@@ -5,10 +5,11 @@ import {
   Filter, TrendingUp, Package, Ticket, Shield, ChevronRight
 } from "lucide-react";
 import {
-  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
+  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
   PieChart, Pie, Cell, AreaChart, Area
 } from "recharts";
 import { apiFetch, getToken, getApiBase } from "@/lib/api";
+import SafeChart from "@/components/SafeChart";
 
 const REPORT_TEMPLATES = [
   { id: "inv", name: "Asset Inventory Summary", icon: <Package size={18} />, desc: "Full asset register with types, locations, and values", type: "Scheduled", frequency: "Weekly", lastRun: "Apr 28, 2026", format: "PDF", color: "#06b6d4" },
@@ -77,9 +78,8 @@ export default function ReportsPage() {
           <div className="card-header">
             <div><div className="card-title">Asset Lifecycle (6 Months)</div><div className="card-subtitle">Assets created vs retired</div></div>
           </div>
-          <div style={{ height: 220 }}>
-            <ResponsiveContainer width="100%" height="100%" minWidth={0}>
-              <BarChart data={monthlyAssets} barSize={18}>
+          <SafeChart height={220}>
+<BarChart data={monthlyAssets} barSize={18}>
                 <CartesianGrid strokeDasharray="3 3" stroke="rgba(42,49,80,0.5)" vertical={false} />
                 <XAxis dataKey="month" tick={{ fill: "#64748b", fontSize: 11 }} axisLine={false} tickLine={false} />
                 <YAxis tick={{ fill: "#64748b", fontSize: 11 }} axisLine={false} tickLine={false} />
@@ -87,23 +87,20 @@ export default function ReportsPage() {
                 <Bar dataKey="created" fill="#06b6d4" radius={[4, 4, 0, 0]} name="Created" />
                 <Bar dataKey="retired" fill="#ef4444" radius={[4, 4, 0, 0]} name="Retired" />
               </BarChart>
-            </ResponsiveContainer>
-          </div>
+</SafeChart>
         </div>
         <div className="card">
           <div className="card-header">
             <div><div className="card-title">Cost Distribution</div><div className="card-subtitle">Total: ₹{(totalCost / 100000).toFixed(1)} Lakhs</div></div>
           </div>
-          <div style={{ height: 220, display: "flex", alignItems: "center" }}>
-            <ResponsiveContainer width="100%" height="100%" minWidth={0}>
-              <PieChart>
+          <SafeChart height={220}>
+<PieChart>
                 <Pie data={costBreakdown} dataKey="value" cx="50%" cy="50%" innerRadius={55} outerRadius={85} paddingAngle={3} strokeWidth={0}>
                   {costBreakdown.map((d, i) => <Cell key={i} fill={d.color} />)}
                 </Pie>
                 <Tooltip contentStyle={{ background: "#1a1f35", border: "1px solid #2a3150", borderRadius: 8, fontSize: 12 }} formatter={(v: any) => `₹${(Number(v) / 1000).toFixed(0)}K`} />
               </PieChart>
-            </ResponsiveContainer>
-          </div>
+</SafeChart>
           <div style={{ display: "flex", gap: 12, justifyContent: "center", flexWrap: "wrap" }}>
             {costBreakdown.map(d => (
               <div key={d.name} style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 10, color: "var(--text-secondary)" }}>
@@ -120,9 +117,8 @@ export default function ReportsPage() {
         <div className="card-header">
           <div><div className="card-title">Ticket Volume (6 Months)</div><div className="card-subtitle">Opened vs closed</div></div>
         </div>
-        <div style={{ height: 180 }}>
-          <ResponsiveContainer width="100%" height="100%" minWidth={0}>
-            <AreaChart data={ticketTrend}>
+        <SafeChart height={180}>
+<AreaChart data={ticketTrend}>
               <defs>
                 <linearGradient id="openGrad" x1="0" y1="0" x2="0" y2="1">
                   <stop offset="0%" stopColor="#8b5cf6" stopOpacity={0.2} />
@@ -140,8 +136,7 @@ export default function ReportsPage() {
               <Area type="monotone" dataKey="opened" stroke="#8b5cf6" fill="url(#openGrad)" strokeWidth={2} name="Opened" />
               <Area type="monotone" dataKey="closed" stroke="#10b981" fill="url(#closeGrad)" strokeWidth={2} name="Closed" />
             </AreaChart>
-          </ResponsiveContainer>
-        </div>
+</SafeChart>
       </div>
 
       {/* Report Templates */}

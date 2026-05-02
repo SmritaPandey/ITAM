@@ -5,10 +5,11 @@ import {
   Play, Search, Eye, RefreshCw, Loader2, Scan, Rocket, BarChart3,
 } from "lucide-react";
 import {
-  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
+  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
   PieChart, Pie, Cell, AreaChart, Area
 } from "recharts";
 import { apiFetch } from "@/lib/api";
+import SafeChart from "@/components/SafeChart";
 
 const SEV_COLORS: Record<string, string> = { Critical: "red", High: "amber", Medium: "purple", Low: "gray" };
 const STATUS_COLORS: Record<string, string> = { Deployed: "green", Pending: "amber", Scheduled: "cyan", Failed: "red" };
@@ -139,45 +140,41 @@ export default function PatchesPage() {
       <div className="charts-grid-equal" style={{ marginBottom: 16 }}>
         <div className="card">
           <div className="card-header"><div className="card-title">Compliance Trend (8 Weeks)</div></div>
-          <div style={{ height: 200 }}>
-            {complianceTimeline.length > 0 ? (
-              <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0}>
-                <AreaChart data={complianceTimeline}>
-                  <defs>
-                    <linearGradient id="compGrad" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="0%" stopColor="#10b981" stopOpacity={0.3} /><stop offset="100%" stopColor="#10b981" stopOpacity={0} />
-                    </linearGradient>
-                  </defs>
-                  <CartesianGrid strokeDasharray="3 3" stroke="rgba(42,49,80,0.5)" vertical={false} />
-                  <XAxis dataKey="week" tick={{ fill: "#64748b", fontSize: 11 }} axisLine={false} tickLine={false} />
-                  <YAxis domain={[0, 100]} tick={{ fill: "#64748b", fontSize: 11 }} axisLine={false} tickLine={false} />
-                  <Tooltip contentStyle={{ background: "#1a1f35", border: "1px solid #2a3150", borderRadius: 8, fontSize: 12 }} />
-                  <Area type="monotone" dataKey="rate" stroke="#10b981" fill="url(#compGrad)" strokeWidth={2} name="Compliance %" />
-                </AreaChart>
-              </ResponsiveContainer>
-            ) : (
-              <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "100%", color: "var(--text-tertiary)", fontSize: 12 }}>
-                <BarChart3 size={16} style={{ marginRight: 6 }} /> Run a scan to populate compliance data
-              </div>
-            )}
-          </div>
+          {complianceTimeline.length > 0 ? (
+            <SafeChart height={200}>
+              <AreaChart data={complianceTimeline}>
+                <defs>
+                  <linearGradient id="compGrad" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="#10b981" stopOpacity={0.3} /><stop offset="100%" stopColor="#10b981" stopOpacity={0} />
+                  </linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="3 3" stroke="rgba(42,49,80,0.5)" vertical={false} />
+                <XAxis dataKey="week" tick={{ fill: "#64748b", fontSize: 11 }} axisLine={false} tickLine={false} />
+                <YAxis domain={[0, 100]} tick={{ fill: "#64748b", fontSize: 11 }} axisLine={false} tickLine={false} />
+                <Tooltip contentStyle={{ background: "#1a1f35", border: "1px solid #2a3150", borderRadius: 8, fontSize: 12 }} />
+                <Area type="monotone" dataKey="rate" stroke="#10b981" fill="url(#compGrad)" strokeWidth={2} name="Compliance %" />
+              </AreaChart>
+            </SafeChart>
+          ) : (
+            <div style={{ height: 200, display: "flex", alignItems: "center", justifyContent: "center", color: "var(--text-tertiary)", fontSize: 12 }}>
+              <BarChart3 size={16} style={{ marginRight: 6 }} /> Run a scan to populate compliance data
+            </div>
+          )}
         </div>
         <div className="card">
           <div className="card-header"><div className="card-title">Patches by Category</div></div>
-          <div style={{ height: 200, display: "flex", alignItems: "center" }}>
-            {categoryData.length > 0 ? (
-              <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0}>
-                <PieChart>
-                  <Pie data={categoryData} dataKey="value" cx="50%" cy="50%" innerRadius={50} outerRadius={80} paddingAngle={3} strokeWidth={0}>
-                    {categoryData.map((d, i) => <Cell key={i} fill={d.color} />)}
-                  </Pie>
-                  <Tooltip contentStyle={{ background: "#1a1f35", border: "1px solid #2a3150", borderRadius: 8, fontSize: 12 }} />
-                </PieChart>
-              </ResponsiveContainer>
-            ) : (
-              <div style={{ width: "100%", textAlign: "center", color: "var(--text-tertiary)", fontSize: 12 }}>No patch data yet</div>
-            )}
-          </div>
+          {categoryData.length > 0 ? (
+            <SafeChart height={200}>
+              <PieChart>
+                <Pie data={categoryData} dataKey="value" cx="50%" cy="50%" innerRadius={50} outerRadius={80} paddingAngle={3} strokeWidth={0}>
+                  {categoryData.map((d, i) => <Cell key={i} fill={d.color} />)}
+                </Pie>
+                <Tooltip contentStyle={{ background: "#1a1f35", border: "1px solid #2a3150", borderRadius: 8, fontSize: 12 }} />
+              </PieChart>
+            </SafeChart>
+          ) : (
+            <div style={{ height: 200, width: "100%", display: "flex", alignItems: "center", justifyContent: "center", color: "var(--text-tertiary)", fontSize: 12 }}>No patch data yet</div>
+          )}
           <div style={{ display: "flex", gap: 12, justifyContent: "center", flexWrap: "wrap" }}>
             {categoryData.map(d => (
               <div key={d.name} style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 10, color: "var(--text-secondary)" }}>

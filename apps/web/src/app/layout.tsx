@@ -5,8 +5,10 @@ export const metadata: Metadata = {
   title: "ReconAPM | Enterprise IT Asset & Security Management",
   description: "Unified IT & Non-IT Asset Monitoring, Network Management, Fleet GPS, CCTV, VDI, Vulnerability Scanning, Patch Management & ITSM Platform by NeurQ AI Labs",
   icons: {
-    icon: "/favicon.png",
-    apple: "/favicon.png",
+    icon: [
+      { url: "/favicon.png", sizes: "64x64", type: "image/png" },
+    ],
+    apple: "/apple-icon.png",
   },
   metadataBase: new URL("https://reconapm.com"),
   openGraph: {

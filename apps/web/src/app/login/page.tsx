@@ -19,7 +19,7 @@ function LoginContent() {
   const [error, setError] = useState("");
   const [theme, setTheme] = useState<"dark" | "light">("dark");
   const [focused, setFocused] = useState<string | null>(null);
-  const [oauthProviders, setOauthProviders] = useState<{ google: boolean; microsoft: boolean }>({ google: false, microsoft: false });
+  const [oauthProviders] = useState<{ google: boolean; microsoft: boolean }>({ google: true, microsoft: true });
   const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4100/api/v1";
 
   useEffect(() => {
@@ -31,11 +31,6 @@ function LoginContent() {
     // Check for OAuth error in URL
     const urlError = searchParams.get("error");
     if (urlError) setError(decodeURIComponent(urlError));
-
-    // Fetch available OAuth providers
-    fetch(`${API}/auth/providers`).then(r => r.json())
-      .then(d => setOauthProviders({ google: !!d.google, microsoft: !!d.microsoft }))
-      .catch(() => {}); // Silently fail if API is down
   }, []);  // eslint-disable-line react-hooks/exhaustive-deps
 
   function toggleTheme() {

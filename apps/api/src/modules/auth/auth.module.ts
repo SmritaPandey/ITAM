@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { Module, Logger } from '@nestjs/common';
 import { JwtModule } from '@nestjs/jwt';
 import { PassportModule } from '@nestjs/passport';
 import { ConfigModule, ConfigService } from '@nestjs/config';
@@ -7,9 +7,30 @@ import { AuthController } from './auth.controller';
 import { EmailVerificationService } from './email-verification.service';
 import { JwtStrategy } from './strategies/jwt.strategy';
 import { LocalStrategy } from './strategies/local.strategy';
-import { GoogleStrategy } from './strategies/google.strategy';
-import { MicrosoftOAuthStrategy } from './strategies/microsoft.strategy';
 import { UsersModule } from '../users/users.module';
+
+// Dynamic OAuth providers — only register if env vars are set
+const oauthProviders: any[] = [];
+
+function tryRegisterOAuth() {
+  const logger = new Logger('AuthModule');
+
+  if (process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET) {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const { GoogleStrategy } = require('./strategies/google.strategy');
+    oauthProviders.push(GoogleStrategy);
+    logger.log('Google OAuth strategy registered');
+  }
+
+  if (process.env.MICROSOFT_CLIENT_ID && process.env.MICROSOFT_CLIENT_SECRET) {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const { MicrosoftOAuthStrategy } = require('./strategies/microsoft.strategy');
+    oauthProviders.push(MicrosoftOAuthStrategy);
+    logger.log('Microsoft OAuth strategy registered');
+  }
+}
+
+tryRegisterOAuth();
 
 @Module({
   imports: [
@@ -30,9 +51,7 @@ import { UsersModule } from '../users/users.module';
     EmailVerificationService,
     JwtStrategy,
     LocalStrategy,
-    // OAuth strategies — they gracefully handle missing env vars
-    GoogleStrategy,
-    MicrosoftOAuthStrategy,
+    ...oauthProviders,
   ],
   exports: [AuthService, EmailVerificationService],
 })

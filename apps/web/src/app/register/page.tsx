@@ -1,5 +1,5 @@
 "use client";
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import {
   Shield, ArrowRight, CheckCircle2, Loader2, Building2, Mail, Lock, User,
@@ -48,17 +48,10 @@ export default function RegisterPage() {
   const [success, setSuccess] = useState(false);
   const [touched, setTouched] = useState<Record<string, boolean>>({});
   const [acceptedTerms, setAcceptedTerms] = useState(false);
-  const [oauthProviders, setOauthProviders] = useState<{ google: boolean; microsoft: boolean }>({ google: false, microsoft: false });
+  const [oauthProviders] = useState<{ google: boolean; microsoft: boolean }>({ google: true, microsoft: true });
 
   const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4100/api/v1";
   const pwStrength = useMemo(() => getPasswordStrength(form.password), [form.password]);
-
-  // Fetch OAuth providers on mount
-  useEffect(() => {
-    fetch(`${API}/auth/providers`).then(r => r.json())
-      .then(d => setOauthProviders({ google: !!d.google, microsoft: !!d.microsoft }))
-      .catch(() => {});
-  }, []);  // eslint-disable-line react-hooks/exhaustive-deps
 
   function update(field: string, value: string) { setForm(f => ({ ...f, [field]: value })); setError(""); }
   function touch(field: string) { setTouched(t => ({ ...t, [field]: true })); }

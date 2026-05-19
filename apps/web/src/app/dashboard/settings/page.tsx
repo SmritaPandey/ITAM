@@ -165,91 +165,223 @@ export default function SettingsPage() {
 
           {activeSection === "billing" && (
             <>
-              <h2 style={{ fontSize: 16, fontWeight: 700, marginBottom: 20 }}>Billing & Subscription</h2>
+              <h2 style={{ fontSize: 18, fontWeight: 800, marginBottom: 4, letterSpacing: "-0.02em" }}>Billing & Subscription</h2>
+              <p style={{ fontSize: 13, color: "var(--text-tertiary)", marginBottom: 24 }}>Manage your plan, billing cycle, and payment details</p>
               {subscription ? (
-                <div style={{ display: "grid", gap: 24 }}>
-                  {/* Current Plan Banner */}
+                <div style={{ display: "grid", gap: 28 }}>
+                  {/* ── Current Plan Status ── */}
                   <div style={{
-                    padding: 20, borderRadius: 12,
-                    background: "linear-gradient(135deg, rgba(6,182,212,0.1), rgba(139,92,246,0.1))",
-                    border: "1px solid rgba(6,182,212,0.2)",
+                    padding: 24, borderRadius: 16,
+                    background: "linear-gradient(135deg, rgba(6,182,212,0.08), rgba(139,92,246,0.06))",
+                    border: "1px solid rgba(6,182,212,0.15)",
+                    position: "relative", overflow: "hidden",
                   }}>
-                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                    <div style={{ position: "absolute", top: 0, right: 0, width: 200, height: 200, borderRadius: "50%",
+                      background: "radial-gradient(circle, rgba(6,182,212,0.06) 0%, transparent 70%)", transform: "translate(30%,-30%)" }} />
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", position: "relative" }}>
                       <div>
-                        <div style={{ fontSize: 11, fontWeight: 600, color: "var(--text-tertiary)", textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 4 }}>Current Plan</div>
-                        <div style={{ fontSize: 22, fontWeight: 800, color: "var(--text-primary)" }}>{subscription.currentPlan}</div>
-                        <div style={{ fontSize: 12, color: "var(--text-secondary)", marginTop: 4 }}>
-                          Status: <span style={{ color: "var(--success)", fontWeight: 600 }}>{subscription.subscription.status}</span>
-                          {subscription.subscription.billingCycle !== "FREE" && (
-                            <> · Billing: <span style={{ fontWeight: 600 }}>{subscription.subscription.billingCycle}</span></>
+                        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
+                          <div style={{
+                            fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.12em",
+                            color: "#06b6d4", background: "rgba(6,182,212,0.1)", padding: "3px 10px", borderRadius: 6,
+                          }}>Active Plan</div>
+                          <div style={{
+                            width: 6, height: 6, borderRadius: "50%", background: "#10b981",
+                            boxShadow: "0 0 8px rgba(16,185,129,0.4)",
+                          }} />
+                        </div>
+                        <div style={{ fontSize: 28, fontWeight: 800, color: "var(--text-primary)", letterSpacing: "-0.03em" }}>{subscription.currentPlan}</div>
+                        <div style={{ fontSize: 12, color: "var(--text-secondary)", marginTop: 6 }}>
+                          Billing: <span style={{ fontWeight: 700, color: "#06b6d4" }}>{subscription.subscription.billingCycle || "MONTHLY"}</span>
+                          {subscription.subscription.discountPercent > 0 && (
+                            <span style={{ marginLeft: 8, padding: "2px 8px", borderRadius: 4, fontSize: 10, fontWeight: 700,
+                              background: "rgba(16,185,129,0.1)", color: "#10b981" }}>
+                              {subscription.subscription.discountPercent}% discount applied
+                            </span>
                           )}
                         </div>
                       </div>
                       <div style={{ textAlign: "right" }}>
-                        <div style={{ fontSize: 28, fontWeight: 800, color: "var(--text-primary)" }}>
-                          {subscription.subscription.mrr === 0 ? "Free" : `₹${subscription.subscription.mrr?.toLocaleString("en-IN")}`}
+                        <div style={{ fontSize: 36, fontWeight: 800, letterSpacing: "-0.03em", color: "var(--text-primary)" }}>
+                          {subscription.subscription.mrr === 0 ? "Free" : `₹${Math.round(subscription.subscription.mrr).toLocaleString("en-IN")}`}
                         </div>
                         {subscription.subscription.mrr > 0 && (
-                          <div style={{ fontSize: 11, color: "var(--text-tertiary)" }}>per month</div>
+                          <div style={{ fontSize: 12, color: "var(--text-tertiary)", marginTop: 2 }}>per month</div>
                         )}
                       </div>
                     </div>
                   </div>
 
-                  {/* Plan Comparison */}
-                  <h3 style={{ fontSize: 14, fontWeight: 600, marginBottom: -8 }}>Available Plans</h3>
-                  <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 14 }}>
-                    {subscription.plans.map((plan: any) => {
-                      const isCurrent = plan.name === subscription.currentPlan;
-                      return (
-                        <div key={plan.name} style={{
-                          padding: 20, borderRadius: 12,
-                          background: isCurrent ? "rgba(6,182,212,0.06)" : "var(--bg-elevated)",
-                          border: `1px solid ${isCurrent ? "rgba(6,182,212,0.3)" : "var(--border-primary)"}`,
-                          position: "relative",
-                        }}>
-                          {plan.popular && (
+                  {/* ── Plan Cards with Psychology ── */}
+                  <div>
+                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16 }}>
+                      <h3 style={{ fontSize: 16, fontWeight: 700, letterSpacing: "-0.02em" }}>Choose Your Plan</h3>
+                      <div style={{ fontSize: 11, color: "var(--text-tertiary)", display: "flex", alignItems: "center", gap: 6 }}>
+                        <Zap size={12} style={{ color: "#f59e0b" }} />
+                        Save up to 20% with annual billing
+                      </div>
+                    </div>
+
+                    <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 12 }}>
+                      {subscription.plans.map((plan: any, idx: number) => {
+                        const isCurrent = plan.name === subscription.currentPlan;
+                        const isPopular = plan.popular;
+                        const isCustom = plan.contactSales;
+                        const annualPrice = plan.price > 0 ? Math.round(plan.price * 0.8) : plan.price;
+                        const monthlySavings = plan.price > 0 ? plan.price - annualPrice : 0;
+
+                        return (
+                          <div key={plan.name} style={{
+                            padding: isPopular ? "2px" : 0,
+                            borderRadius: 14,
+                            background: isPopular
+                              ? "linear-gradient(135deg, #06b6d4, #8b5cf6, #06b6d4)"
+                              : "transparent",
+                          }}>
                             <div style={{
-                              position: "absolute", top: -8, right: 12,
-                              background: "linear-gradient(135deg, #06b6d4, #8b5cf6)",
-                              color: "white", fontSize: 9, fontWeight: 700, padding: "2px 8px", borderRadius: 4,
-                              textTransform: "uppercase", letterSpacing: "0.05em",
-                            }}>Popular</div>
-                          )}
-                          <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 4, color: "var(--text-primary)" }}>{plan.displayName}</div>
-                          <div style={{ fontSize: 22, fontWeight: 800, color: "var(--text-primary)", marginBottom: 12 }}>
-                            {plan.price === 0 ? "Free" : plan.price < 0 ? "Custom" : `₹${plan.price.toLocaleString("en-IN")}`}
-                            {plan.price > 0 && <span style={{ fontSize: 12, fontWeight: 400, color: "var(--text-tertiary)" }}>/mo</span>}
-                            {plan.price < 0 && <div style={{ fontSize: 11, fontWeight: 400, color: "var(--text-tertiary)", marginTop: 2 }}>Tailored pricing</div>}
+                              padding: "22px 18px", borderRadius: isPopular ? 12 : 14, height: "100%",
+                              background: isCurrent ? "rgba(6,182,212,0.06)" : "var(--bg-card)",
+                              border: isPopular ? "none" : `1px solid ${isCurrent ? "rgba(6,182,212,0.25)" : "var(--border-primary)"}`,
+                              position: "relative", display: "flex", flexDirection: "column",
+                              transition: "transform 0.2s, box-shadow 0.2s",
+                            }}>
+                              {/* Popular badge */}
+                              {isPopular && (
+                                <div style={{
+                                  position: "absolute", top: -1, left: "50%", transform: "translateX(-50%)",
+                                  background: "linear-gradient(135deg, #06b6d4, #8b5cf6)",
+                                  color: "white", fontSize: 9, fontWeight: 800, padding: "3px 12px", borderRadius: "0 0 8px 8px",
+                                  textTransform: "uppercase", letterSpacing: "0.08em",
+                                  boxShadow: "0 4px 12px rgba(6,182,212,0.3)",
+                                }}>
+                                  ⚡ Most Popular
+                                </div>
+                              )}
+
+                              {/* Chosen by badge (social proof) */}
+                              {isPopular && (
+                                <div style={{
+                                  fontSize: 10, color: "var(--text-tertiary)", fontWeight: 500,
+                                  marginTop: 12, marginBottom: 8, display: "flex", alignItems: "center", gap: 4,
+                                }}>
+                                  <span style={{ color: "#f59e0b" }}>★</span> Chosen by 78% of teams
+                                </div>
+                              )}
+
+                              {/* Plan name */}
+                              <div style={{
+                                fontSize: 14, fontWeight: 700, color: "var(--text-primary)",
+                                marginBottom: 4, marginTop: isPopular ? 0 : 8,
+                                letterSpacing: "-0.01em",
+                              }}>{plan.displayName}</div>
+
+                              {/* Pricing */}
+                              <div style={{ marginBottom: 16 }}>
+                                {plan.price === 0 ? (
+                                  <div style={{ fontSize: 28, fontWeight: 800, letterSpacing: "-0.03em", color: "var(--text-primary)" }}>Free</div>
+                                ) : isCustom ? (
+                                  <div>
+                                    <div style={{ fontSize: 22, fontWeight: 800, letterSpacing: "-0.03em", color: "var(--text-primary)" }}>Custom</div>
+                                    <div style={{ fontSize: 11, color: "var(--text-tertiary)" }}>Tailored to your needs</div>
+                                  </div>
+                                ) : (
+                                  <div>
+                                    {/* Anchoring: Show annual savings */}
+                                    <div style={{ display: "flex", alignItems: "baseline", gap: 4 }}>
+                                      <span style={{ fontSize: 28, fontWeight: 800, letterSpacing: "-0.03em", color: "var(--text-primary)" }}>
+                                        ₹{annualPrice.toLocaleString("en-IN")}
+                                      </span>
+                                      <span style={{ fontSize: 11, color: "var(--text-tertiary)" }}>/mo</span>
+                                    </div>
+                                    {/* Strikethrough original price (price anchoring) */}
+                                    <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 2 }}>
+                                      <span style={{ fontSize: 12, color: "var(--text-muted)", textDecoration: "line-through" }}>
+                                        ₹{plan.price.toLocaleString("en-IN")}
+                                      </span>
+                                      <span style={{
+                                        fontSize: 10, fontWeight: 700, padding: "1px 6px", borderRadius: 4,
+                                        background: "rgba(16,185,129,0.12)", color: "#10b981",
+                                      }}>Save ₹{(monthlySavings * 12).toLocaleString("en-IN")}/yr</span>
+                                    </div>
+                                  </div>
+                                )}
+                              </div>
+
+                              {/* Features */}
+                              <ul style={{ listStyle: "none", padding: 0, margin: "0 0 auto 0", flex: 1 }}>
+                                {plan.features.slice(0, 5).map((f: string, fi: number) => (
+                                  <li key={f} style={{
+                                    fontSize: 12, color: "var(--text-secondary)", marginBottom: 7,
+                                    display: "flex", alignItems: "center", gap: 6,
+                                    opacity: fi >= 4 && !isPopular ? 0.6 : 1,
+                                  }}>
+                                    <CheckCircle size={12} style={{ color: isPopular ? "#06b6d4" : "var(--success)", flexShrink: 0 }} /> {f}
+                                  </li>
+                                ))}
+                                {plan.features.length > 5 && (
+                                  <li style={{ fontSize: 11, color: "#06b6d4", marginTop: 4, fontWeight: 600 }}>
+                                    +{plan.features.length - 5} more features
+                                  </li>
+                                )}
+                              </ul>
+
+                              {/* CTA Button */}
+                              <div style={{ marginTop: 16 }}>
+                                {isCurrent ? (
+                                  <div style={{
+                                    padding: "10px 0", textAlign: "center", fontSize: 12, fontWeight: 700,
+                                    color: "#06b6d4", borderRadius: 10, border: "1px solid rgba(6,182,212,0.25)",
+                                    background: "rgba(6,182,212,0.04)",
+                                    letterSpacing: "-0.01em",
+                                  }}>✓ Current Plan</div>
+                                ) : isCustom ? (
+                                  <a href="mailto:sales@qsasset.com?subject=Enterprise Plan Inquiry" style={{
+                                    display: "block", padding: "10px 0", textAlign: "center", fontSize: 12, fontWeight: 700,
+                                    color: "white", borderRadius: 10, textDecoration: "none",
+                                    background: "linear-gradient(135deg, #8b5cf6, #06b6d4)",
+                                    boxShadow: "0 4px 12px rgba(139,92,246,0.25)",
+                                    letterSpacing: "-0.01em",
+                                  }}>Talk to Sales →</a>
+                                ) : (
+                                  <button onClick={() => handleUpgrade(plan.name)} disabled={upgrading}
+                                    style={{
+                                      width: "100%", fontSize: 12, padding: "10px 0", borderRadius: 10,
+                                      border: "none", cursor: "pointer", fontFamily: "inherit", fontWeight: 700,
+                                      letterSpacing: "-0.01em", transition: "all 0.15s",
+                                      background: isPopular
+                                        ? "linear-gradient(135deg, #06b6d4, #0891b2)"
+                                        : "var(--bg-elevated)",
+                                      color: isPopular ? "white" : "var(--text-primary)",
+                                      boxShadow: isPopular ? "0 4px 12px rgba(6,182,212,0.25)" : "none",
+                                    }}>
+                                    {upgrading ? "Processing..." : plan.price > (subscription.subscription.mrr || 0) ? "Upgrade Now →" : "Switch Plan"}
+                                  </button>
+                                )}
+                              </div>
+                            </div>
                           </div>
-                          <ul style={{ listStyle: "none", padding: 0, margin: "0 0 16px 0" }}>
-                            {plan.features.map((f: string) => (
-                              <li key={f} style={{ fontSize: 12, color: "var(--text-secondary)", marginBottom: 6, display: "flex", alignItems: "center", gap: 6 }}>
-                                <CheckCircle size={12} style={{ color: "var(--success)", flexShrink: 0 }} /> {f}
-                              </li>
-                            ))}
-                          </ul>
-                          {isCurrent ? (
-                            <div style={{
-                              padding: "8px 0", textAlign: "center", fontSize: 12, fontWeight: 600,
-                              color: "#06b6d4", borderRadius: 8, border: "1px solid rgba(6,182,212,0.3)",
-                              background: "rgba(6,182,212,0.06)",
-                            }}>Current Plan</div>
-                          ) : plan.contactSales ? (
-                            <a href="mailto:sales@qsasset.com?subject=Custom Plan Inquiry" style={{
-                              display: "block", padding: "8px 0", textAlign: "center", fontSize: 12, fontWeight: 600,
-                              color: "white", borderRadius: 8, textDecoration: "none",
-                              background: "linear-gradient(135deg, #8b5cf6, #06b6d4)",
-                            }}>Contact Sales</a>
-                          ) : (
-                            <button onClick={() => handleUpgrade(plan.name)} disabled={upgrading}
-                              className="btn btn-primary" style={{ width: "100%", fontSize: 12, padding: "8px 0" }}>
-                              {upgrading ? "Processing..." : plan.price > (subscription.subscription.mrr || 0) ? "Upgrade" : "Switch"}
-                            </button>
-                          )}
-                        </div>
-                      );
-                    })}
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {/* ── Trust + Guarantee ── */}
+                  <div style={{
+                    display: "flex", alignItems: "center", justifyContent: "center", gap: 24,
+                    padding: "16px 0", borderTop: "1px solid var(--border-primary)",
+                  }}>
+                    {[
+                      { icon: <Shield size={14} />, text: "30-day money-back guarantee" },
+                      { icon: <Lock size={14} />, text: "Cancel anytime, no lock-in" },
+                      { icon: <Crown size={14} />, text: "Priority migration support" },
+                    ].map((t, i) => (
+                      <div key={i} style={{
+                        display: "flex", alignItems: "center", gap: 6,
+                        fontSize: 11, color: "var(--text-tertiary)", fontWeight: 500,
+                      }}>
+                        <span style={{ color: "#06b6d4" }}>{t.icon}</span> {t.text}
+                      </div>
+                    ))}
                   </div>
                 </div>
               ) : (

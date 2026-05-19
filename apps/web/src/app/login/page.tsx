@@ -1,29 +1,22 @@
 "use client";
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { Shield, Eye, EyeOff, Loader2, Users, UserCog, Sun, Moon } from "lucide-react";
+import { Eye, EyeOff, Loader2, ArrowRight, Sun, Moon, Shield, Lock, Fingerprint, Globe2, Zap, BarChart3 } from "lucide-react";
 
 function decodeJwt(token: string) {
-  try {
-    const payload = token.split(".")[1];
-    return JSON.parse(atob(payload));
-  } catch { return null; }
+  try { return JSON.parse(atob(token.split(".")[1])); } catch { return null; }
 }
-
-const QUICK_LOGINS = [
-  { label: "Admin Login", email: "admin@acme.com", icon: <UserCog size={14} />, color: "#06b6d4" },
-  { label: "Staff Login", email: "priya@acme.com", icon: <Users size={14} />, color: "#8b5cf6" },
-];
 
 export default function LoginPage() {
   const router = useRouter();
-  const isDev = process.env.NODE_ENV === 'development';
+  const isDev = process.env.NODE_ENV === "development";
   const [email, setEmail] = useState(isDev ? "admin@acme.com" : "");
   const [password, setPassword] = useState(isDev ? "Admin@123" : "");
   const [showPw, setShowPw] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [theme, setTheme] = useState<"dark" | "light">("dark");
+  const [focused, setFocused] = useState<string | null>(null);
 
   useEffect(() => {
     const saved = localStorage.getItem("theme") as "dark" | "light" | null;
@@ -49,186 +42,331 @@ export default function LoginPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email, password }),
       });
-      if (!res.ok) {
-        const data = await res.json();
-        throw new Error(data.message || "Invalid credentials");
-      }
+      if (!res.ok) { const data = await res.json(); throw new Error(data.message || "Invalid credentials"); }
       const data = await res.json();
       localStorage.setItem("accessToken", data.accessToken);
       localStorage.setItem("refreshToken", data.refreshToken);
-
-      // Decode JWT to get role and route accordingly
       const decoded = decodeJwt(data.accessToken);
-      const role = decoded?.role || "";
-      localStorage.setItem("userRole", role);
+      localStorage.setItem("userRole", decoded?.role || "");
       localStorage.setItem("userEmail", decoded?.email || email);
-
-      if (role === "Employee") {
-        router.push("/portal");
-      } else {
-        router.push("/dashboard");
-      }
+      router.push(decoded?.role === "Employee" ? "/portal" : "/dashboard");
     } catch (err: any) {
       setError(err.message || "Login failed");
-    } finally {
-      setLoading(false);
-    }
+    } finally { setLoading(false); }
   }
 
-  const isLight = theme === "light";
+  const dk = theme === "dark";
+
+  const FEATURES = [
+    { icon: <Shield size={20} />, title: "Enterprise Security", desc: "SOC 2 compliant with end-to-end encryption" },
+    { icon: <Globe2 size={20} />, title: "Network Discovery", desc: "Auto-detect every device on your network" },
+    { icon: <BarChart3 size={20} />, title: "Real-Time Analytics", desc: "Live dashboards with actionable insights" },
+    { icon: <Zap size={20} />, title: "Smart Automation", desc: "Automated workflows and compliance checks" },
+  ];
 
   return (
     <div style={{
-      minHeight: "100vh",
-      display: "flex",
-      alignItems: "center",
-      justifyContent: "center",
-      background: isLight
-        ? "linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 50%, #f0f9ff 100%)"
-        : "linear-gradient(135deg, #0a0e1a 0%, #111827 50%, #0d1225 100%)",
-      position: "relative",
-      overflow: "hidden",
-      transition: "background 0.3s ease",
+      minHeight: "100vh", display: "flex", fontFamily: "'Plus Jakarta Sans', 'Inter', system-ui, sans-serif",
+      background: dk ? "#09090b" : "#fafafa",
     }}>
-      {/* Animated background orbs */}
-      <div style={{
-        position: "absolute", width: 500, height: 500, borderRadius: "50%",
-        background: isLight
-          ? "radial-gradient(circle, rgba(6,182,212,0.06) 0%, transparent 70%)"
-          : "radial-gradient(circle, rgba(6,182,212,0.08) 0%, transparent 70%)",
-        top: "-10%", right: "-5%", animation: "pulse 8s ease-in-out infinite",
-      }} />
-      <div style={{
-        position: "absolute", width: 400, height: 400, borderRadius: "50%",
-        background: isLight
-          ? "radial-gradient(circle, rgba(139,92,246,0.04) 0%, transparent 70%)"
-          : "radial-gradient(circle, rgba(139,92,246,0.06) 0%, transparent 70%)",
-        bottom: "-10%", left: "-5%", animation: "pulse 10s ease-in-out infinite reverse",
-      }} />
-
-      {/* Theme toggle */}
-      <button onClick={toggleTheme} style={{
-        position: "absolute", top: 20, right: 20, width: 40, height: 40,
-        borderRadius: 10, border: "none", cursor: "pointer",
-        background: isLight ? "rgba(0,0,0,0.05)" : "rgba(255,255,255,0.06)",
-        color: "var(--text-secondary)", display: "flex", alignItems: "center", justifyContent: "center",
-        transition: "all 0.2s",
+      {/* ─── Left Panel: Brand / Features ─── */}
+      <div className="login-hero" style={{
+        flex: "0 0 50%", display: "flex", flexDirection: "column", justifyContent: "center",
+        padding: "60px 56px", position: "relative", overflow: "hidden",
+        background: dk
+          ? "linear-gradient(160deg, #0c0f1d 0%, #111631 40%, #0e1428 100%)"
+          : "linear-gradient(160deg, #f0f9ff 0%, #e0e7ff 40%, #ede9fe 100%)",
       }}>
-        {isLight ? <Moon size={18} /> : <Sun size={18} />}
-      </button>
-
-      <div style={{
-        width: "min(420px, 92vw)", padding: "clamp(20px, 5vw, 40px)", borderRadius: 16,
-        background: isLight ? "rgba(255, 255, 255, 0.85)" : "rgba(26, 31, 53, 0.7)",
-        backdropFilter: "blur(20px)",
-        border: isLight ? "1px solid rgba(226, 232, 240, 0.8)" : "1px solid rgba(42, 49, 80, 0.6)",
-        boxShadow: isLight
-          ? "0 24px 80px rgba(0,0,0,0.08), 0 0 40px rgba(6,182,212,0.03)"
-          : "0 24px 80px rgba(0,0,0,0.4), 0 0 40px rgba(6,182,212,0.05)",
-        transition: "all 0.3s ease",
-      }}>
-        <div style={{ textAlign: "center", marginBottom: 32 }}>
-          <a href="/" style={{ display: "inline-block", textDecoration: "none" }}>
-            <img src="/favicon.png" alt="QS Asset" style={{
-              width: 56, height: 56, margin: "0 auto 16px", borderRadius: 14, display: "block",
-              boxShadow: isLight ? "0 8px 24px rgba(6,182,212,0.2)" : "0 8px 24px rgba(6,182,212,0.3)",
-            }} />
-          </a>
-          <h1 style={{
-            fontSize: 22, fontWeight: 700, letterSpacing: "-0.02em",
-            background: isLight ? "linear-gradient(135deg, #0e7490, #7c3aed)" : "linear-gradient(135deg, #67e8f9, #a78bfa)",
-            WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent",
-          }}>QS Asset</h1>
-          <p style={{ fontSize: 13, color: "var(--text-tertiary)", marginTop: 4 }}>Enterprise IT Asset & Security Management</p>
+        {/* Animated mesh */}
+        <div style={{ position: "absolute", inset: 0, opacity: dk ? 0.4 : 0.3 }}>
+          <div className="mesh-orb" style={{ position: "absolute", width: 600, height: 600, borderRadius: "50%", top: "-20%", left: "-15%",
+            background: "radial-gradient(circle, rgba(6,182,212,0.15) 0%, transparent 65%)", animation: "float 12s ease-in-out infinite" }} />
+          <div className="mesh-orb" style={{ position: "absolute", width: 500, height: 500, borderRadius: "50%", bottom: "-20%", right: "-10%",
+            background: "radial-gradient(circle, rgba(139,92,246,0.12) 0%, transparent 65%)", animation: "float 15s ease-in-out infinite reverse" }} />
+          <div className="mesh-orb" style={{ position: "absolute", width: 300, height: 300, borderRadius: "50%", top: "40%", right: "20%",
+            background: "radial-gradient(circle, rgba(6,182,212,0.08) 0%, transparent 65%)", animation: "float 10s ease-in-out infinite 2s" }} />
         </div>
 
-        {/* Quick Login Buttons */}
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 20 }}>
-          {QUICK_LOGINS.map(q => (
-            <button key={q.email} type="button" onClick={() => setEmail(q.email)}
-              style={{
-                padding: "8px 12px", borderRadius: 8, fontSize: 11, fontWeight: 600,
-                background: email === q.email ? `${q.color}15` : isLight ? "rgba(0,0,0,0.03)" : "rgba(30,37,64,0.5)",
-                border: email === q.email ? `1px solid ${q.color}40` : `1px solid var(--border-primary)`,
-                color: email === q.email ? q.color : "var(--text-secondary)",
-                cursor: "pointer", fontFamily: "inherit", display: "flex", alignItems: "center",
-                justifyContent: "center", gap: 6, transition: "all 0.15s",
-              }}>
-              {q.icon} {q.label}
-            </button>
-          ))}
-        </div>
+        {/* Subtle grid pattern */}
+        <div style={{ position: "absolute", inset: 0, opacity: dk ? 0.03 : 0.04,
+          backgroundImage: `url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' stroke='${dk ? '%23fff' : '%23000'}' stroke-width='0.5'%3E%3Cpath d='M0 30h60M30 0v60'/%3E%3C/g%3E%3C/svg%3E")`,
+        }} />
 
-        <form onSubmit={handleSubmit}>
-          <div style={{ marginBottom: 16 }}>
-            <label style={{ fontSize: 12, fontWeight: 600, color: "var(--text-secondary)", display: "block", marginBottom: 6 }}>Email</label>
-            <input
-              type="email" value={email} onChange={e => setEmail(e.target.value)} required
-              style={{
-                width: "100%", padding: "10px 14px", borderRadius: 8,
-                background: "var(--bg-input)", border: "1px solid var(--border-primary)", color: "var(--text-primary)",
-                fontSize: 13, fontFamily: "inherit", outline: "none", transition: "border-color 0.2s",
-              }}
-              onFocus={e => e.target.style.borderColor = "#06b6d4"}
-              onBlur={e => e.target.style.borderColor = "var(--border-primary)"}
-            />
+        <div style={{ position: "relative", zIndex: 1, maxWidth: 480 }}>
+          {/* Brand */}
+          <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 48 }}>
+            <div style={{
+              width: 44, height: 44, borderRadius: 12,
+              background: "linear-gradient(135deg, #06b6d4, #8b5cf6)",
+              display: "flex", alignItems: "center", justifyContent: "center",
+              boxShadow: "0 8px 32px rgba(6,182,212,0.3)",
+            }}>
+              <img src="/favicon.png" alt="QS" style={{ width: 28, height: 28, borderRadius: 6 }} />
+            </div>
+            <span style={{
+              fontSize: 24, fontWeight: 800, letterSpacing: "-0.04em",
+              color: dk ? "#f1f5f9" : "#0f172a",
+            }}>QS Asset</span>
           </div>
 
-          <div style={{ marginBottom: 20 }}>
-            <label style={{ fontSize: 12, fontWeight: 600, color: "var(--text-secondary)", display: "block", marginBottom: 6 }}>Password</label>
-            <div style={{ position: "relative" }}>
-              <input
-                type={showPw ? "text" : "password"} value={password}
-                onChange={e => setPassword(e.target.value)} required
-                style={{
-                  width: "100%", padding: "10px 40px 10px 14px", borderRadius: 8,
-                  background: "var(--bg-input)", border: "1px solid var(--border-primary)", color: "var(--text-primary)",
-                  fontSize: 13, fontFamily: "inherit", outline: "none", transition: "border-color 0.2s",
-                }}
-                onFocus={e => e.target.style.borderColor = "#06b6d4"}
-                onBlur={e => e.target.style.borderColor = "var(--border-primary)"}
-              />
-              <button type="button" onClick={() => setShowPw(!showPw)} style={{
-                position: "absolute", right: 10, top: "50%", transform: "translateY(-50%)",
-                background: "none", border: "none", color: "var(--text-tertiary)", cursor: "pointer",
+          {/* Headline */}
+          <h1 style={{
+            fontSize: 42, fontWeight: 800, lineHeight: 1.1, letterSpacing: "-0.04em",
+            color: dk ? "#f8fafc" : "#0f172a", marginBottom: 16,
+          }}>
+            Secure Every Asset.{" "}
+            <span style={{
+              background: "linear-gradient(135deg, #06b6d4, #8b5cf6)",
+              WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent",
+            }}>Everywhere.</span>
+          </h1>
+          <p style={{
+            fontSize: 16, lineHeight: 1.7, color: dk ? "#94a3b8" : "#64748b",
+            maxWidth: 420, marginBottom: 40,
+          }}>
+            Enterprise-grade IT asset management, network monitoring, and security compliance — all in one platform.
+          </p>
+
+          {/* Feature chips */}
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
+            {FEATURES.map((f, i) => (
+              <div key={i} style={{
+                display: "flex", gap: 12, alignItems: "flex-start",
+                padding: "14px 16px", borderRadius: 12,
+                background: dk ? "rgba(255,255,255,0.03)" : "rgba(255,255,255,0.6)",
+                border: `1px solid ${dk ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.06)"}`,
+                backdropFilter: "blur(8px)",
+                transition: "transform 0.2s, box-shadow 0.2s",
               }}>
-                {showPw ? <EyeOff size={16} /> : <Eye size={16} />}
-              </button>
+                <div style={{
+                  color: "#06b6d4", flexShrink: 0, marginTop: 2,
+                }}>{f.icon}</div>
+                <div>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: dk ? "#e2e8f0" : "#1e293b", marginBottom: 2 }}>{f.title}</div>
+                  <div style={{ fontSize: 11, color: dk ? "#64748b" : "#94a3b8", lineHeight: 1.5 }}>{f.desc}</div>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {/* Social proof */}
+          <div style={{ marginTop: 40, display: "flex", alignItems: "center", gap: 12 }}>
+            <div style={{ display: "flex" }}>
+              {["#06b6d4", "#8b5cf6", "#10b981", "#f59e0b"].map((c, i) => (
+                <div key={i} style={{
+                  width: 28, height: 28, borderRadius: "50%", border: `2px solid ${dk ? "#111" : "#fafafa"}`,
+                  background: `linear-gradient(135deg, ${c}, ${c}dd)`,
+                  marginLeft: i > 0 ? -8 : 0, display: "flex", alignItems: "center", justifyContent: "center",
+                  fontSize: 10, fontWeight: 700, color: "white",
+                }}>{["S", "A", "V", "K"][i]}</div>
+              ))}
+            </div>
+            <div>
+              <div style={{ fontSize: 12, fontWeight: 700, color: dk ? "#e2e8f0" : "#1e293b" }}>Trusted by 200+ teams</div>
+              <div style={{ fontSize: 11, color: dk ? "#64748b" : "#94a3b8" }}>Managing 50K+ assets worldwide</div>
             </div>
           </div>
+        </div>
+      </div>
 
-          {error && (
-            <div style={{
-              padding: "8px 12px", borderRadius: 8, marginBottom: 16,
-              background: "rgba(239,68,68,0.1)", border: "1px solid rgba(239,68,68,0.2)",
-              color: "#f87171", fontSize: 12,
-            }}>{error}</div>
-          )}
-
-          <button type="submit" disabled={loading} className="btn btn-primary" style={{
-            width: "100%", justifyContent: "center", padding: "12px 16px", fontSize: 14,
-          }}>
-            {loading ? <Loader2 size={16} style={{ animation: "spin 1s linear infinite" }} /> : null}
-            {loading ? "Signing in..." : "Sign In"}
-          </button>
-        </form>
-
-        <div style={{
-          marginTop: 16, padding: "10px 12px", borderRadius: 8,
-          background: isLight ? "rgba(6,182,212,0.04)" : "rgba(6,182,212,0.05)",
-          border: isLight ? "1px solid rgba(6,182,212,0.08)" : "1px solid rgba(6,182,212,0.1)",
+      {/* ─── Right Panel: Login Form ─── */}
+      <div style={{
+        flex: "0 0 50%", display: "flex", alignItems: "center", justifyContent: "center",
+        padding: "40px 32px", position: "relative",
+        background: dk ? "#09090b" : "#fafafa",
+      }}>
+        {/* Theme toggle */}
+        <button onClick={toggleTheme} style={{
+          position: "absolute", top: 24, right: 24, width: 40, height: 40,
+          borderRadius: 10, border: `1px solid ${dk ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.08)"}`,
+          background: dk ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.03)",
+          color: dk ? "#94a3b8" : "#64748b", display: "flex", alignItems: "center", justifyContent: "center",
+          cursor: "pointer", transition: "all 0.2s",
         }}>
-          <p style={{ fontSize: 10, color: "var(--text-muted)", margin: 0, textAlign: "center" }}>
-            <strong style={{ color: "#06b6d4" }}>Admin:</strong> admin@acme.com &nbsp;|&nbsp;
-            <strong style={{ color: "#8b5cf6" }}>Staff:</strong> priya@acme.com
-            <br />Password: Admin@123
-          </p>
+          {dk ? <Sun size={16} /> : <Moon size={16} />}
+        </button>
+
+        <div style={{ width: "100%", maxWidth: 380 }}>
+          {/* Mobile-only brand */}
+          <div className="login-mobile-brand" style={{ display: "none", textAlign: "center", marginBottom: 32 }}>
+            <a href="/" style={{ textDecoration: "none", display: "inline-flex", alignItems: "center", gap: 8 }}>
+              <img src="/favicon.png" alt="QS" style={{ width: 36, height: 36, borderRadius: 10 }} />
+              <span style={{ fontSize: 20, fontWeight: 800, letterSpacing: "-0.03em", color: dk ? "#f1f5f9" : "#0f172a" }}>QS Asset</span>
+            </a>
+          </div>
+
+          {/* Welcome */}
+          <div style={{ marginBottom: 32 }}>
+            <h2 style={{
+              fontSize: 28, fontWeight: 800, letterSpacing: "-0.03em",
+              color: dk ? "#f8fafc" : "#0f172a", marginBottom: 8,
+            }}>Welcome back</h2>
+            <p style={{ fontSize: 14, color: dk ? "#64748b" : "#94a3b8", lineHeight: 1.6 }}>
+              Sign in to your workspace to continue
+            </p>
+          </div>
+
+          <form onSubmit={handleSubmit} style={{ display: "flex", flexDirection: "column", gap: 20 }}>
+            {/* Email */}
+            <div>
+              <label style={{
+                display: "block", fontSize: 13, fontWeight: 600, marginBottom: 8,
+                color: dk ? "#a1a1aa" : "#71717a", letterSpacing: "-0.01em",
+              }}>Email address</label>
+              <input type="email" value={email} onChange={e => setEmail(e.target.value)}
+                onFocus={() => setFocused("email")} onBlur={() => setFocused(null)}
+                placeholder="you@company.com" required autoComplete="email"
+                style={{
+                  width: "100%", padding: "13px 16px", borderRadius: 10, fontSize: 14,
+                  fontFamily: "inherit", outline: "none", transition: "all 0.2s ease",
+                  background: dk ? "rgba(255,255,255,0.04)" : "white",
+                  border: `1.5px solid ${focused === "email" ? "#06b6d4" : dk ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.1)"}`,
+                  color: dk ? "#f1f5f9" : "#0f172a",
+                  boxShadow: focused === "email" ? "0 0 0 3px rgba(6,182,212,0.1)" : "none",
+                }} />
+            </div>
+
+            {/* Password */}
+            <div>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+                <label style={{
+                  fontSize: 13, fontWeight: 600,
+                  color: dk ? "#a1a1aa" : "#71717a", letterSpacing: "-0.01em",
+                }}>Password</label>
+                <a href="#" style={{
+                  fontSize: 12, color: "#06b6d4", textDecoration: "none", fontWeight: 500,
+                }}>Forgot password?</a>
+              </div>
+              <div style={{ position: "relative" }}>
+                <input type={showPw ? "text" : "password"} value={password}
+                  onChange={e => setPassword(e.target.value)}
+                  onFocus={() => setFocused("password")} onBlur={() => setFocused(null)}
+                  placeholder="Enter your password" required autoComplete="current-password"
+                  style={{
+                    width: "100%", padding: "13px 44px 13px 16px", borderRadius: 10, fontSize: 14,
+                    fontFamily: "inherit", outline: "none", transition: "all 0.2s ease",
+                    background: dk ? "rgba(255,255,255,0.04)" : "white",
+                    border: `1.5px solid ${focused === "password" ? "#06b6d4" : dk ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.1)"}`,
+                    color: dk ? "#f1f5f9" : "#0f172a",
+                    boxShadow: focused === "password" ? "0 0 0 3px rgba(6,182,212,0.1)" : "none",
+                  }} />
+                <button type="button" onClick={() => setShowPw(!showPw)} style={{
+                  position: "absolute", right: 14, top: "50%", transform: "translateY(-50%)",
+                  background: "none", border: "none", cursor: "pointer", padding: 0,
+                  color: dk ? "#52525b" : "#a1a1aa",
+                }}>
+                  {showPw ? <EyeOff size={16} /> : <Eye size={16} />}
+                </button>
+              </div>
+            </div>
+
+            {/* Error */}
+            {error && (
+              <div style={{
+                padding: "12px 16px", borderRadius: 10, fontSize: 13, fontWeight: 500,
+                background: dk ? "rgba(239,68,68,0.08)" : "rgba(239,68,68,0.06)",
+                border: `1px solid ${dk ? "rgba(239,68,68,0.2)" : "rgba(239,68,68,0.15)"}`,
+                color: "#ef4444", display: "flex", alignItems: "center", gap: 8,
+              }}>
+                <div style={{ width: 6, height: 6, borderRadius: "50%", background: "#ef4444", flexShrink: 0 }} />
+                {error}
+              </div>
+            )}
+
+            {/* Submit */}
+            <button type="submit" disabled={loading} style={{
+              width: "100%", padding: "14px 16px", borderRadius: 10,
+              border: "none", cursor: loading ? "wait" : "pointer",
+              background: loading
+                ? (dk ? "rgba(6,182,212,0.3)" : "rgba(6,182,212,0.4)")
+                : "linear-gradient(135deg, #06b6d4 0%, #0891b2 100%)",
+              color: "white", fontSize: 14, fontWeight: 700, fontFamily: "inherit",
+              display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
+              boxShadow: loading ? "none" : "0 4px 16px rgba(6,182,212,0.25), 0 1px 3px rgba(6,182,212,0.1)",
+              transition: "all 0.2s ease", letterSpacing: "-0.01em",
+            }}>
+              {loading ? (
+                <><Loader2 size={16} style={{ animation: "spin 1s linear infinite" }} /> Signing in...</>
+              ) : (
+                <>Sign in <ArrowRight size={15} /></>
+              )}
+            </button>
+          </form>
+
+          {/* Separator */}
+          <div style={{
+            display: "flex", alignItems: "center", gap: 12, margin: "24px 0",
+          }}>
+            <div style={{ flex: 1, height: 1, background: dk ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.06)" }} />
+            <span style={{ fontSize: 11, color: dk ? "#52525b" : "#a1a1aa", fontWeight: 500, letterSpacing: "0.02em" }}>DEMO CREDENTIALS</span>
+            <div style={{ flex: 1, height: 1, background: dk ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.06)" }} />
+          </div>
+
+          {/* Quick logins */}
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+            {[
+              { label: "Admin Demo", email: "admin@acme.com", color: "#06b6d4", sub: "Full access" },
+              { label: "Staff Demo", email: "priya@acme.com", color: "#8b5cf6", sub: "Limited access" },
+            ].map(q => (
+              <button key={q.email} type="button" onClick={() => { setEmail(q.email); setPassword("Admin@123"); }}
+                style={{
+                  padding: "12px 14px", borderRadius: 10, cursor: "pointer", fontFamily: "inherit",
+                  background: email === q.email
+                    ? (dk ? `rgba(${q.color === "#06b6d4" ? "6,182,212" : "139,92,246"},0.08)` : `rgba(${q.color === "#06b6d4" ? "6,182,212" : "139,92,246"},0.06)`)
+                    : (dk ? "rgba(255,255,255,0.03)" : "white"),
+                  border: `1.5px solid ${email === q.email ? `${q.color}40` : dk ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.08)"}`,
+                  transition: "all 0.15s",
+                  textAlign: "left",
+                }}>
+                <div style={{ fontSize: 13, fontWeight: 700, color: email === q.email ? q.color : (dk ? "#e4e4e7" : "#3f3f46"), marginBottom: 2 }}>
+                  {q.label}
+                </div>
+                <div style={{ fontSize: 11, color: dk ? "#52525b" : "#a1a1aa" }}>{q.sub}</div>
+              </button>
+            ))}
+          </div>
+
+          {/* Register link */}
+          <div style={{ textAlign: "center", marginTop: 28 }}>
+            <p style={{ fontSize: 13, color: dk ? "#52525b" : "#a1a1aa", margin: 0 }}>
+              Don&apos;t have an account?{" "}
+              <a href="/register" style={{
+                color: "#06b6d4", textDecoration: "none", fontWeight: 600,
+                borderBottom: "1px solid transparent",
+                transition: "border-color 0.15s",
+              }}>Create workspace</a>
+            </p>
+          </div>
+
+          {/* Trust signals */}
+          <div style={{
+            display: "flex", alignItems: "center", justifyContent: "center", gap: 16, marginTop: 28,
+            padding: "14px 0", borderTop: `1px solid ${dk ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.04)"}`,
+          }}>
+            {[
+              { icon: <Lock size={12} />, text: "256-bit SSL" },
+              { icon: <Fingerprint size={12} />, text: "SOC 2" },
+              { icon: <Shield size={12} />, text: "GDPR" },
+            ].map((t, i) => (
+              <div key={i} style={{
+                display: "flex", alignItems: "center", gap: 4,
+                fontSize: 11, color: dk ? "#3f3f46" : "#a1a1aa", fontWeight: 500,
+              }}>
+                {t.icon} {t.text}
+              </div>
+            ))}
+          </div>
         </div>
       </div>
 
       <style>{`
-        @keyframes pulse { 0%,100% { transform: scale(1); opacity: 0.5; } 50% { transform: scale(1.1); opacity: 1; } }
+        @keyframes float { 0%,100% { transform: translate(0,0) scale(1); } 50% { transform: translate(20px,-20px) scale(1.05); } }
         @keyframes spin { to { transform: rotate(360deg); } }
+        @media (max-width: 900px) {
+          .login-hero { display: none !important; }
+          div[style*="flex: \\"0 0 50%\\""] + div[style*="flex: \\"0 0 50%\\""] { flex: 1 1 100% !important; }
+          .login-mobile-brand { display: block !important; }
+        }
       `}</style>
     </div>
   );

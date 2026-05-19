@@ -1,12 +1,16 @@
 import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../common/database/prisma.service';
 import { Cron, CronExpression } from '@nestjs/schedule';
+import { EmailService } from './email.service';
 
 @Injectable()
 export class NotificationChannelsService {
   private readonly logger = new Logger(NotificationChannelsService.name);
 
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private emailService: EmailService,
+  ) {}
 
   async list(tenantId: string) {
     return this.prisma.notificationChannel.findMany({ where: { tenantId }, orderBy: { name: 'asc' } });
@@ -76,6 +80,14 @@ export class NotificationChannelsService {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ event, ...payload, timestamp: new Date().toISOString() }),
+          });
+        }
+        if (channel.type === 'EMAIL' && config.recipients) {
+          const recipients = Array.isArray(config.recipients) ? config.recipients : [config.recipients];
+          await this.emailService.send({
+            to: recipients,
+            subject: `[QS Asset] ${event}: ${payload.message || payload.name || 'Alert'}`,
+            html: `<h3>${event}</h3><pre>${JSON.stringify(payload, null, 2)}</pre>`,
           });
         }
       } catch (err: any) {

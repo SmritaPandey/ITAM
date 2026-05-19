@@ -27,6 +27,7 @@ export default function TicketsPage() {
   const [slaStats, setSlaStats] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [showCreate, setShowCreate] = useState(false);
+  const [statusFilter, setStatusFilter] = useState<string | null>(null);
 
   function loadTickets() {
     setLoading(true);
@@ -57,8 +58,16 @@ export default function TicketsPage() {
       <div className="stats-grid" style={{ gridTemplateColumns: "repeat(5, 1fr)", marginBottom: 8 }}>
         {["NEW", "OPEN", "IN_PROGRESS", "PENDING", "RESOLVED"].map(status => {
           const count = tickets.data?.filter((t: any) => t.status === status).length || 0;
+          const isActive = statusFilter === status;
           return (
-            <div key={status} className="stat-card" style={{ padding: 14 }}>
+            <div key={status} className="stat-card" style={{
+              padding: 14, cursor: "pointer",
+              borderLeft: isActive ? "3px solid var(--brand-400)" : undefined,
+              transition: "transform 0.15s",
+            }}
+              onClick={() => setStatusFilter(isActive ? null : status)}
+              onMouseEnter={e => (e.currentTarget.style.transform = "translateY(-2px)")}
+              onMouseLeave={e => (e.currentTarget.style.transform = "none")}>
               <div className="stat-content">
                 <div className="stat-label">{status.replace("_", " ")}</div>
                 <div className="stat-value" style={{ fontSize: 24 }}>{count}</div>
@@ -68,6 +77,12 @@ export default function TicketsPage() {
           );
         })}
       </div>
+      {statusFilter && (
+        <div style={{ marginBottom: 10, display: "flex", alignItems: "center", gap: 8 }}>
+          <span style={{ fontSize: 12, color: "var(--text-secondary)" }}>Showing: <strong>{statusFilter.replace("_", " ")}</strong></span>
+          <button className="btn btn-secondary" style={{ padding: "2px 8px", fontSize: 10 }} onClick={() => setStatusFilter(null)}>Clear ✕</button>
+        </div>
+      )}
 
       {/* SLA Compliance Row */}
       {slaStats && (
@@ -126,7 +141,7 @@ export default function TicketsPage() {
           <tbody>
             {loading ? (
               <tr><td colSpan={8} style={{ textAlign: "center", padding: 40, color: "var(--text-tertiary)" }}>Loading...</td></tr>
-            ) : tickets.data?.map((t: any) => {
+            ) : (statusFilter ? tickets.data?.filter((t: any) => t.status === statusFilter) : tickets.data)?.map((t: any) => {
               const sla = slaCountdown(t.resolutionDueAt);
               return (
                 <tr key={t.id} style={{ cursor: "pointer" }} onClick={() => router.push(`/dashboard/tickets/${t.id}`)}>

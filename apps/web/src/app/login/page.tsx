@@ -128,15 +128,17 @@ export default function LoginPage() {
         transition: "all 0.3s ease",
       }}>
         <div style={{ textAlign: "center", marginBottom: 32 }}>
-          <img src="/favicon.png" alt="ReconAPM" style={{
-            width: 56, height: 56, margin: "0 auto 16px", borderRadius: 14, display: "block",
-            boxShadow: isLight ? "0 8px 24px rgba(6,182,212,0.2)" : "0 8px 24px rgba(6,182,212,0.3)",
-          }} />
+          <a href="/" style={{ display: "inline-block", textDecoration: "none" }}>
+            <img src="/favicon.png" alt="QS Asset" style={{
+              width: 56, height: 56, margin: "0 auto 16px", borderRadius: 14, display: "block",
+              boxShadow: isLight ? "0 8px 24px rgba(6,182,212,0.2)" : "0 8px 24px rgba(6,182,212,0.3)",
+            }} />
+          </a>
           <h1 style={{
             fontSize: 22, fontWeight: 700, letterSpacing: "-0.02em",
             background: isLight ? "linear-gradient(135deg, #0e7490, #7c3aed)" : "linear-gradient(135deg, #67e8f9, #a78bfa)",
             WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent",
-          }}>ReconAPM</h1>
+          }}>QS Asset</h1>
           <p style={{ fontSize: 13, color: "var(--text-tertiary)", marginTop: 4 }}>Enterprise IT Asset & Security Management</p>
         </div>
 

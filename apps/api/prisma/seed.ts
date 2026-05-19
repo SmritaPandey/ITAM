@@ -51,6 +51,21 @@ async function main() {
   });
   console.log(`  ✅ Tenant: ${tenant.name}`);
 
+  // 1b. Create platform owner tenant (system-level, not visible to clients)
+  const platformTenant = await prisma.tenant.upsert({
+    where: { slug: 'qs-asset-platform' },
+    update: {},
+    create: {
+      name: 'QS Asset Platform',
+      slug: 'qs-asset-platform',
+      domain: 'qsasset.com',
+      plan: 'ENTERPRISE',
+      status: 'ACTIVE',
+      settings: { timezone: 'Asia/Kolkata', dateFormat: 'DD/MM/YYYY', isSystemTenant: true },
+    },
+  });
+  console.log(`  ✅ Platform Tenant: ${platformTenant.name}`);
+
   // 2. Create sites
   const hq = await prisma.site.upsert({
     where: { id: '00000000-0000-0000-0000-000000000001' },
@@ -140,8 +155,25 @@ async function main() {
       tenantId: tenant.id, email: 'admin@acme.com', passwordHash,
       firstName: 'Admin', lastName: 'User', roleId: adminRole.id,
       departmentId: itDept.id, siteId: hq.id, status: 'ACTIVE',
+      isSuperAdmin: false,
     },
   });
+
+  // Create platform owner account (separate from tenant users)
+  const ownerRole = await prisma.role.create({
+    data: {
+      tenantId: platformTenant.id, name: 'Platform Owner',
+      permissions: JSON.parse(JSON.stringify(['*'])),
+    },
+  });
+  await prisma.user.create({
+    data: {
+      tenantId: platformTenant.id, email: 'smrita@neurqai.com', passwordHash,
+      firstName: 'Smrita', lastName: 'Pandey', roleId: ownerRole.id,
+      status: 'ACTIVE', isSuperAdmin: true,
+    },
+  });
+  console.log(`  ✅ Platform Owner: owner@qsasset.com`);
   const itAdmin = await prisma.user.create({
     data: {
       tenantId: tenant.id, email: 'itadmin@acme.com', passwordHash,

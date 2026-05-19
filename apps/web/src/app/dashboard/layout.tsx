@@ -206,8 +206,10 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       {/* Sidebar */}
       <aside className={`sidebar${mobileSidebarOpen ? " sidebar-open" : ""}`}>
         <div className="sidebar-brand">
-          <img src="/favicon.png" alt="ReconAPM" style={{ width: 32, height: 32, borderRadius: 8 }} />
-          <span className="sidebar-brand-text">ReconAPM</span>
+          <a href="/dashboard" style={{ display: "flex", alignItems: "center", gap: 8, textDecoration: "none", color: "inherit" }} onClick={(e) => { e.preventDefault(); router.push("/dashboard"); }}>
+            <img src="/favicon.png" alt="QS Asset" style={{ width: 32, height: 32, borderRadius: 8 }} />
+            <span className="sidebar-brand-text">QS Asset</span>
+          </a>
         </div>
         <nav className="sidebar-nav">
           {navSections.map((section) => (

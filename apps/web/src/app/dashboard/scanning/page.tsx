@@ -87,7 +87,10 @@ export default function ScanningPage() {
           const Icon = SCAN_ICONS[cap.type] || Shield;
           const color = SCAN_COLORS[cap.type] || "#64748b";
           return (
-            <div key={cap.type} className="card" style={{ padding: "14px 16px", borderLeft: `3px solid ${cap.available ? color : "var(--border-primary)"}`, opacity: cap.available ? 1 : 0.5 }}>
+            <div key={cap.type} className="card" style={{ padding: "14px 16px", borderLeft: `3px solid ${cap.available ? color : "var(--border-primary)"}`, opacity: cap.available ? 1 : 0.5, cursor: cap.available ? "pointer" : "default", transition: "transform 0.15s" }}
+              onClick={() => { if (cap.available) { setScanType(cap.type); document.getElementById("scan-runner")?.scrollIntoView({ behavior: "smooth" }); } }}
+              onMouseEnter={e => { if (cap.available) e.currentTarget.style.transform = "translateY(-2px)"; }}
+              onMouseLeave={e => (e.currentTarget.style.transform = "none")}>
               <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 6 }}>
                 <Icon size={18} style={{ color }} />
                 <span style={{ fontSize: 13, fontWeight: 700, color: "var(--text-primary)" }}>{cap.name}</span>
@@ -109,7 +112,7 @@ export default function ScanningPage() {
       </div>
 
       {/* Scan Runner */}
-      <div className="card" style={{ padding: 16, marginBottom: 20 }}>
+      <div id="scan-runner" className="card" style={{ padding: 16, marginBottom: 20 }}>
         <div className="card-header" style={{ marginBottom: 12 }}><div className="card-title">Run Scan</div></div>
         <div style={{ display: "flex", gap: 10, alignItems: "flex-end", flexWrap: "wrap" }}>
           <div style={{ flex: "0 0 140px" }}>

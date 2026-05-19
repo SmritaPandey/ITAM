@@ -137,7 +137,7 @@ export default function DiscoveryPage() {
       </div>
 
       <PageHelp id="discovery" title="How Network Discovery Works">
-        Enter a subnet (e.g., <strong>192.168.1.0/24</strong>) and select a scan type. <strong>Ping Sweep</strong> is the fastest — it finds alive hosts. <strong>Full Scan</strong> combines all methods for maximum coverage. After scanning, review discovered devices in the <strong>Pending Review</strong> tab and approve them to add as managed assets. You can also deploy the <strong>ReconAPM Agent</strong> on staff machines for automatic inventory collection.
+        Enter a subnet (e.g., <strong>192.168.1.0/24</strong>) and select a scan type. <strong>Ping Sweep</strong> is the fastest — it finds alive hosts. <strong>Full Scan</strong> combines all methods for maximum coverage. After scanning, review discovered devices in the <strong>Pending Review</strong> tab and approve them to add as managed assets. You can also deploy the <strong>QS Asset Agent</strong> on staff machines for automatic inventory collection.
       </PageHelp>
 
       {/* Scan Type Selector */}
@@ -447,7 +447,7 @@ export default function DiscoveryPage() {
             <div style={{ textAlign: "center", padding: 48, color: "var(--text-tertiary)" }}>
               <Bot size={36} style={{ margin: "0 auto 12px" }} />
               <div style={{ fontSize: 14, fontWeight: 600 }}>No agents registered</div>
-              <p style={{ fontSize: 12 }}>Deploy the ReconAPM agent on endpoints to auto-report inventory</p>
+              <p style={{ fontSize: 12 }}>Deploy the QS Asset agent on endpoints to auto-report inventory</p>
             </div>
           ) : (
             <table className="data-table">

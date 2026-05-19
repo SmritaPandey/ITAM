@@ -71,16 +71,20 @@ export default function LandingPage() {
 
       {/* NAV */}
       <nav className="landing-nav" style={{ position: "fixed", top: 0, left: 0, right: 0, zIndex: 100, padding: "14px 40px", display: "flex", alignItems: "center", justifyContent: "space-between", background: L ? "rgba(248,250,252,0.9)" : "rgba(10,14,26,0.9)", backdropFilter: "blur(16px)", borderBottom: `1px solid ${border}` }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-          <img src="/favicon.png" alt="ReconAPM" style={{ width: 34, height: 34, borderRadius: 9 }} />
-          <span style={{ fontSize: 17, fontWeight: 800, letterSpacing: "-0.03em" }}>ReconAPM</span>
-        </div>
+        <a href="/" style={{ display: "flex", alignItems: "center", gap: 10, textDecoration: "none", color: "inherit" }}>
+          <img src="/favicon.png" alt="QS Asset" style={{ width: 34, height: 34, borderRadius: 9 }} />
+          <span style={{ fontSize: 17, fontWeight: 800, letterSpacing: "-0.03em" }}>QS Asset</span>
+        </a>
         <div className="landing-nav-links" style={{ display: "flex", alignItems: "center", gap: 20 }}>
           {["Features","Modules","Compare","Security","Pricing"].map(t => (
             <a key={t} href={`#${t.toLowerCase()}`} style={{ fontSize: 13, fontWeight: 500, color: muted, textDecoration: "none" }}>{t}</a>
           ))}
+          <a href="/contact" style={{ fontSize: 13, fontWeight: 500, color: muted, textDecoration: "none" }}>Contact</a>
           <button onClick={toggle} style={{ width: 34, height: 34, borderRadius: 8, border: "none", cursor: "pointer", background: L ? "rgba(0,0,0,0.05)" : "rgba(255,255,255,0.06)", color: muted, display: "flex", alignItems: "center", justifyContent: "center" }}>
             {L ? <Moon size={15} /> : <Sun size={15} />}
+          </button>
+          <button onClick={() => router.push("/register")} style={{ padding: "8px 16px", borderRadius: 8, border: `1px solid ${border}`, background: "transparent", color: txt, fontSize: 13, fontWeight: 600, cursor: "pointer", marginRight: 4 }}>
+            Register
           </button>
           <button onClick={() => router.push("/login")} style={{ padding: "8px 20px", borderRadius: 8, border: "none", background: "linear-gradient(135deg,#06b6d4,#8b5cf6)", color: "white", fontSize: 13, fontWeight: 600, cursor: "pointer" }}>
             Sign In <ArrowRight size={13} style={{ marginLeft: 4, verticalAlign: "middle" }} />
@@ -103,8 +107,8 @@ export default function LandingPage() {
             The only platform that unifies IT &amp; non-IT asset management, ITSM ticketing, vulnerability scanning, network monitoring, CCTV, fleet GPS, VDI, patch management, and CMDB — in a single pane of glass.
           </p>
           <div style={{ display: "flex", gap: 12, justifyContent: "center", flexWrap: "wrap" }}>
-            <button onClick={() => router.push("/login")} style={{ padding: "13px 30px", borderRadius: 10, border: "none", background: "linear-gradient(135deg,#06b6d4,#8b5cf6)", color: "white", fontSize: 15, fontWeight: 700, cursor: "pointer", boxShadow: "0 8px 32px rgba(6,182,212,0.3)", display: "flex", alignItems: "center", gap: 8 }}>
-              Start Free Trial <ChevronRight size={18} />
+            <button onClick={() => router.push("/register")} style={{ padding: "13px 30px", borderRadius: 10, border: "none", background: "linear-gradient(135deg,#06b6d4,#8b5cf6)", color: "white", fontSize: 15, fontWeight: 700, cursor: "pointer", boxShadow: "0 8px 32px rgba(6,182,212,0.3)", display: "flex", alignItems: "center", gap: 8 }}>
+              Start Free — No Credit Card <ChevronRight size={18} />
             </button>
             <button onClick={() => document.getElementById("modules")?.scrollIntoView({ behavior: "smooth" })} style={{ padding: "13px 30px", borderRadius: 10, border: `1px solid ${border}`, background: card, color: txt, fontSize: 15, fontWeight: 600, cursor: "pointer", display: "flex", alignItems: "center", gap: 8 }}>
               <Globe size={16} /> Explore 12+ Modules
@@ -128,10 +132,12 @@ export default function LandingPage() {
 
       {/* TRUST */}
       <div style={{ textAlign: "center", padding: "30px 0", borderTop: `1px solid ${border}`, borderBottom: `1px solid ${border}` }}>
-        <p style={{ fontSize: 11, textTransform: "uppercase", letterSpacing: "0.15em", color: muted, marginBottom: 16, fontWeight: 600 }}>Trusted by India&apos;s Leading Enterprises</p>
-        <div style={{ display: "flex", justifyContent: "center", gap: 48, flexWrap: "wrap", opacity: 0.35 }}>
-          {["Tata","Infosys","Wipro","HCL","TCS","Reliance"].map(n => (
-            <div key={n} style={{ fontSize: 18, fontWeight: 700, letterSpacing: "0.05em", color: muted }}>{n}</div>
+        <p style={{ fontSize: 11, textTransform: "uppercase", letterSpacing: "0.15em", color: muted, marginBottom: 16, fontWeight: 600 }}>Built for Enterprise Security Standards</p>
+        <div style={{ display: "flex", justifyContent: "center", gap: 32, flexWrap: "wrap" }}>
+          {["SOC 2 Type II","ISO 27001","DPDP Act 2023","ITIL v4","SHA-256 Audit","RBAC + MFA"].map(n => (
+            <div key={n} style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, fontWeight: 600, color: muted, opacity: 0.7 }}>
+              <CheckCircle2 size={14} color="#10b981" /> {n}
+            </div>
           ))}
         </div>
       </div>
@@ -140,7 +146,7 @@ export default function LandingPage() {
       <section id="modules" className="landing-section" style={{ padding: "70px 40px", maxWidth: 1200, margin: "0 auto" }}>
         <div style={{ textAlign: "center", marginBottom: 48 }}>
           <h2 style={{ fontSize: 34, fontWeight: 800, letterSpacing: "-0.03em", marginBottom: 10 }}>12 Modules. One Unified Platform.</h2>
-          <p style={{ fontSize: 15, color: muted, maxWidth: 600, margin: "0 auto" }}>Replace 6+ point solutions with ReconAPM. Every module is deeply integrated — assets flow into tickets, scans trigger patches, and everything feeds the CMDB.</p>
+          <p style={{ fontSize: 15, color: muted, maxWidth: 600, margin: "0 auto" }}>Replace 6+ point solutions with QS Asset. Every module is deeply integrated — assets flow into tickets, scans trigger patches, and everything feeds the CMDB.</p>
         </div>
         <div className="landing-modules-grid" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(280px,1fr))", gap: 14 }}>
           {MODULES.map(m => {
@@ -165,14 +171,14 @@ export default function LandingPage() {
       <section id="compare" style={{ padding: "60px 40px", maxWidth: 900, margin: "0 auto" }}>
         <div style={{ textAlign: "center", marginBottom: 36 }}>
           <h2 style={{ fontSize: 30, fontWeight: 800, marginBottom: 8 }}>How We Compare</h2>
-          <p style={{ fontSize: 14, color: muted }}>ReconAPM vs. industry leaders — more features at a fraction of the cost.</p>
+          <p style={{ fontSize: 14, color: muted }}>QS Asset vs. industry leaders — more features at a fraction of the cost.</p>
         </div>
         <div style={{ borderRadius: 14, overflow: "hidden", border: `1px solid ${border}` }}>
           <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
             <thead>
               <tr style={{ background: L ? "#f1f5f9" : "rgba(15,23,42,0.6)" }}>
                 <th style={{ textAlign: "left", padding: "12px 16px", fontWeight: 600 }}>Feature</th>
-                <th style={{ padding: "12px 16px", fontWeight: 700, color: "#06b6d4" }}>ReconAPM</th>
+                <th style={{ padding: "12px 16px", fontWeight: 700, color: "#06b6d4" }}>QS Asset</th>
                 <th style={{ padding: "12px 16px", fontWeight: 600, color: muted }}>Ivanti</th>
                 <th style={{ padding: "12px 16px", fontWeight: 600, color: muted }}>ManageEngine</th>
               </tr>
@@ -243,8 +249,8 @@ export default function LandingPage() {
                   <CheckCircle2 size={14} color="#10b981" /> {f}
                 </div>
               ))}
-              <button onClick={() => router.push("/login")} style={{ width: "100%", marginTop: 16, padding: "11px 0", borderRadius: 10, border: p.popular ? "none" : `1px solid ${border}`, background: p.popular ? "linear-gradient(135deg,#06b6d4,#8b5cf6)" : "transparent", color: p.popular ? "white" : txt, fontSize: 14, fontWeight: 700, cursor: "pointer" }}>
-                Get Started
+              <button onClick={() => router.push(p.name === "Enterprise" ? "/contact" : "/register")} style={{ width: "100%", marginTop: 16, padding: "11px 0", borderRadius: 10, border: p.popular ? "none" : `1px solid ${border}`, background: p.popular ? "linear-gradient(135deg,#06b6d4,#8b5cf6)" : "transparent", color: p.popular ? "white" : txt, fontSize: 14, fontWeight: 700, cursor: "pointer" }}>
+                {p.name === "Enterprise" ? "Contact Sales" : "Get Started Free"}
               </button>
             </div>
           ))}
@@ -256,26 +262,81 @@ export default function LandingPage() {
         <div style={{ maxWidth: 700, margin: "0 auto", padding: 44, borderRadius: 18, background: "linear-gradient(135deg,rgba(6,182,212,0.08),rgba(139,92,246,0.08))", border: `1px solid ${border}` }}>
           <h2 style={{ fontSize: 26, fontWeight: 800, marginBottom: 10 }}>Ready to Take Command?</h2>
           <p style={{ fontSize: 14, color: muted, marginBottom: 24, maxWidth: 500, margin: "0 auto 24px" }}>Join enterprises managing 50,000+ assets with complete visibility, automated security, and regulatory compliance.</p>
-          <button onClick={() => router.push("/login")} style={{ padding: "13px 36px", borderRadius: 10, border: "none", background: "linear-gradient(135deg,#06b6d4,#8b5cf6)", color: "white", fontSize: 15, fontWeight: 700, cursor: "pointer", boxShadow: "0 8px 32px rgba(6,182,212,0.3)" }}>
-            Start Free Trial <ArrowRight size={17} style={{ marginLeft: 6, verticalAlign: "middle" }} />
-          </button>
+          <div style={{ display: "flex", gap: 12, justifyContent: "center", flexWrap: "wrap" }}>
+            <button onClick={() => router.push("/register")} style={{ padding: "13px 36px", borderRadius: 10, border: "none", background: "linear-gradient(135deg,#06b6d4,#8b5cf6)", color: "white", fontSize: 15, fontWeight: 700, cursor: "pointer", boxShadow: "0 8px 32px rgba(6,182,212,0.3)" }}>
+              Create Free Account <ArrowRight size={17} style={{ marginLeft: 6, verticalAlign: "middle" }} />
+            </button>
+            <button onClick={() => router.push("/contact")} style={{ padding: "13px 28px", borderRadius: 10, border: `1px solid ${border}`, background: "transparent", color: txt, fontSize: 15, fontWeight: 600, cursor: "pointer" }}>
+              Talk to Sales
+            </button>
+          </div>
+          <p style={{ fontSize: 11, color: muted, marginTop: 14, opacity: 0.7 }}>Free forever for up to 100 assets • No credit card required • Setup in 2 minutes</p>
         </div>
       </section>
 
+      {/* FAQ */}
+      <section style={{ padding: "60px 40px", maxWidth: 800, margin: "0 auto" }}>
+        <div style={{ textAlign: "center", marginBottom: 36 }}>
+          <h2 style={{ fontSize: 28, fontWeight: 800, marginBottom: 8 }}>Frequently Asked Questions</h2>
+          <p style={{ fontSize: 14, color: muted }}>Everything you need to know about QS Asset Management.</p>
+        </div>
+        {[
+          { q: "Is there really a free plan?", a: "Yes — the Starter plan is free forever. You get up to 100 assets, 5 users, IT asset tracking, basic reports, and email support. No credit card required." },
+          { q: "Can I deploy on my own servers?", a: "Absolutely. QS Asset supports both cloud SaaS and on-premise deployment via Docker. Your data stays on your infrastructure with full control." },
+          { q: "How does network scanning work?", a: "We support agent-based monitoring (install our lightweight agent on endpoints) and agentless scanning via SNMP, ICMP, Nmap, and ARP. Both methods auto-discover devices on your network." },
+          { q: "Is my data secure and compliant?", a: "All data is encrypted at rest (AES-256) and in transit (TLS 1.3). We support DPDP Act 2023, SOC 2 Type II, and ISO 27001 compliance standards. Multi-tenant RBAC ensures strict data isolation." },
+          { q: "How long does setup take?", a: "For SaaS — register and start scanning in under 2 minutes. For on-premise — deploy with Docker in under 10 minutes using our one-command setup script." },
+          { q: "Can I migrate from ManageEngine, Ivanti, or ServiceNow?", a: "Yes. QS Asset supports CSV bulk import. Export your assets from your current tool and import them directly. We also provide assisted migration for Enterprise plans." },
+        ].map((faq, i) => (
+          <details key={i} style={{ marginBottom: 8, padding: "16px 20px", borderRadius: 10, background: card, border: `1px solid ${border}`, cursor: "pointer" }}>
+            <summary style={{ fontSize: 14, fontWeight: 600, listStyle: "none", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              {faq.q} <ChevronRight size={14} style={{ color: muted, flexShrink: 0, transition: "transform 0.2s" }} />
+            </summary>
+            <p style={{ fontSize: 13, color: muted, lineHeight: 1.8, marginTop: 10, paddingTop: 10, borderTop: `1px solid ${border}` }}>{faq.a}</p>
+          </details>
+        ))}
+      </section>
+
       {/* FOOTER */}
-      <footer style={{ padding: "32px 40px 20px", borderTop: `1px solid ${border}`, maxWidth: 1200, margin: "0 auto" }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 16 }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-            <img src="/favicon.png" alt="ReconAPM" style={{ width: 26, height: 26, borderRadius: 7 }} />
-            <span style={{ fontSize: 13, fontWeight: 700 }}>ReconAPM</span>
-            <span style={{ fontSize: 11, color: muted, marginLeft: 8 }}>by NeurQ AI Labs</span>
+      <footer style={{ padding: "40px 40px 24px", borderTop: `1px solid ${border}`, maxWidth: 1200, margin: "0 auto" }}>
+        <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr 1fr 1fr", gap: 32, marginBottom: 28 }}>
+          <div>
+            <a href="/" style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12, textDecoration: "none", color: "inherit" }}>
+              <img src="/favicon.png" alt="QS Asset" style={{ width: 28, height: 28, borderRadius: 7 }} />
+              <span style={{ fontSize: 15, fontWeight: 800 }}>QS Asset</span>
+            </a>
+            <p style={{ fontSize: 12, color: muted, lineHeight: 1.7, maxWidth: 280 }}>Enterprise IT asset management, network monitoring, and security platform. Built by NeurQ AI Labs.</p>
           </div>
-          <p style={{ fontSize: 11, color: muted, margin: 0 }}>© 2026 NeurQ AI Labs Pvt Ltd. All rights reserved. Built in India 🇮🇳</p>
+          <div>
+            <h4 style={{ fontSize: 12, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 12, color: muted }}>Product</h4>
+            {[{l:"Features",h:"#features"},{l:"Modules",h:"#modules"},{l:"Pricing",h:"#pricing"},{l:"Documentation",h:"/docs"},{l:"API Docs",h:"/api/docs"}].map(a => (
+              <a key={a.l} href={a.h} style={{ display: "block", fontSize: 13, color: txt, textDecoration: "none", marginBottom: 8, opacity: 0.7 }}>{a.l}</a>
+            ))}
+          </div>
+          <div>
+            <h4 style={{ fontSize: 12, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 12, color: muted }}>Company</h4>
+            {[{l:"Contact",h:"/contact"},{l:"About NeurQ",h:"https://neurqai.com"},{l:"Careers",h:"/contact"}].map(a => (
+              <a key={a.l} href={a.h} style={{ display: "block", fontSize: 13, color: txt, textDecoration: "none", marginBottom: 8, opacity: 0.7 }}>{a.l}</a>
+            ))}
+          </div>
+          <div>
+            <h4 style={{ fontSize: 12, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 12, color: muted }}>Legal</h4>
+            {[{l:"Privacy Policy",h:"/privacy"},{l:"Terms of Service",h:"/terms"},{l:"Cookie Policy",h:"/cookies"},{l:"Security",h:"#security"}].map(a => (
+              <a key={a.l} href={a.h} style={{ display: "block", fontSize: 13, color: txt, textDecoration: "none", marginBottom: 8, opacity: 0.7 }}>{a.l}</a>
+            ))}
+          </div>
+        </div>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", paddingTop: 16, borderTop: `1px solid ${border}` }}>
+          <p style={{ fontSize: 11, color: muted, margin: 0 }}>&copy; 2026 NeurQ AI Labs Pvt Ltd. All rights reserved. Built in India 🇮🇳</p>
+          <div style={{ display: "flex", gap: 16 }}>
+            <a href="/privacy" style={{ fontSize: 11, color: muted, textDecoration: "none" }}>Privacy</a>
+            <a href="/terms" style={{ fontSize: 11, color: muted, textDecoration: "none" }}>Terms</a>
+            <a href="/contact" style={{ fontSize: 11, color: muted, textDecoration: "none" }}>Contact</a>
+          </div>
         </div>
       </footer>
 
       <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
         @media (max-width: 768px) {
           .landing-nav { padding: 10px 16px !important; }
           .landing-nav-links a { display: none; }

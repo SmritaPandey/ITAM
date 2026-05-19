@@ -126,17 +126,20 @@ export default function ProcurementPage() {
             <>
               <div className="stats-grid">
                 {[
-                  { label: "Active Vendors", value: dashboard.activeVendors, icon: <Building2 size={18} />, color: "#10b981" },
-                  { label: "Active Contracts", value: dashboard.contractsByStatus?.find((c:any) => c.status === "ACTIVE")?._count || 0, icon: <FileText size={18} />, color: "#3b82f6" },
-                  { label: "Pending POs", value: dashboard.posByStatus?.find((p:any) => p.status === "SUBMITTED")?._count || 0, icon: <Package size={18} />, color: "#f59e0b" },
-                  { label: "Expiring Soon", value: dashboard.expiringContracts, icon: <AlertTriangle size={18} />, color: "#ef4444" },
+                  { label: "Active Vendors", value: dashboard.activeVendors, icon: <Building2 size={18} />, color: "#10b981", targetTab: "Vendors" as const },
+                  { label: "Active Contracts", value: dashboard.contractsByStatus?.find((c:any) => c.status === "ACTIVE")?._count || 0, icon: <FileText size={18} />, color: "#3b82f6", targetTab: "Contracts" as const },
+                  { label: "Pending POs", value: dashboard.posByStatus?.find((p:any) => p.status === "SUBMITTED")?._count || 0, icon: <Package size={18} />, color: "#f59e0b", targetTab: "Purchase Orders" as const },
+                  { label: "Expiring Soon", value: dashboard.expiringContracts, icon: <AlertTriangle size={18} />, color: "#ef4444", targetTab: "Contracts" as const },
                 ].map(c => (
-                  <div key={c.label} className="stat-card">
+                  <div key={c.label} className="stat-card" style={{ cursor: "pointer", transition: "transform 0.15s" }}
+                    onClick={() => setTab(c.targetTab)}
+                    onMouseEnter={e => (e.currentTarget.style.transform = "translateY(-2px)")}
+                    onMouseLeave={e => (e.currentTarget.style.transform = "none")}>
                     <div className="stat-content">
                       <div className="stat-label">{c.label}</div>
                       <div className="stat-value" style={{ color: c.color }}>{c.value}</div>
                     </div>
-                    <div style={{ color: c.color, opacity: 0.6 }}>{c.icon}</div>
+                    <div style={{ color: c.color, opacity: 0.6, display: "flex", alignItems: "center", gap: 4 }}>{c.icon} <ChevronRight size={12} /></div>
                   </div>
                 ))}
               </div>

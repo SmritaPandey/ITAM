@@ -16,4 +16,17 @@ export class TenantsService {
   async create(data: { name: string; slug: string; domain?: string }) {
     return this.prisma.tenant.create({ data });
   }
+
+  async updateSettings(tenantId: string, body: any) {
+    const { name, domain, logoUrl, settings } = body;
+    return this.prisma.tenant.update({
+      where: { id: tenantId },
+      data: {
+        ...(name && { name }),
+        ...(domain && { domain }),
+        ...(logoUrl && { logoUrl }),
+        ...(settings && { settings }),
+      },
+    });
+  }
 }

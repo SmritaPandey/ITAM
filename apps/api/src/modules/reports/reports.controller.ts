@@ -1,10 +1,12 @@
-import { Controller, Get, Post, Patch, Delete, Body, Param, UseGuards, Request } from '@nestjs/common';
+import { Controller, Get, Post, Patch, Delete, Body, Param, Query, UseGuards, Request, Res } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { ReportsService } from './reports.service';
+import { ReportGeneratorService } from './report-generator.service';
 import { PrismaService } from '../../common/database/prisma.service';
+import type { Response } from 'express';
 
 @ApiTags('reports')
 @ApiBearerAuth()
@@ -13,6 +15,7 @@ import { PrismaService } from '../../common/database/prisma.service';
 export class ReportsController {
   constructor(
     private service: ReportsService,
+    private generator: ReportGeneratorService,
     private prisma: PrismaService,
   ) {}
 
@@ -49,6 +52,54 @@ export class ReportsController {
   @ApiOperation({ summary: 'Monthly asset & ticket trends' })
   async getMonthlyTrend(@Request() req: any) {
     return this.service.getMonthlyTrend(req.user.tenantId);
+  }
+
+  @Get('trend')
+  @Roles('Tenant Admin', 'IT Admin')
+  @ApiOperation({ summary: 'Monthly trends (alias)' })
+  async getMonthlyTrendAlias(@Request() req: any) {
+    return this.service.getMonthlyTrend(req.user.tenantId);
+  }
+
+  // ─── Report Generation & Download ────────────────────────────
+
+  @Get('generate/:type')
+  @Roles('Tenant Admin', 'IT Admin')
+  @ApiOperation({ summary: 'Generate a report (JSON data)' })
+  async generateReport(
+    @Request() req: any,
+    @Param('type') type: string,
+    @Query('startDate') startDate?: string,
+    @Query('endDate') endDate?: string,
+  ) {
+    return this.generator.generate(req.user.tenantId, type, { startDate, endDate });
+  }
+
+  @Get('download/:type')
+  @Roles('Tenant Admin', 'IT Admin')
+  @ApiOperation({ summary: 'Download a report as CSV or XLSX' })
+  async downloadReport(
+    @Request() req: any,
+    @Res() res: Response,
+    @Param('type') type: string,
+    @Query('format') format: string = 'csv',
+    @Query('startDate') startDate?: string,
+    @Query('endDate') endDate?: string,
+  ) {
+    const report = await this.generator.generate(req.user.tenantId, type, { startDate, endDate });
+    const filename = `${type}_report_${new Date().toISOString().split('T')[0]}`;
+
+    if (format === 'xlsx') {
+      const buffer = await this.generator.toXLSX(report);
+      res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+      res.setHeader('Content-Disposition', `attachment; filename="${filename}.xlsx"`);
+      res.send(buffer);
+    } else {
+      const csv = this.generator.toCSV(report);
+      res.setHeader('Content-Type', 'text/csv');
+      res.setHeader('Content-Disposition', `attachment; filename="${filename}.csv"`);
+      res.send(csv);
+    }
   }
 
   // ─── Scheduled Reports ────────────────────────────────────────

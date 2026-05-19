@@ -14,7 +14,22 @@ export class ProcurementService {
   }
 
   async createVendor(tenantId: string, data: any) {
-    return this.prisma.vendor.create({ data: { tenantId, ...data } });
+    const { name, email, contactEmail, phone, website, address, category, contactPerson, taxId, paymentTerms, notes } = data;
+    return this.prisma.vendor.create({
+      data: {
+        tenantId,
+        name: name || 'Unknown Vendor',
+        email: email || contactEmail,
+        ...(phone && { phone }),
+        ...(website && { website }),
+        ...(address && { address }),
+        ...(category && { category }),
+        ...(contactPerson && { contactPerson }),
+        ...(taxId && { taxId }),
+        ...(paymentTerms && { paymentTerms }),
+        ...(notes && { notes }),
+      },
+    });
   }
 
   async updateVendor(id: string, tenantId: string, data: any) {
@@ -43,15 +58,37 @@ export class ProcurementService {
   }
 
   async createContract(tenantId: string, data: any) {
-    const { startDate, endDate, value, ...rest } = data;
+    const { startDate, endDate, value, vendorName, vendorId: rawVendorId, title, name, type, currency, autoRenew, terms, notes } = data;
+
+    // Resolve vendorId from vendorName if needed
+    let vendorId = rawVendorId;
+    if (!vendorId && vendorName) {
+      const vendor = await this.prisma.vendor.findFirst({ where: { tenantId, name: vendorName } });
+      if (vendor) vendorId = vendor.id;
+      else {
+        // Auto-create vendor
+        const newVendor = await this.prisma.vendor.create({ data: { tenantId, name: vendorName } });
+        vendorId = newVendor.id;
+      }
+    }
+
+    if (!vendorId) throw new NotFoundException('Vendor not found — provide vendorId or vendorName');
+
     return this.prisma.contract.create({
       data: {
         tenantId,
-        ...rest,
+        vendorId,
+        title: title || name || 'Untitled Contract',
+        type: type || 'AMC',
         startDate: new Date(startDate),
         endDate: new Date(endDate),
         ...(value !== undefined && { value: parseFloat(value) }),
+        ...(currency && { currency }),
+        ...(autoRenew !== undefined && { autoRenew }),
+        ...(terms && { terms }),
+        ...(notes && { notes }),
       },
+      include: { vendor: { select: { name: true } } },
     });
   }
 
@@ -83,11 +120,42 @@ export class ProcurementService {
   async createPurchaseOrder(tenantId: string, userId: string, data: any) {
     const count = await this.prisma.purchaseOrder.count({ where: { tenantId } });
     const poNumber = `PO-${String(count + 1).padStart(5, '0')}`;
-    const { items, ...poData } = data;
+    const { items, vendorName, vendorId: rawVendorId, currency, notes } = data;
+
+    // Resolve vendorId
+    let vendorId = rawVendorId;
+    if (!vendorId && vendorName) {
+      const vendor = await this.prisma.vendor.findFirst({ where: { tenantId, name: vendorName } });
+      if (vendor) vendorId = vendor.id;
+      else {
+        const newVendor = await this.prisma.vendor.create({ data: { tenantId, name: vendorName } });
+        vendorId = newVendor.id;
+      }
+    }
+
+    if (!vendorId) throw new NotFoundException('Vendor not found — provide vendorId or vendorName');
+
     return this.prisma.$transaction(async (tx) => {
-      const po = await tx.purchaseOrder.create({ data: { tenantId, poNumber, requestedById: userId, ...poData } });
+      const po = await tx.purchaseOrder.create({
+        data: {
+          tenantId,
+          poNumber,
+          vendorId,
+          requestedById: userId,
+          ...(currency && { currency }),
+          ...(notes && { notes }),
+        },
+      });
       if (items?.length) {
-        await tx.purchaseOrderItem.createMany({ data: items.map((item: any) => ({ poId: po.id, ...item, totalPrice: (item.quantity || 1) * (item.unitPrice || 0) })) });
+        await tx.purchaseOrderItem.createMany({
+          data: items.map((item: any) => ({
+            poId: po.id,
+            description: item.description || 'Item',
+            quantity: item.quantity || 1,
+            unitPrice: item.unitPrice || 0,
+            totalPrice: (item.quantity || 1) * (item.unitPrice || 0),
+          })),
+        });
       }
       const total = items?.reduce((s: number, i: any) => s + (i.quantity || 1) * (i.unitPrice || 0), 0) || 0;
       return tx.purchaseOrder.update({ where: { id: po.id }, data: { totalAmount: total }, include: { items: true, vendor: true } });

@@ -29,6 +29,7 @@ export default function ProblemsPage() {
   const [saving, setSaving] = useState(false);
   const [workaroundInput, setWorkaroundInput] = useState("");
   const [resolutionInput, setResolutionInput] = useState("");
+  const [statusFilter, setStatusFilter] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -62,7 +63,7 @@ export default function ProblemsPage() {
     background: "var(--bg-primary)", color: "var(--text-primary)", fontSize: 13, fontFamily: "inherit", width: "100%",
   };
 
-  const items = tab === "known-errors" ? knownErrors : problems;
+  const items = tab === "known-errors" ? knownErrors : (statusFilter ? problems.filter(p => p.status === statusFilter) : problems);
 
   return (
     <>
@@ -83,8 +84,12 @@ export default function ProblemsPage() {
           {["OPEN", "ROOT_CAUSE_IDENTIFIED", "KNOWN_ERROR", "RESOLVED", "CLOSED"].map(s => {
             const count = stats.byStatus?.find((x: any) => x.status === s)?._count || 0;
             const sc = STATUS_CONFIG[s];
+            const isActive = statusFilter === s;
             return (
-              <div key={s} className="stat-card">
+              <div key={s} className="stat-card" style={{ cursor: "pointer", borderLeft: isActive ? `3px solid ${sc.color}` : undefined, transition: "transform 0.15s" }}
+                onClick={() => setStatusFilter(isActive ? null : s)}
+                onMouseEnter={e => (e.currentTarget.style.transform = "translateY(-2px)")}
+                onMouseLeave={e => (e.currentTarget.style.transform = "none")}>
                 <div className="stat-content">
                   <div className="stat-label">{sc.label}</div>
                   <div className="stat-value" style={{ color: sc.color }}>{count}</div>

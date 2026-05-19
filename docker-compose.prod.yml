@@ -1,5 +1,5 @@
 # ═══════════════════════════════════════════════════════════════════
-# ReconAPM — Full Local LAN Deployment
+# QS Asset Management — Full Local LAN Deployment
 # ═══════════════════════════════════════════════════════════════════
 #
 # USAGE:
@@ -23,14 +23,14 @@ services:
   # ─── PostgreSQL Database ───────────────────────────────────────
   postgres:
     image: postgres:16-alpine
-    container_name: reconapm-db
+    container_name: qsasset-db
     restart: unless-stopped
     ports:
       - "5434:5432"
     environment:
       POSTGRES_DB: assetcommand
       POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: ${DB_PASSWORD:-ReconAPM@2026}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-QSAsset@2026}
     volumes:
       - pgdata:/var/lib/postgresql/data
       - ./infra/docker/init-extensions.sql:/docker-entrypoint-initdb.d/init-extensions.sql
@@ -39,6 +39,28 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+
+  # ─── Redis Cache ───────────────────────────────────────────────
+  redis:
+    image: redis:7-alpine
+    container_name: qsasset-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    command: redis-server --maxmemory 256mb --maxmemory-policy allkeys-lru
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+    deploy:
+      resources:
+        limits:
+          memory: 300M
 
   # ─── NestJS API Backend ────────────────────────────────────────
   # Uses HOST NETWORK for direct LAN scanning (ping, nmap, arp)
@@ -46,22 +68,31 @@ services:
     build:
       context: ./apps/api
       dockerfile: Dockerfile
-    container_name: reconapm-api
+    container_name: qsasset-api
     restart: unless-stopped
     network_mode: host
     environment:
-      DATABASE_URL: postgresql://postgres:${DB_PASSWORD:-ReconAPM@2026}@localhost:5434/assetcommand
-      JWT_SECRET: ${JWT_SECRET:-reconapm-jwt-secret-2026-change-me}
-      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:-reconapm-refresh-secret-2026-change-me}
+      DATABASE_URL: postgresql://postgres:${DB_PASSWORD:-QSAsset@2026}@localhost:5434/assetcommand?connection_limit=20&statement_timeout=30000
+      REDIS_URL: redis://localhost:6379
+      JWT_SECRET: ${JWT_SECRET:-qsasset-jwt-secret-2026-change-me}
+      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:-qsasset-refresh-secret-2026-change-me}
       JWT_EXPIRATION: "15m"
       JWT_REFRESH_EXPIRATION: "7d"
       PORT: 4100
       NODE_ENV: production
       SEED_DB: ${SEED_DB:-false}
-      CORS_ORIGIN: "http://localhost:3100,http://${SERVER_IP:-0.0.0.0}:3100"
+      CORS_ORIGIN: "http://localhost:3100,http://${SERVER_IP:-0.0.0.0}:3100,https://qsasset.com,https://www.qsasset.com"
+      ENABLE_SNMP_TRAPS: ${ENABLE_SNMP_TRAPS:-false}
+      NODE_OPTIONS: "--max-old-space-size=768"
     depends_on:
       postgres:
         condition: service_healthy
+      redis:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          memory: 1G
 
   # ─── Next.js Frontend ─────────────────────────────────────────
   web:
@@ -70,13 +101,18 @@ services:
       dockerfile: Dockerfile
       args:
         NEXT_PUBLIC_API_URL: http://${SERVER_IP:-localhost}:4100/api/v1
-    container_name: reconapm-web
+    container_name: qsasset-web
     restart: unless-stopped
     ports:
       - "3100:3100"
     depends_on:
       - api
+    deploy:
+      resources:
+        limits:
+          memory: 512M
 
 volumes:
   pgdata:
     driver: local
+

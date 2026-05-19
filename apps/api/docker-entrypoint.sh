@@ -1,7 +1,7 @@
 #!/bin/sh
 set -e
 
-echo "🔧 ReconAPM API — Starting..."
+echo "🔧 QS Asset API — Starting..."
 
 # Apply database schema (works without migrations folder)
 echo "📦 Applying database schema..."

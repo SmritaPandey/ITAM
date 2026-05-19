@@ -32,6 +32,10 @@ import { ProcurementModule } from './modules/procurement/procurement.module';
 import { ChangesModule } from './modules/changes/changes.module';
 import { ProblemsModule } from './modules/problems/problems.module';
 import { ComplianceModule } from './modules/compliance/compliance.module';
+import { WebSocketModule } from './common/websocket/websocket.module';
+import { ContactModule } from './modules/contact/contact.module';
+import { AdminModule } from './modules/admin/admin.module';
+import { AnalyticsModule } from './modules/analytics/analytics.module';
 
 @Module({
   imports: [
@@ -77,6 +81,18 @@ import { ComplianceModule } from './modules/compliance/compliance.module';
     ProblemsModule,
     ComplianceModule,
     HealthModule,
+
+    // Public modules
+    ContactModule,
+
+    // Platform admin
+    AdminModule,
+
+    // Analytics (first-party, consent-gated)
+    AnalyticsModule,
+
+    // Real-time WebSocket
+    WebSocketModule,
   ],
   providers: [
     { provide: APP_INTERCEPTOR, useClass: AuditLogInterceptor },

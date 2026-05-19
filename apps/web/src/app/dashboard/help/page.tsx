@@ -17,9 +17,9 @@ const SECTIONS = [
       {
         id: "first-login",
         title: "First Login & Setup",
-        content: `## Welcome to ReconAPM
+        content: `## Welcome to QS Asset
 
-After deploying ReconAPM, you'll start at the **Setup** page (\`/setup\`) or the **Login** page.
+After deploying QS Asset, you'll start at the **Setup** page (\`/setup\`) or the **Login** page.
 
 ### Initial Setup (New Installation)
 1. Navigate to \`http://YOUR_SERVER:3100/setup\`
@@ -43,7 +43,7 @@ After deploying ReconAPM, you'll start at the **Setup** page (\`/setup\`) or the
         title: "Navigating the Dashboard",
         content: `## Dashboard Navigation
 
-The ReconAPM dashboard is organized into 5 sections:
+The QS Asset dashboard is organized into 5 sections:
 
 ### Overview
 - **Dashboard** — Real-time summary of all assets, tickets, and alerts
@@ -82,7 +82,7 @@ The ReconAPM dashboard is organized into 5 sections:
         title: "User Roles & Permissions",
         content: `## User Roles
 
-ReconAPM supports role-based access control (RBAC):
+QS Asset supports role-based access control (RBAC):
 
 | Role | Permissions |
 |------|------------|
@@ -123,7 +123,7 @@ Regular users access the portal at \`/portal\` where they can:
 4. Click **Save**
 
 ### Auto-Discovery (Recommended)
-Instead of manually adding assets, let ReconAPM discover them:
+Instead of manually adding assets, let QS Asset discover them:
 1. Go to **Discovery** → **New Scan**
 2. Enter your subnet (e.g., \`192.168.1.0/24\`)
 3. Select scan type (Ping Sweep, TCP Port Scan, or Full Scan)
@@ -185,7 +185,7 @@ When an asset goes down, the CMDB shows:
         title: "Network Discovery",
         content: `## Network Discovery
 
-ReconAPM can automatically discover all devices on your network.
+QS Asset can automatically discover all devices on your network.
 
 ### Scan Types
 | Type | Speed | Details |
@@ -247,8 +247,8 @@ The Security Scan page provides deep inspection using real tools:
       },
       {
         id: "agents",
-        title: "ReconAPM Agents",
-        content: `## ReconAPM Agent
+        title: "QS Asset Agents",
+        content: `## QS Asset Agent
 
 The agent is a lightweight script that runs on staff machines and reports system info.
 
@@ -263,7 +263,7 @@ The agent is a lightweight script that runs on staff machines and reports system
 - Running processes
 
 ### Deploying Agents
-1. Share the \`agent/\` folder from the ReconAPM installation
+1. Share the \`agent/\` folder from the QS Asset installation
 2. Staff run the appropriate script:
 
 **Windows:**
@@ -315,7 +315,7 @@ Go to **Discovery** → look for the agent entries showing:
 | **Low** | 24 hours | 72 hours |
 
 ### SLA Tracking
-ReconAPM automatically tracks SLA compliance:
+QS Asset automatically tracks SLA compliance:
 - **Response SLA** — time until first response
 - **Resolution SLA** — time until resolved
 - Red indicators show SLA breaches
@@ -360,7 +360,7 @@ Work orders can be linked to specific assets so you have a complete maintenance 
         title: "Network Monitoring (NMS)",
         content: `## Network Monitoring
 
-ReconAPM provides real-time monitoring of your network infrastructure.
+QS Asset provides real-time monitoring of your network infrastructure.
 
 ### Adding Devices
 1. Go to **Network (NMS)**
@@ -368,7 +368,7 @@ ReconAPM provides real-time monitoring of your network infrastructure.
 3. Enter: Name, IP address, device type
 
 ### Health Checks
-Every 5 minutes, ReconAPM automatically:
+Every 5 minutes, QS Asset automatically:
 - Pings all monitored devices
 - Checks for open ports
 - Updates Online/Offline/Warning status
@@ -530,11 +530,11 @@ docker compose -f docker-compose.prod.yml down -v
         content: `## Deploying Agents to Staff Machines
 
 ### Overview
-The ReconAPM Agent is a lightweight Node.js script that staff run on their laptops. It reports hardware, software, and security info back to the server.
+The QS Asset Agent is a lightweight Node.js script that staff run on their laptops. It reports hardware, software, and security info back to the server.
 
 ### Requirements
 - **Node.js 18+** on the staff machine
-- Network access to the ReconAPM server
+- Network access to the QS Asset server
 
 ### Setup Steps
 1. Copy the \`agent/\` folder to each staff machine

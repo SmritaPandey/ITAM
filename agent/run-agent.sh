@@ -1,12 +1,12 @@
 #!/bin/bash
 # ═══════════════════════════════════════════════════════════════
-# ReconAPM Agent — Mac/Linux Launcher
+# QS Asset Agent — Mac/Linux Launcher
 # ═══════════════════════════════════════════════════════════════
 # Usage: ./run-agent.sh 192.168.1.50 staff@acme.com Staff@123
 
 echo ""
 echo "╔══════════════════════════════════════════════════════╗"
-echo "║         ReconAPM Agent — Mac/Linux Setup             ║"
+echo "║         QS Asset Agent — Mac/Linux Setup             ║"
 echo "╚══════════════════════════════════════════════════════╝"
 echo ""
 
@@ -15,7 +15,7 @@ USER_EMAIL="${2:-$RECONAPM_USER}"
 USER_PASS="${3:-$RECONAPM_PASS}"
 
 if [ -z "$SERVER_IP" ]; then
-  read -p "Enter ReconAPM server IP (e.g., 192.168.1.50): " SERVER_IP
+  read -p "Enter QS Asset server IP (e.g., 192.168.1.50): " SERVER_IP
 fi
 if [ -z "$USER_EMAIL" ]; then
   read -p "Enter your email: " USER_EMAIL
@@ -34,7 +34,7 @@ fi
 
 echo "✅ Node.js $(node --version)"
 echo ""
-echo "🚀 Starting ReconAPM Agent..."
+echo "🚀 Starting QS Asset Agent..."
 echo "   Server: http://$SERVER_IP:4100"
 echo "   User:   $USER_EMAIL"
 echo ""

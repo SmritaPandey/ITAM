@@ -26,6 +26,15 @@ export class AssetsController {
     return this.assetsService.findAll(req.user.tenantId, query, req.user.sub, req.user.role);
   }
 
+  // ─── STATIC ROUTES (must come before :id) ─────────────────────────
+
+  @Get('types')
+  @Roles('*')
+  @ApiOperation({ summary: 'List asset types for this tenant' })
+  async getTypes(@Request() req: any) {
+    return this.assetsService.getAssetTypes(req.user.tenantId);
+  }
+
   @Get('dashboard')
   @Roles('Tenant Admin', 'IT Admin', 'Fleet Manager')
   @ApiOperation({ summary: 'Get asset dashboard statistics' })
@@ -39,6 +48,44 @@ export class AssetsController {
   async exportAssets(@Request() req: any, @Query() query: any) {
     return this.assetsService.exportAssets(req.user.tenantId, query);
   }
+
+  @Get('checked-out')
+  @Roles('Tenant Admin', 'IT Admin')
+  @ApiOperation({ summary: 'List all currently checked out assets' })
+  checkedOut(@Request() req: any) { return this.assetsService.getCheckedOut(req.user.tenantId); }
+
+  @Get('overdue')
+  @Roles('Tenant Admin', 'IT Admin')
+  @ApiOperation({ summary: 'List overdue asset returns' })
+  overdue(@Request() req: any) { return this.assetsService.getOverdue(req.user.tenantId); }
+
+  @Get('lookup')
+  @Roles('*')
+  @ApiOperation({ summary: 'Lookup asset by barcode/tag/serial' })
+  lookup(@Request() req: any, @Query('barcode') barcode: string) {
+    return this.assetsService.lookupByBarcode(req.user.tenantId, barcode);
+  }
+
+  @Get('warranty-expiring')
+  @Roles('Tenant Admin', 'IT Admin')
+  @ApiOperation({ summary: 'Assets with warranty expiring soon' })
+  warrantyExpiring(@Request() req: any, @Query('days') days?: string) {
+    return this.assetsService.getExpiringAssets(req.user.tenantId, 'warranty', days ? parseInt(days) : 30);
+  }
+
+  @Get('lease-expiring')
+  @Roles('Tenant Admin', 'IT Admin')
+  @ApiOperation({ summary: 'Assets with lease expiring soon' })
+  leaseExpiring(@Request() req: any, @Query('days') days?: string) {
+    return this.assetsService.getExpiringAssets(req.user.tenantId, 'lease', days ? parseInt(days) : 30);
+  }
+
+  @Get('attestation/pending')
+  @Roles('Tenant Admin', 'IT Admin')
+  @ApiOperation({ summary: 'List pending attestations' })
+  pendingAttestations(@Request() req: any) { return this.assetsService.getPendingAttestations(req.user.tenantId); }
+
+  // ─── PARAMETERIZED ROUTES ─────────────────────────────────────────
 
   @Get(':id')
   @Roles('*')
@@ -159,79 +206,5 @@ export class AssetsController {
     return this.assetsService.checkin(id, req.user.tenantId, req.user.sub, body);
   }
 
-  @Get('checked-out')
-  @Roles('Tenant Admin', 'IT Admin')
-  @ApiOperation({ summary: 'List all currently checked out assets' })
-  checkedOut(@Request() req: any) { return this.assetsService.getCheckedOut(req.user.tenantId); }
-
-  @Get('overdue')
-  @Roles('Tenant Admin', 'IT Admin')
-  @ApiOperation({ summary: 'List overdue asset returns' })
-  overdue(@Request() req: any) { return this.assetsService.getOverdue(req.user.tenantId); }
-
-  // ─── QR / BARCODE ──────────────────────────────────────────────────
-  @Get(':id/qr')
-  @Roles('Tenant Admin', 'IT Admin')
-  @ApiOperation({ summary: 'Get QR code data for asset' })
-  qr(@Param('id') id: string, @Request() req: any) {
-    return this.assetsService.getQrData(id, req.user.tenantId);
-  }
-
-  @Get('lookup')
-  @Roles('*')
-  @ApiOperation({ summary: 'Lookup asset by barcode/tag/serial' })
-  lookup(@Request() req: any, @Query('barcode') barcode: string) {
-    return this.assetsService.lookupByBarcode(req.user.tenantId, barcode);
-  }
-
-  // ─── BULK OPERATIONS ───────────────────────────────────────────────
-  @Post('bulk-update')
-  @Roles('Tenant Admin')
-  @ApiOperation({ summary: 'Bulk update multiple assets' })
-  bulkUpdate(@Request() req: any, @Body() body: any) {
-    return this.assetsService.bulkUpdate(req.user.tenantId, req.user.sub, body);
-  }
-
-  @Post('bulk-retire')
-  @Roles('Tenant Admin')
-  @ApiOperation({ summary: 'Bulk retire multiple assets' })
-  bulkRetire(@Request() req: any, @Body() body: { assetIds: string[] }) {
-    return this.assetsService.bulkRetire(req.user.tenantId, req.user.sub, body.assetIds);
-  }
-
-  // ─── ATTESTATION ───────────────────────────────────────────────────
-  @Post('attestation-campaign')
-  @Roles('Tenant Admin')
-  @ApiOperation({ summary: 'Create attestation campaign — all users must confirm assets' })
-  attestationCampaign(@Request() req: any, @Body() body: { campaignName: string }) {
-    return this.assetsService.createAttestationCampaign(req.user.tenantId, body.campaignName);
-  }
-
-  @Get('attestation/pending')
-  @Roles('Tenant Admin', 'IT Admin')
-  @ApiOperation({ summary: 'List pending attestations' })
-  pendingAttestations(@Request() req: any) { return this.assetsService.getPendingAttestations(req.user.tenantId); }
-
-  @Post('attestation/:id/respond')
-  @Roles('*')
-  @ApiOperation({ summary: 'Respond to attestation (confirm/lost/transferred)' })
-  respondAttestation(@Param('id') id: string, @Request() req: any, @Body() body: { response: string; notes?: string }) {
-    return this.assetsService.respondAttestation(id, req.user.tenantId, body.response, body.notes);
-  }
-
-  // ─── WARRANTY / LEASE EXPIRY ───────────────────────────────────────
-  @Get('warranty-expiring')
-  @Roles('Tenant Admin', 'IT Admin')
-  @ApiOperation({ summary: 'Assets with warranty expiring soon' })
-  warrantyExpiring(@Request() req: any, @Query('days') days?: string) {
-    return this.assetsService.getExpiringAssets(req.user.tenantId, 'warranty', days ? parseInt(days) : 30);
-  }
-
-  @Get('lease-expiring')
-  @Roles('Tenant Admin', 'IT Admin')
-  @ApiOperation({ summary: 'Assets with lease expiring soon' })
-  leaseExpiring(@Request() req: any, @Query('days') days?: string) {
-    return this.assetsService.getExpiringAssets(req.user.tenantId, 'lease', days ? parseInt(days) : 30);
-  }
 }
 

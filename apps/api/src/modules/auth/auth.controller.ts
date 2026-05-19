@@ -1,15 +1,20 @@
-import { Controller, Post, Get, UseGuards, Request, Body, HttpCode, HttpStatus } from '@nestjs/common';
+import { Controller, Post, Get, UseGuards, Request, Body, HttpCode, HttpStatus, Query } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBody } from '@nestjs/swagger';
 import { Throttle } from '@nestjs/throttler';
 import { AuthService } from './auth.service';
+import { EmailVerificationService } from './email-verification.service';
 import { LocalAuthGuard } from './guards/local-auth.guard';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import { LoginDto } from './dto/login.dto';
+import { RegisterDto } from './dto/register.dto';
 
 @ApiTags('auth')
 @Controller('auth')
 export class AuthController {
-  constructor(private authService: AuthService) {}
+  constructor(
+    private authService: AuthService,
+    private emailVerification: EmailVerificationService,
+  ) {}
 
   @Post('login')
   @UseGuards(LocalAuthGuard)
@@ -44,5 +49,30 @@ export class AuthController {
   @ApiOperation({ summary: 'Get current authenticated user profile' })
   async getProfile(@Request() req: any) {
     return this.authService.getProfile(req.user.sub);
+  }
+
+  @Post('register')
+  @Throttle({ default: { limit: 5, ttl: 60000 } })
+  @HttpCode(HttpStatus.CREATED)
+  @ApiOperation({ summary: 'Self-service tenant registration (public)' })
+  @ApiBody({ type: RegisterDto })
+  async register(@Body() body: RegisterDto) {
+    return this.authService.registerTenant(body);
+  }
+
+  // ─── Email Verification ──────────────────────────────────────────
+
+  @Get('verify-email')
+  @ApiOperation({ summary: 'Verify email address with token (public)' })
+  async verifyEmail(@Query('token') token: string) {
+    return this.emailVerification.verifyToken(token);
+  }
+
+  @Post('resend-verification')
+  @Throttle({ default: { limit: 3, ttl: 60000 } })
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Resend verification email (public)' })
+  async resendVerification(@Body() body: { email: string }) {
+    return this.emailVerification.resendVerification(body.email);
   }
 }

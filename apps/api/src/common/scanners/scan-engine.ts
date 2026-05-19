@@ -55,7 +55,7 @@ export class ScanEngine {
   static async getCapabilities(): Promise<ScanCapability[]> {
     const [nmap, snmp, ssh, arp, traceroute, ssl] = await Promise.all([
       NmapScanner.isAvailable(),
-      SnmpScanner.isAvailable(),
+      new SnmpScanner().isAvailable().then(available => ({ available, path: 'net-snmp' })),
       SshScanner.isAvailable(),
       ArpScanner.isAvailable(),
       TracerouteScanner.isAvailable(),
@@ -146,7 +146,7 @@ export class ScanEngine {
         return NmapScanner.standardScan(target);
       }
       case 'SNMP':
-        return SnmpScanner.walk(target, options?.community || 'public');
+        return new SnmpScanner().pollDevice(target, options?.community || 'public');
       case 'SSH':
         if (!options?.username) throw new Error('SSH scan requires credentials (username)');
         return SshScanner.scan(target, {

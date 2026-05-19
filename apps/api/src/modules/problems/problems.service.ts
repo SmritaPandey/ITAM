@@ -20,7 +20,18 @@ export class ProblemsService {
   async create(tenantId: string, data: any) {
     const count = await this.prisma.problem.count({ where: { tenantId } });
     const problemNumber = `PRB-${String(count + 1).padStart(5, '0')}`;
-    return this.prisma.problem.create({ data: { tenantId, problemNumber, ...data } });
+    const { title, description, priority, category, assignedToId } = data;
+    return this.prisma.problem.create({
+      data: {
+        tenantId,
+        problemNumber,
+        title: title || 'Untitled Problem',
+        ...(description && { description }),
+        ...(priority && { priority }),
+        ...(category && { category }),
+        ...(assignedToId && { assignedToId }),
+      },
+    });
   }
 
   async update(id: string, tenantId: string, data: any) {

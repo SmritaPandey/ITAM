@@ -1,10 +1,17 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, HttpException, HttpStatus } from '@nestjs/common';
 import { PrismaService } from '../../common/database/prisma.service';
+import { TenantMeteringService } from '../tenants/tenant-metering.service';
 import { Prisma } from '@prisma/client';
+
+const MAX_BULK_IMPORT = 500;
+const MAX_EXPORT_RECORDS = 10000;
 
 @Injectable()
 export class AssetsService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private metering: TenantMeteringService,
+  ) {}
 
   async findAll(tenantId: string, filters: {
     page?: number; limit?: number; status?: string; assetTypeId?: string;
@@ -54,6 +61,13 @@ export class AssetsService {
     return { data, total, page, limit, totalPages: Math.ceil(total / limit) };
   }
 
+  async getAssetTypes(tenantId: string) {
+    return this.prisma.assetType.findMany({
+      where: { tenantId },
+      orderBy: { name: 'asc' },
+    });
+  }
+
   async findById(id: string, tenantId: string) {
     const asset = await this.prisma.asset.findFirst({
       where: { id, tenantId, deletedAt: null },
@@ -75,6 +89,9 @@ export class AssetsService {
   }
 
   async create(tenantId: string, userId: string, data: any) {
+    // Enforce plan limits
+    await this.metering.checkAssetLimit(tenantId);
+
     const asset = await this.prisma.asset.create({
       data: {
         ...data,
@@ -165,6 +182,18 @@ export class AssetsService {
 
   async bulkImport(tenantId: string, userId: string, assets: any[]) {
     const results = { imported: 0, failed: 0, errors: [] as string[] };
+
+    // Cap batch size to prevent OOM
+    if (assets.length > MAX_BULK_IMPORT) {
+      return { ...results, errors: [`Import limited to ${MAX_BULK_IMPORT} rows per batch. You sent ${assets.length}.`] };
+    }
+
+    // Check if plan has room for this many assets
+    const usage = await this.metering.getUsage(tenantId);
+    const remaining = usage.usage.assets.limit - usage.usage.assets.current;
+    if (remaining < assets.length && usage.usage.assets.limit !== Infinity) {
+      return { ...results, errors: [`Plan limit: ${usage.usage.assets.limit} assets. Current: ${usage.usage.assets.current}. Can import max ${remaining} more.`] };
+    }
 
     // Get first asset type as default
     const defaultType = await this.prisma.assetType.findFirst({ where: { tenantId } });
@@ -259,6 +288,15 @@ export class AssetsService {
     if (filters.status) where.status = filters.status;
     if (filters.assetTypeId) where.assetTypeId = filters.assetTypeId;
 
+    // Cap export to prevent OOM on large tenants
+    const count = await this.prisma.asset.count({ where });
+    if (count > MAX_EXPORT_RECORDS) {
+      throw new HttpException(
+        `Export limited to ${MAX_EXPORT_RECORDS} records. Current count: ${count}. Please use filters to narrow your export.`,
+        HttpStatus.PAYLOAD_TOO_LARGE,
+      );
+    }
+
     const assets = await this.prisma.asset.findMany({
       where,
       include: {
@@ -268,6 +306,7 @@ export class AssetsService {
         assignedTo: { select: { firstName: true, lastName: true, email: true } },
       },
       orderBy: { name: 'asc' },
+      take: MAX_EXPORT_RECORDS,
     });
 
     // Return CSV-ready flat records

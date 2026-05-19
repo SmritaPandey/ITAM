@@ -60,43 +60,43 @@ export class NmapScanner {
 
   /**
    * Quick host discovery — ping sweep only (fast, no port scan)
-   * Equivalent to: nmap -sn <subnet>
+   * Uses -sT -Pn for unprivileged container compatibility
    */
   static async pingSweep(subnet: string, timeout = 60000): Promise<NmapScanResult> {
-    return this.runScan(`nmap -sn ${subnet} -oX -`, 'PING_SWEEP', timeout);
+    return this.runScan(`nmap --unprivileged -sn -PE ${subnet} -oX -`, 'PING_SWEEP', timeout);
   }
 
   /**
    * Standard scan — top 1000 TCP ports with service detection
-   * Equivalent to: nmap -sV <target>
+   * Uses -sT (TCP connect) for unprivileged environments
    */
   static async standardScan(target: string, timeout = 120000): Promise<NmapScanResult> {
-    return this.runScan(`nmap -sV --top-ports 1000 ${target} -oX -`, 'STANDARD', timeout);
+    return this.runScan(`nmap --unprivileged -sT -sV --top-ports 1000 ${target} -oX -`, 'STANDARD', timeout);
   }
 
   /**
    * Quick scan — top 100 ports, faster
-   * Equivalent to: nmap -F <target>
+   * Uses -sT (TCP connect) for unprivileged environments
    */
   static async quickScan(target: string, timeout = 60000): Promise<NmapScanResult> {
-    return this.runScan(`nmap -F -sV ${target} -oX -`, 'QUICK', timeout);
+    return this.runScan(`nmap --unprivileged -sT -F -sV ${target} -oX -`, 'QUICK', timeout);
   }
 
   /**
-   * Deep scan — all 65535 TCP ports + OS detection + version detection + scripts
-   * Equivalent to: nmap -A -p- <target>
-   * WARNING: This is slow and aggressive
+   * Deep scan — all 65535 TCP ports + version detection + scripts
+   * Uses -sT (TCP connect) for unprivileged environments
+   * NOTE: -O (OS detection) skipped as it requires raw sockets
    */
   static async deepScan(target: string, timeout = 300000): Promise<NmapScanResult> {
-    return this.runScan(`nmap -A -p- --max-retries 2 ${target} -oX -`, 'DEEP', timeout);
+    return this.runScan(`nmap --unprivileged -sT -sV -sC -p- --max-retries 2 ${target} -oX -`, 'DEEP', timeout);
   }
 
   /**
    * Vulnerability scan — runs default NSE scripts for known CVEs
-   * Equivalent to: nmap --script vuln <target>
+   * Uses -sT (TCP connect) for unprivileged environments
    */
   static async vulnScan(target: string, timeout = 180000): Promise<NmapScanResult> {
-    return this.runScan(`nmap -sV --script vuln ${target} -oX -`, 'VULN', timeout);
+    return this.runScan(`nmap --unprivileged -sT -sV --script vuln ${target} -oX -`, 'VULN', timeout);
   }
 
   /**
@@ -107,11 +107,11 @@ export class NmapScanner {
   }
 
   /**
-   * Subnet discovery with OS detection
-   * Equivalent to: nmap -O -sV <subnet>
+   * Subnet discovery with service detection
+   * Uses -sT (TCP connect) for unprivileged environments
    */
   static async subnetScan(subnet: string, timeout = 180000): Promise<NmapScanResult> {
-    return this.runScan(`nmap -O -sV --top-ports 100 ${subnet} -oX -`, 'SUBNET', timeout);
+    return this.runScan(`nmap --unprivileged -sT -sV --top-ports 100 ${subnet} -oX -`, 'SUBNET', timeout);
   }
 
   // ─── Internal ────────────────────────────────────────────────────

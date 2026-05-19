@@ -1,175 +1,126 @@
-import { Logger } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { exec } from 'child_process';
 import { promisify } from 'util';
 
 const execAsync = promisify(exec);
 
-export interface SnmpResult {
+export interface SnmpDeviceInfo {
   ip: string;
-  sysName?: string;
   sysDescr?: string;
-  sysLocation?: string;
+  sysName?: string;
+  sysUpTime?: number;
   sysContact?: string;
-  sysObjectID?: string;
-  uptime?: string;
-  deviceType?: string;
+  sysLocation?: string;
   interfaces?: SnmpInterface[];
-  arpTable?: { ip: string; mac: string }[];
-  raw?: Record<string, string>;
+  cpuLoad?: number;
+  memoryPercent?: number;
 }
 
 export interface SnmpInterface {
   index: number;
   name: string;
-  type: string;
-  speed: string;
-  status: 'up' | 'down' | 'unknown';
-  macAddress?: string;
-  inOctets?: number;
-  outOctets?: number;
+  speed: number;
+  adminStatus: string;
+  operStatus: string;
+  inOctets: number;
+  outOctets: number;
 }
 
-const STANDARD_OIDS: Record<string, string> = {
+const OID = {
   sysDescr: '1.3.6.1.2.1.1.1.0',
-  sysObjectID: '1.3.6.1.2.1.1.2.0',
+  sysName: '1.3.6.1.2.1.1.5.0',
   sysUpTime: '1.3.6.1.2.1.1.3.0',
   sysContact: '1.3.6.1.2.1.1.4.0',
-  sysName: '1.3.6.1.2.1.1.5.0',
   sysLocation: '1.3.6.1.2.1.1.6.0',
-};
-
-const IF_OIDS = {
   ifDescr: '1.3.6.1.2.1.2.2.1.2',
-  ifType: '1.3.6.1.2.1.2.2.1.3',
   ifSpeed: '1.3.6.1.2.1.2.2.1.5',
+  ifAdminStatus: '1.3.6.1.2.1.2.2.1.7',
   ifOperStatus: '1.3.6.1.2.1.2.2.1.8',
-  ifPhysAddress: '1.3.6.1.2.1.2.2.1.6',
   ifInOctets: '1.3.6.1.2.1.2.2.1.10',
   ifOutOctets: '1.3.6.1.2.1.2.2.1.16',
+  hrProcessorLoad: '1.3.6.1.2.1.25.3.3.1.2',
 };
 
-export class SnmpScanner {
-  private static readonly logger = new Logger('SnmpScanner');
+const IF_STATUS: Record<number, string> = { 1: 'up', 2: 'down', 3: 'testing' };
 
-  static async isAvailable(): Promise<{ available: boolean; path?: string }> {
-    try {
-      const { stdout } = await execAsync('which snmpwalk', { timeout: 3000 });
-      return { available: true, path: stdout.trim() };
-    } catch {
-      return { available: false };
+@Injectable()
+export class SnmpScanner {
+  private readonly logger = new Logger(SnmpScanner.name);
+  private snmpModule: any = null;
+
+  private async getSnmp() {
+    if (!this.snmpModule) {
+      try { this.snmpModule = await import('net-snmp'); } catch { return null; }
     }
+    return this.snmpModule;
   }
 
-  /**
-   * Full SNMP walk — collects system info, interfaces, and ARP table
-   */
-  static async walk(ip: string, community = 'public', version = '2c', timeout = 30000): Promise<SnmpResult> {
-    const result: SnmpResult = { ip, raw: {} };
+  async pollDevice(ip: string, community = 'public', timeout = 5000): Promise<SnmpDeviceInfo | null> {
+    const snmp = await this.getSnmp();
+    if (!snmp) return this.fallbackPoll(ip);
 
-    // System info
-    for (const [key, oid] of Object.entries(STANDARD_OIDS)) {
-      try {
-        const { stdout } = await execAsync(
-          `snmpget -v${version} -c ${community} -t 5 -r 1 ${ip} ${oid} 2>/dev/null`,
-          { timeout: 8000 },
-        );
-        const value = this.parseSnmpValue(stdout);
-        if (value) {
-          result.raw![key] = value;
-          if (key === 'sysName') result.sysName = value;
-          else if (key === 'sysDescr') result.sysDescr = value;
-          else if (key === 'sysLocation') result.sysLocation = value;
-          else if (key === 'sysContact') result.sysContact = value;
-          else if (key === 'sysObjectID') result.sysObjectID = value;
-          else if (key === 'sysUpTime') result.uptime = value;
+    return new Promise((resolve) => {
+      const session = snmp.createSession(ip, community, { timeout, retries: 1, version: snmp.Version2c });
+      const result: SnmpDeviceInfo = { ip };
+      const sysOids = [OID.sysDescr, OID.sysName, OID.sysUpTime, OID.sysContact, OID.sysLocation];
+
+      session.get(sysOids, (error: any, varbinds: any[]) => {
+        if (error) { try { session.close(); } catch {} resolve(this.fallbackPoll(ip)); return; }
+        for (const vb of varbinds) {
+          if (snmp.isVarbindError(vb)) continue;
+          const val = vb.value?.toString();
+          if (vb.oid === OID.sysDescr) result.sysDescr = val;
+          else if (vb.oid === OID.sysName) result.sysName = val;
+          else if (vb.oid === OID.sysUpTime) result.sysUpTime = parseInt(val) || 0;
+          else if (vb.oid === OID.sysContact) result.sysContact = val;
+          else if (vb.oid === OID.sysLocation) result.sysLocation = val;
         }
-      } catch {}
-    }
 
-    // Classify device type
-    result.deviceType = this.classifyDevice(result);
+        // Walk interfaces
+        const ifaces: Map<number, Partial<SnmpInterface>> = new Map();
+        const walkOids = [OID.ifDescr, OID.ifSpeed, OID.ifAdminStatus, OID.ifOperStatus, OID.ifInOctets, OID.ifOutOctets];
+        let done = 0;
+        for (const base of walkOids) {
+          session.subtree(base, (vbs: any[]) => {
+            for (const vb of vbs) {
+              if (snmp.isVarbindError(vb)) continue;
+              const idx = parseInt(vb.oid.split('.').pop()!);
+              if (!ifaces.has(idx)) ifaces.set(idx, { index: idx });
+              const iface = ifaces.get(idx)!;
+              const numVal = typeof vb.value === 'number' ? vb.value : parseInt(vb.value?.toString()) || 0;
+              if (vb.oid.startsWith(OID.ifDescr)) iface.name = vb.value?.toString();
+              else if (vb.oid.startsWith(OID.ifSpeed)) iface.speed = numVal;
+              else if (vb.oid.startsWith(OID.ifAdminStatus)) iface.adminStatus = IF_STATUS[numVal] || 'unknown';
+              else if (vb.oid.startsWith(OID.ifOperStatus)) iface.operStatus = IF_STATUS[numVal] || 'unknown';
+              else if (vb.oid.startsWith(OID.ifInOctets)) iface.inOctets = numVal;
+              else if (vb.oid.startsWith(OID.ifOutOctets)) iface.outOctets = numVal;
+            }
+          }, () => {
+            done++;
+            if (done >= walkOids.length) {
+              result.interfaces = Array.from(ifaces.values()) as SnmpInterface[];
+              session.close();
+              resolve(result);
+            }
+          });
+        }
+      });
 
-    // Interfaces
+      setTimeout(() => { try { session.close(); } catch {} resolve(result); }, timeout + 3000);
+    });
+  }
+
+  private async fallbackPoll(ip: string): Promise<SnmpDeviceInfo> {
+    const result: SnmpDeviceInfo = { ip };
     try {
-      const { stdout } = await execAsync(
-        `snmpwalk -v${version} -c ${community} -t 5 -r 1 ${ip} ${IF_OIDS.ifDescr} 2>/dev/null`,
-        { timeout },
-      );
-      const ifNames = this.parseSnmpTable(stdout);
-      const interfaces: SnmpInterface[] = [];
-
-      for (const [idx, name] of Object.entries(ifNames)) {
-        interfaces.push({
-          index: parseInt(idx),
-          name,
-          type: 'ethernet',
-          speed: 'N/A',
-          status: 'unknown',
-        });
-      }
-
-      // Get operational status
-      try {
-        const { stdout: statusOut } = await execAsync(
-          `snmpwalk -v${version} -c ${community} -t 5 -r 1 ${ip} ${IF_OIDS.ifOperStatus} 2>/dev/null`,
-          { timeout: 10000 },
-        );
-        const statuses = this.parseSnmpTable(statusOut);
-        for (const [idx, val] of Object.entries(statuses)) {
-          const iface = interfaces.find(i => i.index === parseInt(idx));
-          if (iface) iface.status = val.includes('1') ? 'up' : 'down';
-        }
-      } catch {}
-
-      result.interfaces = interfaces;
-    } catch {
-      this.logger.debug(`No interface data from ${ip}`);
-    }
-
-    // ARP table
-    try {
-      const { stdout } = await execAsync(
-        `snmpwalk -v${version} -c ${community} -t 5 -r 1 ${ip} 1.3.6.1.2.1.4.22.1.2 2>/dev/null`,
-        { timeout: 10000 },
-      );
-      const arpEntries: { ip: string; mac: string }[] = [];
-      for (const line of stdout.split('\n')) {
-        const ipMatch = line.match(/\.(\d+\.\d+\.\d+\.\d+)\s*=/);
-        const macMatch = line.match(/STRING:\s*([0-9a-fA-F:]+)/i) || line.match(/Hex-STRING:\s*([0-9a-fA-F ]+)/i);
-        if (ipMatch && macMatch) {
-          arpEntries.push({ ip: ipMatch[1], mac: macMatch[1].trim() });
-        }
-      }
-      result.arpTable = arpEntries;
-    } catch {}
-
+      const { stdout } = await execAsync(`ping -c 1 -W 2 ${ip}`, { timeout: 5000 });
+      const match = stdout.match(/time[=<]([\d.]+)/);
+      if (match) { result.sysName = ip; result.sysDescr = `Reachable (${match[1]}ms, no SNMP)`; }
+    } catch { result.sysDescr = 'Unreachable'; }
     return result;
   }
 
-  private static parseSnmpValue(output: string): string | null {
-    const match = output.match(/=\s*(?:STRING|INTEGER|OID|Timeticks|Counter\d*|Gauge\d*):\s*"?([^"\n]+)"?\s*$/m);
-    return match ? match[1].trim() : null;
-  }
-
-  private static parseSnmpTable(output: string): Record<string, string> {
-    const table: Record<string, string> = {};
-    for (const line of output.split('\n')) {
-      const match = line.match(/\.(\d+)\s*=\s*(?:STRING|INTEGER):\s*"?([^"\n]+)"?/);
-      if (match) table[match[1]] = match[2].trim();
-    }
-    return table;
-  }
-
-  private static classifyDevice(result: SnmpResult): string {
-    const desc = (result.sysDescr || '').toLowerCase();
-    const oid = result.sysObjectID || '';
-    if (desc.includes('cisco')) return oid.includes('1.3.6.1.4.1.9.1') ? 'cisco-router' : 'cisco-switch';
-    if (desc.includes('juniper')) return 'juniper-device';
-    if (desc.includes('fortigate') || desc.includes('fortinet')) return 'firewall';
-    if (desc.includes('printer') || desc.includes('laserjet') || desc.includes('xerox')) return 'printer';
-    if (desc.includes('ups') || desc.includes('apc')) return 'ups';
-    if (desc.includes('linux')) return 'linux-server';
-    if (desc.includes('windows')) return 'windows-server';
-    return 'unknown';
+  async isAvailable(): Promise<boolean> {
+    return (await this.getSnmp()) !== null;
   }
 }

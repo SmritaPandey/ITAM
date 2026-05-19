@@ -1,16 +1,26 @@
-import { Controller, Get, Post, Patch, Delete, Body, Param, UseGuards, Request } from '@nestjs/common';
+import { Controller, Get, Post, Patch, Delete, Body, Param, Query, UseGuards, Request } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { MonitoringService } from './monitoring.service';
+import { SnmpPollerService } from './snmp-poller.service';
+import { SnmpTrapReceiverService } from './snmp-trap-receiver.service';
+import { OnvifDiscoveryService } from './onvif-discovery.service';
+import { VdiHypervisorService } from './vdi-hypervisor.service';
 
 @ApiTags('monitoring')
 @ApiBearerAuth()
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Controller('monitoring')
 export class MonitoringController {
-  constructor(private service: MonitoringService) {}
+  constructor(
+    private service: MonitoringService,
+    private snmpPoller: SnmpPollerService,
+    private trapReceiver: SnmpTrapReceiverService,
+    private onvifDiscovery: OnvifDiscoveryService,
+    private vdiHypervisor: VdiHypervisorService,
+  ) {}
 
   // ─── CCTV ─────────────────────────────────────────────────────
 
@@ -33,6 +43,13 @@ export class MonitoringController {
   @ApiOperation({ summary: 'Get camera events (motion, tamper, offline)' })
   async getCameraEvents(@Request() req: any, @Param('id') id: string) {
     return this.service.getCameraEvents(id, req.user.tenantId);
+  }
+
+  @Post('cameras/discover')
+  @Roles('Tenant Admin')
+  @ApiOperation({ summary: 'Discover ONVIF cameras on the network via WS-Discovery' })
+  async discoverCameras(@Request() req: any) {
+    return this.onvifDiscovery.discoverAndRegister(req.user.tenantId);
   }
 
   // ─── Network (NMS) ───────────────────────────────────────────
@@ -63,6 +80,21 @@ export class MonitoringController {
   @ApiOperation({ summary: 'Get recent SNMP traps and events' })
   async getTraps(@Request() req: any) {
     return this.service.getTraps(req.user.tenantId);
+  }
+
+  @Get('network/traps/live')
+  @Roles('Tenant Admin', 'IT Admin')
+  @ApiOperation({ summary: 'Get recent SNMP traps from the live trap receiver' })
+  async getLiveTraps(@Request() req: any, @Query('limit') limit?: string) {
+    const traps = await this.trapReceiver.getRecentTraps(req.user.tenantId, Number(limit) || 100);
+    return { traps, total: traps.length };
+  }
+
+  @Get('network/traps/stats')
+  @Roles('Tenant Admin', 'IT Admin')
+  @ApiOperation({ summary: 'Get SNMP trap receiver statistics' })
+  async getTrapStats() {
+    return this.trapReceiver.getStats();
   }
 
   @Post('network/scan')
@@ -109,6 +141,30 @@ export class MonitoringController {
     return this.service.deepScanDevice(id, req.user.tenantId);
   }
 
+  // ─── SNMP Polling ───────────────────────────────────────────
+
+  @Post('snmp/poll')
+  @Roles('Tenant Admin')
+  @ApiOperation({ summary: 'Trigger SNMP poll for all tenant devices' })
+  async snmpPollAll(@Request() req: any) {
+    await this.snmpPoller.pollTenantDevices(req.user.tenantId);
+    return { message: 'SNMP poll completed' };
+  }
+
+  @Post('snmp/devices/:id/poll')
+  @Roles('Tenant Admin', 'IT Admin')
+  @ApiOperation({ summary: 'SNMP poll a single device' })
+  async snmpPollDevice(@Request() req: any, @Param('id') id: string) {
+    return this.snmpPoller.pollDevice(id, req.user.tenantId);
+  }
+
+  @Get('snmp/devices/:id/history')
+  @Roles('Tenant Admin', 'IT Admin')
+  @ApiOperation({ summary: 'Get SNMP metrics history for charts' })
+  async snmpHistory(@Request() req: any, @Param('id') id: string, @Query('hours') hours?: string) {
+    return this.snmpPoller.getMetricsHistory(id, req.user.tenantId, Number(hours) || 24);
+  }
+
   // ─── VDI ──────────────────────────────────────────────────────
 
   @Get('vdi')
@@ -139,7 +195,42 @@ export class MonitoringController {
     return this.service.getVdiMetrics(req.user.tenantId);
   }
 
+  @Get('vdi/hypervisors')
+  @Roles('Tenant Admin')
+  @ApiOperation({ summary: 'Get configured hypervisors for this tenant' })
+  async getHypervisors(@Request() req: any) {
+    return this.vdiHypervisor.getHypervisors(req.user.tenantId);
+  }
+
+  @Post('vdi/sync')
+  @Roles('Tenant Admin')
+  @ApiOperation({ summary: 'Sync VMs from a hypervisor (VMware Horizon / Proxmox)' })
+  async syncHypervisor(@Request() req: any, @Body() body: any) {
+    return this.vdiHypervisor.syncHypervisor(req.user.tenantId, body);
+  }
+
   // ─── Device CRUD ──────────────────────────────────────────────
+
+  @Get('devices')
+  @Roles('Tenant Admin', 'IT Admin')
+  @ApiOperation({ summary: 'List all monitored devices' })
+  async getDevices(@Request() req: any) {
+    return this.service.getNetworkDevices(req.user.tenantId);
+  }
+
+  @Get('alerts')
+  @Roles('Tenant Admin', 'IT Admin')
+  @ApiOperation({ summary: 'Get monitoring alerts' })
+  async getAlerts(@Request() req: any) {
+    return this.service.getAlerts(req.user.tenantId);
+  }
+
+  @Get('topology')
+  @Roles('Tenant Admin', 'IT Admin')
+  @ApiOperation({ summary: 'Get network topology (shorthand)' })
+  async getTopologyShort(@Request() req: any) {
+    return this.service.getTopology(req.user.tenantId);
+  }
 
   @Post('devices')
   @Roles('Tenant Admin')
@@ -162,3 +253,4 @@ export class MonitoringController {
     return this.service.deleteDevice(id);
   }
 }
+

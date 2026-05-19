@@ -75,6 +75,8 @@ model Tenant {
   endpointPolicies    EndpointPolicy[]
   endpointChanges     EndpointChange[]
   agentBaselines      AgentBaseline[]
+  deviceMetricsHistory DeviceMetricsHistory[]
+  subscription        Subscription?
 
   @@map("tenants")
 }
@@ -146,6 +148,10 @@ model User {
   siteId       String?    @map("site_id") @db.Uuid
   roleId       String     @map("role_id") @db.Uuid
   status       UserStatus @default(ACTIVE)
+  isSuperAdmin Boolean    @default(false) @map("is_super_admin")
+  emailVerified Boolean   @default(false) @map("email_verified")
+  emailVerifyToken String? @map("email_verify_token")
+  emailVerifyExpiry DateTime? @map("email_verify_expiry")
   mfaEnabled   Boolean    @default(false) @map("mfa_enabled")
   mfaSecret    String?    @map("mfa_secret")
   lastLoginAt  DateTime?  @map("last_login_at")
@@ -935,6 +941,7 @@ model MonitoredDevice {
   updatedAt   DateTime            @updatedAt @map("updated_at")
 
   tenant      Tenant              @relation(fields: [tenantId], references: [id])
+  metricsHistory DeviceMetricsHistory[]
 
   @@index([tenantId, type])
   @@map("monitored_devices")
@@ -1487,3 +1494,84 @@ model AgentBaseline {
   @@map("agent_baselines")
 }
 
+// ─── Device Metrics History (SNMP Time-Series) ─────────────────────────────
+model DeviceMetricsHistory {
+  id          String   @id @default(uuid()) @db.Uuid
+  tenantId    String   @map("tenant_id") @db.Uuid
+  deviceId    String   @map("device_id") @db.Uuid
+  metrics     Json     @default("{}")  // { cpu, ram, ifInOctets, ifOutOctets, latency, uptime }
+  collectedAt DateTime @default(now()) @map("collected_at")
+
+  tenant      Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  device      MonitoredDevice @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+
+  @@index([deviceId, collectedAt])
+  @@index([tenantId])
+  @@map("device_metrics_history")
+}
+
+// ============================================================================
+// PLATFORM ADMIN — SUPPORT, SUBSCRIPTIONS & PAYMENTS
+// ============================================================================
+
+model ContactSubmission {
+  id        String    @id @default(uuid()) @db.Uuid
+  name      String
+  email     String
+  subject   String
+  message   String
+  status    String    @default("NEW")       // NEW, READ, REPLIED, ARCHIVED
+  reply     String?
+  repliedAt DateTime? @map("replied_at")
+  ipAddress String?   @map("ip_address")
+  userAgent String?   @map("user_agent")
+  tenantId  String?   @map("tenant_id") @db.Uuid
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+
+  @@index([status])
+  @@index([email])
+  @@map("contact_submissions")
+}
+
+model Subscription {
+  id              String     @id @default(uuid()) @db.Uuid
+  tenantId        String     @unique @map("tenant_id") @db.Uuid
+  plan            TenantPlan
+  status          String     @default("ACTIVE")   // ACTIVE, PAST_DUE, CANCELLED, TRIAL
+  startDate       DateTime   @default(now()) @map("start_date")
+  endDate         DateTime?  @map("end_date")
+  trialEndsAt     DateTime?  @map("trial_ends_at")
+  mrr             Decimal?   @db.Decimal(10, 2)
+  billingCycle    String?    @default("MONTHLY") @map("billing_cycle")  // MONTHLY, QUARTERLY, ANNUAL, CUSTOM
+  discountPercent Decimal?   @default(0) @db.Decimal(5, 2) @map("discount_percent")
+  discountNote    String?    @map("discount_note")
+  customPrice     Decimal?   @db.Decimal(10, 2) @map("custom_price")
+  notes           String?
+  createdAt       DateTime   @default(now()) @map("created_at")
+  updatedAt       DateTime   @updatedAt @map("updated_at")
+
+  tenant      Tenant     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  payments    Payment[]
+
+  @@map("subscriptions")
+}
+
+model Payment {
+  id             String       @id @default(uuid()) @db.Uuid
+  subscriptionId String       @map("subscription_id") @db.Uuid
+  amount         Decimal      @db.Decimal(10, 2)
+  currency       String       @default("INR")
+  status         String       @default("COMPLETED")  // COMPLETED, PENDING, FAILED, REFUNDED
+  method         String?                               // UPI, BANK_TRANSFER, RAZORPAY, MANUAL
+  referenceId    String?      @map("reference_id")
+  invoiceNumber  String?      @map("invoice_number")
+  notes          String?
+  paidAt         DateTime     @default(now()) @map("paid_at")
+  createdAt      DateTime     @default(now()) @map("created_at")
+
+  subscription   Subscription @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
+
+  @@index([subscriptionId])
+  @@map("payments")
+}

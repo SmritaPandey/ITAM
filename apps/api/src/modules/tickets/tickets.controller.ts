@@ -23,6 +23,28 @@ export class TicketsController {
     return this.ticketsService.findAll(req.user.tenantId, query, req.user.sub, req.user.role);
   }
 
+  @Get('stats')
+  @Roles('Tenant Admin', 'IT Admin')
+  @ApiOperation({ summary: 'Get ticket statistics' })
+  async getStats(@Request() req: any) {
+    return this.ticketsService.getStats(req.user.tenantId);
+  }
+
+  // SLA routes (static, before :id)
+  @Get('sla/policies')
+  @Roles('Tenant Admin', 'IT Admin')
+  @ApiOperation({ summary: 'List all SLA policies' })
+  async getSlaPolices(@Request() req: any) {
+    return this.slaService.findAll(req.user.tenantId);
+  }
+
+  @Get('sla/stats')
+  @Roles('Tenant Admin', 'IT Admin')
+  @ApiOperation({ summary: 'SLA compliance statistics' })
+  async getSlaStats(@Request() req: any) {
+    return this.slaService.getStats(req.user.tenantId);
+  }
+
   @Get(':id')
   @Roles('*')
   @ApiOperation({ summary: 'Get ticket details' })
@@ -40,6 +62,13 @@ export class TicketsController {
       await this.slaService.applySlaToTicket(ticket.id, req.user.tenantId, ticket.priority).catch(() => {});
     }
     return ticket;
+  }
+
+  @Get(':id/comments')
+  @Roles('*')
+  @ApiOperation({ summary: 'Get ticket comments' })
+  async getComments(@Request() req: any, @Param('id') id: string) {
+    return this.ticketsService.getTimeline(id, req.user.tenantId);
   }
 
   @Post(':id/comments')
@@ -75,22 +104,6 @@ export class TicketsController {
   @ApiOperation({ summary: 'Get ticket timeline/comments' })
   async getTimeline(@Request() req: any, @Param('id') id: string) {
     return this.ticketsService.getTimeline(id, req.user.tenantId);
-  }
-
-  // ─── SLA Policy Endpoints ──────────────────────────────────────
-
-  @Get('sla/policies')
-  @Roles('Tenant Admin', 'IT Admin')
-  @ApiOperation({ summary: 'List all SLA policies' })
-  async getSlaPolices(@Request() req: any) {
-    return this.slaService.findAll(req.user.tenantId);
-  }
-
-  @Get('sla/stats')
-  @Roles('Tenant Admin', 'IT Admin')
-  @ApiOperation({ summary: 'SLA compliance statistics' })
-  async getSlaStats(@Request() req: any) {
-    return this.slaService.getStats(req.user.tenantId);
   }
 
   @Post('sla/policies')

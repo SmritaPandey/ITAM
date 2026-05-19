@@ -1,10 +1,11 @@
-import { Injectable, UnauthorizedException } from '@nestjs/common';
+import { Injectable, UnauthorizedException, ForbiddenException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import * as bcrypt from 'bcryptjs';
 import { v4 as uuidv4 } from 'uuid';
 import { UsersService } from '../users/users.service';
 import { PrismaService } from '../../common/database/prisma.service';
+import { EmailVerificationService } from './email-verification.service';
 
 export interface JwtPayload {
   sub: string;       // userId
@@ -12,6 +13,7 @@ export interface JwtPayload {
   tenantId: string;
   role: string;
   permissions: string[];
+  isSuperAdmin: boolean;
 }
 
 export interface AuthTokens {
@@ -26,6 +28,7 @@ export class AuthService {
     private jwtService: JwtService,
     private configService: ConfigService,
     private prisma: PrismaService,
+    private emailVerification: EmailVerificationService,
   ) {}
 
   async validateUser(email: string, password: string): Promise<any> {
@@ -40,6 +43,10 @@ export class AuthService {
     if (user.status !== 'ACTIVE') {
       throw new UnauthorizedException('Account is not active');
     }
+    // Block login for unverified new users (seeded/demo users are pre-verified)
+    if (user.emailVerified === false) {
+      throw new ForbiddenException('Please verify your email before signing in. Check your inbox for the verification link.');
+    }
     return user;
   }
 
@@ -53,6 +60,7 @@ export class AuthService {
       tenantId: user.tenantId,
       role: role?.name || 'employee',
       permissions,
+      isSuperAdmin: user.isSuperAdmin || false,
     };
 
     const accessToken = this.jwtService.sign(payload);
@@ -127,4 +135,124 @@ export class AuthService {
     if (!user) throw new UnauthorizedException('User not found');
     return user;
   }
+
+  /**
+   * Self-service tenant registration — creates tenant, roles, and admin user.
+   */
+  async registerTenant(dto: {
+    companyName: string;
+    fullName: string;
+    email: string;
+    password: string;
+  }) {
+    // Check if email already exists
+    const existing = await this.prisma.user.findFirst({
+      where: { email: dto.email.toLowerCase() },
+    });
+    if (existing) {
+      throw new UnauthorizedException('An account with this email already exists');
+    }
+
+    const slug = dto.companyName
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-|-$/g, '')
+      .substring(0, 40);
+
+    // Check slug uniqueness
+    const slugExists = await this.prisma.tenant.findFirst({
+      where: { slug: { startsWith: slug } },
+    });
+    const finalSlug = slugExists ? `${slug}-${Date.now().toString(36)}` : slug;
+
+    const passwordHash = await bcrypt.hash(dto.password, 12);
+    const [firstName, ...rest] = dto.fullName.trim().split(' ');
+    const lastName = rest.join(' ') || '';
+
+    // Create everything in a transaction
+    const result = await this.prisma.$transaction(async (tx) => {
+      // 1. Create tenant
+      const tenant = await tx.tenant.create({
+        data: {
+          name: dto.companyName,
+          slug: finalSlug,
+          plan: 'STARTER',
+          status: 'ACTIVE',
+          settings: {
+            maxAssets: 100,
+            maxUsers: 5,
+            features: ['assets', 'tickets', 'discovery', 'reports'],
+          },
+        },
+      });
+
+      // 2. Create default site
+      await tx.site.create({
+        data: { tenantId: tenant.id, name: 'Headquarters', isHq: true },
+      });
+
+      // 3. Create default roles
+      const adminRole = await tx.role.create({
+        data: {
+          tenantId: tenant.id,
+          name: 'Tenant Admin',
+          description: 'Full administrative access',
+          permissions: [
+            'assets:read', 'assets:write', 'assets:delete',
+            'tickets:read', 'tickets:write', 'tickets:delete',
+            'users:read', 'users:write', 'users:delete',
+            'settings:read', 'settings:write',
+            'reports:read', 'reports:export',
+            'monitoring:read', 'monitoring:write',
+            'scanning:read', 'scanning:execute',
+            'admin:full',
+          ],
+        },
+      });
+
+      await tx.role.create({
+        data: {
+          tenantId: tenant.id,
+          name: 'Employee',
+          description: 'Standard employee access',
+          permissions: ['assets:read', 'tickets:read', 'tickets:write'],
+        },
+      });
+
+      // 4. Create admin user
+      const user = await tx.user.create({
+        data: {
+          tenantId: tenant.id,
+          email: dto.email.toLowerCase(),
+          passwordHash,
+          firstName,
+          lastName,
+          roleId: adminRole.id,
+          status: 'ACTIVE',
+        },
+      });
+
+      return { tenant, user };
+    });
+
+    // Send verification email (non-blocking)
+    try {
+      await this.emailVerification.sendVerificationEmail(
+        result.user.id,
+        result.user.email,
+        firstName,
+      );
+    } catch (err: any) {
+      // Don't fail registration if email sending fails
+    }
+
+    return {
+      message: 'Account created successfully. Please check your email to verify your account.',
+      tenantId: result.tenant.id,
+      tenantSlug: result.tenant.slug,
+      userId: result.user.id,
+      requiresVerification: true,
+    };
+  }
 }
+

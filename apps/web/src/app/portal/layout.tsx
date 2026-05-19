@@ -64,11 +64,13 @@ export default function PortalLayout({ children }: { children: React.ReactNode }
           padding: "20px 16px", display: "flex", alignItems: "center", gap: 10,
           borderBottom: "1px solid var(--border-primary)",
         }}>
-          <img src="/favicon.png" alt="ReconAPM" style={{ width: 32, height: 32, borderRadius: 8 }} />
-          <div>
-            <div style={{ fontSize: 14, fontWeight: 700, color: "var(--text-primary)", letterSpacing: "-0.01em" }}>Employee Portal</div>
-            <div style={{ fontSize: 9, color: "var(--text-tertiary)", fontWeight: 600, letterSpacing: "0.03em" }}>RECONAPM</div>
-          </div>
+          <a href="/portal" onClick={(e) => { e.preventDefault(); router.push("/portal"); }} style={{ display: "flex", alignItems: "center", gap: 10, textDecoration: "none", color: "inherit" }}>
+            <img src="/favicon.png" alt="QS Asset" style={{ width: 32, height: 32, borderRadius: 8 }} />
+            <div>
+              <div style={{ fontSize: 14, fontWeight: 700, color: "var(--text-primary)", letterSpacing: "-0.01em" }}>Employee Portal</div>
+              <div style={{ fontSize: 9, color: "var(--text-tertiary)", fontWeight: 600, letterSpacing: "0.03em" }}>QS ASSET</div>
+            </div>
+          </a>
         </div>
 
         {/* Nav */}

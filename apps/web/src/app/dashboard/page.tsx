@@ -1,8 +1,11 @@
 "use client";
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
+import Link from "next/link";
 import {
   Package, Monitor, Truck, Ticket, AlertTriangle, Shield, CheckCircle2, Clock,
-  TrendingUp, ArrowUpRight, ArrowDownRight, HardDrive, Wifi, Activity, RefreshCw
+  TrendingUp, ArrowUpRight, ArrowDownRight, HardDrive, Wifi, Activity, RefreshCw,
+  ExternalLink
 } from "lucide-react";
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
@@ -47,6 +50,7 @@ function computeWeeklyTrend(allAssets: any[], allTickets: any[]) {
 }
 
 export default function DashboardPage() {
+  const router = useRouter();
   const [stats, setStats] = useState<any>(null);
   const [assets, setAssets] = useState<any[]>([]);
   const [tickets, setTickets] = useState<any[]>([]);
@@ -175,12 +179,12 @@ export default function DashboardPage() {
       {/* Onboarding Quick Start */}
       <QuickStart />
 
-      {/* Stat Cards */}
+      {/* Stat Cards — Click to drill down */}
       <div className="stats-grid">
-        <StatCard icon={<Package size={22} />} iconClass="cyan" label="Total Assets" value={stats?.total || 0} change="+12%" changeUp />
-        <StatCard icon={<Monitor size={22} />} iconClass="blue" label="IT Assets" value={typeData.reduce((a: number, t: any) => a + t.count, 0)} change="+5%" changeUp />
-        <StatCard icon={<Ticket size={22} />} iconClass="purple" label="Open Tickets" value={tickets.length} change="+2" changeUp={false} />
-        <StatCard icon={<Shield size={22} />} iconClass="green" label="Patch Compliance" value="94%" change="+3%" changeUp />
+        <StatCard icon={<Package size={22} />} iconClass="cyan" label="Total Assets" value={stats?.total || 0} change="+12%" changeUp href="/dashboard/assets" />
+        <StatCard icon={<Monitor size={22} />} iconClass="blue" label="IT Assets" value={typeData.reduce((a: number, t: any) => a + t.count, 0)} change="+5%" changeUp href="/dashboard/it-assets" />
+        <StatCard icon={<Ticket size={22} />} iconClass="purple" label="Open Tickets" value={tickets.length} change="+2" changeUp={false} href="/dashboard/tickets" />
+        <StatCard icon={<Shield size={22} />} iconClass="green" label="Patch Compliance" value="94%" change="+3%" changeUp href="/dashboard/patches" />
       </div>
 
       {/* Charts Row 1 */}
@@ -192,17 +196,21 @@ export default function DashboardPage() {
               <div className="card-title">Assets by Type</div>
               <div className="card-subtitle">Distribution across categories</div>
             </div>
+            <Link href="/dashboard/assets" style={{ fontSize: 11, color: "var(--brand-400)", textDecoration: "none", display: "flex", alignItems: "center", gap: 4 }}>
+              View All <ExternalLink size={10} />
+            </Link>
           </div>
           <SafeChart height={260}>
-<BarChart data={typeData} barSize={32}>
+<BarChart data={typeData} barSize={32} style={{ cursor: "pointer" }} onClick={(data: any) => { if (data?.activeLabel) router.push(`/dashboard/assets?type=${encodeURIComponent(data.activeLabel)}`); }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="rgba(42,49,80,0.5)" vertical={false} />
                 <XAxis dataKey="name" tick={{ fill: "#64748b", fontSize: 11 }} axisLine={false} tickLine={false} />
                 <YAxis tick={{ fill: "#64748b", fontSize: 11 }} axisLine={false} tickLine={false} />
                 <Tooltip
                   contentStyle={{ background: "#1a1f35", border: "1px solid #2a3150", borderRadius: 8, fontSize: 12 }}
                   labelStyle={{ color: "#f1f5f9" }}
+                  cursor={{ fill: "rgba(6,182,212,0.08)" }}
                 />
-                <Bar dataKey="count" fill="url(#barGrad)" radius={[6, 6, 0, 0]} />
+                <Bar dataKey="count" fill="url(#barGrad)" radius={[6, 6, 0, 0]} style={{ cursor: "pointer" }} />
                 <defs>
                   <linearGradient id="barGrad" x1="0" y1="0" x2="0" y2="1">
                     <stop offset="0%" stopColor="#06b6d4" />
@@ -220,10 +228,15 @@ export default function DashboardPage() {
               <div className="card-title">Asset Status</div>
               <div className="card-subtitle">Current lifecycle state</div>
             </div>
+            <Link href="/dashboard/assets" style={{ fontSize: 11, color: "var(--brand-400)", textDecoration: "none", display: "flex", alignItems: "center", gap: 4 }}>
+              View All <ExternalLink size={10} />
+            </Link>
           </div>
           <SafeChart height={260}>
 <PieChart>
-                <Pie data={pieData} dataKey="value" cx="50%" cy="50%" innerRadius={60} outerRadius={90} paddingAngle={4} strokeWidth={0}>
+                <Pie data={pieData} dataKey="value" cx="50%" cy="50%" innerRadius={60} outerRadius={90} paddingAngle={4} strokeWidth={0}
+                  style={{ cursor: "pointer" }}
+                  onClick={(data: any) => { if (data?.name) router.push(`/dashboard/assets?status=${encodeURIComponent(data.name.replace(/ /g, "_").toUpperCase())}`); }}>
                   {pieData.map((entry: any, i: number) => <Cell key={i} fill={entry.color} />)}
                 </Pie>
                 <Tooltip contentStyle={{ background: "#1a1f35", border: "1px solid #2a3150", borderRadius: 8, fontSize: 12 }} />
@@ -231,7 +244,11 @@ export default function DashboardPage() {
 </SafeChart>
           <div style={{ display: "flex", flexWrap: "wrap", gap: 12, justifyContent: "center", marginTop: 8 }}>
             {pieData.map((d: any) => (
-              <div key={d.name} style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 11, color: "var(--text-secondary)" }}>
+              <div key={d.name}
+                onClick={() => router.push(`/dashboard/assets?status=${encodeURIComponent(d.name.replace(/ /g, "_").toUpperCase())}`)}
+                style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 11, color: "var(--text-secondary)", cursor: "pointer", padding: "2px 6px", borderRadius: 4, transition: "background 0.15s" }}
+                onMouseEnter={e => (e.currentTarget.style.background = "rgba(255,255,255,0.05)")}
+                onMouseLeave={e => (e.currentTarget.style.background = "transparent")}>
                 <span style={{ width: 8, height: 8, borderRadius: 2, background: d.color, display: "inline-block" }} />
                 {d.name} ({d.value})
               </div>
@@ -245,8 +262,8 @@ export default function DashboardPage() {
         {/* Network Health */}
         <div className="card">
           <div className="card-header">
-            <div>
-              <div className="card-title">Network Bandwidth</div>
+            <div style={{ cursor: "pointer" }} onClick={() => router.push("/dashboard/network")}>
+              <div className="card-title" style={{ display: "flex", alignItems: "center", gap: 6 }}>Network Bandwidth <ExternalLink size={10} style={{ opacity: 0.5 }} /></div>
               <div className="card-subtitle">24h traffic overview (Mbps)</div>
             </div>
             <span className="badge green"><Wifi size={10} /> Healthy</span>
@@ -271,8 +288,8 @@ export default function DashboardPage() {
         {/* Patch Compliance */}
         <div className="card">
           <div className="card-header">
-            <div>
-              <div className="card-title">Patch Compliance</div>
+            <div style={{ cursor: "pointer" }} onClick={() => router.push("/dashboard/patches")}>
+              <div className="card-title" style={{ display: "flex", alignItems: "center", gap: 6 }}>Patch Compliance <ExternalLink size={10} style={{ opacity: 0.5 }} /></div>
               <div className="card-subtitle">By severity level</div>
             </div>
             <span className="badge amber"><AlertTriangle size={10} /> 3 Critical</span>
@@ -309,9 +326,9 @@ export default function DashboardPage() {
             </thead>
             <tbody>
               {assets.map((a: any) => (
-                <tr key={a.id}>
+                <tr key={a.id} style={{ cursor: "pointer" }} onClick={() => router.push(`/dashboard/assets/${a.id}`)}>
                   <td>
-                    <div style={{ fontWeight: 600, color: "var(--text-primary)", fontSize: 13 }}>{a.name}</div>
+                    <div style={{ fontWeight: 600, color: "var(--brand-400)", fontSize: 13 }}>{a.name}</div>
                     <div style={{ fontSize: 11, color: "var(--text-tertiary)" }}>{a.assetTag || a.serialNumber || "—"}</div>
                   </td>
                   <td>
@@ -348,9 +365,9 @@ export default function DashboardPage() {
             </thead>
             <tbody>
               {tickets.map((t: any) => (
-                <tr key={t.id}>
+                <tr key={t.id} style={{ cursor: "pointer" }} onClick={() => router.push(`/dashboard/tickets/${t.id}`)}>
                   <td>
-                    <div style={{ fontWeight: 600, color: "var(--text-primary)", fontSize: 13 }}>{t.subject}</div>
+                    <div style={{ fontWeight: 600, color: "var(--brand-400)", fontSize: 13 }}>{t.subject}</div>
                     <div style={{ fontSize: 11, color: "var(--text-tertiary)" }}>{t.ticketNumber} • {t.type}</div>
                   </td>
                   <td>
@@ -406,12 +423,17 @@ export default function DashboardPage() {
           {activityFeed.map((a: any, i: number) => {
             const modColors: Record<string, string> = { scanning: "var(--brand-400)", patches: "var(--success)", tickets: "var(--warning)", assets: "var(--accent-500)", discovery: "#10b981", changes: "#8b5cf6" };
             const modIcons: Record<string, React.ReactNode> = { scanning: <Shield size={14} />, patches: <Shield size={14} />, tickets: <AlertTriangle size={14} />, assets: <Package size={14} />, discovery: <Wifi size={14} />, changes: <Activity size={14} /> };
+            const modLinks: Record<string, string> = { scanning: "/dashboard/scanning", patches: "/dashboard/patches", tickets: "/dashboard/tickets", assets: "/dashboard/assets", discovery: "/dashboard/discovery", changes: "/dashboard/changes", system: "/dashboard/audit-logs" };
             const color = modColors[a.module] || "var(--text-secondary)";
+            const href = modLinks[a.module] || "/dashboard";
             return (
-              <div key={i} style={{
+              <div key={i} onClick={() => router.push(href)} style={{
                 display: "flex", alignItems: "center", gap: 12, padding: "10px 0",
                 borderBottom: i < activityFeed.length - 1 ? "1px solid var(--border-primary)" : "none",
-              }}>
+                cursor: "pointer", borderRadius: 6, transition: "background 0.15s",
+              }}
+              onMouseEnter={e => (e.currentTarget.style.background = "rgba(255,255,255,0.03)")}
+              onMouseLeave={e => (e.currentTarget.style.background = "transparent")}>
                 <div style={{
                   width: 30, height: 30, borderRadius: 8,
                   background: `${color}15`, display: "flex",
@@ -422,7 +444,7 @@ export default function DashboardPage() {
                   <div style={{ fontSize: 13, fontWeight: 500, color: "var(--text-primary)" }}>{a.event}</div>
                   <div style={{ fontSize: 11, color: "var(--text-tertiary)" }}>{a.detail}</div>
                 </div>
-                <span style={{ fontSize: 10, color: "var(--text-tertiary)", whiteSpace: "nowrap" }}>{a.time}</span>
+                <span style={{ fontSize: 10, color: "var(--text-tertiary)", whiteSpace: "nowrap", display: "flex", alignItems: "center", gap: 4 }}>{a.time} <ExternalLink size={9} style={{ opacity: 0.4 }} /></span>
               </div>
             );
           })}
@@ -434,16 +456,20 @@ export default function DashboardPage() {
   );
 }
 
-// Stat Card Component
-function StatCard({ icon, iconClass, label, value, change, changeUp }: {
+// Stat Card Component — Now with drilldown link
+function StatCard({ icon, iconClass, label, value, change, changeUp, href }: {
   icon: React.ReactNode; iconClass: string; label: string;
-  value: string | number; change: string; changeUp: boolean;
+  value: string | number; change: string; changeUp: boolean; href?: string;
 }) {
-  return (
-    <div className="stat-card">
+  const content = (
+    <div className="stat-card" style={href ? { cursor: "pointer", transition: "transform 0.15s, box-shadow 0.15s" } : {}}
+      onMouseEnter={e => { if (href) { e.currentTarget.style.transform = "translateY(-2px)"; e.currentTarget.style.boxShadow = "0 8px 25px rgba(6,182,212,0.12)"; } }}
+      onMouseLeave={e => { if (href) { e.currentTarget.style.transform = "none"; e.currentTarget.style.boxShadow = "none"; } }}>
       <div className={`stat-icon ${iconClass}`}>{icon}</div>
       <div className="stat-content">
-        <div className="stat-label">{label}</div>
+        <div className="stat-label" style={href ? { display: "flex", alignItems: "center", gap: 4 } : {}}>
+          {label} {href && <ExternalLink size={9} style={{ opacity: 0.4 }} />}
+        </div>
         <div className="stat-value">{value}</div>
         <div className={`stat-change ${changeUp ? "up" : "down"}`}>
           {changeUp ? <ArrowUpRight size={12} /> : <ArrowDownRight size={12} />}
@@ -452,4 +478,6 @@ function StatCard({ icon, iconClass, label, value, change, changeUp }: {
       </div>
     </div>
   );
+  if (href) return <Link href={href} style={{ textDecoration: "none", color: "inherit" }}>{content}</Link>;
+  return content;
 }

@@ -67,63 +67,91 @@ async function tryRefreshToken(): Promise<string | null> {
 
 // ─── Main API Fetch ───────────────────────────────────────────
 
+const DEFAULT_TIMEOUT_MS = 30000;
+const MAX_RETRIES = 2;
+
+/**
+ * Fetch with timeout — prevents hanging requests.
+ */
+function fetchWithTimeout(url: string, opts: RequestInit, timeoutMs = DEFAULT_TIMEOUT_MS): Promise<Response> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  return fetch(url, { ...opts, signal: controller.signal }).finally(() => clearTimeout(timer));
+}
+
 /**
  * Authenticated fetch wrapper.
- * - Auto-refreshes token on 401 and retries the request once
- * - Redirects to /login only if refresh also fails
+ * - 30s request timeout (prevents hanging)
+ * - Auto-refreshes token on 401 and retries once
+ * - Retries 5xx errors with exponential backoff
  * - Returns parsed JSON on success
  */
 export async function apiFetch<T = any>(path: string, opts?: RequestInit): Promise<T> {
   const token = getToken();
-  const res = await fetch(`${API_BASE}${path}`, {
-    ...opts,
-    headers: {
-      Authorization: `Bearer ${token}`,
-      "Content-Type": "application/json",
-      ...opts?.headers,
-    },
-  });
+  const headers = {
+    Authorization: `Bearer ${token}`,
+    "Content-Type": "application/json",
+    ...opts?.headers,
+  };
 
-  if (res.status === 401) {
-    // Try to refresh the token
-    const newToken = await tryRefreshToken();
+  // Retry logic for transient 5xx errors
+  let lastError: Error | null = null;
+  for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+    try {
+      const res = await fetchWithTimeout(`${API_BASE}${path}`, { ...opts, headers });
 
-    if (newToken) {
-      // Retry the original request with the new token
-      const retryRes = await fetch(`${API_BASE}${path}`, {
-        ...opts,
-        headers: {
-          Authorization: `Bearer ${newToken}`,
-          "Content-Type": "application/json",
-          ...opts?.headers,
-        },
-      });
-
-      if (retryRes.ok) {
-        return retryRes.json();
+      // Don't retry 4xx — they are not transient
+      if (res.status >= 400 && res.status < 500) {
+        return handleClientError(res, path, opts);
       }
 
-      // If retry also fails with 401, session is truly dead
-      if (retryRes.status === 401) {
-        forceLogout();
-        throw new Error("Session expired. Please log in again.");
+      if (res.ok) return res.json();
+
+      // 5xx — retry with backoff
+      if (attempt < MAX_RETRIES) {
+        await new Promise(r => setTimeout(r, 500 * Math.pow(2, attempt)));
+        continue;
       }
 
-      const body = await retryRes.json().catch(() => ({}));
-      throw new Error(body.message || `API Error ${retryRes.status}: ${retryRes.statusText}`);
+      const body = await res.json().catch(() => ({}));
+      throw new Error(body.message || `Server Error ${res.status}`);
+    } catch (err: any) {
+      if (err.name === "AbortError") {
+        throw new Error("Request timed out. Please check your connection and try again.");
+      }
+      lastError = err;
+      if (attempt < MAX_RETRIES && !err.message?.includes("Session expired")) {
+        await new Promise(r => setTimeout(r, 500 * Math.pow(2, attempt)));
+        continue;
+      }
+      throw err;
     }
+  }
+  throw lastError || new Error("Request failed");
+}
 
-    // Refresh failed — session expired
+/**
+ * Handle 4xx client errors — auth refresh, validation errors, etc.
+ */
+async function handleClientError(res: Response, path: string, opts?: RequestInit): Promise<any> {
+  if (res.status === 401) {
+    const newToken = await tryRefreshToken();
+    if (newToken) {
+      const retryRes = await fetchWithTimeout(`${API_BASE}${path}`, {
+        ...opts,
+        headers: { Authorization: `Bearer ${newToken}`, "Content-Type": "application/json", ...opts?.headers },
+      });
+      if (retryRes.ok) return retryRes.json();
+      if (retryRes.status === 401) { forceLogout(); throw new Error("Session expired. Please log in again."); }
+      const body = await retryRes.json().catch(() => ({}));
+      throw new Error(body.message || `API Error ${retryRes.status}`);
+    }
     forceLogout();
     throw new Error("Session expired. Please log in again.");
   }
 
-  if (!res.ok) {
-    const body = await res.json().catch(() => ({}));
-    throw new Error(body.message || `API Error ${res.status}: ${res.statusText}`);
-  }
-
-  return res.json();
+  const body = await res.json().catch(() => ({}));
+  throw new Error(body.message || `API Error ${res.status}: ${res.statusText}`);
 }
 
 /**

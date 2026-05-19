@@ -92,7 +92,7 @@ export default function SetupPage() {
             <Server size={28} color="#fff" />
           </div>
           <h1 style={{ fontSize: 24, fontWeight: 700, margin: 0, letterSpacing: "-0.5px" }}>
-            ReconAPM
+            QS Asset
           </h1>
           <p style={{ color: "#94a3b8", fontSize: 13, margin: "4px 0 0" }}>
             {step === 1 ? "First-time setup — configure your organization" : "Setup complete!"}
@@ -185,7 +185,7 @@ export default function SetupPage() {
                 transition: "all 0.2s",
               }}>
               {submitting ? <><Loader2 size={16} style={{ animation: "spin 1s linear infinite" }} /> Initializing...</>
-                : <><Shield size={16} /> Initialize ReconAPM <ArrowRight size={14} /></>}
+                : <><Shield size={16} /> Initialize QS Asset <ArrowRight size={14} /></>}
             </button>
           </form>
         )}

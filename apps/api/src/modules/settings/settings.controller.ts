@@ -1,4 +1,4 @@
-import { Controller, Get, Patch, Body, UseGuards, Request } from '@nestjs/common';
+import { Controller, Get, Patch, Post, Body, UseGuards, Request } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
@@ -38,5 +38,35 @@ export class SettingsController {
   @ApiOperation({ summary: 'List departments' })
   async getDepartments(@Request() req: any) {
     return this.service.getDepartments(req.user.tenantId);
+  }
+
+  // ─── Account & Billing ─────────────────────────────────────────
+
+  @Get('account')
+  @Roles('Tenant Admin')
+  @ApiOperation({ summary: 'Get account overview (users, assets, plan)' })
+  async getAccount(@Request() req: any) {
+    return this.service.getAccount(req.user.tenantId);
+  }
+
+  @Get('subscription')
+  @Roles('Tenant Admin')
+  @ApiOperation({ summary: 'Get current subscription and plan details' })
+  async getSubscription(@Request() req: any) {
+    return this.service.getSubscription(req.user.tenantId);
+  }
+
+  @Get('invoices')
+  @Roles('Tenant Admin')
+  @ApiOperation({ summary: 'Get payment/invoice history' })
+  async getInvoices(@Request() req: any) {
+    return this.service.getInvoices(req.user.tenantId);
+  }
+
+  @Post('upgrade')
+  @Roles('Tenant Admin')
+  @ApiOperation({ summary: 'Request plan upgrade' })
+  async requestUpgrade(@Request() req: any, @Body() body: { plan: string; billingCycle?: string }) {
+    return this.service.requestUpgrade(req.user.tenantId, body.plan, body.billingCycle);
   }
 }

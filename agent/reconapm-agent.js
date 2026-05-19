@@ -1,10 +1,10 @@
 #!/usr/bin/env node
 // ═══════════════════════════════════════════════════════════════
-// ReconAPM Agent — Lightweight System Reporter
+// QS Asset Agent — Lightweight System Reporter
 // ═══════════════════════════════════════════════════════════════
 //
 // Run on any laptop/desktop on the LAN. Reports hardware, OS,
-// software, network info back to the main ReconAPM server.
+// software, network info back to the main QS Asset server.
 //
 // USAGE:
 //   node reconapm-agent.js --server http://192.168.1.50:4100 --user staff@acme.com --pass Staff@123
@@ -388,7 +388,7 @@ async function sendHeartbeat() {
 async function main() {
   console.log('');
   console.log('╔══════════════════════════════════════════════════════╗');
-  console.log('║         ReconAPM Agent v' + VERSION + '                       ║');
+  console.log('║         QS Asset Agent v' + VERSION + '                       ║');
   console.log('╚══════════════════════════════════════════════════════╝');
   console.log('');
   console.log(`  Server:   ${SERVER}`);

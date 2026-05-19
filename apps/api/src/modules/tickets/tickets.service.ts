@@ -149,5 +149,16 @@ export class TicketsService {
       orderBy: { createdAt: 'asc' },
     });
   }
+
+  async getStats(tenantId: string) {
+    const [byStatus, byPriority, byType, total, openCount] = await Promise.all([
+      this.prisma.ticket.groupBy({ by: ['status'], where: { tenantId }, _count: true }),
+      this.prisma.ticket.groupBy({ by: ['priority'], where: { tenantId }, _count: true }),
+      this.prisma.ticket.groupBy({ by: ['type'], where: { tenantId }, _count: true }),
+      this.prisma.ticket.count({ where: { tenantId } }),
+      this.prisma.ticket.count({ where: { tenantId, status: { in: ['NEW', 'OPEN', 'IN_PROGRESS'] } } }),
+    ]);
+    return { total, open: openCount, byStatus, byPriority, byType };
+  }
 }
 

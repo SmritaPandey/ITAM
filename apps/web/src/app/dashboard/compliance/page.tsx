@@ -151,7 +151,7 @@ export default function CompliancePage() {
               <Shield size={48} style={{ margin: "0 auto 16px", color: "var(--brand-400)", opacity: 0.6 }} />
               <h3 style={{ fontSize: 18, fontWeight: 700, marginBottom: 8 }}>No Endpoints Monitored Yet</h3>
               <p style={{ fontSize: 13, color: "var(--text-secondary)", maxWidth: 520, margin: "0 auto 20px" }}>
-                Deploy the <strong>ReconAPM Agent</strong> on staff machines or use the <strong>Agentless Scan</strong> tab to SSH into servers.
+                Deploy the <strong>QS Asset Agent</strong> on staff machines or use the <strong>Agentless Scan</strong> tab to SSH into servers.
                 Once endpoints report in, the compliance engine will automatically detect unauthorized changes and enforce your policies.
               </p>
               <div style={{ display: "flex", gap: 10, justifyContent: "center" }}>
@@ -187,28 +187,28 @@ export default function CompliancePage() {
 
             {/* Stat Cards */}
             <div className="stats-grid" style={{ gridTemplateColumns: "repeat(4, 1fr)" }}>
-              <div className="stat-card">
+              <div className="stat-card" style={{ cursor: "pointer" }} onClick={() => setTab("changes")}>
                 <div className="stat-content">
                   <div className="stat-label">Total Changes</div>
                   <div className="stat-value">{dashboard.total}</div>
                 </div>
                 <Activity size={18} style={{ color: "var(--brand-400)" }} />
               </div>
-              <div className="stat-card" style={{ borderLeft: "3px solid #f59e0b" }}>
+              <div className="stat-card" style={{ borderLeft: "3px solid #f59e0b", cursor: "pointer" }} onClick={() => { setStatusFilter("PENDING_REVIEW"); setTab("changes"); }}>
                 <div className="stat-content">
                   <div className="stat-label">Pending Review</div>
                   <div className="stat-value" style={{ color: "#f59e0b" }}>{dashboard.pending}</div>
                 </div>
                 <Clock size={18} style={{ color: "#f59e0b" }} />
               </div>
-              <div className="stat-card" style={{ borderLeft: "3px solid #ef4444" }}>
+              <div className="stat-card" style={{ borderLeft: "3px solid #ef4444", cursor: "pointer" }} onClick={() => { setStatusFilter("VIOLATION"); setTab("changes"); }}>
                 <div className="stat-content">
                   <div className="stat-label">Violations</div>
                   <div className="stat-value" style={{ color: "#ef4444" }}>{dashboard.violations}</div>
                 </div>
                 <AlertTriangle size={18} style={{ color: "#ef4444" }} />
               </div>
-              <div className="stat-card" style={{ borderLeft: "3px solid #10b981" }}>
+              <div className="stat-card" style={{ borderLeft: "3px solid #10b981", cursor: "pointer" }} onClick={() => setTab("policies")}>
                 <div className="stat-content">
                   <div className="stat-label">Active Policies</div>
                   <div className="stat-value" style={{ color: "#10b981" }}>{dashboard.activePolicies}</div>
@@ -228,14 +228,14 @@ export default function CompliancePage() {
               <div style={{ textAlign: "center", padding: 48, color: "var(--text-tertiary)" }}>
                 <Shield size={36} style={{ margin: "0 auto 12px" }} />
                 <div style={{ fontSize: 14, fontWeight: 600 }}>No changes detected yet</div>
-                <p style={{ fontSize: 12 }}>Deploy the ReconAPM agent on endpoints to start monitoring</p>
+                <p style={{ fontSize: 12 }}>Deploy the QS Asset agent on endpoints to start monitoring</p>
               </div>
             ) : (
               <table className="data-table">
                 <thead><tr><th>Change</th><th>Hostname</th><th>Severity</th><th>Status</th><th>Time</th></tr></thead>
                 <tbody>
                   {dashboard.recentChanges?.map((c: any) => (
-                    <tr key={c.id}>
+                    <tr key={c.id} style={{ cursor: "pointer" }} onClick={() => { setStatusFilter(""); setTab("changes"); }}>
                       <td><span style={{ display: "flex", alignItems: "center", gap: 6 }}>{CATEGORY_ICONS[c.category] || <Activity size={14} />}{c.summary}</span></td>
                       <td style={{ fontWeight: 500 }}>{c.hostname || "—"}</td>
                       <td><span className={`badge ${SEVERITY_COLORS[c.severity]?.badge || "gray"}`}>{c.severity}</span></td>

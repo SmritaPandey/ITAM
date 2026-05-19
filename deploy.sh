@@ -1,12 +1,12 @@
 #!/bin/bash
 # ═══════════════════════════════════════════════════════════════
-# ReconAPM — One-Command LAN Deployment Script
+# QS Asset — One-Command LAN Deployment Script
 # ═══════════════════════════════════════════════════════════════
 set -e
 
 echo ""
 echo "╔══════════════════════════════════════════════════════════╗"
-echo "║         ReconAPM — Local LAN Deployment                 ║"
+echo "║         QS Asset — Local LAN Deployment                 ║"
 echo "╚══════════════════════════════════════════════════════════╝"
 echo ""
 
@@ -76,10 +76,10 @@ echo ""
 echo "🔍 Running health checks..."
 
 # Check postgres
-if docker exec reconapm-db pg_isready -U postgres &>/dev/null; then
+if docker exec qsasset-db pg_isready -U postgres &>/dev/null; then
   echo "  ✅ PostgreSQL — running"
 else
-  echo "  ❌ PostgreSQL — not ready (check: docker logs reconapm-db)"
+  echo "  ❌ PostgreSQL — not ready (check: docker logs qsasset-db)"
 fi
 
 # Check API
@@ -87,19 +87,19 @@ sleep 3
 if curl -s --max-time 5 http://localhost:4100/api/v1/health &>/dev/null || curl -s --max-time 5 http://localhost:4100/api/v1 &>/dev/null; then
   echo "  ✅ API Server — running on :4100"
 else
-  echo "  ⏳ API Server — still starting (check: docker logs reconapm-api)"
+  echo "  ⏳ API Server — still starting (check: docker logs qsasset-api)"
 fi
 
 # Check Web
 if curl -s --max-time 5 http://localhost:3100 &>/dev/null; then
   echo "  ✅ Web Frontend — running on :3100"
 else
-  echo "  ⏳ Web Frontend — still starting (check: docker logs reconapm-web)"
+  echo "  ⏳ Web Frontend — still starting (check: docker logs qsasset-web)"
 fi
 
 echo ""
 echo "╔══════════════════════════════════════════════════════════╗"
-echo "║                 🚀 ReconAPM is LIVE!                    ║"
+echo "║                 🚀 QS Asset is LIVE!                    ║"
 echo "╠══════════════════════════════════════════════════════════╣"
 echo "║                                                         ║"
 echo "║  Dashboard:  http://$SERVER_IP:3100                     "

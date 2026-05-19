@@ -191,7 +191,12 @@ export class AuthService {
         data: { tenantId: tenant.id, name: 'Headquarters', isHq: true },
       });
 
-      // 3. Create default roles
+      // 3. Create default department
+      await tx.department.create({
+        data: { tenantId: tenant.id, name: 'IT Department' },
+      });
+
+      // 4. Create default roles (Admin + IT Admin + Staff + Employee)
       const adminRole = await tx.role.create({
         data: {
           tenantId: tenant.id,
@@ -213,13 +218,40 @@ export class AuthService {
       await tx.role.create({
         data: {
           tenantId: tenant.id,
+          name: 'IT Admin',
+          description: 'IT operations administrator',
+          permissions: [
+            'assets:read', 'assets:write', 'assets:delete',
+            'tickets:read', 'tickets:write', 'tickets:delete',
+            'monitoring:read', 'monitoring:write',
+            'scanning:read', 'scanning:execute',
+            'reports:read', 'reports:export',
+          ],
+        },
+      });
+
+      await tx.role.create({
+        data: {
+          tenantId: tenant.id,
+          name: 'Staff',
+          description: 'Regular staff member',
+          permissions: [
+            'assets:read',
+            'tickets:read', 'tickets:write',
+          ],
+        },
+      });
+
+      await tx.role.create({
+        data: {
+          tenantId: tenant.id,
           name: 'Employee',
           description: 'Standard employee access',
           permissions: ['assets:read', 'tickets:read', 'tickets:write'],
         },
       });
 
-      // 4. Create admin user
+      // 5. Create admin user
       const user = await tx.user.create({
         data: {
           tenantId: tenant.id,
@@ -230,6 +262,56 @@ export class AuthService {
           roleId: adminRole.id,
           status: 'ACTIVE',
         },
+      });
+
+      // 6. Create default asset types
+      await tx.assetType.createMany({
+        data: [
+          { tenantId: tenant.id, name: 'Laptop', isItAsset: true, icon: 'laptop', color: '#6366f1' },
+          { tenantId: tenant.id, name: 'Desktop', isItAsset: true, icon: 'monitor', color: '#3b82f6' },
+          { tenantId: tenant.id, name: 'Server', isItAsset: true, icon: 'server', color: '#8b5cf6' },
+          { tenantId: tenant.id, name: 'Network Device', isItAsset: true, icon: 'router', color: '#0ea5e9' },
+          { tenantId: tenant.id, name: 'Printer', isItAsset: true, icon: 'printer', color: '#a855f7' },
+          { tenantId: tenant.id, name: 'Furniture', isItAsset: false, icon: 'armchair', color: '#f97316' },
+          { tenantId: tenant.id, name: 'Vehicle', isItAsset: false, icon: 'car', color: '#10b981' },
+        ],
+      });
+
+      // 7. Create default SLA policies
+      await tx.slaPolicy.createMany({
+        data: [
+          { tenantId: tenant.id, name: 'Critical SLA', priority: 'CRITICAL', responseHours: 1, resolutionHours: 4, escalationHours: 2, isDefault: true },
+          { tenantId: tenant.id, name: 'High SLA', priority: 'HIGH', responseHours: 4, resolutionHours: 8, escalationHours: 6, isDefault: true },
+          { tenantId: tenant.id, name: 'Medium SLA', priority: 'MEDIUM', responseHours: 8, resolutionHours: 24, escalationHours: 16, isDefault: true },
+          { tenantId: tenant.id, name: 'Low SLA', priority: 'LOW', responseHours: 24, resolutionHours: 72, escalationHours: 48, isDefault: true },
+        ],
+      });
+
+      // 8. Create default automation rules
+      await tx.automationRule.createMany({
+        data: [
+          {
+            tenantId: tenant.id, name: 'Auto-ticket on device offline > 1h',
+            description: 'Creates a ticket when a monitored device goes offline',
+            triggerModule: 'Monitoring', triggerEvent: 'device_offline',
+            actionModule: 'Tickets', actionType: 'create_ticket',
+            status: 'ACTIVE', cooldownMinutes: 60, actionConfig: {},
+          },
+          {
+            tenantId: tenant.id, name: 'Notify on SLA breach',
+            description: 'Send notification when ticket SLA is breached',
+            triggerModule: 'Ticket', triggerEvent: 'sla_breach',
+            actionModule: 'Notifications', actionType: 'send_notification',
+            status: 'ACTIVE', cooldownMinutes: 30, actionConfig: {},
+          },
+          {
+            tenantId: tenant.id, name: 'Alert on new unmanaged device',
+            description: 'Notify admin when network scan discovers new devices',
+            triggerModule: 'Discovery', triggerEvent: 'scan_completed',
+            actionModule: 'Notifications', actionType: 'send_notification',
+            status: 'ACTIVE', cooldownMinutes: 15, actionConfig: {},
+          },
+        ],
       });
 
       return { tenant, user };

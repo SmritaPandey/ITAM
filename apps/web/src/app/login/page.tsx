@@ -77,19 +77,9 @@ export default function LoginPage() {
           ? "linear-gradient(160deg, #0c0f1d 0%, #111631 40%, #0e1428 100%)"
           : "linear-gradient(160deg, #f0f9ff 0%, #e0e7ff 40%, #ede9fe 100%)",
       }}>
-        {/* Animated mesh */}
-        <div style={{ position: "absolute", inset: 0, opacity: dk ? 0.4 : 0.3 }}>
-          <div className="mesh-orb" style={{ position: "absolute", width: 600, height: 600, borderRadius: "50%", top: "-20%", left: "-15%",
-            background: "radial-gradient(circle, rgba(6,182,212,0.15) 0%, transparent 65%)", animation: "float 12s ease-in-out infinite" }} />
-          <div className="mesh-orb" style={{ position: "absolute", width: 500, height: 500, borderRadius: "50%", bottom: "-20%", right: "-10%",
-            background: "radial-gradient(circle, rgba(139,92,246,0.12) 0%, transparent 65%)", animation: "float 15s ease-in-out infinite reverse" }} />
-          <div className="mesh-orb" style={{ position: "absolute", width: 300, height: 300, borderRadius: "50%", top: "40%", right: "20%",
-            background: "radial-gradient(circle, rgba(6,182,212,0.08) 0%, transparent 65%)", animation: "float 10s ease-in-out infinite 2s" }} />
-        </div>
-
-        {/* Subtle grid pattern */}
-        <div style={{ position: "absolute", inset: 0, opacity: dk ? 0.03 : 0.04,
-          backgroundImage: `url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' stroke='${dk ? '%23fff' : '%23000'}' stroke-width='0.5'%3E%3Cpath d='M0 30h60M30 0v60'/%3E%3C/g%3E%3C/svg%3E")`,
+        {/* Subtle grain texture only */}
+        <div style={{ position: "absolute", inset: 0, opacity: dk ? 0.02 : 0.03,
+          backgroundImage: `url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' stroke='${dk ? '%23fff' : '%23000'}' stroke-width='0.3'%3E%3Cpath d='M0 30h60M30 0v60'/%3E%3C/g%3E%3C/svg%3E")`,
         }} />
 
         <div style={{ position: "relative", zIndex: 1, maxWidth: 480 }}>
@@ -360,8 +350,7 @@ export default function LoginPage() {
       </div>
 
       <style>{`
-        @keyframes float { 0%,100% { transform: translate(0,0) scale(1); } 50% { transform: translate(20px,-20px) scale(1.05); } }
-        @keyframes spin { to { transform: rotate(360deg); } }
+        @keyframes spin { to { transform: rotate(360deg); }  }
         @media (max-width: 900px) {
           .login-hero { display: none !important; }
           div[style*="flex: \\"0 0 50%\\""] + div[style*="flex: \\"0 0 50%\\""] { flex: 1 1 100% !important; }

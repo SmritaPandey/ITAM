@@ -10,7 +10,7 @@ import { PageHelp, Tip } from "@/components/HelpSystem";
 
 const SCAN_TYPES = [
   { value: "PING_SWEEP", label: "Ping Sweep", desc: "ICMP host alive check" },
-  { value: "TCP_PORT_SCAN", label: "TCP Port Scan", desc: "Service fingerprinting" },
+  { value: "PORT_SCAN", label: "TCP Port Scan", desc: "Service fingerprinting" },
   { value: "SNMP_DISCOVERY", label: "SNMP Discovery", desc: "Network device detection" },
   { value: "FULL_SCAN", label: "Full Scan", desc: "Ping + Ports + SNMP + ARP" },
 ];

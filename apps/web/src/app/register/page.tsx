@@ -97,15 +97,15 @@ export default function RegisterPage() {
     } finally { setLoading(false); }
   }
 
-  const bg = "#0a0e1a", card = "rgba(26,31,53,0.7)", border = "rgba(42,49,80,0.5)", muted = "#94a3b8";
+  const bg = "#09090b", card = "rgba(24,24,27,0.8)", border = "rgba(63,63,70,0.3)", muted = "#94a3b8";
 
   // ─── Success State ────────────────────────────────────────────
   if (success) return (
-    <div style={{ minHeight: "100vh", background: bg, display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "'Inter',system-ui,sans-serif" }}>
+    <div style={{ minHeight: "100vh", background: bg, display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "'Plus Jakarta Sans','Inter',system-ui,sans-serif" }}>
       <div style={{ textAlign: "center", maxWidth: 440, padding: 40 }}>
         <div style={{ width: 72, height: 72, borderRadius: 18, background: "rgba(6,182,212,0.15)", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 20px", color: "#06b6d4" }}><Mail size={36} /></div>
-        <h1 style={{ fontSize: 26, fontWeight: 800, color: "#f1f5f9", marginBottom: 8 }}>Check Your Email</h1>
-        <p style={{ fontSize: 14, color: muted, lineHeight: 1.7, marginBottom: 8 }}>We&apos;ve sent a verification link to <strong style={{ color: "#06b6d4" }}>{form.email}</strong></p>
+        <h1 style={{ fontSize: 26, fontWeight: 800, color: "#f1f5f9", marginBottom: 8, letterSpacing: "-0.03em" }}>Check Your Email</h1>
+        <p style={{ fontSize: 14, color: muted, lineHeight: 1.7, marginBottom: 8, letterSpacing: "-0.01em" }}>We&apos;ve sent a verification link to <strong style={{ color: "#06b6d4" }}>{form.email}</strong></p>
         <p style={{ fontSize: 12, color: "rgba(148,163,184,0.6)", marginBottom: 24 }}>Click the link in the email to verify your account and start managing your IT assets.</p>
 
         <div style={{ display: "flex", gap: 10, justifyContent: "center", flexWrap: "wrap" }}>
@@ -128,22 +128,22 @@ export default function RegisterPage() {
 
   // ─── Registration Form ────────────────────────────────────────
   return (
-    <div style={{ minHeight: "100vh", background: bg, display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "'Inter',system-ui,sans-serif", padding: 20 }}>
-      <div style={{ position: "absolute", width: 500, height: 500, borderRadius: "50%", background: "radial-gradient(circle,rgba(6,182,212,0.06) 0%,transparent 70%)", top: "-10%", right: "15%" }} />
-      <div style={{ position: "absolute", width: 400, height: 400, borderRadius: "50%", background: "radial-gradient(circle,rgba(139,92,246,0.05) 0%,transparent 70%)", bottom: "-10%", left: "10%" }} />
+    <div style={{ minHeight: "100vh", background: bg, display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "'Plus Jakarta Sans','Inter',system-ui,sans-serif", padding: 20 }}>
 
       <div style={{ width: "100%", maxWidth: 460, position: "relative", zIndex: 1 }}>
         {/* Header */}
         <div style={{ textAlign: "center", marginBottom: 28 }}>
-          <div onClick={() => router.push("/")} style={{ display: "inline-flex", alignItems: "center", gap: 8, cursor: "pointer", marginBottom: 16 }} title="Back to homepage">
-            <Shield size={28} style={{ color: "#06b6d4" }} />
-            <span style={{ fontSize: 20, fontWeight: 800, color: "#f1f5f9", letterSpacing: "-0.03em" }}>QS Asset</span>
+          <div onClick={() => router.push("/")} style={{ display: "inline-flex", alignItems: "center", gap: 9, cursor: "pointer", marginBottom: 18 }} title="Back to homepage">
+            <div style={{ width: 32, height: 32, borderRadius: 9, background: "linear-gradient(135deg,#06b6d4,#8b5cf6)", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 4px 16px rgba(6,182,212,0.2)" }}>
+              <Shield size={18} style={{ color: "white" }} />
+            </div>
+            <span style={{ fontSize: 19, fontWeight: 800, color: "#f1f5f9", letterSpacing: "-0.04em" }}>QS Asset</span>
           </div>
-          <h1 style={{ fontSize: 22, fontWeight: 800, color: "#f1f5f9", marginBottom: 4 }}>Create Your Workspace</h1>
-          <p style={{ fontSize: 13, color: muted }}>Free plan includes 100 assets and 5 users • <a href="/contact" style={{ color: "#06b6d4", textDecoration: "none" }} title="Contact us for enterprise pricing">Need more?</a></p>
+          <h1 style={{ fontSize: 24, fontWeight: 800, color: "#f1f5f9", marginBottom: 6, letterSpacing: "-0.03em" }}>Create Your Workspace</h1>
+          <p style={{ fontSize: 13, color: muted, letterSpacing: "-0.01em" }}>Free plan includes 100 assets and 5 users • <a href="/contact" style={{ color: "#06b6d4", textDecoration: "none", fontWeight: 600 }} title="Contact us for enterprise pricing">Need more?</a></p>
         </div>
 
-        <form onSubmit={handleSubmit} style={{ background: card, backdropFilter: "blur(20px)", border: `1px solid ${border}`, borderRadius: 16, padding: 28 }}>
+        <form onSubmit={handleSubmit} style={{ background: card, backdropFilter: "blur(20px)", border: `1px solid ${border}`, borderRadius: 18, padding: 30 }}>
           {/* Error Banner */}
           {error && (
             <div style={{ padding: "10px 14px", borderRadius: 8, background: "rgba(239,68,68,0.1)", border: "1px solid rgba(239,68,68,0.2)", color: "#ef4444", fontSize: 12, fontWeight: 500, marginBottom: 16, display: "flex", alignItems: "center", gap: 8 }}>
@@ -223,7 +223,7 @@ export default function RegisterPage() {
 
           {/* Submit */}
           <button type="submit" disabled={!canSubmit}
-            style={{ width: "100%", padding: "12px 0", borderRadius: 10, border: "none", background: canSubmit ? "linear-gradient(135deg,#06b6d4,#8b5cf6)" : "rgba(100,116,139,0.3)", color: canSubmit ? "white" : "#64748b", fontSize: 14, fontWeight: 700, cursor: canSubmit ? "pointer" : "not-allowed", marginTop: 4, display: "flex", alignItems: "center", justifyContent: "center", gap: 8, transition: "all 0.2s" }}>
+            style={{ width: "100%", padding: "12px 0", borderRadius: 10, border: "none", background: canSubmit ? "linear-gradient(135deg,#06b6d4,#0891b2)" : "rgba(100,116,139,0.2)", color: canSubmit ? "white" : "#64748b", fontSize: 14, fontWeight: 700, cursor: canSubmit ? "pointer" : "not-allowed", marginTop: 4, display: "flex", alignItems: "center", justifyContent: "center", gap: 8, transition: "all 0.2s", letterSpacing: "-0.01em", fontFamily: "inherit", boxShadow: canSubmit ? "0 4px 16px rgba(6,182,212,0.2)" : "none" }}>
             {loading ? <><Loader2 size={16} style={{ animation: "spin 1s linear infinite" }} /> Creating Workspace...</> : <>Create Free Account <ArrowRight size={15} /></>}
           </button>
 

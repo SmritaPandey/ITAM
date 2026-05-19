@@ -11,6 +11,7 @@ import {
 } from "lucide-react";
 
 import { apiFetch, safeFetch, getToken } from "@/lib/api";
+import { WalkthroughProvider } from "@/components/HelpSystem";
 
 const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4100/api/v1";
 
@@ -198,6 +199,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   if (!user) return null;
 
   return (
+    <WalkthroughProvider>
     <div className="app-layout">
       {/* Mobile Sidebar Overlay */}
       {mobileSidebarOpen && (
@@ -482,5 +484,6 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         </>
       )}
     </div>
+    </WalkthroughProvider>
   );
 }

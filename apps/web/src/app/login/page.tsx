@@ -160,7 +160,7 @@ export default function LoginPage() {
       </div>
 
       {/* ─── Right Panel: Login Form ─── */}
-      <div style={{
+      <div className="login-form-panel" style={{
         flex: "0 0 50%", display: "flex", alignItems: "center", justifyContent: "center",
         padding: "40px 32px", position: "relative",
         background: dk ? "#09090b" : "#fafafa",
@@ -293,7 +293,7 @@ export default function LoginPage() {
           </div>
 
           {/* Quick logins */}
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+          <div className="login-demo-grid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
             {[
               { label: "Admin Demo", email: "admin@acme.com", color: "#06b6d4", sub: "Full access" },
               { label: "Staff Demo", email: "priya@acme.com", color: "#8b5cf6", sub: "Limited access" },
@@ -329,7 +329,7 @@ export default function LoginPage() {
           </div>
 
           {/* Trust signals */}
-          <div style={{
+          <div className="login-trust-badges" style={{
             display: "flex", alignItems: "center", justifyContent: "center", gap: 16, marginTop: 28,
             padding: "14px 0", borderTop: `1px solid ${dk ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.04)"}`,
           }}>
@@ -353,8 +353,15 @@ export default function LoginPage() {
         @keyframes spin { to { transform: rotate(360deg); }  }
         @media (max-width: 900px) {
           .login-hero { display: none !important; }
-          div[style*="flex: \\"0 0 50%\\""] + div[style*="flex: \\"0 0 50%\\""] { flex: 1 1 100% !important; }
+          .login-form-panel { flex: 1 1 100% !important; }
           .login-mobile-brand { display: block !important; }
+        }
+        @media (max-width: 600px) {
+          .login-form-panel { padding: 24px 20px !important; }
+          .login-form-card { padding: 24px 20px !important; border-radius: 14px !important; }
+          .login-form-card h1 { font-size: 22px !important; }
+          .login-demo-grid { grid-template-columns: 1fr !important; }
+          .login-trust-badges { flex-direction: column !important; gap: 6px !important; }
         }
       `}</style>
     </div>

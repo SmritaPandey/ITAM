@@ -95,7 +95,7 @@ export default function LandingPage() {
       </nav>
 
       {/* HERO */}
-      <section style={{ paddingTop: 140, paddingBottom: 70, textAlign: "center", position: "relative" }}>
+      <section className="landing-hero" style={{ paddingTop: 140, paddingBottom: 70, textAlign: "center", position: "relative", padding: "140px 20px 70px" }}>
         <div style={{ position: "relative", zIndex: 1, maxWidth: 860, margin: "0 auto", padding: "0 24px" }}>
           <div style={{ display: "inline-flex", alignItems: "center", gap: 8, padding: "6px 16px", borderRadius: 20, background: L ? "rgba(6,182,212,0.06)" : "rgba(6,182,212,0.08)", border: `1px solid ${L ? 'rgba(6,182,212,0.12)' : 'rgba(6,182,212,0.15)'}`, marginBottom: 28, fontSize: 12, fontWeight: 600, color: "#06b6d4", letterSpacing: "-0.01em" }}>
             <Zap size={13} /> Enterprise-Grade IT Asset Management
@@ -107,7 +107,7 @@ export default function LandingPage() {
           <p style={{ fontSize: 17, lineHeight: 1.7, color: muted, maxWidth: 600, margin: "0 auto 36px", letterSpacing: "-0.01em" }}>
             The only platform that unifies IT &amp; non-IT asset management, ITSM, vulnerability scanning, network monitoring, and compliance — in a single pane of glass.
           </p>
-          <div style={{ display: "flex", gap: 12, justifyContent: "center", flexWrap: "wrap", marginBottom: 32 }}>
+          <div className="landing-hero-buttons" style={{ display: "flex", gap: 12, justifyContent: "center", flexWrap: "wrap", marginBottom: 32 }}>
             <button onClick={() => router.push("/register")} style={{ padding: "14px 32px", borderRadius: 10, border: "none", background: "linear-gradient(135deg,#06b6d4,#0891b2)", color: "white", fontSize: 15, fontWeight: 700, cursor: "pointer", boxShadow: "0 4px 20px rgba(6,182,212,0.25)", display: "flex", alignItems: "center", gap: 8, letterSpacing: "-0.01em", transition: "transform 0.15s, box-shadow 0.15s" }}>
               Start Free — No Credit Card <ChevronRight size={17} />
             </button>
@@ -147,7 +147,7 @@ export default function LandingPage() {
       {/* TRUST */}
       <div style={{ textAlign: "center", padding: "28px 0", borderTop: `1px solid ${L ? 'rgba(0,0,0,0.05)' : 'rgba(255,255,255,0.04)'}`, borderBottom: `1px solid ${L ? 'rgba(0,0,0,0.05)' : 'rgba(255,255,255,0.04)'}` }}>
         <p style={{ fontSize: 10, textTransform: "uppercase", letterSpacing: "0.14em", color: muted, marginBottom: 14, fontWeight: 600 }}>Built for Enterprise Security Standards</p>
-        <div style={{ display: "flex", justifyContent: "center", gap: 28, flexWrap: "wrap" }}>
+        <div className="landing-trust-bar" style={{ display: "flex", justifyContent: "center", gap: 28, flexWrap: "wrap" }}>
           {["SOC 2 Type II","ISO 27001","DPDP Act 2023","ITIL v4","SHA-256 Audit","RBAC + MFA"].map(n => (
             <div key={n} style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, fontWeight: 600, color: muted, opacity: 0.8 }}>
               <CheckCircle2 size={13} color="#10b981" /> {n}
@@ -187,7 +187,7 @@ export default function LandingPage() {
           <h2 style={{ fontSize: 32, fontWeight: 800, letterSpacing: "-0.04em", marginBottom: 10 }}>How We Compare</h2>
           <p style={{ fontSize: 14, color: muted, letterSpacing: "-0.01em" }}>QS Asset vs. industry leaders — more features at a fraction of the cost.</p>
         </div>
-        <div style={{ borderRadius: 14, overflow: "hidden", border: `1px solid ${border}` }}>
+        <div className="landing-compare-wrap" style={{ borderRadius: 14, overflow: "hidden", border: `1px solid ${border}` }}>
           <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
             <thead>
               <tr style={{ background: L ? "#f1f5f9" : "rgba(15,23,42,0.6)" }}>
@@ -213,7 +213,7 @@ export default function LandingPage() {
 
       {/* SECURITY */}
       <section id="security" style={{ padding: "80px 48px", maxWidth: 1200, margin: "0 auto" }}>
-        <div style={{ padding: 48, borderRadius: 20, background: L ? "rgba(0,0,0,0.015)" : "rgba(255,255,255,0.02)", border: `1px solid ${border}`, display: "grid", gridTemplateColumns: "1fr 1fr", gap: 48, alignItems: "center" }}>
+        <div className="landing-security-grid" style={{ padding: 48, borderRadius: 20, background: L ? "rgba(0,0,0,0.015)" : "rgba(255,255,255,0.02)", border: `1px solid ${border}`, display: "grid", gridTemplateColumns: "1fr 1fr", gap: 48, alignItems: "center" }}>
           <div>
             <div style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "5px 12px", borderRadius: 6, background: "rgba(16,185,129,0.08)", color: "#10b981", fontSize: 11, fontWeight: 700, marginBottom: 18, letterSpacing: "-0.01em" }}><Lock size={12} /> Enterprise Security</div>
             <h2 style={{ fontSize: 28, fontWeight: 800, marginBottom: 12, letterSpacing: "-0.03em" }}>Built for Zero-Trust Environments</h2>
@@ -224,7 +224,7 @@ export default function LandingPage() {
               </div>
             ))}
           </div>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+          <div className="landing-security-cards" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
             {[
               { icon: Server, t: "On-Premise", d: "Self-hosted deployment" },
               { icon: Globe, t: "Cloud SaaS", d: "Managed infrastructure" },
@@ -248,7 +248,7 @@ export default function LandingPage() {
         <h2 style={{ fontSize: 34, fontWeight: 800, letterSpacing: "-0.04em", marginBottom: 10 }}>Simple, Transparent Pricing</h2>
         <p style={{ fontSize: 14, color: muted, marginBottom: 10, letterSpacing: "-0.01em" }}>Start free. Scale as you grow. No hidden fees.</p>
         <p style={{ fontSize: 12, color: "#f59e0b", fontWeight: 600, marginBottom: 40, display: "flex", alignItems: "center", justifyContent: "center", gap: 6 }}><Zap size={13} /> Save up to 20% with annual billing</p>
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 14, alignItems: "start" }}>
+        <div className="landing-pricing-grid" style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 14, alignItems: "start" }}>
           {[
             { name: "Starter", price: 0, annual: 0, desc: "Up to 100 assets", features: ["IT Asset Tracking","5 Users","Basic Reports","Email Support","Community Access"], popular: false, cta: "Start Free" },
             { name: "Professional", price: 4999, annual: 3999, desc: "Unlimited assets", features: ["All 12 Modules","Unlimited Users","Vulnerability Scanning","ITSM + SLA Engine","Priority Support","API Access"], popular: true, cta: "Start 14-Day Trial" },
@@ -289,7 +289,7 @@ export default function LandingPage() {
           ))}
         </div>
         {/* Trust guarantees */}
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 24, marginTop: 28 }}>
+        <div className="landing-trust-footer" style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 24, marginTop: 28 }}>
           {[
             { icon: <Shield size={13} />, text: "30-day money-back guarantee" },
             { icon: <Lock size={13} />, text: "Cancel anytime, no lock-in" },
@@ -307,7 +307,7 @@ export default function LandingPage() {
         <div style={{ maxWidth: 720, margin: "0 auto", padding: 48, borderRadius: 20, background: L ? "rgba(0,0,0,0.02)" : "rgba(255,255,255,0.02)", border: `1px solid ${border}` }}>
           <h2 style={{ fontSize: 28, fontWeight: 800, marginBottom: 12, letterSpacing: "-0.03em" }}>Ready to Take Command?</h2>
           <p style={{ fontSize: 14, color: muted, marginBottom: 28, maxWidth: 480, margin: "0 auto 28px", lineHeight: 1.7, letterSpacing: "-0.01em" }}>Join enterprises managing 50,000+ assets with complete visibility, automated security, and regulatory compliance.</p>
-          <div style={{ display: "flex", gap: 12, justifyContent: "center", flexWrap: "wrap" }}>
+          <div className="landing-cta-buttons" style={{ display: "flex", gap: 12, justifyContent: "center", flexWrap: "wrap" }}>
             <button onClick={() => router.push("/register")} style={{ padding: "14px 36px", borderRadius: 10, border: "none", background: "linear-gradient(135deg,#06b6d4,#0891b2)", color: "white", fontSize: 15, fontWeight: 700, cursor: "pointer", boxShadow: "0 4px 20px rgba(6,182,212,0.25)", letterSpacing: "-0.01em" }}>
               Create Free Account <ArrowRight size={16} style={{ marginLeft: 6, verticalAlign: "middle" }} />
             </button>
@@ -344,7 +344,7 @@ export default function LandingPage() {
 
       {/* FOOTER */}
       <footer style={{ padding: "44px 48px 24px", borderTop: `1px solid ${L ? 'rgba(0,0,0,0.05)' : 'rgba(255,255,255,0.04)'}`, maxWidth: 1200, margin: "0 auto" }}>
-        <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr 1fr 1fr", gap: 32, marginBottom: 28 }}>
+        <div className="landing-footer-grid" style={{ display: "grid", gridTemplateColumns: "2fr 1fr 1fr 1fr", gap: 32, marginBottom: 28 }}>
           <div>
             <a href="/" style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12, textDecoration: "none", color: "inherit" }}>
               <div style={{ width: 28, height: 28, borderRadius: 7, background: "linear-gradient(135deg,#06b6d4,#8b5cf6)", display: "flex", alignItems: "center", justifyContent: "center" }}>
@@ -373,7 +373,7 @@ export default function LandingPage() {
             ))}
           </div>
         </div>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", paddingTop: 16, borderTop: `1px solid ${L ? 'rgba(0,0,0,0.05)' : 'rgba(255,255,255,0.04)'}` }}>
+        <div className="landing-footer-bottom" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", paddingTop: 16, borderTop: `1px solid ${L ? 'rgba(0,0,0,0.05)' : 'rgba(255,255,255,0.04)'}` }}>
           <p style={{ fontSize: 11, color: muted, margin: 0, letterSpacing: "-0.01em" }}>&copy; 2026 NeurQ AI Labs Pvt Ltd. All rights reserved. Built in India 🇮🇳</p>
           <div style={{ display: "flex", gap: 16 }}>
             <a href="/privacy" style={{ fontSize: 11, color: muted, textDecoration: "none" }}>Privacy</a>
@@ -384,15 +384,39 @@ export default function LandingPage() {
       </footer>
 
       <style>{`
+        @media (max-width: 1024px) {
+          .landing-nav { padding: 10px 20px !important; }
+          .landing-nav-links a:not(:last-child):not(:nth-last-child(2)):not(:nth-last-child(3)) { display: none; }
+          .landing-section { padding: 60px 24px !important; }
+        }
         @media (max-width: 768px) {
           .landing-nav { padding: 10px 16px !important; }
-          .landing-nav-links a { display: none; }
+          .landing-nav-links a { display: none !important; }
           .landing-section { padding: 40px 16px !important; }
-          .landing-features-grid { grid-template-columns: repeat(3, 1fr) !important; }
+          .landing-features-grid { grid-template-columns: repeat(3, 1fr) !important; gap: 8px !important; }
           .landing-modules-grid { grid-template-columns: 1fr !important; }
+          .landing-hero h1 { font-size: 36px !important; }
+          .landing-hero p { font-size: 15px !important; }
+          .landing-hero-buttons { flex-direction: column !important; align-items: center !important; }
+          .landing-hero-buttons button { width: 100% !important; max-width: 320px !important; justify-content: center !important; }
+          .landing-pricing-grid { grid-template-columns: 1fr !important; max-width: 400px !important; margin: 0 auto !important; }
+          .landing-security-grid { grid-template-columns: 1fr !important; }
+          .landing-security-cards { grid-template-columns: repeat(3, 1fr) !important; }
+          .landing-compare-wrap { overflow-x: auto !important; -webkit-overflow-scrolling: touch !important; }
+          .landing-compare-wrap table { min-width: 500px !important; }
+          .landing-footer-grid { grid-template-columns: 1fr 1fr !important; gap: 24px !important; }
+          .landing-footer-bottom { flex-direction: column !important; gap: 10px !important; text-align: center !important; }
+          .landing-cta-buttons { flex-direction: column !important; align-items: center !important; }
+          .landing-cta-buttons button { width: 100% !important; max-width: 320px !important; justify-content: center !important; }
+          .landing-trust-bar { gap: 16px !important; }
+          .landing-trust-footer { flex-direction: column !important; gap: 8px !important; }
         }
         @media (max-width: 480px) {
           .landing-features-grid { grid-template-columns: repeat(2, 1fr) !important; }
+          .landing-hero h1 { font-size: 28px !important; }
+          .landing-security-cards { grid-template-columns: repeat(2, 1fr) !important; }
+          .landing-footer-grid { grid-template-columns: 1fr !important; }
+          .landing-trust-bar { flex-direction: column !important; gap: 8px !important; }
         }
       `}</style>
     </div>

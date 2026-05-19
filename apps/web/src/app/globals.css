@@ -702,6 +702,20 @@ body {
 
   .topbar { height: 52px; }
   .topbar-avatar { width: 28px; height: 28px; font-size: 11px; }
+
+  /* Settings page */
+  .settings-layout { grid-template-columns: 1fr !important; gap: 12px !important; }
+  .settings-plans-grid { grid-template-columns: 1fr !important; }
+}
+
+/* ─── Settings mobile refinements ─── */
+@media (max-width: 768px) {
+  .settings-layout { grid-template-columns: 1fr !important; }
+  .settings-plans-grid { grid-template-columns: repeat(2, 1fr) !important; }
+}
+
+@media (max-width: 600px) {
+  .settings-plans-grid { grid-template-columns: 1fr !important; }
 }
 
 /* ─── Light mode component overrides ─── */

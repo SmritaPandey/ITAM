@@ -99,7 +99,7 @@ export default function SettingsPage() {
         )}
       </div>
 
-      <div style={{ display: "grid", gridTemplateColumns: "220px 1fr", gap: 16, minHeight: 500 }}>
+      <div className="settings-layout" style={{ display: "grid", gridTemplateColumns: "220px 1fr", gap: 16, minHeight: 500 }}>
         {/* Sidebar */}
         <div className="card" style={{ padding: "8px 0" }}>
           {SECTIONS.map(s => (
@@ -222,7 +222,7 @@ export default function SettingsPage() {
                       </div>
                     </div>
 
-                    <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 12 }}>
+                    <div className="settings-plans-grid" style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 12 }}>
                       {subscription.plans.map((plan: any, idx: number) => {
                         const isCurrent = plan.name === subscription.currentPlan;
                         const isPopular = plan.popular;

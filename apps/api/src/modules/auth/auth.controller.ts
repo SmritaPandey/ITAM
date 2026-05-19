@@ -1,20 +1,36 @@
-import { Controller, Post, Get, UseGuards, Request, Body, HttpCode, HttpStatus, Query } from '@nestjs/common';
+import { Controller, Post, Get, UseGuards, Request, Body, HttpCode, HttpStatus, Query, Res, Logger } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBody } from '@nestjs/swagger';
 import { Throttle } from '@nestjs/throttler';
+import { ConfigService } from '@nestjs/config';
+import * as express from 'express';
 import { AuthService } from './auth.service';
 import { EmailVerificationService } from './email-verification.service';
 import { LocalAuthGuard } from './guards/local-auth.guard';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
+import { GoogleAuthGuard, MicrosoftAuthGuard } from './guards/oauth.guard';
 import { LoginDto } from './dto/login.dto';
 import { RegisterDto } from './dto/register.dto';
 
 @ApiTags('auth')
 @Controller('auth')
 export class AuthController {
+  private readonly logger = new Logger(AuthController.name);
+  private readonly appUrl: string;
+  private readonly googleEnabled: boolean;
+  private readonly microsoftEnabled: boolean;
+
   constructor(
     private authService: AuthService,
     private emailVerification: EmailVerificationService,
-  ) {}
+    private configService: ConfigService,
+  ) {
+    this.appUrl = this.configService.get<string>('APP_URL') || 'https://qsasset.vercel.app';
+    this.googleEnabled = !!(this.configService.get<string>('GOOGLE_CLIENT_ID') && this.configService.get<string>('GOOGLE_CLIENT_SECRET'));
+    this.microsoftEnabled = !!(this.configService.get<string>('MICROSOFT_CLIENT_ID') && this.configService.get<string>('MICROSOFT_CLIENT_SECRET'));
+
+    if (this.googleEnabled) this.logger.log('Google OAuth enabled');
+    if (this.microsoftEnabled) this.logger.log('Microsoft OAuth enabled');
+  }
 
   @Post('login')
   @UseGuards(LocalAuthGuard)
@@ -74,5 +90,77 @@ export class AuthController {
   @ApiOperation({ summary: 'Resend verification email (public)' })
   async resendVerification(@Body() body: { email: string }) {
     return this.emailVerification.resendVerification(body.email);
+  }
+
+  // ─── OAuth Providers Status ────────────────────────────────────
+
+  @Get('providers')
+  @ApiOperation({ summary: 'Get available OAuth providers' })
+  getProviders() {
+    return {
+      google: this.googleEnabled,
+      microsoft: this.microsoftEnabled,
+      email: true,
+    };
+  }
+
+  // ─── Google OAuth ──────────────────────────────────────────────
+
+  @Get('google')
+  @UseGuards(GoogleAuthGuard)
+  @ApiOperation({ summary: 'Initiate Google OAuth login' })
+  async googleAuth() {
+    // Guard redirects to Google
+  }
+
+  @Get('google/callback')
+  @UseGuards(GoogleAuthGuard)
+  @ApiOperation({ summary: 'Google OAuth callback' })
+  async googleCallback(@Request() req: any, @Res() res: express.Response) {
+    try {
+      if (!req.user) {
+        return res.redirect(`${this.appUrl}/login?error=google_auth_failed`);
+      }
+      const result = await this.authService.oauthLogin(req.user);
+      const params = new URLSearchParams({
+        token: result.accessToken,
+        refresh: result.refreshToken,
+        new: result.isNewUser ? '1' : '0',
+      });
+      return res.redirect(`${this.appUrl}/auth/callback?${params.toString()}`);
+    } catch (err: any) {
+      this.logger.error(`Google OAuth error: ${err.message}`);
+      return res.redirect(`${this.appUrl}/login?error=${encodeURIComponent(err.message)}`);
+    }
+  }
+
+  // ─── Microsoft OAuth ───────────────────────────────────────────
+
+  @Get('microsoft')
+  @UseGuards(MicrosoftAuthGuard)
+  @ApiOperation({ summary: 'Initiate Microsoft OAuth login' })
+  async microsoftAuth() {
+    // Guard redirects to Microsoft
+  }
+
+  @Get('microsoft/callback')
+  @UseGuards(MicrosoftAuthGuard)
+  @ApiOperation({ summary: 'Microsoft OAuth callback' })
+  async microsoftCallback(@Request() req: any, @Res() res: express.Response) {
+    try {
+      if (!req.user) {
+        return res.redirect(`${this.appUrl}/login?error=microsoft_auth_failed`);
+      }
+      const result = await this.authService.oauthLogin(req.user);
+      const params = new URLSearchParams({
+        token: result.accessToken,
+        refresh: result.refreshToken,
+        new: result.isNewUser ? '1' : '0',
+      });
+      return res.redirect(`${this.appUrl}/auth/callback?${params.toString()}`);
+    } catch (err: any) {
+      this.logger.error(`Microsoft OAuth error: ${err.message}`);
+      return res.redirect(`${this.appUrl}/login?error=${encodeURIComponent(err.message)}`);
+    }
   }
 }

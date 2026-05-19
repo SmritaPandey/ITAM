@@ -1,10 +1,13 @@
 "use client";
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import {
   Shield, ArrowRight, CheckCircle2, Loader2, Building2, Mail, Lock, User,
   Eye, EyeOff, AlertCircle, Info, XCircle, ArrowLeft, Zap
 } from "lucide-react";
+
+const GOOGLE_ICON = <svg width="18" height="18" viewBox="0 0 24 24"><path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 01-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z" fill="#4285F4"/><path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/><path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18A10.96 10.96 0 001 12c0 1.77.42 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/><path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/></svg>;
+const MS_ICON = <svg width="18" height="18" viewBox="0 0 23 23"><rect x="1" y="1" width="10" height="10" fill="#F25022"/><rect x="12" y="1" width="10" height="10" fill="#7FBA00"/><rect x="1" y="12" width="10" height="10" fill="#00A4EF"/><rect x="12" y="12" width="10" height="10" fill="#FFB900"/></svg>;
 
 // ─── Password Strength ─────────────────────────────────────────
 function getPasswordStrength(pw: string): { score: number; label: string; color: string; tips: string[] } {
@@ -45,9 +48,17 @@ export default function RegisterPage() {
   const [success, setSuccess] = useState(false);
   const [touched, setTouched] = useState<Record<string, boolean>>({});
   const [acceptedTerms, setAcceptedTerms] = useState(false);
+  const [oauthProviders, setOauthProviders] = useState<{ google: boolean; microsoft: boolean }>({ google: false, microsoft: false });
 
   const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4100/api/v1";
   const pwStrength = useMemo(() => getPasswordStrength(form.password), [form.password]);
+
+  // Fetch OAuth providers on mount
+  useEffect(() => {
+    fetch(`${API}/auth/providers`).then(r => r.json())
+      .then(d => setOauthProviders({ google: !!d.google, microsoft: !!d.microsoft }))
+      .catch(() => {});
+  }, []);  // eslint-disable-line react-hooks/exhaustive-deps
 
   function update(field: string, value: string) { setForm(f => ({ ...f, [field]: value })); setError(""); }
   function touch(field: string) { setTouched(t => ({ ...t, [field]: true })); }
@@ -142,6 +153,43 @@ export default function RegisterPage() {
           <h1 style={{ fontSize: 24, fontWeight: 800, color: "#f1f5f9", marginBottom: 6, letterSpacing: "-0.03em" }}>Create Your Workspace</h1>
           <p style={{ fontSize: 13, color: muted, letterSpacing: "-0.01em" }}>Free plan includes 100 assets and 5 users • <a href="/contact" style={{ color: "#06b6d4", textDecoration: "none", fontWeight: 600 }} title="Contact us for enterprise pricing">Need more?</a></p>
         </div>
+
+        {/* OAuth Quick Signup */}
+        {(oauthProviders.google || oauthProviders.microsoft) && (
+          <>
+            <div style={{ display: "flex", gap: 10, marginBottom: 16 }}>
+              {oauthProviders.google && (
+                <a href={`${API}/auth/google`} style={{
+                  flex: 1, padding: "12px 16px", borderRadius: 10, textDecoration: "none",
+                  display: "flex", alignItems: "center", justifyContent: "center", gap: 10,
+                  background: card, border: `1px solid ${border}`,
+                  fontSize: 13, fontWeight: 600, color: "#e4e4e7",
+                  fontFamily: "inherit", cursor: "pointer", transition: "all 0.15s",
+                }}>
+                  {GOOGLE_ICON}
+                  Sign up with Google
+                </a>
+              )}
+              {oauthProviders.microsoft && (
+                <a href={`${API}/auth/microsoft`} style={{
+                  flex: 1, padding: "12px 16px", borderRadius: 10, textDecoration: "none",
+                  display: "flex", alignItems: "center", justifyContent: "center", gap: 10,
+                  background: card, border: `1px solid ${border}`,
+                  fontSize: 13, fontWeight: 600, color: "#e4e4e7",
+                  fontFamily: "inherit", cursor: "pointer", transition: "all 0.15s",
+                }}>
+                  {MS_ICON}
+                  Sign up with Microsoft
+                </a>
+              )}
+            </div>
+            <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 16 }}>
+              <div style={{ flex: 1, height: 1, background: "rgba(63,63,70,0.3)" }} />
+              <span style={{ fontSize: 11, color: muted, fontWeight: 500, letterSpacing: "0.02em" }}>OR REGISTER WITH EMAIL</span>
+              <div style={{ flex: 1, height: 1, background: "rgba(63,63,70,0.3)" }} />
+            </div>
+          </>
+        )}
 
         <form onSubmit={handleSubmit} style={{ background: card, backdropFilter: "blur(20px)", border: `1px solid ${border}`, borderRadius: 18, padding: 30 }}>
           {/* Error Banner */}

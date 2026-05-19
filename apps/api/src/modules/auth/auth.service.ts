@@ -336,5 +336,208 @@ export class AuthService {
       requiresVerification: true,
     };
   }
-}
 
+  /**
+   * OAuth login/registration — handles both existing users and new tenant creation.
+   * If user exists: link OAuth provider, login.
+   * If new: create full tenant workspace (same as registerTenant), then login.
+   */
+  async oauthLogin(profile: {
+    provider: string;
+    providerId: string;
+    email: string;
+    firstName: string;
+    lastName: string;
+    avatarUrl?: string | null;
+  }): Promise<AuthTokens & { isNewUser: boolean }> {
+    const email = profile.email.toLowerCase();
+
+    // 1. Try to find existing user by OAuth provider ID
+    let user = await this.prisma.user.findFirst({
+      where: {
+        oauthProvider: profile.provider,
+        oauthProviderId: profile.providerId,
+        deletedAt: null,
+      },
+      include: { role: true },
+    });
+
+    if (user) {
+      // Existing OAuth user — just login
+      const tokens = await this.login(user);
+      return { ...tokens, isNewUser: false };
+    }
+
+    // 2. Try to find by email (user registered via email, now linking OAuth)
+    user = await this.prisma.user.findFirst({
+      where: { email, deletedAt: null },
+      include: { role: true },
+    });
+
+    if (user) {
+      // Link OAuth to existing account
+      await this.prisma.user.update({
+        where: { id: user.id },
+        data: {
+          oauthProvider: profile.provider,
+          oauthProviderId: profile.providerId,
+          emailVerified: true, // OAuth proves email ownership
+          avatarUrl: profile.avatarUrl || user.avatarUrl,
+        },
+      });
+      const tokens = await this.login(user);
+      return { ...tokens, isNewUser: false };
+    }
+
+    // 3. New user — create full tenant workspace (same as registerTenant)
+    const companyName = `${profile.firstName}'s Organization`;
+    const slug = companyName
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-|-$/g, '')
+      .substring(0, 40);
+    const slugExists = await this.prisma.tenant.findFirst({
+      where: { slug: { startsWith: slug } },
+    });
+    const finalSlug = slugExists ? `${slug}-${Date.now().toString(36)}` : slug;
+
+    const result = await this.prisma.$transaction(async (tx) => {
+      // Create tenant
+      const tenant = await tx.tenant.create({
+        data: {
+          name: companyName,
+          slug: finalSlug,
+          plan: 'STARTER',
+          status: 'ACTIVE',
+          settings: {
+            maxAssets: 100,
+            maxUsers: 5,
+            features: ['assets', 'tickets', 'discovery', 'reports'],
+          },
+        },
+      });
+
+      // Default site
+      await tx.site.create({
+        data: { tenantId: tenant.id, name: 'Headquarters', isHq: true },
+      });
+
+      // Default department
+      await tx.department.create({
+        data: { tenantId: tenant.id, name: 'IT Department' },
+      });
+
+      // Roles
+      const adminRole = await tx.role.create({
+        data: {
+          tenantId: tenant.id,
+          name: 'Tenant Admin',
+          description: 'Full administrative access',
+          permissions: [
+            'assets:read', 'assets:write', 'assets:delete',
+            'tickets:read', 'tickets:write', 'tickets:delete',
+            'users:read', 'users:write', 'users:delete',
+            'settings:read', 'settings:write',
+            'reports:read', 'reports:export',
+            'monitoring:read', 'monitoring:write',
+            'scanning:read', 'scanning:execute',
+            'admin:full',
+          ],
+        },
+      });
+
+      await tx.role.createMany({
+        data: [
+          {
+            tenantId: tenant.id, name: 'IT Admin', description: 'IT operations administrator',
+            permissions: ['assets:read', 'assets:write', 'assets:delete', 'tickets:read', 'tickets:write', 'tickets:delete', 'monitoring:read', 'monitoring:write', 'scanning:read', 'scanning:execute', 'reports:read', 'reports:export'],
+          },
+          {
+            tenantId: tenant.id, name: 'Staff', description: 'Regular staff member',
+            permissions: ['assets:read', 'tickets:read', 'tickets:write'],
+          },
+          {
+            tenantId: tenant.id, name: 'Employee', description: 'Standard employee access',
+            permissions: ['assets:read', 'tickets:read', 'tickets:write'],
+          },
+        ],
+      });
+
+      // Create admin user (no password — OAuth user)
+      const newUser = await tx.user.create({
+        data: {
+          tenantId: tenant.id,
+          email,
+          firstName: profile.firstName || 'User',
+          lastName: profile.lastName || '',
+          roleId: adminRole.id,
+          status: 'ACTIVE',
+          emailVerified: true, // OAuth proves email
+          oauthProvider: profile.provider,
+          oauthProviderId: profile.providerId,
+          avatarUrl: profile.avatarUrl,
+        },
+      });
+
+      // Default asset types
+      await tx.assetType.createMany({
+        data: [
+          { tenantId: tenant.id, name: 'Laptop', isItAsset: true, icon: 'laptop', color: '#6366f1' },
+          { tenantId: tenant.id, name: 'Desktop', isItAsset: true, icon: 'monitor', color: '#3b82f6' },
+          { tenantId: tenant.id, name: 'Server', isItAsset: true, icon: 'server', color: '#8b5cf6' },
+          { tenantId: tenant.id, name: 'Network Device', isItAsset: true, icon: 'router', color: '#0ea5e9' },
+          { tenantId: tenant.id, name: 'Printer', isItAsset: true, icon: 'printer', color: '#a855f7' },
+          { tenantId: tenant.id, name: 'Furniture', isItAsset: false, icon: 'armchair', color: '#f97316' },
+          { tenantId: tenant.id, name: 'Vehicle', isItAsset: false, icon: 'car', color: '#10b981' },
+        ],
+      });
+
+      // Default SLA policies
+      await tx.slaPolicy.createMany({
+        data: [
+          { tenantId: tenant.id, name: 'Critical SLA', priority: 'CRITICAL', responseHours: 1, resolutionHours: 4, escalationHours: 2, isDefault: true },
+          { tenantId: tenant.id, name: 'High SLA', priority: 'HIGH', responseHours: 4, resolutionHours: 8, escalationHours: 6, isDefault: true },
+          { tenantId: tenant.id, name: 'Medium SLA', priority: 'MEDIUM', responseHours: 8, resolutionHours: 24, escalationHours: 16, isDefault: true },
+          { tenantId: tenant.id, name: 'Low SLA', priority: 'LOW', responseHours: 24, resolutionHours: 72, escalationHours: 48, isDefault: true },
+        ],
+      });
+
+      // Default automation rules
+      await tx.automationRule.createMany({
+        data: [
+          {
+            tenantId: tenant.id, name: 'Auto-ticket on device offline > 1h',
+            description: 'Creates a ticket when a monitored device goes offline',
+            triggerModule: 'Monitoring', triggerEvent: 'device_offline',
+            actionModule: 'Tickets', actionType: 'create_ticket',
+            status: 'ACTIVE', cooldownMinutes: 60, actionConfig: {},
+          },
+          {
+            tenantId: tenant.id, name: 'Notify on SLA breach',
+            description: 'Send notification when ticket SLA is breached',
+            triggerModule: 'Ticket', triggerEvent: 'sla_breach',
+            actionModule: 'Notifications', actionType: 'send_notification',
+            status: 'ACTIVE', cooldownMinutes: 30, actionConfig: {},
+          },
+          {
+            tenantId: tenant.id, name: 'Alert on new unmanaged device',
+            description: 'Notify admin when network scan discovers new devices',
+            triggerModule: 'Discovery', triggerEvent: 'scan_completed',
+            actionModule: 'Notifications', actionType: 'send_notification',
+            status: 'ACTIVE', cooldownMinutes: 15, actionConfig: {},
+          },
+        ],
+      });
+
+      return { tenant, user: newUser };
+    });
+
+    // Login the newly created user
+    const freshUser = await this.prisma.user.findUnique({
+      where: { id: result.user.id },
+      include: { role: true },
+    });
+    const tokens = await this.login(freshUser!);
+    return { ...tokens, isNewUser: true };
+  }
+}

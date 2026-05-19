@@ -7,6 +7,8 @@ import { AuthController } from './auth.controller';
 import { EmailVerificationService } from './email-verification.service';
 import { JwtStrategy } from './strategies/jwt.strategy';
 import { LocalStrategy } from './strategies/local.strategy';
+import { GoogleStrategy } from './strategies/google.strategy';
+import { MicrosoftOAuthStrategy } from './strategies/microsoft.strategy';
 import { UsersModule } from '../users/users.module';
 
 @Module({
@@ -23,7 +25,15 @@ import { UsersModule } from '../users/users.module';
     }),
   ],
   controllers: [AuthController],
-  providers: [AuthService, EmailVerificationService, JwtStrategy, LocalStrategy],
+  providers: [
+    AuthService,
+    EmailVerificationService,
+    JwtStrategy,
+    LocalStrategy,
+    // OAuth strategies — they gracefully handle missing env vars
+    GoogleStrategy,
+    MicrosoftOAuthStrategy,
+  ],
   exports: [AuthService, EmailVerificationService],
 })
 export class AuthModule {}

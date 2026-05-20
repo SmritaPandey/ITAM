@@ -10,7 +10,7 @@ export class TenantMeteringService {
 
   // Plan limits configuration
   private readonly PLAN_LIMITS: Record<string, { maxAssets: number; maxUsers: number; maxScansPerMonth: number }> = {
-    STARTER:      { maxAssets: 100,      maxUsers: 5,        maxScansPerMonth: 10 },
+    STARTER:      { maxAssets: 5,        maxUsers: 4,        maxScansPerMonth: 10 },
     PROFESSIONAL: { maxAssets: Infinity,  maxUsers: Infinity, maxScansPerMonth: Infinity },
     ENTERPRISE:   { maxAssets: Infinity,  maxUsers: Infinity, maxScansPerMonth: Infinity },
     ON_PREMISE:   { maxAssets: Infinity,  maxUsers: Infinity, maxScansPerMonth: Infinity },
@@ -24,8 +24,8 @@ export class TenantMeteringService {
   async getUsage(tenantId: string) {
     const [tenant, assetCount, userCount, scanCount] = await Promise.all([
       this.prisma.tenant.findUnique({ where: { id: tenantId } }),
-      this.prisma.asset.count({ where: { tenantId } }),
-      this.prisma.user.count({ where: { tenantId } }),
+      this.prisma.asset.count({ where: { tenantId, deletedAt: null } }),
+      this.prisma.user.count({ where: { tenantId, deletedAt: null } }),
       this.getMonthlyScans(tenantId),
     ]);
 
@@ -63,7 +63,7 @@ export class TenantMeteringService {
     }
 
     const limits = this.getEffectiveLimits(tenant);
-    const count = await this.prisma.asset.count({ where: { tenantId } });
+    const count = await this.prisma.asset.count({ where: { tenantId, deletedAt: null } });
 
     if (count >= limits.maxAssets) {
       throw new HttpException(
@@ -81,7 +81,7 @@ export class TenantMeteringService {
     if (!tenant) throw new HttpException('Tenant not found', HttpStatus.NOT_FOUND);
 
     const limits = this.getEffectiveLimits(tenant);
-    const count = await this.prisma.user.count({ where: { tenantId } });
+    const count = await this.prisma.user.count({ where: { tenantId, deletedAt: null } });
 
     if (count >= limits.maxUsers) {
       throw new HttpException(

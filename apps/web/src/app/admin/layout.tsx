@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import {
   LayoutDashboard, Building2, Users, MessageSquare, CreditCard, Shield,
-  Activity, LogOut, ChevronRight, ArrowLeft, Sun, Moon,
+  Activity, LogOut, ChevronRight, ArrowLeft, Sun, Moon, Eye,
 } from "lucide-react";
 import { LogoIcon } from "@/components/Logo";
 
@@ -13,6 +13,7 @@ const adminNav = [
   { name: "Users", icon: Users, href: "/admin/users" },
   { name: "Support Inbox", icon: MessageSquare, href: "/admin/support" },
   { name: "Payments", icon: CreditCard, href: "/admin/payments" },
+  { name: "Telemetry", icon: Eye, href: "/admin/analytics" },
   { name: "System", icon: Activity, href: "/admin/system" },
 ];
 

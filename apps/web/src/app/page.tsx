@@ -250,7 +250,7 @@ export default function LandingPage() {
         <p style={{ fontSize: 12, color: "#f59e0b", fontWeight: 600, marginBottom: 40, display: "flex", alignItems: "center", justifyContent: "center", gap: 6 }}><Zap size={13} /> Save up to 20% with annual billing</p>
         <div className="landing-pricing-grid" style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 14, alignItems: "start" }}>
           {[
-            { name: "Starter", price: 0, annual: 0, desc: "Up to 100 assets", features: ["IT Asset Tracking","5 Users","Basic Reports","Email Support","Community Access"], popular: false, cta: "Start Free" },
+            { name: "Starter", price: 0, annual: 0, desc: "Up to 5 assets", features: ["IT Asset Tracking","4 Users","Basic Reports","Email Support","Community Access"], popular: false, cta: "Start Free" },
             { name: "Professional", price: 4999, annual: 3999, desc: "Unlimited assets", features: ["All 12 Modules","Unlimited Users","Vulnerability Scanning","ITSM + SLA Engine","Priority Support","API Access"], popular: true, cta: "Start 14-Day Trial" },
             { name: "Enterprise", price: -1, annual: -1, desc: "On-premise + SaaS", features: ["Everything in Pro","On-Premise Deploy","SSO / SAML / LDAP","Dedicated CSM","Custom SLA","White-Label Option"], popular: false, cta: "Talk to Sales →" },
           ].map(p => (
@@ -315,7 +315,7 @@ export default function LandingPage() {
               Talk to Sales
             </button>
           </div>
-          <p style={{ fontSize: 11, color: muted, marginTop: 16, opacity: 0.7 }}>Free forever for up to 100 assets · No credit card required · Setup in 2 minutes</p>
+          <p style={{ fontSize: 11, color: muted, marginTop: 16, opacity: 0.7 }}>Free forever for up to 5 assets · No credit card required · Setup in 2 minutes</p>
         </div>
       </section>
 
@@ -326,7 +326,7 @@ export default function LandingPage() {
           <p style={{ fontSize: 14, color: muted, letterSpacing: "-0.01em" }}>Everything you need to know about QS Asset Management.</p>
         </div>
         {[
-          { q: "Is there really a free plan?", a: "Yes — the Starter plan is free forever. You get up to 100 assets, 5 users, IT asset tracking, basic reports, and email support. No credit card required." },
+          { q: "Is there really a free plan?", a: "Yes — the Starter plan is free forever. You get up to 5 assets, 4 users, IT asset tracking, basic reports, and email support. No credit card required." },
           { q: "Can I deploy on my own servers?", a: "Absolutely. QS Asset supports both cloud SaaS and on-premise deployment via Docker. Your data stays on your infrastructure with full control." },
           { q: "How does network scanning work?", a: "We support agent-based monitoring (install our lightweight agent on endpoints) and agentless scanning via SNMP, ICMP, Nmap, and ARP. Both methods auto-discover devices on your network." },
           { q: "Is my data secure and compliant?", a: "All data is encrypted at rest (AES-256) and in transit (TLS 1.3). We support DPDP Act 2023, SOC 2 Type II, and ISO 27001 compliance standards. Multi-tenant RBAC ensures strict data isolation." },

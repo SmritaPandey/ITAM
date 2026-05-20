@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../../common/database/prisma.service';
 import * as bcrypt from 'bcryptjs';
 
@@ -40,6 +40,17 @@ export class UsersService {
     email: string; password: string; firstName: string; lastName: string;
     roleId: string; departmentId?: string; siteId?: string; phone?: string;
   }) {
+    // Freemium restriction: STARTER plan has max 4 active user accounts
+    const tenant = await this.prisma.tenant.findUnique({ where: { id: tenantId } });
+    if (tenant && tenant.plan === 'STARTER') {
+      const activeUserCount = await this.prisma.user.count({
+        where: { tenantId, deletedAt: null },
+      });
+      if (activeUserCount >= 4) {
+        throw new BadRequestException('User limit exceeded. Free tier allows a maximum of 4 active user accounts. Please upgrade to a premium plan to add more team members.');
+      }
+    }
+
     const passwordHash = await bcrypt.hash(data.password, 12);
     return this.prisma.user.create({
       data: {

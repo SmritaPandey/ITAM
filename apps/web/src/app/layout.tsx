@@ -102,7 +102,7 @@ const jsonLd = {
       name: "Starter",
       price: "0",
       priceCurrency: "INR",
-      description: "Free plan — up to 100 assets and 5 users",
+      description: "Free plan — up to 5 assets and 4 users",
     },
     {
       "@type": "Offer",

@@ -37,7 +37,7 @@ export function LogoIcon({ size = 32, glow = true }: LogoIconProps) {
         stroke="url(#cyber-cyan)"
         strokeWidth="3"
         strokeLinejoin="round"
-        fill="rgba(13, 18, 37, 0.75)"
+        fill="none"
       />
 
       {/* Active Network Scan Line (Subtle Inner Hex) */}

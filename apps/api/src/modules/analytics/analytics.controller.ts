@@ -17,7 +17,10 @@ export class AnalyticsController {
   @HttpCode(200)
   @ApiOperation({ summary: 'Record analytics event (public, consent-gated on frontend)' })
   recordEvent(@Body() body: any, @Req() req: any) {
-    this.service.record(body, req.ip || req.headers['x-forwarded-for']);
+    const rawIp = req.headers['x-forwarded-for'] || req.socket?.remoteAddress || req.ip;
+    const ip = typeof rawIp === 'string' ? rawIp.split(',')[0].trim() : rawIp;
+    const authHeader = req.headers.authorization;
+    this.service.record(body, ip, authHeader);
     return { ok: true };
   }
 

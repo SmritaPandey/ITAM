@@ -144,7 +144,7 @@ export default function RegisterPage() {
             <span style={{ fontSize: 19, fontWeight: 800, color: "#f1f5f9", letterSpacing: "-0.04em" }}>QS Asset</span>
           </div>
           <h1 style={{ fontSize: 24, fontWeight: 800, color: "#f1f5f9", marginBottom: 6, letterSpacing: "-0.03em" }}>Create Your Workspace</h1>
-          <p style={{ fontSize: 13, color: muted, letterSpacing: "-0.01em" }}>Free plan includes 100 assets and 5 users • <a href="/contact" style={{ color: "#06b6d4", textDecoration: "none", fontWeight: 600 }} title="Contact us for enterprise pricing">Need more?</a></p>
+          <p style={{ fontSize: 13, color: muted, letterSpacing: "-0.01em" }}>Free plan includes 5 assets and 4 users • <a href="/contact" style={{ color: "#06b6d4", textDecoration: "none", fontWeight: 600 }} title="Contact us for enterprise pricing">Need more?</a></p>
         </div>
 
         {/* OAuth Quick Signup */}

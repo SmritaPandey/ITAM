@@ -68,7 +68,7 @@ export class SettingsService {
   // ─── Account & Billing ─────────────────────────────────────────
 
   private readonly PLAN_LIMITS: Record<string, { assets: number; users: number; modules: number; price: number }> = {
-    STARTER: { assets: 100, users: 5, modules: 4, price: 0 },
+    STARTER: { assets: 5, users: 4, modules: 4, price: 0 },
     PROFESSIONAL: { assets: -1, users: 50, modules: 12, price: 4999 },
     ENTERPRISE: { assets: -1, users: -1, modules: 12, price: 14999 },
   };
@@ -153,7 +153,7 @@ export class SettingsService {
           priceUSD: 0, priceINR: 0,
           discountedUSD: 0, discountedINR: 0,
           billingLabelUSD: 'Free forever', billingLabelINR: 'Free forever',
-          features: ['Up to 100 assets', '5 users', '4 core modules', 'Community support', 'Basic reports'],
+          features: ['Up to 5 assets', '4 users', '4 core modules', 'Community support', 'Basic reports'],
         },
         {
           name: 'PROFESSIONAL', displayName: 'Professional',

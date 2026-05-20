@@ -121,6 +121,20 @@ export class AdminController {
     return this.service.listAuditLogs({ limit, offset, module });
   }
 
+  @Get('telemetry')
+  @ApiOperation({ summary: 'Platform-wide user telemetry' })
+  listTelemetry(
+    @Query('limit') limit?: number,
+    @Query('offset') offset?: number,
+    @Query('search') search?: string,
+  ) {
+    return this.service.listTelemetry({
+      limit: limit ? parseInt(String(limit)) : undefined,
+      offset: offset ? parseInt(String(offset)) : undefined,
+      search,
+    });
+  }
+
   @Get('system')
   @ApiOperation({ summary: 'System health & info' })
   getSystemHealth() {

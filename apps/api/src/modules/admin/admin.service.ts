@@ -378,6 +378,32 @@ export class AdminService {
     return { data, total };
   }
 
+  // ─── Telemetry Logs (Platform-wide) ──────────────────────────
+  async listTelemetry(query?: { limit?: number; offset?: number; search?: string }) {
+    const where: any = {};
+    if (query?.search) {
+      where.OR = [
+        { email: { contains: query.search, mode: 'insensitive' } },
+        { ipAddress: { contains: query.search, mode: 'insensitive' } },
+        { path: { contains: query.search, mode: 'insensitive' } },
+        { country: { contains: query.search, mode: 'insensitive' } },
+        { city: { contains: query.search, mode: 'insensitive' } },
+      ];
+    }
+
+    const [data, total] = await Promise.all([
+      this.prisma.userTelemetry.findMany({
+        where,
+        orderBy: { trackedAt: 'desc' },
+        take: query?.limit || 50,
+        skip: query?.offset || 0,
+      }),
+      this.prisma.userTelemetry.count({ where }),
+    ]);
+
+    return { data, total };
+  }
+
   // ─── System Health ───────────────────────────────────────────
   async getSystemHealth() {
     const dbCheck = await this.prisma.$queryRaw`SELECT 1 AS ok`;

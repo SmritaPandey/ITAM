@@ -1627,3 +1627,29 @@ model GpsTelemetry {
   @@index([tenantId, assetId])
   @@map("gps_telemetries")
 }
+
+// ============================================================================
+// USER TELEMETRY & COOKIE TRACKING (Platform Analytics)
+// ============================================================================
+model UserTelemetry {
+  id           String   @id @default(uuid()) @db.Uuid
+  tenantId     String?  @map("tenant_id") @db.Uuid
+  userId       String?  @map("user_id") @db.Uuid
+  email        String?
+  ipAddress    String?  @map("ip_address")
+  userAgent    String?  @map("user_agent")
+  path         String
+  referrer     String?
+  country      String?
+  city         String?
+  region       String?
+  latitude     Float?
+  longitude    Float?
+  cookies      Json     @default("{}")
+  sessionData  Json     @default("{}")
+  trackedAt    DateTime @default(now()) @map("tracked_at")
+
+  @@index([trackedAt])
+  @@index([tenantId])
+  @@map("user_telemetry")
+}

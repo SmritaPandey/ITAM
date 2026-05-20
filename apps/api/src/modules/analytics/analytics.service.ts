@@ -39,9 +39,105 @@ export class AnalyticsService {
   }
 
   /**
-   * Buffer an analytics event (non-blocking, best-effort)
+   * Parse auth header token if provided
    */
-  record(event: AnalyticsEvent, ip?: string) {
+  private decodeToken(authHeader?: string) {
+    if (!authHeader || !authHeader.startsWith('Bearer ')) return null;
+    try {
+      const token = authHeader.substring(7);
+      const base64Url = token.split('.')[1];
+      const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+      const jsonPayload = Buffer.from(base64, 'base64').toString('utf8');
+      return JSON.parse(jsonPayload);
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * Dynamic real-time geolocation mapping via ip-api.com
+   */
+  private async geolocate(ip?: string) {
+    // Local / development coordinates fallback - random Indian business centers
+    const fallbackLocations = [
+      { country: 'India', region: 'Maharashtra', city: 'Mumbai', lat: 19.0760, lon: 72.8777 },
+      { country: 'India', region: 'Karnataka', city: 'Bengaluru', lat: 12.9716, lon: 77.5946 },
+      { country: 'India', region: 'Delhi', city: 'New Delhi', lat: 28.6139, lon: 77.2090 }
+    ];
+    const localFallback = fallbackLocations[Math.floor(Math.random() * fallbackLocations.length)];
+
+    if (!ip || ip === '127.0.0.1' || ip === '::1' || ip.startsWith('192.168.') || ip.startsWith('10.')) {
+      return localFallback;
+    }
+
+    try {
+      const res = await fetch(`http://ip-api.com/json/${ip}`);
+      if (!res.ok) return localFallback;
+      const data = await res.json();
+      if (data.status !== 'success') return localFallback;
+      return {
+        country: data.country || 'India',
+        region: data.regionName || 'Delhi',
+        city: data.city || 'New Delhi',
+        lat: data.lat || 28.6139,
+        lon: data.lon || 77.2090,
+      };
+    } catch (err) {
+      this.logger.debug(`IP Geo lookup failed for ${ip}: ${err}`);
+      return localFallback;
+    }
+  }
+
+  /**
+   * Persist detailed cookie telemetry directly into the database
+   */
+  async record(event: AnalyticsEvent, ip?: string, authHeader?: string) {
+    try {
+      // Decode user authorization metadata
+      const decoded = this.decodeToken(authHeader) || (event.token ? this.decodeToken(`Bearer ${event.token}`) : null);
+      const tenantId = decoded?.tenantId || null;
+      const userId = decoded?.sub || null;
+      const email = decoded?.email || null;
+
+      // Extract geolocation details
+      const geo = await this.geolocate(ip);
+
+      // Parse cookies if present
+      const cookiesObj = typeof event.cookies === 'object' && event.cookies ? event.cookies : {};
+
+      // Build extra session context details
+      const sessionData = {
+        screenWidth: event.screenWidth || null,
+        screenHeight: event.screenHeight || null,
+        language: event.language || null,
+        duration: event.duration || null,
+        eventType: event.event,
+        sessionId: event.sessionId || null,
+      };
+
+      await this.prisma.userTelemetry.create({
+        data: {
+          tenantId,
+          userId,
+          email,
+          ipAddress: ip || 'unknown',
+          userAgent: event.userAgent || null,
+          path: event.path || '/',
+          referrer: event.referrer || null,
+          country: geo.country,
+          city: geo.city,
+          region: geo.region,
+          latitude: geo.lat,
+          longitude: geo.lon,
+          cookies: cookiesObj,
+          sessionData,
+        },
+      });
+    } catch (err) {
+      this.logger.error(`Error saving user telemetry: ${err}`);
+    }
+
+    // Also buffer normal system telemetry summaries
     const sanitized: AnalyticsEvent = {
       event: event.event,
       sessionId: event.sessionId,

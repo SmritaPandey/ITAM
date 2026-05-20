@@ -1,9 +1,10 @@
 "use client";
 import { useState, useEffect, useCallback } from "react";
+import { useRouter } from "next/navigation";
 import {
   AlertOctagon, Plus, RefreshCw, Filter, Loader2, X,
   CheckCircle2, AlertTriangle, Eye, BookOpen, Clock,
-  Search, Bug, ShieldAlert, ArrowRight, XCircle,
+  Search, Bug, ShieldAlert, ArrowRight, XCircle, ExternalLink,
 } from "lucide-react";
 import { apiFetch } from "@/lib/api";
 
@@ -18,9 +19,12 @@ const STATUS_CONFIG: Record<string, { color: string; bg: string; badge: string; 
 const PRIORITY_BADGE: Record<string, string> = { LOW: "green", MEDIUM: "amber", HIGH: "red", CRITICAL: "red" };
 
 export default function ProblemsPage() {
+  const router = useRouter();
   const [problems, setProblems] = useState<any[]>([]);
   const [knownErrors, setKnownErrors] = useState<any[]>([]);
   const [stats, setStats] = useState<any>(null);
+  const [assets, setAssets] = useState<any[]>([]);
+  const [tickets, setTickets] = useState<any[]>([]);
   const [tab, setTab] = useState<"all" | "known-errors">("all");
   const [showCreate, setShowCreate] = useState(false);
   const [form, setForm] = useState<any>({ priority: "MEDIUM" });
@@ -30,12 +34,23 @@ export default function ProblemsPage() {
   const [workaroundInput, setWorkaroundInput] = useState("");
   const [resolutionInput, setResolutionInput] = useState("");
   const [statusFilter, setStatusFilter] = useState<string | null>(null);
+  const [promotingChange, setPromotingChange] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const [p, ke, s] = await Promise.all([apiFetch("/problems"), apiFetch("/problems/known-errors"), apiFetch("/problems/stats")]);
-      setProblems(p); setKnownErrors(ke); setStats(s);
+      const [p, ke, s, assetList, ticketList] = await Promise.all([
+        apiFetch("/problems"),
+        apiFetch("/problems/known-errors"),
+        apiFetch("/problems/stats"),
+        apiFetch("/assets?limit=200").catch(() => ({ data: [] })),
+        apiFetch("/tickets?limit=200").catch(() => ({ data: [] })),
+      ]);
+      setProblems(p);
+      setKnownErrors(ke);
+      setStats(s);
+      setAssets(assetList?.data || []);
+      setTickets(ticketList?.data || []);
     } catch (e) { console.error(e); }
     setLoading(false);
   }, []);
@@ -56,6 +71,92 @@ export default function ProblemsPage() {
   const resolve = async (id: string) => {
     if (!resolutionInput.trim()) return alert("Please enter a resolution");
     try { await apiFetch(`/problems/${id}/resolve`, { method: "POST", body: JSON.stringify({ resolution: resolutionInput }) }); load(); setResolutionInput(""); setSelected(null); } catch(e) { alert(String(e)); }
+  };
+
+  const promoteToChange = async (id: string) => {
+    setPromotingChange(true);
+    try {
+      const res = await apiFetch(`/problems/${id}/promote-change`, { method: "POST" });
+      setSelected(res.problem);
+      load();
+      alert(`Success! Promoted to Change Request: ${res.changeRequest.changeNumber}`);
+    } catch (e) {
+      alert("Error promoting to change request: " + String(e));
+    } finally {
+      setPromotingChange(false);
+    }
+  };
+
+  const linkAsset = async (assetId: string) => {
+    if (!selected) return;
+    const asset = assets.find(a => a.id === assetId);
+    if (!asset) return;
+    const current = Array.isArray(selected.affectedAssets) ? selected.affectedAssets : [];
+    const assetIdVal = asset.id;
+    if (current.some((x: any) => (typeof x === "string" ? x === assetIdVal : x.id === assetIdVal))) return;
+    const updated = [...current, { id: asset.id, name: asset.name, assetTag: asset.assetTag }];
+    try {
+      const res = await apiFetch(`/problems/${selected.id}`, {
+        method: "PATCH",
+        body: JSON.stringify({ affectedAssets: updated })
+      });
+      setSelected(res);
+      load();
+    } catch (e) {
+      alert("Error linking asset: " + String(e));
+    }
+  };
+
+  const unlinkAsset = async (assetId: string) => {
+    if (!selected) return;
+    const current = Array.isArray(selected.affectedAssets) ? selected.affectedAssets : [];
+    const updated = current.filter((x: any) => (typeof x === "string" ? x !== assetId : x.id !== assetId));
+    try {
+      const res = await apiFetch(`/problems/${selected.id}`, {
+        method: "PATCH",
+        body: JSON.stringify({ affectedAssets: updated })
+      });
+      setSelected(res);
+      load();
+    } catch (e) {
+      alert("Error unlinking asset: " + String(e));
+    }
+  };
+
+  const linkTicket = async (ticketId: string) => {
+    if (!selected) return;
+    const ticket = tickets.find(t => t.id === ticketId);
+    if (!ticket) return;
+    const current = Array.isArray(selected.relatedTickets) ? selected.relatedTickets : [];
+    const ticketIdVal = ticket.id;
+    if (current.some((x: any) => (typeof x === "string" ? x === ticketIdVal : x.id === ticketIdVal))) return;
+    const updated = [...current, { id: ticket.id, ticketNumber: ticket.ticketNumber, title: ticket.title }];
+    try {
+      const res = await apiFetch(`/problems/${selected.id}`, {
+        method: "PATCH",
+        body: JSON.stringify({ relatedTickets: updated })
+      });
+      setSelected(res);
+      load();
+    } catch (e) {
+      alert("Error linking ticket: " + String(e));
+    }
+  };
+
+  const unlinkTicket = async (ticketId: string) => {
+    if (!selected) return;
+    const current = Array.isArray(selected.relatedTickets) ? selected.relatedTickets : [];
+    const updated = current.filter((x: any) => (typeof x === "string" ? x !== ticketId : x.id !== ticketId));
+    try {
+      const res = await apiFetch(`/problems/${selected.id}`, {
+        method: "PATCH",
+        body: JSON.stringify({ relatedTickets: updated })
+      });
+      setSelected(res);
+      load();
+    } catch (e) {
+      alert("Error unlinking ticket: " + String(e));
+    }
   };
 
   const inputStyle: React.CSSProperties = {
@@ -271,9 +372,235 @@ export default function ProblemsPage() {
               </div>
             )}
 
+            {/* ITIL Relationship Widgets */}
+            {(() => {
+              const currentAffectedAssets = Array.isArray(selected.affectedAssets) ? selected.affectedAssets : [];
+              const currentRelatedTickets = Array.isArray(selected.relatedTickets) ? selected.relatedTickets : [];
+
+              const availableAssets = assets.filter(a => {
+                return !currentAffectedAssets.some((x: any) => (typeof x === "string" ? x === a.id : x.id === a.id));
+              });
+
+              const availableTickets = tickets.filter(t => {
+                return !currentRelatedTickets.some((x: any) => (typeof x === "string" ? x === t.id : x.id === t.id));
+              });
+
+              return (
+                <>
+                  {/* Affected CIs Section */}
+                  <div style={{ marginBottom: 20, paddingTop: 16, borderTop: "1px solid var(--border-primary)" }}>
+                    <div style={{ fontSize: 11, color: "var(--text-tertiary)", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 8, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                      <span>Affected Configuration Items (CIs)</span>
+                      <span className="badge cyan" style={{ fontSize: 9 }}>{currentAffectedAssets.length} linked</span>
+                    </div>
+                    
+                    <div style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 8 }}>
+                      {currentAffectedAssets.map((x: any, i: number) => {
+                        const assetId = typeof x === "string" ? x : x.id;
+                        const asset = assets.find(a => a.id === assetId);
+                        const name = asset?.name || (typeof x === "object" ? x.name : "Unknown CI");
+                        const tag = asset?.assetTag || (typeof x === "object" ? x.assetTag : "—");
+                        return (
+                          <div key={assetId + "-" + i} style={{
+                            display: "flex", justifyContent: "space-between", alignItems: "center",
+                            padding: "8px 12px", background: "var(--bg-card)", borderRadius: 8,
+                            border: "1px solid var(--border-primary)", transition: "all 0.2s",
+                          }}>
+                            <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+                              <span style={{ fontSize: 13, fontWeight: 600, color: "var(--text-primary)" }}>{name}</span>
+                              <span style={{ fontSize: 10, color: "var(--text-tertiary)" }}>{tag}</span>
+                            </div>
+                            <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                              <button 
+                                className="btn btn-secondary" 
+                                style={{ padding: 4, height: "auto" }}
+                                title="View Inventory Details"
+                                onClick={() => router.push(`/dashboard/assets/${assetId}`)}
+                              >
+                                <ExternalLink size={12} />
+                              </button>
+                              <button 
+                                className="btn btn-secondary" 
+                                style={{ padding: 4, height: "auto", color: "var(--danger)" }}
+                                title="Unlink CI"
+                                onClick={() => unlinkAsset(assetId)}
+                              >
+                                <X size={12} />
+                              </button>
+                            </div>
+                          </div>
+                        );
+                      })}
+                      {currentAffectedAssets.length === 0 && (
+                        <div style={{ padding: "12px", textAlign: "center", fontSize: 12, color: "var(--text-tertiary)", background: "var(--bg-card)", borderRadius: 8, border: "1px dashed var(--border-primary)" }}>
+                          No CIs mapped. Select an asset below to link.
+                        </div>
+                      )}
+                    </div>
+
+                    {availableAssets.length > 0 && (
+                      <div style={{ display: "flex", gap: 8 }}>
+                        <select 
+                          defaultValue=""
+                          onChange={(e) => {
+                            if (e.target.value) {
+                              linkAsset(e.target.value);
+                              e.target.value = "";
+                            }
+                          }}
+                          style={{ ...inputStyle, flex: 1, padding: "8px 10px" }}
+                        >
+                          <option value="" disabled>+ Link Configuration Item (CI)...</option>
+                          {availableAssets.map((a: any) => (
+                            <option key={a.id} value={a.id}>{a.name} ({a.assetTag})</option>
+                          ))}
+                        </select>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Related Tickets Section */}
+                  <div style={{ marginBottom: 20 }}>
+                    <div style={{ fontSize: 11, color: "var(--text-tertiary)", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 8, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                      <span>Related Incidents / Tickets</span>
+                      <span className="badge amber" style={{ fontSize: 9 }}>{currentRelatedTickets.length} linked</span>
+                    </div>
+                    
+                    <div style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 8 }}>
+                      {currentRelatedTickets.map((x: any, i: number) => {
+                        const ticketId = typeof x === "string" ? x : x.id;
+                        const ticket = tickets.find(t => t.id === ticketId);
+                        const ticketNumber = ticket?.ticketNumber || (typeof x === "object" ? x.ticketNumber : "Unknown Ticket");
+                        const title = ticket?.title || (typeof x === "object" ? x.title : "—");
+                        return (
+                          <div key={ticketId + "-" + i} style={{
+                            display: "flex", justifyContent: "space-between", alignItems: "center",
+                            padding: "8px 12px", background: "var(--bg-card)", borderRadius: 8,
+                            border: "1px solid var(--border-primary)", transition: "all 0.2s",
+                          }}>
+                            <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+                              <span style={{ fontSize: 11, fontFamily: "monospace", fontWeight: 600, color: "var(--brand-400)" }}>{ticketNumber}</span>
+                              <span style={{ fontSize: 12, fontWeight: 500, color: "var(--text-primary)" }}>{title}</span>
+                            </div>
+                            <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                              <button 
+                                className="btn btn-secondary" 
+                                style={{ padding: 4, height: "auto" }}
+                                title="View Ticket Details"
+                                onClick={() => router.push(`/dashboard/tickets/${ticketId}`)}
+                              >
+                                <ExternalLink size={12} />
+                              </button>
+                              <button 
+                                className="btn btn-secondary" 
+                                style={{ padding: 4, height: "auto", color: "var(--danger)" }}
+                                title="Unlink Ticket"
+                                onClick={() => unlinkTicket(ticketId)}
+                              >
+                                <X size={12} />
+                              </button>
+                            </div>
+                          </div>
+                        );
+                      })}
+                      {currentRelatedTickets.length === 0 && (
+                        <div style={{ padding: "12px", textAlign: "center", fontSize: 12, color: "var(--text-tertiary)", background: "var(--bg-card)", borderRadius: 8, border: "1px dashed var(--border-primary)" }}>
+                          No related tickets mapped. Select a ticket below to link.
+                        </div>
+                      )}
+                    </div>
+
+                    {availableTickets.length > 0 && (
+                      <div style={{ display: "flex", gap: 8 }}>
+                        <select 
+                          defaultValue=""
+                          onChange={(e) => {
+                            if (e.target.value) {
+                              linkTicket(e.target.value);
+                              e.target.value = "";
+                            }
+                          }}
+                          style={{ ...inputStyle, flex: 1, padding: "8px 10px" }}
+                        >
+                          <option value="" disabled>+ Link Incident / Ticket...</option>
+                          {availableTickets.map((t: any) => (
+                            <option key={t.id} value={t.id}>{t.ticketNumber} — {t.title}</option>
+                          ))}
+                        </select>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Related Changes Section */}
+                  <div style={{ marginBottom: 20 }}>
+                    <div style={{ fontSize: 11, color: "var(--text-tertiary)", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 8, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                      <span>Related Change Requests</span>
+                      <span className="badge blue" style={{ fontSize: 9 }}>{((selected as any).relatedChanges || []).length} linked</span>
+                    </div>
+                    
+                    <div style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 8 }}>
+                      {((selected as any).relatedChanges || []).map((x: any, i: number) => {
+                        const changeId = typeof x === "string" ? x : x.id;
+                        const changeNumber = typeof x === "object" ? x.changeNumber : "CHG-XXXXX";
+                        const changeTitle = typeof x === "object" ? x.title : "—";
+                        return (
+                          <div key={changeId + "-" + i} style={{
+                            display: "flex", justifyContent: "space-between", alignItems: "center",
+                            padding: "8px 12px", background: "var(--bg-card)", borderRadius: 8,
+                            border: "1px solid var(--border-primary)", transition: "all 0.2s",
+                          }}>
+                            <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+                              <span style={{ fontSize: 11, fontFamily: "monospace", fontWeight: 600, color: "var(--brand-400)" }}>{changeNumber}</span>
+                              <span style={{ fontSize: 12, fontWeight: 500, color: "var(--text-primary)" }}>{changeTitle}</span>
+                            </div>
+                            <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                              <button 
+                                className="btn btn-secondary" 
+                                style={{ padding: 4, height: "auto" }}
+                                title="View Change Details"
+                                onClick={() => router.push(`/dashboard/changes`)}
+                              >
+                                <ExternalLink size={12} />
+                              </button>
+                            </div>
+                          </div>
+                        );
+                      })}
+                      {((selected as any).relatedChanges || []).length === 0 && (
+                        <div style={{ padding: "12px", textAlign: "center", fontSize: 12, color: "var(--text-tertiary)", background: "var(--bg-card)", borderRadius: 8, border: "1px dashed var(--border-primary)" }}>
+                          No change requests promoted.
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </>
+              );
+            })()}
+
             {/* Actions */}
             {selected.status !== "RESOLVED" && selected.status !== "CLOSED" && (
               <div style={{ marginTop: 20, paddingTop: 16, borderTop: "1px solid var(--border-primary)" }}>
+                <div style={{ marginBottom: 16, borderBottom: "1px solid var(--border-primary)", paddingBottom: 16 }}>
+                  <div style={{ fontSize: 12, fontWeight: 600, color: "var(--brand-400)", marginBottom: 8, display: "flex", alignItems: "center", gap: 6 }}>
+                    <RefreshCw size={14} /> Change Management Promotion
+                  </div>
+                  <button 
+                    onClick={() => promoteToChange(selected.id)} 
+                    disabled={promotingChange}
+                    className="btn btn-primary" 
+                    style={{ fontSize: 12, width: "100%", justifyContent: "center", display: "flex", gap: 6 }}
+                  >
+                    {promotingChange ? (
+                      <>
+                        <Loader2 size={12} className="animate-spin" /> Promoting...
+                      </>
+                    ) : (
+                      <>
+                        <ArrowRight size={12} /> Promote to Change Request (RFC)
+                      </>
+                    )}
+                  </button>
+                </div>
                 {selected.status === "OPEN" && (
                   <div style={{ marginBottom: 16 }}>
                     <div style={{ fontSize: 12, fontWeight: 600, color: "#f97316", marginBottom: 8, display: "flex", alignItems: "center", gap: 6 }}>

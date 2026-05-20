@@ -1,9 +1,11 @@
 "use client";
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { Building2, Armchair, Wrench } from "lucide-react";
 import { apiFetch } from "@/lib/api";
 
 export default function NonITAssetsPage() {
+  const router = useRouter();
   const [assets, setAssets] = useState<any>({ data: [], total: 0 });
   const [loading, setLoading] = useState(true);
 
@@ -34,9 +36,9 @@ export default function NonITAssetsPage() {
             {loading ? (
               <tr><td colSpan={6} style={{ textAlign: "center", padding: 40, color: "var(--text-tertiary)" }}>Loading...</td></tr>
             ) : assets.data.map((a: any) => (
-              <tr key={a.id}>
+              <tr key={a.id} style={{ cursor: "pointer" }} onClick={() => router.push(`/dashboard/assets/${a.id}`)}>
                 <td>
-                  <div style={{ fontWeight: 600, color: "var(--text-primary)" }}>{a.name}</div>
+                  <div style={{ fontWeight: 600, color: "var(--brand-400)" }}>{a.name}</div>
                   <div style={{ fontSize: 11, color: "var(--text-tertiary)" }}>{a.assetTag} • {a.manufacturer}</div>
                 </td>
                 <td><span className="badge amber">{a.assetType?.name}</span></td>

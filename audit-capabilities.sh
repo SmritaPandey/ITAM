@@ -80,7 +80,7 @@ else: print('')
 " 2>/dev/null)
 
 if [ -n "$ASSET_TYPE_ID" ]; then
-  test_endpoint "Create Asset" POST "/assets" "{\"name\":\"MacBook Pro 16-M3\",\"assetTypeId\":\"$ASSET_TYPE_ID\",\"serialNumber\":\"FVFL$(date +%s)\",\"manufacturer\":\"Apple\",\"model\":\"MacBook Pro 16 M3 Max\",\"ipAddress\":\"192.168.1.$(shuf -i 10-200 -n1)\",\"hostname\":\"smrita-mbp\",\"status\":\"ACTIVE\"}"
+  test_endpoint "Create Asset" POST "/assets" "{\"name\":\"MacBook Pro 16-M3\",\"assetTypeId\":\"$ASSET_TYPE_ID\",\"serialNumber\":\"FVFL$(date +%s)\",\"manufacturer\":\"Apple\",\"model\":\"MacBook Pro 16 M3 Max\",\"ipAddress\":\"192.168.1.$((RANDOM % 191 + 10))\",\"hostname\":\"smrita-mbp\",\"status\":\"ACTIVE\"}"
 else
   echo "⚠️  Create Asset — Skipped (no asset types found)"
 fi

@@ -1,10 +1,14 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../common/database/prisma.service';
 import { Prisma } from '@prisma/client';
+import { EventBusService } from '../../common/events/event-bus.service';
 
 @Injectable()
 export class TicketsService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private eventBus: EventBusService,
+  ) {}
 
   private async generateTicketNumber(tenantId: string): Promise<string> {
     const count = await this.prisma.ticket.count({ where: { tenantId } });
@@ -74,7 +78,7 @@ export class TicketsService {
   }) {
     const ticketNumber = await this.generateTicketNumber(tenantId);
 
-    return this.prisma.ticket.create({
+    const ticket = await this.prisma.ticket.create({
       data: {
         tenantId,
         ticketNumber,
@@ -92,9 +96,13 @@ export class TicketsService {
       },
       include: {
         requester: { select: { id: true, firstName: true, lastName: true } },
-        assets: { include: { asset: { select: { id: true, name: true } } } },
+        assets: { include: { asset: { select: { id: true, name: true, assetTag: true } } } },
       },
     });
+
+    this.eventBus.emitTicketEvent(tenantId, 'created', ticket);
+
+    return ticket;
   }
 
   async addComment(ticketId: string, tenantId: string, authorId: string, content: string, isInternal = false) {

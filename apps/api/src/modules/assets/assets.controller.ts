@@ -129,6 +129,13 @@ export class AssetsController {
     return this.assetsService.getHistory(id, req.user.tenantId);
   }
 
+  @Get(':id/qr')
+  @Roles('*')
+  @ApiOperation({ summary: 'Get asset QR and barcode telemetrics data' })
+  async getQrData(@Request() req: any, @Param('id') id: string) {
+    return this.assetsService.getQrData(id, req.user.tenantId);
+  }
+
   @Get(':id/relationships')
   @Roles('*')
   @ApiOperation({ summary: 'Get asset CI relationships' })

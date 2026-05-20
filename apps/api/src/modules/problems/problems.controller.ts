@@ -58,4 +58,11 @@ export class ProblemsController {
   resolve(@Param('id') id: string, @Request() req: any, @Body() body: { resolution: string }) {
     return this.service.resolve(id, req.user.tenantId, body.resolution);
   }
+
+  @Post(':id/promote-change')
+  @Roles('Tenant Admin')
+  @ApiOperation({ summary: 'Promote problem to change request' })
+  promoteChange(@Param('id') id: string, @Request() req: any, @Body() body: any) {
+    return this.service.promoteToChangeRequest(id, req.user.tenantId, req.user.sub, body);
+  }
 }

@@ -7,6 +7,7 @@ import { exec } from 'child_process';
 import { promisify } from 'util';
 import * as os from 'os';
 import * as net from 'net';
+import { TopologyService } from './topology.service';
 
 const execAsync = promisify(exec);
 
@@ -22,6 +23,7 @@ export class MonitoringService {
   constructor(
     private prisma: PrismaService,
     private eventBus: EventBusService,
+    private topologyService: TopologyService,
   ) {}
 
   // ─── Real ICMP Ping ──────────────────────────────────────────────
@@ -492,122 +494,7 @@ export class MonitoringService {
   }
 
   async getTopology(tenantId: string) {
-    const devices = await this.prisma.monitoredDevice.findMany({
-      where: { tenantId, type: 'NETWORK_DEVICE' },
-    });
-
-    // Build node list with SNMP-sourced metadata
-    const nodes = devices.map((d, i) => {
-      const cfg = d.config as any || {};
-      const met = d.metrics as any || {};
-      const angle = (i / Math.max(devices.length, 1)) * 2 * Math.PI;
-      const radius = 250;
-      return {
-        id: d.id, name: d.name, type: cfg.deviceType || 'switch',
-        ip: d.ipAddress, status: d.status,
-        cpu: met.cpu || 0, memory: met.memory || 0,
-        interfaces: met.interfacesUp || 0,
-        sysName: cfg.sysName || '',
-        x: cfg.layoutX ?? (500 + radius * Math.cos(angle)),
-        y: cfg.layoutY ?? (300 + radius * Math.sin(angle)),
-      };
-    });
-
-    const links: any[] = [];
-    const linkSet = new Set<string>(); // Prevent duplicate links
-
-    // Strategy 1: ARP table neighbor discovery
-    // Devices that appear in each other's ARP tables are likely directly connected
-    for (const device of devices) {
-      const met = device.metrics as any || {};
-      const arpTable = met.arpTable || (device.config as any)?.arpTable || [];
-
-      if (Array.isArray(arpTable)) {
-        for (const arpEntry of arpTable) {
-          const neighbor = devices.find(d => d.ipAddress === arpEntry.ip && d.id !== device.id);
-          if (neighbor) {
-            const linkId = [device.id, neighbor.id].sort().join('-');
-            if (!linkSet.has(linkId)) {
-              linkSet.add(linkId);
-              const metA = device.metrics as any || {};
-              const metB = neighbor.metrics as any || {};
-              const avgLatency = ((metA.latency || 0) + (metB.latency || 0)) / 2;
-              links.push({
-                source: device.id, target: neighbor.id,
-                bandwidth: '1Gbps',
-                utilization: avgLatency > 0 ? Math.min(Math.round(avgLatency * 2), 100) : 0,
-                discoverySource: 'arp',
-              });
-            }
-          }
-        }
-      }
-
-      // Strategy 2: LLDP/CDP neighbor data (from SNMP)
-      const lldpNeighbors = (device.config as any)?.lldpNeighbors || [];
-      for (const lldp of lldpNeighbors) {
-        const neighbor = devices.find(d =>
-          d.ipAddress === lldp.mgmtAddress ||
-          (d.config as any)?.sysName === lldp.sysName,
-        );
-        if (neighbor && neighbor.id !== device.id) {
-          const linkId = [device.id, neighbor.id].sort().join('-');
-          if (!linkSet.has(linkId)) {
-            linkSet.add(linkId);
-            links.push({
-              source: device.id, target: neighbor.id,
-              bandwidth: lldp.portSpeed || '1Gbps',
-              utilization: 0,
-              localPort: lldp.localPort,
-              remotePort: lldp.remotePort,
-              discoverySource: 'lldp',
-            });
-          }
-        }
-      }
-    }
-
-    // Strategy 3: Subnet-based fallback for devices not yet linked
-    const linkedDevices = new Set<string>();
-    for (const link of links) {
-      linkedDevices.add(link.source);
-      linkedDevices.add(link.target);
-    }
-
-    for (let i = 0; i < nodes.length; i++) {
-      for (let j = i + 1; j < nodes.length; j++) {
-        if (linkedDevices.has(nodes[i].id) && linkedDevices.has(nodes[j].id)) continue;
-        const a = nodes[i].ip?.split('.').slice(0, 3).join('.');
-        const b = nodes[j].ip?.split('.').slice(0, 3).join('.');
-        if (a && b && a === b) {
-          const linkId = [nodes[i].id, nodes[j].id].sort().join('-');
-          if (!linkSet.has(linkId)) {
-            linkSet.add(linkId);
-            const metricsA = (devices.find(d => d.id === nodes[i].id)?.metrics as any) || {};
-            const metricsB = (devices.find(d => d.id === nodes[j].id)?.metrics as any) || {};
-            const avgLatency = ((metricsA.latency || 0) + (metricsB.latency || 0)) / 2;
-            links.push({
-              source: nodes[i].id, target: nodes[j].id,
-              bandwidth: '1Gbps',
-              utilization: avgLatency > 0 ? Math.min(Math.round(avgLatency * 2), 100) : 0,
-              discoverySource: 'subnet',
-            });
-          }
-        }
-      }
-    }
-
-    // Fallback: ensure at least one link for visualization
-    if (links.length === 0 && nodes.length >= 2) {
-      links.push({ source: nodes[0].id, target: nodes[1].id, bandwidth: '10Gbps', utilization: 0, discoverySource: 'fallback' });
-    }
-
-    return {
-      nodes, links,
-      deviceCount: nodes.length,
-      linkCount: links.length,
-      discoveryMethods: [...new Set(links.map(l => l.discoverySource))],
-    };
+    return this.topologyService.getTopology(tenantId);
   }
 
   // ─── Real Device Interface Scan ──────────────────────────────────

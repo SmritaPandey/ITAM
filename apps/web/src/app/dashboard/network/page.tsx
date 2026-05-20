@@ -4,7 +4,7 @@ import { useRouter } from "next/navigation";
 import {
   Wifi, AlertTriangle, Activity, CheckCircle2, XCircle, Signal, Loader2,
   RefreshCw, FileCode, Scan, Zap, Cpu, HardDrive, Clock, BarChart3,
-  ChevronRight, X, Server, Network, Router
+  ChevronRight, X, Server, Network, Router, ExternalLink
 } from "lucide-react";
 import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, LineChart, Line, Legend
@@ -277,6 +277,11 @@ export default function NetworkPage() {
                 </p>
               </div>
               <div style={{ display: "flex", gap: 8 }}>
+                {selectedDevice.config?.sourceAssetId && (
+                  <button className="btn btn-primary" style={{ padding: "4px 10px", fontSize: 11, display: "flex", alignItems: "center", gap: 4 }} onClick={() => router.push(`/dashboard/assets/${selectedDevice.config.sourceAssetId}`)}>
+                    <ExternalLink size={12} /> View Asset
+                  </button>
+                )}
                 <button className="btn btn-secondary" style={{ padding: "4px 10px", fontSize: 11 }} onClick={async () => {
                   try { await apiFetch(`/monitoring/snmp/devices/${selectedDevice.id}/poll`, { method: "POST" }); refresh(); } catch {}
                 }}><Activity size={12} /> Poll Now</button>

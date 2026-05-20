@@ -4,6 +4,7 @@ import { PrismaService } from '../../common/database/prisma.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
+import * as v8 from 'v8';
 
 const APP_VERSION = '1.0.0';
 const MEMORY_WARN_PERCENT = 85;
@@ -86,7 +87,8 @@ export class HealthController {
       this.prisma.tenant.count().catch(() => 0),
     ]);
     const mem = process.memoryUsage();
-    const heapPercent = Math.round((mem.heapUsed / mem.heapTotal) * 100);
+    const heapLimit = v8.getHeapStatistics().heap_size_limit;
+    const heapPercent = Math.round((mem.heapUsed / heapLimit) * 100);
 
     return {
       status: dbHealthy ? 'healthy' : 'degraded',
@@ -107,6 +109,7 @@ export class HealthController {
       system: {
         heapUsedMB: Math.round(mem.heapUsed / 1024 / 1024),
         heapTotalMB: Math.round(mem.heapTotal / 1024 / 1024),
+        heapLimitMB: Math.round(heapLimit / 1024 / 1024),
         heapPercent,
         rssMB: Math.round(mem.rss / 1024 / 1024),
         externalMB: Math.round(mem.external / 1024 / 1024),
@@ -129,7 +132,8 @@ export class HealthController {
 
   private checkMemory(): boolean {
     const mem = process.memoryUsage();
-    const heapPercent = (mem.heapUsed / mem.heapTotal) * 100;
+    const heapLimit = v8.getHeapStatistics().heap_size_limit;
+    const heapPercent = (mem.heapUsed / heapLimit) * 100;
     return heapPercent < MEMORY_WARN_PERCENT;
   }
 }

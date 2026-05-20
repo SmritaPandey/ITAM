@@ -4,6 +4,17 @@ import { promisify } from 'util';
 
 const execAsync = promisify(exec);
 
+export interface SnmpNeighbor {
+  localPortIndex: number;
+  localPortName?: string;
+  remotePortName?: string;
+  remotePortDesc?: string;
+  remoteSysName?: string;
+  remoteSysDesc?: string;
+  remoteChassisId?: string;
+  remoteIp?: string;
+}
+
 export interface SnmpDeviceInfo {
   ip: string;
   sysDescr?: string;
@@ -14,6 +25,8 @@ export interface SnmpDeviceInfo {
   interfaces?: SnmpInterface[];
   cpuLoad?: number;
   memoryPercent?: number;
+  lldpNeighbors?: SnmpNeighbor[];
+  cdpNeighbors?: SnmpNeighbor[];
 }
 
 export interface SnmpInterface {
@@ -39,6 +52,22 @@ const OID = {
   ifInOctets: '1.3.6.1.2.1.2.2.1.10',
   ifOutOctets: '1.3.6.1.2.1.2.2.1.16',
   hrProcessorLoad: '1.3.6.1.2.1.25.3.3.1.2',
+
+  // LLDP MIBs
+  lldpRemChassisId: '1.0.8802.1.1.2.1.4.1.1.5',
+  lldpRemPortId: '1.0.8802.1.1.2.1.4.1.1.7',
+  lldpRemPortDesc: '1.0.8802.1.1.2.1.4.1.1.8',
+  lldpRemSysName: '1.0.8802.1.1.2.1.4.1.1.9',
+  lldpRemSysDesc: '1.0.8802.1.1.2.1.4.1.1.10',
+  lldpRemManAddrTable: '1.0.8802.1.1.2.1.4.2.1',
+  lldpLocPortDesc: '1.0.8802.1.1.2.1.3.7.1.3',
+
+  // CDP Cache MIBs
+  cdpCacheAddress: '1.3.6.1.4.1.9.9.23.1.2.1.1.4',
+  cdpCacheVersion: '1.3.6.1.4.1.9.9.23.1.2.1.1.5',
+  cdpCacheDeviceId: '1.3.6.1.4.1.9.9.23.1.2.1.1.6',
+  cdpCacheDevicePort: '1.3.6.1.4.1.9.9.23.1.2.1.1.7',
+  cdpCacheSysName: '1.3.6.1.4.1.9.9.23.1.2.1.1.17',
 };
 
 const IF_STATUS: Record<number, string> = { 1: 'up', 2: 'down', 3: 'testing' };
@@ -76,29 +105,136 @@ export class SnmpScanner {
           else if (vb.oid === OID.sysLocation) result.sysLocation = val;
         }
 
-        // Walk interfaces
+        // Walk interfaces and neighbors
         const ifaces: Map<number, Partial<SnmpInterface>> = new Map();
-        const walkOids = [OID.ifDescr, OID.ifSpeed, OID.ifAdminStatus, OID.ifOperStatus, OID.ifInOctets, OID.ifOutOctets];
+        const lldpNeighborsMap: Map<string, SnmpNeighbor> = new Map();
+        const cdpNeighborsMap: Map<string, SnmpNeighbor> = new Map();
+        const lldpLocPortMap: Map<number, string> = new Map();
+
+        const walkOids = [
+          OID.ifDescr, OID.ifSpeed, OID.ifAdminStatus, OID.ifOperStatus, OID.ifInOctets, OID.ifOutOctets,
+          OID.lldpRemChassisId, OID.lldpRemPortId, OID.lldpRemPortDesc, OID.lldpRemSysName, OID.lldpRemSysDesc, OID.lldpRemManAddrTable, OID.lldpLocPortDesc,
+          OID.cdpCacheAddress, OID.cdpCacheVersion, OID.cdpCacheDeviceId, OID.cdpCacheDevicePort, OID.cdpCacheSysName
+        ];
+
         let done = 0;
         for (const base of walkOids) {
           session.subtree(base, (vbs: any[]) => {
             for (const vb of vbs) {
               if (snmp.isVarbindError(vb)) continue;
-              const idx = parseInt(vb.oid.split('.').pop()!);
-              if (!ifaces.has(idx)) ifaces.set(idx, { index: idx });
-              const iface = ifaces.get(idx)!;
+              
+              const parts = vb.oid.split('.');
               const numVal = typeof vb.value === 'number' ? vb.value : parseInt(vb.value?.toString()) || 0;
-              if (vb.oid.startsWith(OID.ifDescr)) iface.name = vb.value?.toString();
-              else if (vb.oid.startsWith(OID.ifSpeed)) iface.speed = numVal;
-              else if (vb.oid.startsWith(OID.ifAdminStatus)) iface.adminStatus = IF_STATUS[numVal] || 'unknown';
-              else if (vb.oid.startsWith(OID.ifOperStatus)) iface.operStatus = IF_STATUS[numVal] || 'unknown';
-              else if (vb.oid.startsWith(OID.ifInOctets)) iface.inOctets = numVal;
-              else if (vb.oid.startsWith(OID.ifOutOctets)) iface.outOctets = numVal;
+              const strVal = vb.value?.toString();
+
+              if (vb.oid.startsWith('1.3.6.2.1.2.2.1.') || vb.oid.startsWith('1.3.6.1.2.1.2.2.1.')) {
+                // Interface table
+                const idx = parseInt(parts.pop()!);
+                if (!ifaces.has(idx)) ifaces.set(idx, { index: idx });
+                const iface = ifaces.get(idx)!;
+                if (vb.oid.startsWith(OID.ifDescr)) iface.name = strVal;
+                else if (vb.oid.startsWith(OID.ifSpeed)) iface.speed = numVal;
+                else if (vb.oid.startsWith(OID.ifAdminStatus)) iface.adminStatus = IF_STATUS[numVal] || 'unknown';
+                else if (vb.oid.startsWith(OID.ifOperStatus)) iface.operStatus = IF_STATUS[numVal] || 'unknown';
+                else if (vb.oid.startsWith(OID.ifInOctets)) iface.inOctets = numVal;
+                else if (vb.oid.startsWith(OID.ifOutOctets)) iface.outOctets = numVal;
+              } else if (vb.oid.startsWith('1.0.8802.1.1.2.1.4.1.1.')) {
+                // LLDP remote table
+                const localPortNum = parseInt(parts[parts.length - 2]);
+                const remIndex = parseInt(parts[parts.length - 1]);
+                const key = `${localPortNum}_${remIndex}`;
+                if (!lldpNeighborsMap.has(key)) {
+                  lldpNeighborsMap.set(key, { localPortIndex: localPortNum });
+                }
+                const n = lldpNeighborsMap.get(key)!;
+                if (vb.oid.startsWith(OID.lldpRemChassisId)) n.remoteChassisId = strVal;
+                else if (vb.oid.startsWith(OID.lldpRemPortId)) n.remotePortName = strVal;
+                else if (vb.oid.startsWith(OID.lldpRemPortDesc)) n.remotePortDesc = strVal;
+                else if (vb.oid.startsWith(OID.lldpRemSysName)) n.remoteSysName = strVal;
+                else if (vb.oid.startsWith(OID.lldpRemSysDesc)) n.remoteSysDesc = strVal;
+              } else if (vb.oid.startsWith('1.0.8802.1.1.2.1.4.2.1.')) {
+                // LLDP remote man address table
+                if (parts[11] === '4') {
+                  const localPortNum = parseInt(parts[13]);
+                  const remIndex = parseInt(parts[14]);
+                  const key = `${localPortNum}_${remIndex}`;
+                  if (!lldpNeighborsMap.has(key)) {
+                    lldpNeighborsMap.set(key, { localPortIndex: localPortNum });
+                  }
+                  const n = lldpNeighborsMap.get(key)!;
+                  if (Buffer.isBuffer(vb.value)) {
+                    if (vb.value.length === 4) {
+                      n.remoteIp = `${vb.value[0]}.${vb.value[1]}.${vb.value[2]}.${vb.value[3]}`;
+                    } else {
+                      n.remoteIp = strVal;
+                    }
+                  } else {
+                    n.remoteIp = strVal;
+                  }
+                }
+              } else if (vb.oid.startsWith(OID.lldpLocPortDesc)) {
+                // LLDP local port description table
+                const localPortNum = parseInt(parts.pop()!);
+                lldpLocPortMap.set(localPortNum, strVal);
+              } else if (vb.oid.startsWith('1.3.6.1.4.1.9.9.23.1.2.1.1.')) {
+                // CDP remote table
+                const localIfIndex = parseInt(parts[14]);
+                const deviceIndex = parseInt(parts[15]);
+                const key = `${localIfIndex}_${deviceIndex}`;
+                if (!cdpNeighborsMap.has(key)) {
+                  cdpNeighborsMap.set(key, { localPortIndex: localIfIndex });
+                }
+                const n = cdpNeighborsMap.get(key)!;
+                if (vb.oid.startsWith(OID.cdpCacheAddress)) {
+                  if (Buffer.isBuffer(vb.value)) {
+                    if (vb.value.length === 4) {
+                      n.remoteIp = `${vb.value[0]}.${vb.value[1]}.${vb.value[2]}.${vb.value[3]}`;
+                    } else {
+                      const hex = vb.value.toString('hex');
+                      if (hex.length === 8) {
+                        n.remoteIp = [
+                          parseInt(hex.slice(0, 2), 16),
+                          parseInt(hex.slice(2, 4), 16),
+                          parseInt(hex.slice(4, 6), 16),
+                          parseInt(hex.slice(6, 8), 16),
+                        ].join('.');
+                      } else {
+                        n.remoteIp = strVal;
+                      }
+                    }
+                  } else {
+                    n.remoteIp = strVal;
+                  }
+                } else if (vb.oid.startsWith(OID.cdpCacheVersion)) n.remoteSysDesc = strVal;
+                else if (vb.oid.startsWith(OID.cdpCacheDeviceId)) n.remoteChassisId = strVal;
+                else if (vb.oid.startsWith(OID.cdpCacheDevicePort)) n.remotePortName = strVal;
+                else if (vb.oid.startsWith(OID.cdpCacheSysName)) n.remoteSysName = strVal;
+              }
             }
           }, () => {
             done++;
             if (done >= walkOids.length) {
               result.interfaces = Array.from(ifaces.values()) as SnmpInterface[];
+              
+              // Resolve interface names for LLDP
+              result.lldpNeighbors = Array.from(lldpNeighborsMap.values()).map(n => {
+                const localPortDesc = lldpLocPortMap.get(n.localPortIndex);
+                const localIfaceName = Array.from(ifaces.values()).find(i => i.index === n.localPortIndex)?.name;
+                return {
+                  ...n,
+                  localPortName: localPortDesc || localIfaceName || `Port ${n.localPortIndex}`,
+                };
+              });
+
+              // Resolve interface names for CDP
+              result.cdpNeighbors = Array.from(cdpNeighborsMap.values()).map(n => {
+                const localIfaceName = Array.from(ifaces.values()).find(i => i.index === n.localPortIndex)?.name;
+                return {
+                  ...n,
+                  localPortName: localIfaceName || `Port ${n.localPortIndex}`,
+                };
+              });
+
               session.close();
               resolve(result);
             }
@@ -124,3 +260,4 @@ export class SnmpScanner {
     return (await this.getSnmp()) !== null;
   }
 }
+

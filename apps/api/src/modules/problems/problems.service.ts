@@ -54,6 +54,57 @@ export class ProblemsService {
     });
   }
 
+  async promoteToChangeRequest(id: string, tenantId: string, userId: string, changeData?: any) {
+    const problem = await this.prisma.problem.findFirst({ where: { id, tenantId } });
+    if (!problem) throw new NotFoundException('Problem not found');
+
+    const count = await this.prisma.changeRequest.count({ where: { tenantId } });
+    const changeNumber = `CHG-${String(count + 1).padStart(5, '0')}`;
+
+    const title = changeData?.title || `Change Request from ${problem.problemNumber}: ${problem.title}`;
+    const description = changeData?.description || problem.description || 'Change request created from problem record.';
+    const type = changeData?.type || 'NORMAL';
+    const category = changeData?.category || problem.category || 'Infrastructure';
+    const priority = changeData?.priority || problem.priority || 'MEDIUM';
+    const risk = changeData?.risk || 'MEDIUM';
+
+    const changeRequest = await this.prisma.changeRequest.create({
+      data: {
+        tenantId,
+        changeNumber,
+        title,
+        description,
+        type,
+        category,
+        priority,
+        risk,
+        status: 'DRAFT',
+        requestedById: userId,
+        affectedAssets: problem.affectedAssets || [],
+        relatedTickets: problem.relatedTickets || [],
+      }
+    });
+
+    const existingChanges = Array.isArray(problem.relatedChanges) ? problem.relatedChanges : [];
+    const newChangeEntry = {
+      id: changeRequest.id,
+      changeNumber: changeRequest.changeNumber,
+      title: changeRequest.title,
+      status: changeRequest.status,
+    };
+    const updatedChanges = [...existingChanges, newChangeEntry];
+
+    const updatedProblem = await this.prisma.problem.update({
+      where: { id },
+      data: {
+        status: 'ROOT_CAUSE_IDENTIFIED',
+        relatedChanges: updatedChanges as any,
+      }
+    });
+
+    return { problem: updatedProblem, changeRequest };
+  }
+
   async getKnownErrors(tenantId: string) {
     return this.prisma.problem.findMany({ where: { tenantId, isKnownError: true }, orderBy: { createdAt: 'desc' } });
   }

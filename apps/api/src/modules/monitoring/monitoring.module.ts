@@ -7,6 +7,7 @@ import { SnmpScanner } from '../../common/scanners/snmp.scanner';
 import { SnmpTrapReceiverService } from './snmp-trap-receiver.service';
 import { OnvifDiscoveryService } from './onvif-discovery.service';
 import { VdiHypervisorService } from './vdi-hypervisor.service';
+import { TopologyService } from './topology.service';
 
 @Module({
   controllers: [MonitoringController, NetworkConfigController],
@@ -17,8 +18,15 @@ import { VdiHypervisorService } from './vdi-hypervisor.service';
     SnmpTrapReceiverService,
     OnvifDiscoveryService,
     VdiHypervisorService,
+    TopologyService,
   ],
-  exports: [MonitoringService, SnmpPollerService, OnvifDiscoveryService, VdiHypervisorService],
+  exports: [
+    MonitoringService,
+    SnmpPollerService,
+    OnvifDiscoveryService,
+    VdiHypervisorService,
+    TopologyService,
+  ],
 })
 export class MonitoringModule {}
 

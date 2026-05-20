@@ -3,6 +3,7 @@ import { Cron, CronExpression } from '@nestjs/schedule';
 import { PrismaService } from '../../common/database/prisma.service';
 import { EventBusService } from '../../common/events/event-bus.service';
 import { SnmpScanner } from '../../common/scanners/snmp.scanner';
+import { TopologyService } from './topology.service';
 
 @Injectable()
 export class SnmpPollerService {
@@ -12,6 +13,7 @@ export class SnmpPollerService {
     private prisma: PrismaService,
     private eventBus: EventBusService,
     private snmpScanner: SnmpScanner,
+    private topologyService: TopologyService,
   ) {}
 
   /**
@@ -31,6 +33,7 @@ export class SnmpPollerService {
 
       for (const tenant of tenants) {
         await this.pollTenantDevices(tenant.id);
+        await this.topologyService.buildAndPersistTopology(tenant.id);
       }
     } catch (err: any) {
       this.logger.error(`Scheduled SNMP poll error: ${err.message}`);
@@ -99,6 +102,8 @@ export class SnmpPollerService {
             sysName: info.sysName,
             sysContact: info.sysContact,
             sysLocation: info.sysLocation,
+            lldpNeighbors: info.lldpNeighbors || [],
+            cdpNeighbors: info.cdpNeighbors || [],
             interfaces: (info.interfaces || []).map(i => ({
               name: i.name,
               speed: i.speed,

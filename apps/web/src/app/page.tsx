@@ -1,13 +1,14 @@
 "use client";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import {
   Shield, Monitor, Ticket, Network, Package, BarChart3, Lock, Zap, ChevronRight,
   ArrowRight, CheckCircle2, Globe, Server, Cpu, Sun, Moon, Camera, Car, Laptop,
-  Radio, FileText, AlertTriangle, Settings, Activity, Database, Eye, Wifi, HardDrive
+  Radio, FileText, AlertTriangle, Settings, Activity, Database, Eye, Wifi, HardDrive,
+  RefreshCw, Terminal as TerminalIcon, Check, Users, DollarSign, Sparkles
 } from "lucide-react";
 
-/* ── data ── */
+/* ── Static Modules Data ── */
 const MODULES = [
   { icon: Monitor, title: "IT Asset Management", desc: "Full lifecycle tracking for laptops, servers, workstations, and peripherals — from procurement to retirement. Auto-discovery via agent or agentless scan.", color: "#06b6d4", kpis: ["MTTR < 4h", "100% asset coverage", "Auto-discovery"] },
   { icon: HardDrive, title: "Non-IT Asset Management", desc: "Track facilities, furniture, equipment, and infrastructure assets. QR/barcode tagging, depreciation, maintenance schedules.", color: "#8b5cf6", kpis: ["Depreciation tracking", "Maintenance alerts", "Location mapping"] },
@@ -21,15 +22,6 @@ const MODULES = [
   { icon: Database, title: "CMDB & Dependencies", desc: "Configuration management database with CI relationships, dependency mapping, impact analysis, and change risk scoring.", color: "#f97316", kpis: ["CI mapping", "Impact analysis", "Risk scoring"] },
   { icon: FileText, title: "Procurement & Contracts", desc: "End-to-end vendor management, purchase orders, contract lifecycle tracking, renewal alerts, and budget forecasting.", color: "#06b6d4", kpis: ["PO workflows", "Renewal alerts", "Budget tracking"] },
   { icon: BarChart3, title: "Reports & Compliance", desc: "50+ executive dashboards, scheduled PDF reports, SHA-256 audit trails, and regulatory compliance (DPDP, SOC 2, ISO 27001).", color: "#6366f1", kpis: ["50+ dashboards", "SHA-256 audit", "DPDP ready"] },
-];
-
-const KPIS = [
-  { value: "99.9%", label: "Uptime SLA", sub: "Enterprise guarantee" },
-  { value: "50K+", label: "Assets Managed", sub: "Across categories" },
-  { value: "<2s", label: "Scan Response", sub: "Real-time detection" },
-  { value: "24/7", label: "Monitoring", sub: "Always-on coverage" },
-  { value: "12+", label: "Modules", sub: "Unified platform" },
-  { value: "50+", label: "Dashboards", sub: "Executive insights" },
 ];
 
 const COMPARE = [
@@ -49,161 +41,924 @@ const COMPARE = [
 
 export default function LandingPage() {
   const router = useRouter();
-  const [theme, setTheme] = useState<"dark"|"light">("dark");
+  const [theme, setTheme] = useState<"dark" | "light">("light");
+
+  const L = theme === "light";
+  const bg = L ? "#f9fafb" : "#020205";
+  const card = L ? "#ffffff" : "rgba(10, 10, 15, 0.7)";
+  const border = L ? "rgba(15, 23, 42, 0.08)" : "rgba(255, 255, 255, 0.06)";
+  const muted = L ? "#475569" : "#8a8f98";
+  const txt = L ? "#0f172a" : "#f3f4f6";
+  const hudBg = L ? "rgba(255, 255, 255, 0.85)" : "rgba(3, 3, 6, 0.85)";
+
   useEffect(() => {
-    const s = localStorage.getItem("theme") as "dark"|"light"|null;
-    const t = s || "dark"; setTheme(t);
+    const s = localStorage.getItem("theme") as "dark" | "light" | null;
+    const t = s || "light";
+    setTheme(t);
     document.documentElement.setAttribute("data-theme", t);
   }, []);
+
   function toggle() {
-    const n = theme === "dark" ? "light" : "dark"; setTheme(n);
-    localStorage.setItem("theme", n); document.documentElement.setAttribute("data-theme", n);
+    const n = theme === "dark" ? "light" : "dark";
+    setTheme(n);
+    localStorage.setItem("theme", n);
+    document.documentElement.setAttribute("data-theme", n);
   }
-  const L = theme === "light";
-  const bg = L ? "#f8fafc" : "#0a0e1a";
-  const card = L ? "white" : "rgba(26,31,53,0.6)";
-  const border = L ? "rgba(0,0,0,0.07)" : "rgba(42,49,80,0.5)";
-  const muted = L ? "#64748b" : "#94a3b8";
-  const txt = L ? "#0f172a" : "#f1f5f9";
+
+  // ─── CHAPTER 1: CMDB TOPOLOGY REROUTING STATE ───
+  const [cmdbFailureSimulated, setCmdbFailureSimulated] = useState(false);
+  const [selectedHudNode, setSelectedHudNode] = useState<string>("core-sw-01");
+  const [swPacketCount, setSwPacketCount] = useState({ eth1: 1420, eth2: 2890 });
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setSwPacketCount(prev => ({
+        eth1: prev.eth1 + Math.floor(Math.random() * 11) - 5,
+        eth2: prev.eth2 + Math.floor(Math.random() * 15) - 7,
+      }));
+    }, 1000);
+    return () => clearInterval(interval);
+  }, []);
+
+  // ─── CHAPTER 2: THE SECURE IMMUNE IMMERSIVE CLI REMEDIATION STATE ───
+  const [radarAngle, setRadarAngle] = useState(0);
+  const [radarPatched, setRadarPatched] = useState(false);
+  const [securityLogs, setSecurityLogs] = useState<string[]>([
+    "// System secure. Telemetry idle.",
+    "// Click \"1-Click Remediate & Patch\" to execute direct SSH shell fixes."
+  ]);
+  const [isPatching, setIsPatching] = useState(false);
+  const [radarPatchingProgress, setRadarPatchingProgress] = useState(0);
+
+  useEffect(() => {
+    const radarInterval = setInterval(() => {
+      setRadarAngle(prev => (prev + 3.2) % 360);
+    }, 30);
+    return () => clearInterval(radarInterval);
+  }, []);
+
+  // Sequential typing shell script mitigation simulation
+  function handlePatchSecurity() {
+    if (isPatching || radarPatched) return;
+    setIsPatching(true);
+    setSecurityLogs(["$ qs-ssh root@10.0.1.18 -p 22 --auth-key-vault"]);
+    setRadarPatchingProgress(5);
+
+    const scriptSteps = [
+      { text: "⚡ [SSH] secure shell handshake established using ed25519 hash.", progress: 15 },
+      { text: "$ systemctl stop vulnerable-service.service", progress: 30 },
+      { text: "⚙️ Service daemon halted. Preparing secure downstream sweep...", progress: 45 },
+      { text: "$ apt-get update && apt-get install --only-upgrade -y liblzma5", progress: 60 },
+      { text: "📦 Fetching liblzma5:amd64 upstream replacement...", progress: 75 },
+      { text: "$ sha256sum /usr/lib/liblzma.so.5.6.1", progress: 85 },
+      { text: "🔒 Hash check: F4E82B7... Cryptographic match SECURE.", progress: 95 },
+      { text: "✅ [SUCCESS] Mitigation verified. Radar sweep green.", progress: 100 }
+    ];
+
+    scriptSteps.forEach((step, idx) => {
+      setTimeout(() => {
+        setSecurityLogs(prev => [...prev, step.text]);
+        setRadarPatchingProgress(step.progress);
+        if (step.progress === 100) {
+          setIsPatching(false);
+          setRadarPatched(true);
+        }
+      }, (idx + 1) * 850);
+    });
+  }
+
+  // ─── CHAPTER 3: KPI 3D CARD FLIP DECK ───
+  const [kpiMode, setKpiMode] = useState<"legacy" | "optimized">("optimized");
+
+  // ─── CHAPTER 4: ROI CALCULATOR ───
+  const [roiAssets, setRoiAssets] = useState(2500);
+  const [roiAgents, setRoiAgents] = useState(20);
+
+  const tradCost = (roiAssets * 220 + roiAgents * 4200) * 12;
+  const qsCost = (roiAssets * 60 + roiAgents * 1000) * 12;
+  const netSavings = tradCost - qsCost;
 
   return (
-    <div style={{ minHeight: "100vh", background: bg, color: txt, fontFamily: "'Plus Jakarta Sans','Inter',system-ui,sans-serif", transition: "background 0.3s, color 0.3s" }}>
+    <div style={{ minHeight: "100vh", background: bg, color: txt, fontFamily: "'Plus Jakarta Sans', 'Inter', system-ui, sans-serif", transition: "background 0.5s, color 0.5s", overflowX: "hidden" }}>
+      
+      {/* ─── ATMOSPHERIC SLATE BACKDROP RAYS ─── */}
+      <div style={{
+        position: "absolute",
+        top: "-10%",
+        left: "50%",
+        transform: "translateX(-50%)",
+        width: "80%",
+        height: "700px",
+        background: L
+          ? "radial-gradient(ellipse at center, rgba(6, 182, 212, 0.04) 0%, rgba(139, 92, 246, 0.02) 50%, transparent 100%)"
+          : "radial-gradient(ellipse at center, rgba(6, 182, 212, 0.07) 0%, rgba(139, 92, 246, 0.04) 50%, transparent 100%)",
+        pointerEvents: "none",
+        filter: "blur(120px)",
+        zIndex: 0
+      }} />
+      <div style={{
+        position: "absolute",
+        top: 0,
+        left: 0,
+        right: 0,
+        height: 1400,
+        backgroundImage: L
+          ? "linear-gradient(rgba(6, 182, 212, 0.04) 1px, transparent 1px), linear-gradient(90deg, rgba(6, 182, 212, 0.04) 1px, transparent 1px)"
+          : "linear-gradient(rgba(6, 182, 212, 0.03) 1px, transparent 1px), linear-gradient(90deg, rgba(6, 182, 212, 0.03) 1px, transparent 1px)",
+        backgroundSize: "60px 60px",
+        backgroundPosition: "center top",
+        maskImage: "linear-gradient(to bottom, rgba(0,0,0,1) 30%, rgba(0,0,0,0.05) 80%, rgba(0,0,0,0))",
+        WebkitMaskImage: "linear-gradient(to bottom, rgba(0,0,0,1) 30%, rgba(0,0,0,0.05) 80%, rgba(0,0,0,0))",
+        pointerEvents: "none",
+        zIndex: 0
+      }} />
 
-      {/* NAV */}
-      <nav className="landing-nav" style={{ position: "fixed", top: 0, left: 0, right: 0, zIndex: 100, padding: "12px 48px", display: "flex", alignItems: "center", justifyContent: "space-between", background: L ? "rgba(250,250,250,0.85)" : "rgba(9,9,11,0.8)", backdropFilter: "blur(20px) saturate(1.4)", borderBottom: `1px solid ${L ? 'rgba(0,0,0,0.06)' : 'rgba(255,255,255,0.06)'}` }}>
+      {/* ─── NAVIGATION BAR (APPLE GLASS STYLE) ─── */}
+      <nav style={{
+        position: "fixed",
+        top: 0,
+        left: 0,
+        right: 0,
+        zIndex: 100,
+        padding: "16px 6%",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "space-between",
+        background: L ? "rgba(255,255,255,0.75)" : "rgba(2, 2, 5, 0.65)",
+        backdropFilter: "blur(30px) saturate(1.8)",
+        WebkitBackdropFilter: "blur(30px) saturate(1.8)",
+        borderBottom: `1px solid ${border}`,
+        boxShadow: L ? "0 4px 30px rgba(15, 23, 42, 0.03)" : "none",
+        transition: "background 0.3s"
+      }}>
         <a href="/" style={{ display: "flex", alignItems: "center", gap: 10, textDecoration: "none", color: "inherit" }}>
-          <div style={{ width: 36, height: 36, borderRadius: 10, background: "linear-gradient(135deg,#06b6d4,#8b5cf6)", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 4px 16px rgba(6,182,212,0.25)" }}>
-            <img src="/favicon.png" alt="QS" style={{ width: 22, height: 22, borderRadius: 5 }} />
+          <div style={{
+            width: 32,
+            height: 32,
+            borderRadius: 8,
+            background: "linear-gradient(135deg, #06b6d4, #8b5cf6)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            boxShadow: "0 4px 20px rgba(6, 182, 212, 0.25)"
+          }}>
+            <img src="/favicon.png" alt="QS" style={{ width: 20, height: 20, borderRadius: 4 }} />
           </div>
-          <span style={{ fontSize: 18, fontWeight: 800, letterSpacing: "-0.04em" }}>QS Asset</span>
+          <span style={{ fontSize: 16, fontWeight: 900, letterSpacing: "-0.04em" }}>QS Asset</span>
         </a>
-        <div className="landing-nav-links" style={{ display: "flex", alignItems: "center", gap: 24 }}>
-          {["Features","Modules","Compare","Security","Pricing"].map(t => (
-            <a key={t} href={`#${t.toLowerCase()}`} style={{ fontSize: 13, fontWeight: 500, color: muted, textDecoration: "none", transition: "color 0.15s" }}>{t}</a>
+        
+        <div className="landing-nav-links" style={{ display: "flex", alignItems: "center", gap: 32 }}>
+          {[
+            { l: "Nerve System", h: "#nerve-system" },
+            { l: "Immune Radar", h: "#immune-system" },
+            { l: "3D Comparison", h: "#3d-comparison" },
+            { l: "Savings Engine", h: "#savings-engine" },
+            { l: "12 Modules", h: "#modules-grid" }
+          ].map(t => (
+            <a key={t.l} href={t.h} style={{ fontSize: 13, fontWeight: 600, color: muted, textDecoration: "none", transition: "color 0.2s" }}>{t.l}</a>
           ))}
-          <a href="/contact" style={{ fontSize: 13, fontWeight: 500, color: muted, textDecoration: "none" }}>Contact</a>
-          <button onClick={toggle} style={{ width: 34, height: 34, borderRadius: 8, border: `1px solid ${L ? 'rgba(0,0,0,0.08)' : 'rgba(255,255,255,0.08)'}`, cursor: "pointer", background: L ? "rgba(0,0,0,0.03)" : "rgba(255,255,255,0.04)", color: muted, display: "flex", alignItems: "center", justifyContent: "center" }}>
+          <button onClick={toggle} style={{ width: 34, height: 34, borderRadius: 9, border: `1px solid ${border}`, cursor: "pointer", background: L ? "rgba(0,0,0,0.03)" : "rgba(255,255,255,0.04)", color: muted, display: "flex", alignItems: "center", justifyContent: "center" }}>
             {L ? <Moon size={15} /> : <Sun size={15} />}
           </button>
-          <button onClick={() => router.push("/register")} style={{ padding: "8px 18px", borderRadius: 9, border: `1.5px solid ${L ? 'rgba(0,0,0,0.1)' : 'rgba(255,255,255,0.1)'}`, background: "transparent", color: txt, fontSize: 13, fontWeight: 600, cursor: "pointer", letterSpacing: "-0.01em" }}>
-            Register
-          </button>
-          <button onClick={() => router.push("/login")} style={{ padding: "8px 22px", borderRadius: 9, border: "none", background: "linear-gradient(135deg,#06b6d4,#0891b2)", color: "white", fontSize: 13, fontWeight: 700, cursor: "pointer", boxShadow: "0 2px 12px rgba(6,182,212,0.25)", letterSpacing: "-0.01em" }}>
-            Sign In <ArrowRight size={13} style={{ marginLeft: 4, verticalAlign: "middle" }} />
+          <button onClick={() => router.push("/login")} style={{ padding: "8px 20px", borderRadius: 8, border: "none", background: "linear-gradient(135deg, #06b6d4, #0891b2)", color: "white", fontSize: 13, fontWeight: 800, cursor: "pointer", boxShadow: "0 4px 16px rgba(6, 182, 212, 0.2)", display: "flex", alignItems: "center", gap: 6, letterSpacing: "-0.01em" }}>
+            Sign In <ArrowRight size={13} />
           </button>
         </div>
       </nav>
 
-      {/* HERO */}
-      <section className="landing-hero" style={{ paddingTop: 140, paddingBottom: 70, textAlign: "center", position: "relative", padding: "140px 20px 70px" }}>
-        <div style={{ position: "relative", zIndex: 1, maxWidth: 860, margin: "0 auto", padding: "0 24px" }}>
-          <div style={{ display: "inline-flex", alignItems: "center", gap: 8, padding: "6px 16px", borderRadius: 20, background: L ? "rgba(6,182,212,0.06)" : "rgba(6,182,212,0.08)", border: `1px solid ${L ? 'rgba(6,182,212,0.12)' : 'rgba(6,182,212,0.15)'}`, marginBottom: 28, fontSize: 12, fontWeight: 600, color: "#06b6d4", letterSpacing: "-0.01em" }}>
-            <Zap size={13} /> Enterprise-Grade IT Asset Management
+      {/* ─── HERO CHAPTER: THE GENESIS (APPLE DRAMATIC STYLE) ─── */}
+      <section style={{ paddingTop: 180, paddingBottom: 110, textAlign: "center", position: "relative", zIndex: 1 }}>
+        <div style={{ maxWidth: 940, margin: "0 auto", padding: "0 24px" }}>
+          
+          <div style={{
+            display: "inline-flex",
+            alignItems: "center",
+            gap: 8,
+            padding: "8px 18px",
+            borderRadius: 30,
+            background: L ? "rgba(6, 182, 212, 0.05)" : "rgba(6, 182, 212, 0.06)",
+            border: `1px solid ${L ? 'rgba(6,182,212,0.15)' : 'rgba(6, 182, 212, 0.2)'}`,
+            marginBottom: 32,
+            fontSize: 11,
+            fontWeight: 800,
+            color: "#06b6d4",
+            letterSpacing: "0.08em",
+            textTransform: "uppercase"
+          }}>
+            <Sparkles size={12} /> The First Autonomic IT Management Infrastructure
           </div>
-          <h1 style={{ fontSize: 56, fontWeight: 800, lineHeight: 1.08, letterSpacing: "-0.045em", marginBottom: 20, color: txt }}>
-            Command Every Asset.<br />
-            <span style={{ background: "linear-gradient(135deg, #06b6d4, #0891b2)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent" }}>Secure Every Endpoint.</span>
+          
+          <h1 style={{ fontSize: 72, fontWeight: 900, lineHeight: 1.05, letterSpacing: "-0.05em", marginBottom: 28, color: txt }}>
+            Control Every Device.<br />
+            <span style={{ background: "linear-gradient(135deg, #06b6d4 10%, #8b5cf6 90%)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent", backgroundClip: "text" }}>
+              Secure Every Network.
+            </span>
           </h1>
-          <p style={{ fontSize: 17, lineHeight: 1.7, color: muted, maxWidth: 600, margin: "0 auto 36px", letterSpacing: "-0.01em" }}>
-            The only platform that unifies IT &amp; non-IT asset management, ITSM, vulnerability scanning, network monitoring, and compliance — in a single pane of glass.
+
+          <p style={{ fontSize: 20, lineHeight: 1.6, color: muted, maxWidth: 740, margin: "0 auto 44px", letterSpacing: "-0.015em" }}>
+            Witness a fully self-healing network CMDB topology, secure CVE hotfixing, and automated ITSM ticketing consolidated into one breathtaking pane.
           </p>
-          <div className="landing-hero-buttons" style={{ display: "flex", gap: 12, justifyContent: "center", flexWrap: "wrap", marginBottom: 32 }}>
-            <button onClick={() => router.push("/register")} style={{ padding: "14px 32px", borderRadius: 10, border: "none", background: "linear-gradient(135deg,#06b6d4,#0891b2)", color: "white", fontSize: 15, fontWeight: 700, cursor: "pointer", boxShadow: "0 4px 20px rgba(6,182,212,0.25)", display: "flex", alignItems: "center", gap: 8, letterSpacing: "-0.01em", transition: "transform 0.15s, box-shadow 0.15s" }}>
-              Start Free — No Credit Card <ChevronRight size={17} />
+
+          <div style={{ display: "flex", gap: 16, justifyContent: "center", flexWrap: "wrap", marginBottom: 60 }}>
+            <button onClick={() => router.push("/register")} style={{ padding: "16px 36px", borderRadius: 10, border: "none", background: "linear-gradient(135deg, #06b6d4, #0891b2)", color: "white", fontSize: 15, fontWeight: 800, cursor: "pointer", boxShadow: "0 6px 28px rgba(6, 182, 212, 0.3)", display: "flex", alignItems: "center", gap: 8, letterSpacing: "-0.02em" }}>
+              Get Started Free <ChevronRight size={16} />
             </button>
-            <button onClick={() => document.getElementById("modules")?.scrollIntoView({ behavior: "smooth" })} style={{ padding: "14px 28px", borderRadius: 10, border: `1.5px solid ${L ? 'rgba(0,0,0,0.1)' : 'rgba(255,255,255,0.1)'}`, background: "transparent", color: txt, fontSize: 15, fontWeight: 600, cursor: "pointer", display: "flex", alignItems: "center", gap: 8, letterSpacing: "-0.01em" }}>
-              <Globe size={16} /> Explore 12+ Modules
-            </button>
+            <a href="#nerve-system" style={{ padding: "16px 32px", borderRadius: 10, border: `1.5px solid ${border}`, background: card, color: txt, fontSize: 15, fontWeight: 800, cursor: "pointer", display: "flex", alignItems: "center", gap: 8, textDecoration: "none", letterSpacing: "-0.02em" }}>
+              Explore the Chapters
+            </a>
           </div>
-          {/* Social proof */}
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 10 }}>
-            <div style={{ display: "flex" }}>
-              {["#06b6d4","#8b5cf6","#10b981","#f59e0b","#ef4444"].map((c,i) => (
-                <div key={i} style={{ width: 26, height: 26, borderRadius: "50%", border: `2px solid ${bg}`, background: `linear-gradient(135deg,${c},${c}cc)`, marginLeft: i > 0 ? -7 : 0, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 9, fontWeight: 700, color: "white" }}>
-                  {["S","A","V","P","K"][i]}
-                </div>
-              ))}
-            </div>
-            <span style={{ fontSize: 12, color: muted, fontWeight: 500 }}>
-              Trusted by <strong style={{ color: txt, fontWeight: 700 }}>200+ teams</strong> managing 50K+ assets
+
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 12 }}>
+            <span style={{ width: 6, height: 6, borderRadius: "50%", background: "#10b981", boxShadow: "0 0 10px #10b981" }} />
+            <span style={{ fontSize: 12, color: muted, fontWeight: 700, letterSpacing: "0.02em" }}>
+              DPDP ACT 2023 COMPLIANT • SECURE CRYPTO AUDIT HASH CHAINS
             </span>
           </div>
+
         </div>
       </section>
 
-      {/* KPIs */}
-      <section id="features" className="landing-section" style={{ padding: "20px 48px 60px", maxWidth: 1100, margin: "0 auto" }}>
-        <div className="landing-features-grid" style={{ display: "grid", gridTemplateColumns: "repeat(6,1fr)", gap: 10 }}>
-          {KPIS.map(k => (
-            <div key={k.label} style={{ textAlign: "center", padding: "22px 16px", borderRadius: 14, background: card, border: `1px solid ${border}`, transition: "transform 0.15s", cursor: "default" }}>
-              <div style={{ fontSize: 30, fontWeight: 800, letterSpacing: "-0.03em", background: "linear-gradient(135deg,#06b6d4,#0891b2)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent" }}>{k.value}</div>
-              <div style={{ fontSize: 12, fontWeight: 700, marginTop: 6, letterSpacing: "-0.01em" }}>{k.label}</div>
-              <div style={{ fontSize: 11, color: muted, marginTop: 2, fontWeight: 500 }}>{k.sub}</div>
-            </div>
-          ))}
-        </div>
-      </section>
+      {/* ─── CHAPTER 1: THE NERVE SYSTEM (AUTONOMIC CMDB TOPOLOGY) ─── */}
+      <section id="nerve-system" style={{ padding: "100px 6%", maxWidth: 1240, margin: "0 auto", position: "relative", zIndex: 2 }}>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1.3fr", gap: 64, alignItems: "center" }}>
+          
+          <div>
+            <div style={{ fontSize: 12, fontWeight: 900, color: "#06b6d4", letterSpacing: "0.1em", textTransform: "uppercase" }}>CHAPTER 01</div>
+            <h2 style={{ fontSize: 44, fontWeight: 900, letterSpacing: "-0.04em", marginTop: 8, lineHeight: 1.1 }}>
+              The Nerve System.<br />Self-Healing CMDB.
+            </h2>
+            <p style={{ fontSize: 15, color: muted, marginTop: 18, lineHeight: 1.7 }}>
+              Traditional spreadsheets are obsolete static records. QS Asset polls every physical router and switch continuously using LLDP/CDP MIB walks, charting dynamic neighborhood relations.
+            </p>
+            <p style={{ fontSize: 15, color: muted, marginTop: 12, lineHeight: 1.7 }}>
+              When a link goes down, the system does not fail. It automatically detects the severance, emits an SNMP trap alert, and reroutes production traffic through secondary active layers in milliseconds.
+            </p>
 
-      {/* TRUST */}
-      <div style={{ textAlign: "center", padding: "28px 0", borderTop: `1px solid ${L ? 'rgba(0,0,0,0.05)' : 'rgba(255,255,255,0.04)'}`, borderBottom: `1px solid ${L ? 'rgba(0,0,0,0.05)' : 'rgba(255,255,255,0.04)'}` }}>
-        <p style={{ fontSize: 10, textTransform: "uppercase", letterSpacing: "0.14em", color: muted, marginBottom: 14, fontWeight: 600 }}>Built for Enterprise Security Standards</p>
-        <div className="landing-trust-bar" style={{ display: "flex", justifyContent: "center", gap: 28, flexWrap: "wrap" }}>
-          {["SOC 2 Type II","ISO 27001","DPDP Act 2023","ITIL v4","SHA-256 Audit","RBAC + MFA"].map(n => (
-            <div key={n} style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, fontWeight: 600, color: muted, opacity: 0.8 }}>
-              <CheckCircle2 size={13} color="#10b981" /> {n}
-            </div>
-          ))}
-        </div>
-      </div>
-
-      {/* ALL 12 MODULES */}
-      <section id="modules" className="landing-section" style={{ padding: "80px 48px", maxWidth: 1200, margin: "0 auto" }}>
-        <div style={{ textAlign: "center", marginBottom: 48 }}>
-          <h2 style={{ fontSize: 36, fontWeight: 800, letterSpacing: "-0.04em", marginBottom: 12 }}>12 Modules. One Unified Platform.</h2>
-          <p style={{ fontSize: 15, color: muted, maxWidth: 560, margin: "0 auto", lineHeight: 1.7, letterSpacing: "-0.01em" }}>Replace 6+ point solutions with QS Asset. Every module is deeply integrated — assets flow into tickets, scans trigger patches, and everything feeds the CMDB.</p>
-        </div>
-        <div className="landing-modules-grid" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(280px,1fr))", gap: 12 }}>
-          {MODULES.map(m => {
-            const Icon = m.icon;
-            return (
-            <div key={m.title} style={{ padding: 24, borderRadius: 14, background: card, border: `1px solid ${border}`, transition: "transform 0.15s, box-shadow 0.15s", cursor: "default" }}>
-              <div style={{ width: 44, height: 44, borderRadius: 10, background: `${m.color}15`, display: "flex", alignItems: "center", justifyContent: "center", color: m.color, marginBottom: 14 }}><Icon size={22} /></div>
-              <h3 style={{ fontSize: 15, fontWeight: 700, marginBottom: 6 }}>{m.title}</h3>
-              <p style={{ fontSize: 12, lineHeight: 1.6, color: muted, margin: "0 0 12px" }}>{m.desc}</p>
-              <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-                {m.kpis.map(k => (
-                  <span key={k} style={{ fontSize: 10, padding: "3px 8px", borderRadius: 6, background: `${m.color}10`, color: m.color, fontWeight: 600 }}>{k}</span>
-                ))}
+            <div style={{ marginTop: 32, display: "flex", gap: 16 }}>
+              <div style={{ flex: 1, padding: "14px", background: L ? "#f8fafc" : "rgba(255,255,255,0.02)", borderRadius: 10, border: `1px solid ${border}`, boxShadow: L ? "0 4px 10px rgba(0,0,0,0.01)" : "none" }}>
+                <span style={{ fontSize: 11, fontWeight: 800, color: muted }}>ETH1/1 PORT</span>
+                <div style={{ fontSize: 18, fontWeight: 800, color: cmdbFailureSimulated ? "#ef4444" : "#10b981", marginTop: 4 }}>
+                  {cmdbFailureSimulated ? "LINK DOWN" : `${swPacketCount.eth1} Pkts/s`}
+                </div>
+              </div>
+              <div style={{ flex: 1, padding: "14px", background: L ? "#f8fafc" : "rgba(255,255,255,0.02)", borderRadius: 10, border: `1px solid ${border}`, boxShadow: L ? "0 4px 10px rgba(0,0,0,0.01)" : "none" }}>
+                <span style={{ fontSize: 11, fontWeight: 800, color: muted }}>ETH1/2 BACKUP</span>
+                <div style={{ fontSize: 18, fontWeight: 800, color: "#8b5cf6", marginTop: 4 }}>
+                  {cmdbFailureSimulated ? `${swPacketCount.eth2 * 2} Pkts/s` : `${swPacketCount.eth2} Pkts/s`}
+                </div>
               </div>
             </div>
-          );
+          </div>
+
+          {/* Interactive Live SVG Widescreen Console Mockup */}
+          <div style={{
+            background: hudBg,
+            border: `1.5px solid ${border}`,
+            borderRadius: 24,
+            padding: 24,
+            boxShadow: L
+              ? "0 30px 70px -15px rgba(15, 23, 42, 0.06), 0 0 0 1px rgba(15, 23, 42, 0.02)"
+              : "0 20px 80px rgba(6, 182, 212, 0.08)",
+            position: "relative",
+            minHeight: 460,
+            display: "flex",
+            flexDirection: "column"
+          }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <span style={{ width: 8, height: 8, borderRadius: "50%", background: cmdbFailureSimulated ? "#ef4444" : "#06b6d4", boxShadow: cmdbFailureSimulated ? "0 0 8px #ef4444" : "0 0 8px #06b6d4" }} />
+                <span style={{ fontSize: 11.5, fontWeight: 800, letterSpacing: "0.02em", color: txt }}>
+                  TOPOLOGY MONITOR: {cmdbFailureSimulated ? "REROUTED" : "OPTIMAL"}
+                </span>
+              </div>
+              <button
+                onClick={() => setCmdbFailureSimulated(!cmdbFailureSimulated)}
+                style={{
+                  padding: "6px 12px",
+                  borderRadius: 6,
+                  border: `1px solid ${cmdbFailureSimulated ? "#10b981" : "#ef4444"}`,
+                  background: "transparent",
+                  color: cmdbFailureSimulated ? "#10b981" : "#ef4444",
+                  fontSize: 11,
+                  fontWeight: 800,
+                  cursor: "pointer",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 6
+                }}
+              >
+                <RefreshCw size={11} className={cmdbFailureSimulated ? "spin" : ""} />
+                {cmdbFailureSimulated ? "Restore Connection" : "Simulate Link Failure"}
+              </button>
+            </div>
+
+            {/* Live Interactive Graph Canvas Area */}
+            <div style={{
+              flex: 1,
+              position: "relative",
+              border: `1.5px dashed ${border}`,
+              borderRadius: 14,
+              background: L ? "#ffffff" : "rgba(2, 2, 5, 0.4)",
+              boxShadow: L ? "inset 0 2px 8px rgba(15, 23, 42, 0.02)" : "none",
+              minHeight: 300,
+              overflow: "hidden"
+            }}>
+              <svg style={{ width: "100%", height: "100%", minHeight: 300 }}>
+                {/* Links */}
+                {/* Severed direct path */}
+                <line
+                  x1="80" y1="150" x2="420" y2="150"
+                  stroke={cmdbFailureSimulated ? "#ef4444" : "#06b6d4"}
+                  strokeWidth={cmdbFailureSimulated ? "2" : "3.5"}
+                  strokeDasharray={cmdbFailureSimulated ? "5 5" : "0"}
+                  style={{ transition: "stroke 0.3s, stroke-width 0.3s" }}
+                />
+                
+                {/* Secondary Detour Path */}
+                <path
+                  d="M 80 150 Q 250 40 420 150"
+                  fill="none"
+                  stroke={cmdbFailureSimulated ? "#8b5cf6" : "rgba(139, 92, 246, 0.2)"}
+                  strokeWidth="2.5"
+                  style={{ transition: "stroke 0.3s" }}
+                />
+
+                <path
+                  d="M 80 150 Q 250 260 420 150"
+                  fill="none"
+                  stroke="rgba(100, 116, 139, 0.15)"
+                  strokeWidth="1.5"
+                />
+
+                {/* Packet Animations */}
+                {!cmdbFailureSimulated ? (
+                  <circle r="4" fill="#06b6d4" style={{ filter: "drop-shadow(0 0 4px #06b6d4)" }}>
+                    <animateMotion dur="2s" repeatCount="indefinite" path="M 80 150 L 420 150" />
+                  </circle>
+                ) : (
+                  <>
+                    <circle r="4.5" fill="#a78bfa" style={{ filter: "drop-shadow(0 0 6px #a78bfa)" }}>
+                      <animateMotion dur="1.8s" repeatCount="indefinite" path="M 80 150 Q 250 40 420 150" />
+                    </circle>
+                    <circle r="3.5" fill="#a78bfa">
+                      <animateMotion dur="1.8s" begin="0.9s" repeatCount="indefinite" path="M 80 150 Q 250 40 420 150" />
+                    </circle>
+                  </>
+                )}
+
+                {/* Node Icons */}
+                {[
+                  { id: "fw-01", name: "edge-fw-01", label: "Firewall", cx: 80, cy: 150, color: "#ef4444", icon: "🛡️" },
+                  { id: "core-sw-01", name: "core-sw-01", label: "Core Switch", cx: 250, cy: 40, color: "#8b5cf6", icon: "🔌" },
+                  { id: "prod-db-01", name: "prod-db-01", label: "Database", cx: 420, cy: 150, color: "#10b981", icon: "🗄️" }
+                ].map(n => {
+                  const isSel = selectedHudNode === n.id;
+                  return (
+                    <g key={n.id} onClick={() => setSelectedHudNode(n.id)} style={{ cursor: "pointer" }}>
+                      {isSel && <circle cx={n.cx} cy={n.cy} r="20" fill={`${n.color}15`} stroke={n.color} strokeWidth="1" strokeDasharray="3 3" />}
+                      <circle cx={n.cx} cy={n.cy} r="14" fill={L ? "#ffffff" : "#020205"} stroke={n.color} strokeWidth="2.5" />
+                      <text x={n.cx} y={n.cy + 1} textAnchor="middle" alignmentBaseline="middle" fontSize="13">{n.icon}</text>
+                      <text x={n.cx} y={n.cy + 25} textAnchor="middle" fill={txt} fontSize="10" fontWeight="800">{n.name}</text>
+                    </g>
+                  );
+                })}
+              </svg>
+
+              {/* Server Warning Card overlay */}
+              {cmdbFailureSimulated && (
+                <div style={{
+                  position: "absolute",
+                  bottom: 12,
+                  left: 12,
+                  right: 12,
+                  background: L ? "rgba(239, 68, 68, 0.08)" : "rgba(239, 68, 68, 0.12)",
+                  border: "1px solid #ef4444",
+                  padding: "10px 14px",
+                  borderRadius: 10,
+                  fontSize: 11,
+                  fontWeight: 700,
+                  color: L ? "#991b1b" : "#fca5a5",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 8,
+                  animation: "pulse 2s infinite"
+                }}>
+                  <AlertTriangle size={14} color="#ef4444" />
+                  <span>Port xe-0/0/1 state down. Detour path Core-SW-01 activated successfully.</span>
+                </div>
+              )}
+            </div>
+
+            {/* Node Info Inspection Detail Deck */}
+            <div style={{ marginTop: 18, display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14, fontSize: 12 }}>
+              <div style={{ padding: 12, background: L ? "#f8fafc" : "rgba(255,255,255,0.02)", borderRadius: 8, border: `1px solid ${border}` }}>
+                <span style={{ color: muted }}>Discovered Node</span>
+                <h4 style={{ fontWeight: 800, marginTop: 2, color: txt }}>
+                  {selectedHudNode === "fw-01" ? "edge-fw-01" : selectedHudNode === "prod-db-01" ? "prod-db-01" : "core-sw-01"}
+                </h4>
+              </div>
+              <div style={{ padding: 12, background: L ? "#f8fafc" : "rgba(255,255,255,0.02)", borderRadius: 8, border: `1px solid ${border}` }}>
+                <span style={{ color: muted }}>IP Specs</span>
+                <h4 style={{ fontWeight: 800, marginTop: 2, color: txt }}>
+                  {selectedHudNode === "fw-01" ? "10.0.1.1" : selectedHudNode === "prod-db-01" ? "10.0.1.18" : "10.0.1.5"}
+                </h4>
+              </div>
+            </div>
+          </div>
+
+        </div>
+      </section>
+
+      {/* ─── CHAPTER 2: THE IMMUNE SYSTEM (SECURITY IMMERSIVE COCKPIT SCANNER) ─── */}
+      <section id="immune-system" style={{ padding: "100px 6%", maxWidth: 1240, margin: "0 auto", position: "relative", zIndex: 2 }}>
+        <div style={{ display: "grid", gridTemplateColumns: "1.3fr 1fr", gap: 64, alignItems: "center" }}>
+          
+          {/* Immersive Sweeper & Retro Hacker CLI Console */}
+          <div style={{
+            background: hudBg,
+            border: `1.5px solid ${border}`,
+            borderRadius: 24,
+            padding: 24,
+            boxShadow: L
+              ? "0 30px 70px -15px rgba(15, 23, 42, 0.06), 0 0 0 1px rgba(15, 23, 42, 0.02)"
+              : "0 20px 80px rgba(6, 182, 212, 0.08)",
+            position: "relative",
+            minHeight: 480,
+            display: "flex",
+            flexDirection: "column"
+          }}>
+            
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <span style={{ width: 8, height: 8, borderRadius: "50%", background: radarPatched ? "#10b981" : "#ef4444", boxShadow: radarPatched ? "0 0 8px #10b981" : "0 0 8px #ef4444" }} />
+                <span style={{ fontSize: 11.5, fontWeight: 800, letterSpacing: "0.02em", color: txt }}>
+                  IMMUNE RADAR: {radarPatched ? "SECURED" : "2 HAZARDS FOUND"}
+                </span>
+              </div>
+              <span style={{ fontSize: 11, fontWeight: 800, color: radarPatched ? "#10b981" : "#ef4444" }}>
+                System: {radarPatched ? "100%" : "62%"} Clean
+              </span>
+            </div>
+
+            {/* Radar and terminal columns */}
+            <div className="radar-terminal-grid" style={{ display: "grid", gridTemplateColumns: "170px 1fr", gap: 20, flex: 1 }}>
+              
+              {/* SVG Sweep Radar */}
+              <div style={{
+                border: `1px solid ${border}`,
+                borderRadius: 14,
+                background: L ? "#ffffff" : "rgba(2, 2, 5, 0.6)",
+                boxShadow: L ? "0 8px 24px rgba(15, 23, 42, 0.02)" : "none",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                position: "relative",
+                height: 180
+              }}>
+                <svg style={{ width: 140, height: 140 }}>
+                  <circle cx="70" cy="70" r="60" stroke={border} fill="none" strokeWidth="1" />
+                  <circle cx="70" cy="70" r="40" stroke={border} fill="none" strokeWidth="1" strokeDasharray="3 3" />
+                  <circle cx="70" cy="70" r="20" stroke={border} fill="none" strokeWidth="1" />
+                  <line x1="70" y1="5" x2="70" y2="135" stroke={border} strokeWidth="0.8" />
+                  <line x1="5" y1="70" x2="135" y2="70" stroke={border} strokeWidth="0.8" />
+
+                  {/* Sweep wedge */}
+                  <path
+                    d="M 70 70 L 70 10 A 60 60 0 0 1 130 70 Z"
+                    fill="url(#radarSweepGlow)"
+                    transform={`rotate(${radarAngle} 70 70)`}
+                  />
+
+                  <defs>
+                    <linearGradient id="radarSweepGlow" x1="0" y1="0" x2="1" y2="1">
+                      <stop offset="0%" stopColor={radarPatched ? "#10b981" : "#ef4444"} stopOpacity="0.4" />
+                      <stop offset="100%" stopColor={radarPatched ? "#10b981" : "#ef4444"} stopOpacity="0" />
+                    </linearGradient>
+                  </defs>
+
+                  {/* Hazard Nodes */}
+                  <circle cx="45" cy="45" r="4.5" fill={radarPatched ? "#10b981" : "#ef4444"} className="pulse" />
+                  <circle cx="100" cy="90" r="4.5" fill={radarPatched ? "#10b981" : "#f59e0b"} className="pulse" />
+                </svg>
+              </div>
+
+              {/* Immersive Typewriter Terminal CLI */}
+              <div style={{
+                background: "#010103",
+                border: L ? "1.5px solid rgba(0, 0, 0, 0.08)" : "1.5px solid rgba(255,255,255,0.04)",
+                borderRadius: 14,
+                padding: "16px",
+                fontFamily: "monospace",
+                fontSize: 10.5,
+                color: "#10b981",
+                display: "flex",
+                flexDirection: "column",
+                gap: 6,
+                height: 180,
+                overflowY: "auto"
+              }}>
+                {securityLogs.map((log, idx) => (
+                  <div key={idx} style={{ lineBreak: "anywhere", opacity: 0.9 }}>{log}</div>
+                ))}
+                {isPatching && <div className="blink" style={{ color: "#ef4444" }}>█ Mitigating...</div>}
+              </div>
+
+            </div>
+
+            {/* Mitigation button with custom state indicator */}
+            <div style={{ marginTop: 20 }}>
+              {isPatching && (
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
+                  <span style={{ fontSize: 11, fontWeight: 700, color: muted }}>Deploying Autonomic Shell Patch...</span>
+                  <span style={{ fontSize: 11, fontWeight: 800, color: "#ef4444", marginLeft: "auto" }}>{radarPatchingProgress}%</span>
+                </div>
+              )}
+
+              <button
+                onClick={handlePatchSecurity}
+                disabled={isPatching || radarPatched}
+                style={{
+                  width: "100%",
+                  padding: "14px",
+                  borderRadius: 10,
+                  border: "none",
+                  background: radarPatched ? "#10b981" : "linear-gradient(135deg, #ef4444, #dc2626)",
+                  color: "white",
+                  fontSize: 13,
+                  fontWeight: 800,
+                  cursor: (isPatching || radarPatched) ? "not-allowed" : "pointer",
+                  boxShadow: radarPatched ? "none" : "0 4px 20px rgba(239, 68, 68, 0.25)",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  gap: 8
+                }}
+              >
+                <Shield size={14} />
+                {radarPatched ? "Vulnerability Resolved (100% Secure)" : isPatching ? "Remediating Hotfixes..." : "Execute 1-Click Remediate & Patch"}
+              </button>
+            </div>
+
+          </div>
+
+          <div>
+            <div style={{ fontSize: 12, fontWeight: 900, color: "#ef4444", letterSpacing: "0.1em", textTransform: "uppercase" }}>CHAPTER 02</div>
+            <h2 style={{ fontSize: 44, fontWeight: 900, letterSpacing: "-0.04em", marginTop: 8, lineHeight: 1.1 }}>
+              The Immune System.<br />1-Click Remediation.
+            </h2>
+            <p style={{ fontSize: 15, color: muted, marginTop: 18, lineHeight: 1.7 }}>
+              Alert fatigue is an administrative bottleneck. When our vulnerability sweep radar maps active threat vectors (CVE vulnerabilities), you do not log static Jira tasks to resolve next quarter.
+            </p>
+            <p style={{ fontSize: 15, color: muted, marginTop: 12, lineHeight: 1.7 }}>
+              You launch direct shell remediation. From stopping outdated service daemons, pulling secure downstream libraries, validating cryptographic SHA hashes, to restarting active systems securely. Remediated in seconds.
+            </p>
+          </div>
+
+        </div>
+      </section>
+
+      {/* ─── CHAPTER 3: THE UNIFIED SHIFT (3D COMPARISON FLIP) ─── */}
+      <section id="3d-comparison" style={{ padding: "100px 6%", maxWidth: 1240, margin: "0 auto", position: "relative", zIndex: 2 }}>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1.3fr", gap: 64, alignItems: "center" }}>
+          
+          <div>
+            <div style={{ fontSize: 12, fontWeight: 900, color: "#8b5cf6", letterSpacing: "0.1em", textTransform: "uppercase" }}>CHAPTER 03</div>
+            <h2 style={{ fontSize: 44, fontWeight: 900, letterSpacing: "-0.04em", marginTop: 8, lineHeight: 1.1 }}>
+              The Unified Shift.<br />Consolidated in a Flip.
+            </h2>
+            <p style={{ fontSize: 15, color: muted, marginTop: 18, lineHeight: 1.7 }}>
+              Stop context switching across separate tabs. Witness the visual metamorphosis when you unify point solutions (ITAM + NMS + ITSM + CCTV + patch workflows) under one single operational console.
+            </p>
+            <p style={{ fontSize: 15, color: muted, marginTop: 12, lineHeight: 1.7 }}>
+              Toggle between a traditional, fractured IT suite and our autonomic stack. Watch the metrics flip in beautiful 3D cards.
+            </p>
+
+            <div style={{
+              display: "inline-flex",
+              background: L ? "#e2e8f0" : "rgba(255,255,255,0.02)",
+              border: `1px solid ${border}`,
+              padding: 4,
+              borderRadius: 10,
+              marginTop: 28,
+              boxShadow: L ? "inset 0 1px 2px rgba(0,0,0,0.05)" : "none"
+            }}>
+              <button
+                onClick={() => setKpiMode("legacy")}
+                style={{
+                  padding: "8px 20px",
+                  borderRadius: 8,
+                  border: "none",
+                  fontSize: 12,
+                  fontWeight: 700,
+                  cursor: "pointer",
+                  background: kpiMode === "legacy" ? "#ef4444" : "transparent",
+                  color: kpiMode === "legacy" ? "white" : muted,
+                  transition: "all 0.15s"
+                }}
+              >
+                Traditional Stack
+              </button>
+              <button
+                onClick={() => setKpiMode("optimized")}
+                style={{
+                  padding: "8px 20px",
+                  borderRadius: 8,
+                  border: "none",
+                  fontSize: 12,
+                  fontWeight: 700,
+                  cursor: "pointer",
+                  background: kpiMode === "optimized" ? "#10b981" : "transparent",
+                  color: kpiMode === "optimized" ? "white" : muted,
+                  transition: "all 0.15s"
+                }}
+              >
+                QS Autonomic Core
+              </button>
+            </div>
+          </div>
+
+          {/* 3D Flipping Cards Deck */}
+          <div className="kpi-flip-grid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
+            {[
+              { title: "Average MTTR", legacyVal: "18.2 Hours", legacyDesc: "Disconnected tickets, manually researching hardware specs.", optVal: "12 Minutes", optDesc: "Automated correlation, instant hardware spec injections.", color: "#06b6d4" },
+              { title: "CVE Remediation", legacyVal: "14.5 Days", legacyDesc: "Weekly schedules, downloading packages manually, testing hotfixes.", optVal: "4 Minutes", optDesc: "1-Click automated hotfix deploy, immediate scan validation.", color: "#ef4444" },
+              { title: "Annual Licensing", legacyVal: "₹18.5L / yr", legacyDesc: "Seat licensing thresholds, disjointed modules, costly NMS add-ons.", optVal: "₹3.9L / yr", optDesc: "Flat module licensing, massive savings, unlimited seats.", color: "#8b5cf6" },
+              { title: "Network Uptime", legacyVal: "99.2% Uptime", legacyDesc: "Blindspots on remote ports, missed SNMP polling loops.", optVal: "99.99% Uptime", optDesc: "Real-time LLDP neighbor routing, continuous alert engine.", color: "#10b981" },
+            ].map((cardItem, idx) => {
+              const isFlipped = kpiMode === "legacy";
+              return (
+                <div key={idx} style={{ height: 200, perspective: 1000 }}>
+                  <div style={{
+                    position: "relative",
+                    width: "100%",
+                    height: "100%",
+                    transition: "transform 0.8s cubic-bezier(0.4, 0, 0.2, 1)",
+                    transformStyle: "preserve-3d",
+                    transform: isFlipped ? "rotateY(180deg)" : "none"
+                  }}>
+                    {/* Front: QS Autonomic */}
+                    <div style={{
+                      position: "absolute",
+                      inset: 0,
+                      backfaceVisibility: "hidden",
+                      WebkitBackfaceVisibility: "hidden",
+                      background: card,
+                      border: `1.5px solid ${border}`,
+                      borderRadius: 16,
+                      padding: 20,
+                      display: "flex",
+                      flexDirection: "column",
+                      justifyContent: "space-between",
+                      textAlign: "left",
+                      boxShadow: L ? "0 10px 30px rgba(15, 23, 42, 0.02)" : "none"
+                    }}>
+                      <div>
+                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                          <span style={{ fontSize: 10, fontWeight: 800, color: cardItem.color, textTransform: "uppercase", letterSpacing: "0.05em" }}>{cardItem.title}</span>
+                          <Zap size={12} color="#10b981" />
+                        </div>
+                        <div style={{ fontSize: 26, fontWeight: 900, marginTop: 6, color: "#10b981" }}>{cardItem.optVal}</div>
+                      </div>
+                      <p style={{ fontSize: 11.5, lineHeight: 1.5, color: muted, margin: 0 }}>{cardItem.optDesc}</p>
+                    </div>
+
+                    {/* Back: Legacy */}
+                    <div style={{
+                      position: "absolute",
+                      inset: 0,
+                      backfaceVisibility: "hidden",
+                      WebkitBackfaceVisibility: "hidden",
+                      background: card,
+                      border: `1.5px solid #ef4444`,
+                      borderRadius: 16,
+                      padding: 20,
+                      display: "flex",
+                      flexDirection: "column",
+                      justifyContent: "space-between",
+                      textAlign: "left",
+                      transform: "rotateY(180deg)",
+                      boxShadow: L ? "0 10px 30px rgba(239, 68, 68, 0.03)" : "none"
+                    }}>
+                      <div>
+                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                          <span style={{ fontSize: 10, fontWeight: 800, color: muted, textTransform: "uppercase", letterSpacing: "0.05em" }}>{cardItem.title}</span>
+                          <AlertTriangle size={12} color="#ef4444" />
+                        </div>
+                        <div style={{ fontSize: 26, fontWeight: 900, marginTop: 6, color: "#ef4444" }}>{cardItem.legacyVal}</div>
+                      </div>
+                      <p style={{ fontSize: 11.5, lineHeight: 1.5, color: muted, margin: 0 }}>{cardItem.legacyDesc}</p>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+        </div>
+      </section>
+
+      {/* ─── CHAPTER 4: THE SAVINGS ENGINE (ROI GRAPH CALCULATOR) ─── */}
+      <section id="savings-engine" style={{ padding: "100px 6%", maxWidth: 1240, margin: "0 auto", position: "relative", zIndex: 2 }}>
+        <div style={{ display: "grid", gridTemplateColumns: "1.2fr 1fr", gap: 64, alignItems: "center" }}>
+          
+          <div>
+            <div style={{ fontSize: 12, fontWeight: 900, color: "#10b981", letterSpacing: "0.1em", textTransform: "uppercase" }}>CHAPTER 04</div>
+            <h2 style={{ fontSize: 44, fontWeight: 900, letterSpacing: "-0.04em", marginTop: 8, lineHeight: 1.1 }}>
+              The Financial Engine.<br />Consolidated Spending.
+            </h2>
+            <p style={{ fontSize: 15, color: muted, marginTop: 18, lineHeight: 1.7 }}>
+              License proliferation degrades operational efficiency. By consolidating individual point systems into one unified subscription plan, save up to 75% on licensing spend.
+            </p>
+            
+            <div style={{ marginTop: 32, display: "grid", gap: 24 }}>
+              {/* Slider 1: Managed Assets */}
+              <div>
+                <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 8, fontSize: 13, fontWeight: 800 }}>
+                  <span>Managed Network Assets</span>
+                  <span style={{ color: "#06b6d4" }}>{roiAssets.toLocaleString()} Devices</span>
+                </div>
+                <input
+                  type="range"
+                  min="500"
+                  max="15000"
+                  step="250"
+                  value={roiAssets}
+                  onChange={e => setRoiAssets(Number(e.target.value))}
+                  style={{
+                    width: "100%",
+                    accentColor: "#06b6d4",
+                    background: L ? "#e2e8f0" : "#111116",
+                    height: 5,
+                    borderRadius: 3,
+                    outline: "none"
+                  }}
+                />
+              </div>
+
+              {/* Slider 2: IT support agents */}
+              <div>
+                <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 8, fontSize: 13, fontWeight: 800 }}>
+                  <span>Support Desk Seats</span>
+                  <span style={{ color: "#8b5cf6" }}>{roiAgents} Seats</span>
+                </div>
+                <input
+                  type="range"
+                  min="5"
+                  max="300"
+                  step="5"
+                  value={roiAgents}
+                  onChange={e => setRoiAgents(Number(e.target.value))}
+                  style={{
+                    width: "100%",
+                    accentColor: "#8b5cf6",
+                    background: L ? "#e2e8f0" : "#111116",
+                    height: 5,
+                    borderRadius: 3,
+                    outline: "none"
+                  }}
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* Interactive Cost comparison bar graphs panel */}
+          <div style={{
+            background: hudBg,
+            border: `1.5px solid ${border}`,
+            borderRadius: 24,
+            padding: 32,
+            boxShadow: L
+              ? "0 30px 70px -15px rgba(15, 23, 42, 0.06), 0 0 0 1px rgba(15, 23, 42, 0.02)"
+              : "0 20px 80px rgba(6, 182, 212, 0.08)",
+            display: "flex",
+            flexDirection: "column",
+            gap: 24
+          }}>
+            <div>
+              <div style={{ fontSize: 10, fontWeight: 800, color: muted, textTransform: "uppercase", letterSpacing: "0.08em" }}>YOUR ANNUALLY RECOVERED SPEND</div>
+              <div style={{
+                fontSize: 40,
+                fontWeight: 950,
+                background: "linear-gradient(135deg, #06b6d4, #10b981)",
+                WebkitBackgroundClip: "text",
+                WebkitTextFillColor: "transparent",
+                backgroundClip: "text",
+                marginTop: 6,
+                letterSpacing: "-0.04em"
+              }}>
+                ₹{netSavings.toLocaleString("en-IN")} / yr
+              </div>
+            </div>
+
+            <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+              {/* Competitor Spend Bar */}
+              <div>
+                <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11, fontWeight: 800, marginBottom: 6 }}>
+                  <span style={{ color: "#ef4444" }}>Legacy fragmented software stack</span>
+                  <span>₹{tradCost.toLocaleString("en-IN")}</span>
+                </div>
+                <div style={{ width: "100%", height: 8, background: "rgba(239, 68, 68, 0.08)", borderRadius: 4, overflow: "hidden" }}>
+                  <div style={{ width: "100%", height: "100%", background: "#ef4444", borderRadius: 4 }} />
+                </div>
+              </div>
+
+              {/* QS Asset Spend Bar */}
+              <div>
+                <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11, fontWeight: 800, marginBottom: 6 }}>
+                  <span style={{ color: "#10b981" }}>QS Autonomic flat plan</span>
+                  <span>₹{qsCost.toLocaleString("en-IN")}</span>
+                </div>
+                <div style={{ width: "100%", height: 8, background: "rgba(16, 185, 129, 0.08)", borderRadius: 4, overflow: "hidden" }}>
+                  <div style={{
+                    width: `${Math.max(8, (qsCost / tradCost) * 100)}%`,
+                    height: "100%",
+                    background: "#10b981",
+                    borderRadius: 4,
+                    transition: "width 0.4s ease"
+                  }} />
+                </div>
+              </div>
+            </div>
+
+            <div style={{ borderTop: `1px solid ${border}`, paddingTop: 16, fontSize: 11.5, color: muted, display: "flex", alignItems: "center", gap: 6, fontWeight: 600 }}>
+              <CheckCircle2 size={14} color="#10b981" /> Consolidates NMS, ITSM, and ITAM seat costs by 75%.
+            </div>
+          </div>
+
+        </div>
+      </section>
+
+      {/* ─── 12 INTEGRATED MODULES COHESIVE SYSTEM ─── */}
+      <section id="modules-grid" style={{ padding: "100px 6%", maxWidth: 1240, margin: "0 auto" }}>
+        <div style={{ textAlign: "center", marginBottom: 60 }}>
+          <h2 style={{ fontSize: 44, fontWeight: 900, letterSpacing: "-0.04em", marginBottom: 16 }}>
+            12 Cohesive Modules. One Autonomic Heart.
+          </h2>
+          <p style={{ fontSize: 16, color: muted, maxWidth: 640, margin: "0 auto", lineHeight: 1.7 }}>
+            Consolidate fragmented point solutions into a single interface. SNMP alerts trigger automated ITSM service tickets; CVE alerts run automated CLI patches.
+          </p>
+        </div>
+        
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))", gap: 20 }}>
+          {MODULES.map(m => {
+            const IconComp = m.icon;
+            return (
+              <div
+                key={m.title}
+                style={{
+                  padding: 28,
+                  borderRadius: 16,
+                  background: card,
+                  border: `1.5px solid ${border}`,
+                  transition: "all 0.3s ease",
+                  display: "flex",
+                  flexDirection: "column",
+                  justifyContent: "space-between"
+                }}
+                className="module-card-hover"
+              >
+                <div>
+                  <div style={{ width: 44, height: 44, borderRadius: 10, background: `${m.color}12`, display: "flex", alignItems: "center", justifyContent: "center", color: m.color, marginBottom: 18 }}>
+                    <IconComp size={20} />
+                  </div>
+                  <h3 style={{ fontSize: 16, fontWeight: 800, marginBottom: 8, color: txt }}>{m.title}</h3>
+                  <p style={{ fontSize: 12.5, lineHeight: 1.6, color: muted, margin: "0 0 16px" }}>{m.desc}</p>
+                </div>
+                <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                  {m.kpis.map(k => (
+                    <span key={k} style={{ fontSize: 10.5, padding: "4px 10px", borderRadius: 6, background: `${m.color}08`, color: m.color, fontWeight: 700 }}>{k}</span>
+                  ))}
+                </div>
+              </div>
+            );
           })}
         </div>
       </section>
 
-      {/* COMPARISON TABLE */}
-      <section id="compare" style={{ padding: "80px 48px", maxWidth: 920, margin: "0 auto" }}>
-        <div style={{ textAlign: "center", marginBottom: 40 }}>
-          <h2 style={{ fontSize: 32, fontWeight: 800, letterSpacing: "-0.04em", marginBottom: 10 }}>How We Compare</h2>
-          <p style={{ fontSize: 14, color: muted, letterSpacing: "-0.01em" }}>QS Asset vs. industry leaders — more features at a fraction of the cost.</p>
+      {/* ─── COMPARATIVE FEATURE CAPABILITY MATRIX GRID ─── */}
+      <section style={{ padding: "100px 6%", maxWidth: 940, margin: "0 auto" }}>
+        <div style={{ textAlign: "center", marginBottom: 48 }}>
+          <h2 style={{ fontSize: 36, fontWeight: 900, letterSpacing: "-0.03em" }}>Capability Comparison Grid</h2>
+          <p style={{ fontSize: 15, color: muted, marginTop: 8 }}>See how QS Asset consolidates legacy enterprise platforms.</p>
         </div>
-        <div className="landing-compare-wrap" style={{ borderRadius: 14, overflow: "hidden", border: `1px solid ${border}` }}>
-          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+        
+        <div style={{ borderRadius: 18, overflow: "hidden", border: `1.5px solid ${border}`, background: card, boxShadow: L ? "0 10px 40px rgba(0, 0, 0, 0.02)" : "none" }}>
+          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13.5 }}>
             <thead>
-              <tr style={{ background: L ? "#f1f5f9" : "rgba(15,23,42,0.6)" }}>
-                <th style={{ textAlign: "left", padding: "12px 16px", fontWeight: 600 }}>Feature</th>
-                <th style={{ padding: "12px 16px", fontWeight: 700, color: "#06b6d4" }}>QS Asset</th>
-                <th style={{ padding: "12px 16px", fontWeight: 600, color: muted }}>Ivanti</th>
-                <th style={{ padding: "12px 16px", fontWeight: 600, color: muted }}>ManageEngine</th>
+              <tr style={{ background: L ? "#f8fafc" : "rgba(10,10,15,0.8)" }}>
+                <th style={{ textAlign: "left", padding: "16px 20px", fontWeight: 700, color: txt }}>Feature Specs</th>
+                <th style={{ padding: "16px 20px", fontWeight: 900, color: "#06b6d4", textAlign: "center" }}>QS Asset</th>
+                <th style={{ padding: "16px 20px", fontWeight: 700, color: muted, textAlign: "center" }}>Ivanti</th>
+                <th style={{ padding: "16px 20px", fontWeight: 700, color: muted, textAlign: "center" }}>ManageEngine</th>
               </tr>
             </thead>
             <tbody>
               {COMPARE.map((r, i) => (
-                <tr key={r.feature} style={{ borderTop: `1px solid ${border}`, background: i % 2 === 0 ? "transparent" : (L ? "rgba(0,0,0,0.015)" : "rgba(255,255,255,0.015)") }}>
-                  <td style={{ padding: "10px 16px", fontWeight: 500 }}>{r.feature}</td>
-                  <td style={{ padding: "10px 16px", textAlign: "center" }}>{r.us ? <CheckCircle2 size={16} color="#10b981" /> : <span style={{ color: muted }}>—</span>}</td>
-                  <td style={{ padding: "10px 16px", textAlign: "center" }}>{r.ivanti ? <CheckCircle2 size={16} color="#64748b" /> : <span style={{ color: muted }}>—</span>}</td>
-                  <td style={{ padding: "10px 16px", textAlign: "center" }}>{r.manage ? <CheckCircle2 size={16} color="#64748b" /> : <span style={{ color: muted }}>—</span>}</td>
+                <tr key={r.feature} style={{ borderTop: `1.5px solid ${border}`, background: i % 2 === 0 ? "transparent" : (L ? "rgba(241, 245, 249, 0.4)" : "rgba(255,255,255,0.01)") }}>
+                  <td style={{ padding: "14px 20px", fontWeight: 700, color: txt }}>{r.feature}</td>
+                  <td style={{ padding: "14px 20px", textAlign: "center" }}><CheckCircle2 size={16} color="#10b981" style={{ margin: "0 auto" }} /></td>
+                  <td style={{ padding: "14px 20px", textAlign: "center" }}>{r.ivanti ? <CheckCircle2 size={16} color="#64748b" style={{ margin: "0 auto" }} /> : <span style={{ color: muted }}>—</span>}</td>
+                  <td style={{ padding: "14px 20px", textAlign: "center" }}>{r.manage ? <CheckCircle2 size={16} color="#64748b" style={{ margin: "0 auto" }} /> : <span style={{ color: muted }}>—</span>}</td>
                 </tr>
               ))}
             </tbody>
@@ -211,214 +966,147 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* SECURITY */}
-      <section id="security" style={{ padding: "80px 48px", maxWidth: 1200, margin: "0 auto" }}>
-        <div className="landing-security-grid" style={{ padding: 48, borderRadius: 20, background: L ? "rgba(0,0,0,0.015)" : "rgba(255,255,255,0.02)", border: `1px solid ${border}`, display: "grid", gridTemplateColumns: "1fr 1fr", gap: 48, alignItems: "center" }}>
-          <div>
-            <div style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "5px 12px", borderRadius: 6, background: "rgba(16,185,129,0.08)", color: "#10b981", fontSize: 11, fontWeight: 700, marginBottom: 18, letterSpacing: "-0.01em" }}><Lock size={12} /> Enterprise Security</div>
-            <h2 style={{ fontSize: 28, fontWeight: 800, marginBottom: 12, letterSpacing: "-0.03em" }}>Built for Zero-Trust Environments</h2>
-            <p style={{ fontSize: 13, lineHeight: 1.7, color: muted, marginBottom: 22, letterSpacing: "-0.01em" }}>Multi-tenant architecture with RBAC, JWT authentication, SHA-256 audit hash chains, and full compliance with DPDP Act 2023, SOC 2 Type II, and ISO 27001.</p>
-            {["SOC 2 Type II Ready","DPDP Act 2023 Compliant","SHA-256 Audit Hash Chain","RBAC + Multi-Tenant Isolation","End-to-End Encrypted API","Credential Vault for Scans"].map(t => (
-              <div key={t} style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 9, fontSize: 13, fontWeight: 500 }}>
-                <CheckCircle2 size={14} color="#10b981" /> {t}
-              </div>
-            ))}
-          </div>
-          <div className="landing-security-cards" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-            {[
-              { icon: Server, t: "On-Premise", d: "Self-hosted deployment" },
-              { icon: Globe, t: "Cloud SaaS", d: "Managed infrastructure" },
-              { icon: Cpu, t: "Agent-Based", d: "Deep endpoint telemetry" },
-              { icon: Wifi, t: "Agentless", d: "Zero-install SNMP/WMI" },
-              { icon: Eye, t: "Real-Time", d: "Live dashboards & alerts" },
-              { icon: Activity, t: "Automated", d: "Self-healing workflows" },
-            ].map(c => (
-              <div key={c.t} style={{ padding: 18, borderRadius: 12, background: card, border: `1px solid ${border}`, textAlign: "center", transition: "transform 0.15s" }}>
-                <div style={{ color: "#06b6d4", marginBottom: 6 }}><c.icon size={18} /></div>
-                <div style={{ fontSize: 12, fontWeight: 700, marginBottom: 2, letterSpacing: "-0.01em" }}>{c.t}</div>
-                <div style={{ fontSize: 11, color: muted }}>{c.d}</div>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* PRICING — Psychology-Driven */}
-      <section id="pricing" style={{ padding: "80px 48px", maxWidth: 1020, margin: "0 auto", textAlign: "center" }}>
-        <h2 style={{ fontSize: 34, fontWeight: 800, letterSpacing: "-0.04em", marginBottom: 10 }}>Simple, Transparent Pricing</h2>
-        <p style={{ fontSize: 14, color: muted, marginBottom: 10, letterSpacing: "-0.01em" }}>Start free. Scale as you grow. No hidden fees.</p>
-        <p style={{ fontSize: 12, color: "#f59e0b", fontWeight: 600, marginBottom: 40, display: "flex", alignItems: "center", justifyContent: "center", gap: 6 }}><Zap size={13} /> Save up to 20% with annual billing</p>
-        <div className="landing-pricing-grid" style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 14, alignItems: "start" }}>
+      {/* ─── PRICING ─── */}
+      <section id="pricing" style={{ padding: "100px 6%", maxWidth: 1040, margin: "0 auto", textAlign: "center" }}>
+        <h2 style={{ fontSize: 40, fontWeight: 900, letterSpacing: "-0.04em", marginBottom: 12 }}>Simple, Transparent Pricing</h2>
+        <p style={{ fontSize: 15, color: muted, marginBottom: 44 }}>Unified flat-fee subscriptions. No mandatory service lock-ins.</p>
+        
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 20, alignItems: "start" }}>
           {[
-            { name: "Starter", price: 0, annual: 0, desc: "Up to 5 assets", features: ["IT Asset Tracking","4 Users","Basic Reports","Email Support","Community Access"], popular: false, cta: "Start Free" },
-            { name: "Professional", price: 4999, annual: 3999, desc: "Unlimited assets", features: ["All 12 Modules","Unlimited Users","Vulnerability Scanning","ITSM + SLA Engine","Priority Support","API Access"], popular: true, cta: "Start 14-Day Trial" },
-            { name: "Enterprise", price: -1, annual: -1, desc: "On-premise + SaaS", features: ["Everything in Pro","On-Premise Deploy","SSO / SAML / LDAP","Dedicated CSM","Custom SLA","White-Label Option"], popular: false, cta: "Talk to Sales →" },
+            { name: "Starter", price: 0, annual: 0, desc: "Up to 5 assets", features: ["IT Asset Tracking", "4 Users", "Basic Reports", "Email Support", "Community Access"], popular: false, cta: "Start Free" },
+            { name: "Professional", price: 4999, annual: 3999, desc: "Unlimited assets", features: ["All 12 Modules", "Unlimited Users", "Vulnerability Scanning", "ITSM + SLA Engine", "Priority Support", "API Access"], popular: true, cta: "Start 14-Day Trial" },
+            { name: "Enterprise", price: -1, annual: -1, desc: "On-premise + SaaS", features: ["Everything in Pro", "On-Premise Deploy", "SSO / SAML / LDAP", "Dedicated CSM", "Custom SLA", "White-Label Option"], popular: false, cta: "Talk to Sales" },
           ].map(p => (
-            <div key={p.name} style={{ borderRadius: 16, padding: p.popular ? "2px" : 0, background: p.popular ? "linear-gradient(135deg,#06b6d4,#8b5cf6,#06b6d4)" : "transparent" }}>
-              <div style={{ padding: "28px 24px", borderRadius: p.popular ? 14 : 16, background: card, border: p.popular ? "none" : `1px solid ${border}`, position: "relative", textAlign: "left" }}>
-                {p.popular && <div style={{ position: "absolute", top: -1, left: "50%", transform: "translateX(-50%)", padding: "3px 14px", borderRadius: "0 0 8px 8px", background: "linear-gradient(135deg,#06b6d4,#8b5cf6)", color: "white", fontSize: 9, fontWeight: 800, textTransform: "uppercase", letterSpacing: "0.08em", boxShadow: "0 4px 12px rgba(6,182,212,0.3)" }}>⚡ Most Popular</div>}
-                {p.popular && <div style={{ fontSize: 10, color: muted, fontWeight: 500, marginTop: 10, marginBottom: 6, display: "flex", alignItems: "center", gap: 4 }}><span style={{ color: "#f59e0b" }}>★</span> Chosen by 78% of teams</div>}
-                <h3 style={{ fontSize: 16, fontWeight: 700, marginBottom: 6, marginTop: p.popular ? 0 : 4, letterSpacing: "-0.01em" }}>{p.name}</h3>
+            <div key={p.name} style={{
+              borderRadius: 18,
+              padding: p.popular ? "2px" : 0,
+              background: p.popular ? "linear-gradient(135deg, #06b6d4, #8b5cf6)" : "transparent",
+              boxShadow: L
+                ? (p.popular ? "0 25px 50px -12px rgba(6, 182, 212, 0.15)" : "0 15px 35px -10px rgba(15, 23, 42, 0.05)")
+                : "none"
+            }}>
+              <div style={{ padding: "34px 24px", borderRadius: p.popular ? 16 : 18, background: card, border: p.popular ? "none" : `1.5px solid ${border}`, position: "relative", textAlign: "left" }}>
+                {p.popular && <div style={{ position: "absolute", top: -1, left: "50%", transform: "translateX(-50%)", padding: "4px 16px", borderRadius: "0 0 8px 8px", background: "linear-gradient(135deg, #06b6d4, #8b5cf6)", color: "white", fontSize: 9, fontWeight: 900, textTransform: "uppercase", letterSpacing: "0.08em" }}>⚡ POPULAR</div>}
+                
+                <h3 style={{ fontSize: 18, fontWeight: 800, marginBottom: 12, marginTop: p.popular ? 8 : 4, color: txt }}>{p.name}</h3>
+                
                 {p.price === 0 ? (
-                  <div style={{ fontSize: 32, fontWeight: 800, letterSpacing: "-0.03em", marginBottom: 4 }}>Free</div>
+                  <div style={{ fontSize: 32, fontWeight: 900, marginBottom: 4, color: txt }}>Free</div>
                 ) : p.price < 0 ? (
-                  <div><div style={{ fontSize: 26, fontWeight: 800, letterSpacing: "-0.03em" }}>Custom</div><div style={{ fontSize: 11, color: muted }}>Tailored to your needs</div></div>
+                  <div><div style={{ fontSize: 26, fontWeight: 900, color: txt }}>Custom</div><div style={{ fontSize: 11, color: muted }}>Tailored SLA models</div></div>
                 ) : (
                   <div>
                     <div style={{ display: "flex", alignItems: "baseline", gap: 4 }}>
-                      <span style={{ fontSize: 32, fontWeight: 800, letterSpacing: "-0.03em" }}>₹{p.annual.toLocaleString("en-IN")}</span>
+                      <span style={{ fontSize: 34, fontWeight: 900, color: txt }}>₹{p.annual.toLocaleString("en-IN")}</span>
                       <span style={{ fontSize: 12, color: muted }}>/mo</span>
-                    </div>
-                    <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 2 }}>
-                      <span style={{ fontSize: 12, color: muted, textDecoration: "line-through" }}>₹{p.price.toLocaleString("en-IN")}</span>
-                      <span style={{ fontSize: 10, fontWeight: 700, padding: "1px 6px", borderRadius: 4, background: "rgba(16,185,129,0.1)", color: "#10b981" }}>Save ₹{((p.price - p.annual) * 12).toLocaleString("en-IN")}/yr</span>
                     </div>
                   </div>
                 )}
-                <p style={{ fontSize: 12, color: muted, marginBottom: 16, marginTop: 6 }}>{p.desc}</p>
-                {p.features.map(f => (
-                  <div key={f} style={{ display: "flex", alignItems: "center", gap: 7, fontSize: 13, marginBottom: 7, color: txt, fontWeight: 500 }}>
-                    <CheckCircle2 size={13} color={p.popular ? "#06b6d4" : "#10b981"} /> {f}
-                  </div>
-                ))}
-                <button onClick={() => router.push(p.price < 0 ? "/contact" : "/register")} style={{ width: "100%", marginTop: 18, padding: "12px 0", borderRadius: 10, border: p.popular ? "none" : `1.5px solid ${L ? 'rgba(0,0,0,0.1)' : 'rgba(255,255,255,0.1)'}`, background: p.popular ? "linear-gradient(135deg,#06b6d4,#0891b2)" : "transparent", color: p.popular ? "white" : txt, fontSize: 14, fontWeight: 700, cursor: "pointer", letterSpacing: "-0.01em", boxShadow: p.popular ? "0 4px 16px rgba(6,182,212,0.25)" : "none", fontFamily: "inherit" }}>
+                <p style={{ fontSize: 12, color: muted, marginBottom: 24, marginTop: 6 }}>{p.desc}</p>
+                
+                <div style={{ display: "grid", gap: 10 }}>
+                  {p.features.map(f => (
+                    <div key={f} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, color: txt, fontWeight: 600 }}>
+                      <CheckCircle2 size={14} color="#10b981" /> {f}
+                    </div>
+                  ))}
+                </div>
+
+                <button onClick={() => router.push(p.price < 0 ? "/contact" : "/register")} style={{ width: "100%", marginTop: 28, padding: "12px 0", borderRadius: 10, border: p.popular ? "none" : `1.5px solid ${border}`, background: p.popular ? "linear-gradient(135deg, #06b6d4, #0891b2)" : "transparent", color: p.popular ? "white" : txt, fontSize: 14, fontWeight: 800, cursor: "pointer" }}>
                   {p.cta}
                 </button>
               </div>
             </div>
           ))}
         </div>
-        {/* Trust guarantees */}
-        <div className="landing-trust-footer" style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 24, marginTop: 28 }}>
-          {[
-            { icon: <Shield size={13} />, text: "30-day money-back guarantee" },
-            { icon: <Lock size={13} />, text: "Cancel anytime, no lock-in" },
-            { icon: <Zap size={13} />, text: "Setup in under 2 minutes" },
-          ].map((t,i) => (
-            <div key={i} style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 11, color: muted, fontWeight: 500 }}>
-              <span style={{ color: "#06b6d4" }}>{t.icon}</span> {t.text}
-            </div>
-          ))}
-        </div>
       </section>
 
-      {/* CTA */}
-      <section style={{ padding: "60px 48px", textAlign: "center" }}>
-        <div style={{ maxWidth: 720, margin: "0 auto", padding: 48, borderRadius: 20, background: L ? "rgba(0,0,0,0.02)" : "rgba(255,255,255,0.02)", border: `1px solid ${border}` }}>
-          <h2 style={{ fontSize: 28, fontWeight: 800, marginBottom: 12, letterSpacing: "-0.03em" }}>Ready to Take Command?</h2>
-          <p style={{ fontSize: 14, color: muted, marginBottom: 28, maxWidth: 480, margin: "0 auto 28px", lineHeight: 1.7, letterSpacing: "-0.01em" }}>Join enterprises managing 50,000+ assets with complete visibility, automated security, and regulatory compliance.</p>
-          <div className="landing-cta-buttons" style={{ display: "flex", gap: 12, justifyContent: "center", flexWrap: "wrap" }}>
-            <button onClick={() => router.push("/register")} style={{ padding: "14px 36px", borderRadius: 10, border: "none", background: "linear-gradient(135deg,#06b6d4,#0891b2)", color: "white", fontSize: 15, fontWeight: 700, cursor: "pointer", boxShadow: "0 4px 20px rgba(6,182,212,0.25)", letterSpacing: "-0.01em" }}>
-              Create Free Account <ArrowRight size={16} style={{ marginLeft: 6, verticalAlign: "middle" }} />
-            </button>
-            <button onClick={() => router.push("/contact")} style={{ padding: "14px 28px", borderRadius: 10, border: `1.5px solid ${L ? 'rgba(0,0,0,0.1)' : 'rgba(255,255,255,0.1)'}`, background: "transparent", color: txt, fontSize: 15, fontWeight: 600, cursor: "pointer", letterSpacing: "-0.01em" }}>
-              Talk to Sales
-            </button>
-          </div>
-          <p style={{ fontSize: 11, color: muted, marginTop: 16, opacity: 0.7 }}>Free forever for up to 5 assets · No credit card required · Setup in 2 minutes</p>
-        </div>
-      </section>
-
-      {/* FAQ */}
-      <section style={{ padding: "80px 48px", maxWidth: 800, margin: "0 auto" }}>
-        <div style={{ textAlign: "center", marginBottom: 40 }}>
-          <h2 style={{ fontSize: 28, fontWeight: 800, letterSpacing: "-0.03em", marginBottom: 10 }}>Frequently Asked Questions</h2>
-          <p style={{ fontSize: 14, color: muted, letterSpacing: "-0.01em" }}>Everything you need to know about QS Asset Management.</p>
-        </div>
-        {[
-          { q: "Is there really a free plan?", a: "Yes — the Starter plan is free forever. You get up to 5 assets, 4 users, IT asset tracking, basic reports, and email support. No credit card required." },
-          { q: "Can I deploy on my own servers?", a: "Absolutely. QS Asset supports both cloud SaaS and on-premise deployment via Docker. Your data stays on your infrastructure with full control." },
-          { q: "How does network scanning work?", a: "We support agent-based monitoring (install our lightweight agent on endpoints) and agentless scanning via SNMP, ICMP, Nmap, and ARP. Both methods auto-discover devices on your network." },
-          { q: "Is my data secure and compliant?", a: "All data is encrypted at rest (AES-256) and in transit (TLS 1.3). We support DPDP Act 2023, SOC 2 Type II, and ISO 27001 compliance standards. Multi-tenant RBAC ensures strict data isolation." },
-          { q: "How long does setup take?", a: "For SaaS — register and start scanning in under 2 minutes. For on-premise — deploy with Docker in under 10 minutes using our one-command setup script." },
-          { q: "Can I migrate from ManageEngine, Ivanti, or ServiceNow?", a: "Yes. QS Asset supports CSV bulk import. Export your assets from your current tool and import them directly. We also provide assisted migration for Enterprise plans." },
-        ].map((faq, i) => (
-          <details key={i} style={{ marginBottom: 8, padding: "16px 20px", borderRadius: 10, background: card, border: `1px solid ${border}`, cursor: "pointer" }}>
-            <summary style={{ fontSize: 14, fontWeight: 600, listStyle: "none", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-              {faq.q} <ChevronRight size={14} style={{ color: muted, flexShrink: 0, transition: "transform 0.2s" }} />
-            </summary>
-            <p style={{ fontSize: 13, color: muted, lineHeight: 1.8, marginTop: 10, paddingTop: 10, borderTop: `1px solid ${border}` }}>{faq.a}</p>
-          </details>
-        ))}
-      </section>
-
-      {/* FOOTER */}
-      <footer style={{ padding: "44px 48px 24px", borderTop: `1px solid ${L ? 'rgba(0,0,0,0.05)' : 'rgba(255,255,255,0.04)'}`, maxWidth: 1200, margin: "0 auto" }}>
-        <div className="landing-footer-grid" style={{ display: "grid", gridTemplateColumns: "2fr 1fr 1fr 1fr", gap: 32, marginBottom: 28 }}>
+      {/* ─── FOOTER ─── */}
+      <footer style={{ padding: "80px 6% 36px", borderTop: `1.5px solid ${border}`, maxWidth: 1240, margin: "0 auto" }}>
+        <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr 1fr 1fr", gap: 48, marginBottom: 40 }}>
           <div>
-            <a href="/" style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12, textDecoration: "none", color: "inherit" }}>
-              <div style={{ width: 28, height: 28, borderRadius: 7, background: "linear-gradient(135deg,#06b6d4,#8b5cf6)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 16 }}>
+              <div style={{ width: 28, height: 28, borderRadius: 7, background: "linear-gradient(135deg, #06b6d4, #8b5cf6)", display: "flex", alignItems: "center", justifyContent: "center" }}>
                 <img src="/favicon.png" alt="QS" style={{ width: 17, height: 17, borderRadius: 4 }} />
               </div>
-              <span style={{ fontSize: 15, fontWeight: 800, letterSpacing: "-0.03em" }}>QS Asset</span>
-            </a>
-            <p style={{ fontSize: 12, color: muted, lineHeight: 1.7, maxWidth: 280, letterSpacing: "-0.01em" }}>Enterprise IT asset management, network monitoring, and security platform. Built by NeurQ AI Labs.</p>
+              <span style={{ fontSize: 15, fontWeight: 900, letterSpacing: "-0.03em" }}>QS Asset</span>
+            </div>
+            <p style={{ fontSize: 12.5, color: muted, lineHeight: 1.7, maxWidth: 300 }}>
+              Autonomous IT asset lifecycle management, real-time SNMP topology, and security mitigation engine. Crafted by NeurQ AI Labs.
+            </p>
           </div>
           <div>
-            <h4 style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.12em", marginBottom: 14, color: muted }}>Product</h4>
-            {[{l:"Features",h:"#features"},{l:"Modules",h:"#modules"},{l:"Pricing",h:"#pricing"},{l:"Documentation",h:"/docs"},{l:"API Docs",h:"/api/docs"}].map(a => (
-              <a key={a.l} href={a.h} style={{ display: "block", fontSize: 13, color: txt, textDecoration: "none", marginBottom: 8, opacity: 0.65, fontWeight: 500, letterSpacing: "-0.01em" }}>{a.l}</a>
+            <h4 style={{ fontSize: 11, fontWeight: 800, textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 16, color: muted }}>Product</h4>
+            {[{ l: "Nerve System", h: "#nerve-system" }, { l: "Immune Radar", h: "#immune-system" }, { l: "Pricing", h: "#pricing" }].map(a => (
+              <a key={a.l} href={a.h} style={{ display: "block", fontSize: 13, color: txt, textDecoration: "none", marginBottom: 10, opacity: 0.7, fontWeight: 600 }}>{a.l}</a>
             ))}
           </div>
           <div>
-            <h4 style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.12em", marginBottom: 14, color: muted }}>Company</h4>
-            {[{l:"Contact",h:"/contact"},{l:"About NeurQ",h:"https://neurqai.com"},{l:"Careers",h:"/contact"}].map(a => (
-              <a key={a.l} href={a.h} style={{ display: "block", fontSize: 13, color: txt, textDecoration: "none", marginBottom: 8, opacity: 0.65, fontWeight: 500, letterSpacing: "-0.01em" }}>{a.l}</a>
+            <h4 style={{ fontSize: 11, fontWeight: 800, textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 16, color: muted }}>Company</h4>
+            {[{ l: "Contact Sales", h: "/contact" }].map(a => (
+              <a key={a.l} href={a.h} style={{ display: "block", fontSize: 13, color: txt, textDecoration: "none", marginBottom: 10, opacity: 0.7, fontWeight: 600 }}>{a.l}</a>
             ))}
           </div>
           <div>
-            <h4 style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.12em", marginBottom: 14, color: muted }}>Legal</h4>
-            {[{l:"Privacy Policy",h:"/privacy"},{l:"Terms of Service",h:"/terms"},{l:"Cookie Policy",h:"/cookies"},{l:"Security",h:"#security"}].map(a => (
-              <a key={a.l} href={a.h} style={{ display: "block", fontSize: 13, color: txt, textDecoration: "none", marginBottom: 8, opacity: 0.65, fontWeight: 500, letterSpacing: "-0.01em" }}>{a.l}</a>
+            <h4 style={{ fontSize: 11, fontWeight: 800, textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 16, color: muted }}>Legal</h4>
+            {[{ l: "Privacy Policy", h: "/privacy" }, { l: "Terms of Service", h: "/terms" }].map(a => (
+              <a key={a.l} href={a.h} style={{ display: "block", fontSize: 13, color: txt, textDecoration: "none", marginBottom: 10, opacity: 0.7, fontWeight: 600 }}>{a.l}</a>
             ))}
           </div>
         </div>
-        <div className="landing-footer-bottom" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", paddingTop: 16, borderTop: `1px solid ${L ? 'rgba(0,0,0,0.05)' : 'rgba(255,255,255,0.04)'}` }}>
-          <p style={{ fontSize: 11, color: muted, margin: 0, letterSpacing: "-0.01em" }}>&copy; 2026 NeurQ AI Labs Pvt Ltd. All rights reserved. Built in India 🇮🇳</p>
-          <div style={{ display: "flex", gap: 16 }}>
-            <a href="/privacy" style={{ fontSize: 11, color: muted, textDecoration: "none" }}>Privacy</a>
-            <a href="/terms" style={{ fontSize: 11, color: muted, textDecoration: "none" }}>Terms</a>
-            <a href="/contact" style={{ fontSize: 11, color: muted, textDecoration: "none" }}>Contact</a>
-          </div>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", paddingTop: 24, borderTop: `1px solid ${border}` }}>
+          <p style={{ fontSize: 12, color: muted, margin: 0 }}>&copy; 2026 NeurQ AI Labs Pvt Ltd. All rights reserved. Crafted in India 🇮🇳</p>
         </div>
       </footer>
 
+      {/* ─── PREMIUM SCROLL EFFECTS & INTERACTIONS ─── */}
       <style>{`
+        @keyframes pulse {
+          0%, 100% { opacity: 1; transform: scale(1); }
+          50% { opacity: 0.4; transform: scale(0.96); }
+        }
+        @keyframes spin {
+          to { transform: rotate(360deg); }
+        }
+        @keyframes blink {
+          50% { opacity: 0; }
+        }
+        .spin {
+          animation: spin 1.5s linear infinite;
+        }
+        .blink {
+          animation: blink 1s step-end infinite;
+        }
+        .pulse {
+          animation: pulse 2.5s infinite ease-in-out;
+        }
+        .module-card-hover {
+          box-shadow: 0 4px 20px rgba(15, 23, 42, 0.01) !important;
+          transition: all 0.35s cubic-bezier(0.16, 1, 0.3, 1) !important;
+        }
+        .module-card-hover:hover {
+          transform: translateY(-6px) !important;
+          border-color: rgba(6, 182, 212, 0.35) !important;
+          box-shadow: 0 20px 40px rgba(6, 182, 212, 0.1) !important;
+        }
         @media (max-width: 1024px) {
-          .landing-nav { padding: 10px 20px !important; }
-          .landing-nav-links a:not(:last-child):not(:nth-last-child(2)):not(:nth-last-child(3)) { display: none; }
-          .landing-section { padding: 60px 24px !important; }
+          .landing-nav-links { display: none !important; }
+          h1 { font-size: 52px !important; }
         }
         @media (max-width: 768px) {
-          .landing-nav { padding: 10px 16px !important; }
-          .landing-nav-links a { display: none !important; }
-          .landing-section { padding: 40px 16px !important; }
-          .landing-features-grid { grid-template-columns: repeat(3, 1fr) !important; gap: 8px !important; }
-          .landing-modules-grid { grid-template-columns: 1fr !important; }
-          .landing-hero h1 { font-size: 36px !important; }
-          .landing-hero p { font-size: 15px !important; }
-          .landing-hero-buttons { flex-direction: column !important; align-items: center !important; }
-          .landing-hero-buttons button { width: 100% !important; max-width: 320px !important; justify-content: center !important; }
-          .landing-pricing-grid { grid-template-columns: 1fr !important; max-width: 400px !important; margin: 0 auto !important; }
-          .landing-security-grid { grid-template-columns: 1fr !important; }
-          .landing-security-cards { grid-template-columns: repeat(3, 1fr) !important; }
-          .landing-compare-wrap { overflow-x: auto !important; -webkit-overflow-scrolling: touch !important; }
-          .landing-compare-wrap table { min-width: 500px !important; }
-          .landing-footer-grid { grid-template-columns: 1fr 1fr !important; gap: 24px !important; }
-          .landing-footer-bottom { flex-direction: column !important; gap: 10px !important; text-align: center !important; }
-          .landing-cta-buttons { flex-direction: column !important; align-items: center !important; }
-          .landing-cta-buttons button { width: 100% !important; max-width: 320px !important; justify-content: center !important; }
-          .landing-trust-bar { gap: 16px !important; }
-          .landing-trust-footer { flex-direction: column !important; gap: 8px !important; }
+          section > div[style*="gridTemplateColumns"] { grid-template-columns: 1fr !important; gap: 32px !important; }
+          .kpi-flip-grid { grid-template-columns: 1fr !important; }
+          #pricing > div { grid-template-columns: 1fr !important; max-width: 400px !important; margin: 0 auto !important; }
+          #pricing > div > div { width: 100% !important; }
+          footer > div { grid-template-columns: 1fr !important; }
         }
-        @media (max-width: 480px) {
-          .landing-features-grid { grid-template-columns: repeat(2, 1fr) !important; }
-          .landing-hero h1 { font-size: 28px !important; }
-          .landing-security-cards { grid-template-columns: repeat(2, 1fr) !important; }
-          .landing-footer-grid { grid-template-columns: 1fr !important; }
-          .landing-trust-bar { flex-direction: column !important; gap: 8px !important; }
+        @media (max-width: 600px) {
+          .radar-terminal-grid {
+            grid-template-columns: 1fr !important;
+          }
         }
       `}</style>
+
     </div>
   );
 }

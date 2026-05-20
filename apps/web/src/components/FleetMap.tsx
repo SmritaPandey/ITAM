@@ -7,12 +7,15 @@ interface FleetMapProps {
   vehicles: any[];
   selectedVehicle: any;
   onSelect: (v: any) => void;
+  selectedTrip?: any;
 }
 
-export default function FleetMap({ vehicles, selectedVehicle, onSelect }: FleetMapProps) {
+export default function FleetMap({ vehicles, selectedVehicle, onSelect, selectedTrip }: FleetMapProps) {
   const mapRef = useRef<HTMLDivElement>(null);
   const mapInstance = useRef<L.Map | null>(null);
   const markersRef = useRef<L.Marker[]>([]);
+  const polylineRef = useRef<L.Polyline | null>(null);
+  const tripMarkersRef = useRef<L.Marker[]>([]);
 
   useEffect(() => {
     if (!mapRef.current || mapInstance.current) return;
@@ -86,19 +89,98 @@ export default function FleetMap({ vehicles, selectedVehicle, onSelect }: FleetM
       markersRef.current.push(marker);
     });
 
-    // Fit bounds
-    if (vehicles.length > 1) {
+    // Fit bounds only if a trip polyline is NOT drawn (to avoid competing zoom states)
+    if (!selectedTrip && vehicles.length > 1) {
       const bounds = L.latLngBounds(vehicles.map(v => [v.latitude, v.longitude]));
       map.fitBounds(bounds, { padding: [40, 40] });
     }
-  }, [vehicles, selectedVehicle, onSelect]);
+  }, [vehicles, selectedVehicle, onSelect, selectedTrip]);
 
-  // Pan to selected vehicle
+  // Pan to selected vehicle (only if not viewing a trip)
   useEffect(() => {
-    if (mapInstance.current && selectedVehicle) {
+    if (mapInstance.current && selectedVehicle && !selectedTrip) {
       mapInstance.current.setView([selectedVehicle.latitude, selectedVehicle.longitude], 14, { animate: true });
     }
-  }, [selectedVehicle]);
+  }, [selectedVehicle, selectedTrip]);
+
+  // Draw selected trip polyline and start/end markers
+  useEffect(() => {
+    if (!mapInstance.current) return;
+    const map = mapInstance.current;
+
+    // Clear old polyline
+    if (polylineRef.current) {
+      polylineRef.current.remove();
+      polylineRef.current = null;
+    }
+    // Clear old trip markers
+    tripMarkersRef.current.forEach(m => m.remove());
+    tripMarkersRef.current = [];
+
+    if (!selectedTrip || !selectedTrip.points || selectedTrip.points.length === 0) {
+      return;
+    }
+
+    const coords = selectedTrip.points.map((p: any) => [p.lat, p.lng] as [number, number]);
+
+    // Draw Polyline
+    const polyline = L.polyline(coords, {
+      color: "#06b6d4",
+      weight: 5,
+      opacity: 0.8,
+      lineJoin: "round",
+    }).addTo(map);
+
+    polylineRef.current = polyline;
+
+    // Draw Start Marker
+    const startPt = selectedTrip.points[0];
+    const startIcon = L.divIcon({
+      className: "trip-start-marker",
+      html: `<div style="
+        width: 24px;
+        height: 24px;
+        border-radius: 50%;
+        background: linear-gradient(135deg, #10b981, #059669);
+        border: 2px solid white;
+        box-shadow: 0 2px 8px rgba(16,185,129,0.5);
+        display: flex; align-items: center; justify-content: center;
+        color: white; font-weight: 700; font-size: 10px; font-family: sans-serif;
+      ">A</div>`,
+      iconSize: [24, 24],
+      iconAnchor: [12, 12],
+    });
+    const startMarker = L.marker([startPt.lat, startPt.lng], { icon: startIcon })
+      .addTo(map)
+      .bindPopup(`<strong style="color: #10b981">Start Location</strong><br/>${selectedTrip.startLocation || "Mumbai Terminal"}`);
+    tripMarkersRef.current.push(startMarker);
+
+    // Draw End Marker
+    const endPt = selectedTrip.points[selectedTrip.points.length - 1];
+    const endIcon = L.divIcon({
+      className: "trip-end-marker",
+      html: `<div style="
+        width: 24px;
+        height: 24px;
+        border-radius: 50%;
+        background: linear-gradient(135deg, #f43f5e, #e11d48);
+        border: 2px solid white;
+        box-shadow: 0 2px 8px rgba(244,63,94,0.5);
+        display: flex; align-items: center; justify-content: center;
+        color: white; font-weight: 700; font-size: 10px; font-family: sans-serif;
+      ">B</div>`,
+      iconSize: [24, 24],
+      iconAnchor: [12, 12],
+    });
+    const endMarker = L.marker([endPt.lat, endPt.lng], { icon: endIcon })
+      .addTo(map)
+      .bindPopup(`<strong style="color: #f43f5e">End Location</strong><br/>${selectedTrip.endLocation || "Destination"}`);
+    tripMarkersRef.current.push(endMarker);
+
+    // Fit bounds to polyline
+    map.fitBounds(polyline.getBounds(), { padding: [50, 50] });
+
+  }, [selectedTrip]);
 
   return (
     <div ref={mapRef} style={{ width: "100%", height: "100%", minHeight: 400, background: "#1a1a2e" }} />

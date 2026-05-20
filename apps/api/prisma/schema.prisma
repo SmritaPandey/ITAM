@@ -77,6 +77,8 @@ model Tenant {
   agentBaselines      AgentBaseline[]
   deviceMetricsHistory DeviceMetricsHistory[]
   subscription        Subscription?
+  trips               Trip[]
+  gpsTelemetries      GpsTelemetry[]
 
   @@map("tenants")
 }
@@ -328,6 +330,7 @@ enum DiscoverySource {
   SNMP
   WMI
   SSH
+  NETWORK_SCAN
   CLOUD_AWS
   CLOUD_AZURE
   CLOUD_GCP
@@ -429,6 +432,8 @@ model Asset {
   attestations      AssetAttestation[]
   sourceRelations   AssetRelationship[] @relation("RelSource")
   targetRelations   AssetRelationship[] @relation("RelTarget")
+  trips             Trip[]
+  gpsTelemetries    GpsTelemetry[]
 
   @@unique([tenantId, assetTag])
   @@index([tenantId])
@@ -725,6 +730,7 @@ enum ScanType {
   PING_SWEEP
   ARP_SCAN
   PORT_SCAN
+  TCP_PORT_SCAN
   SNMP_DISCOVERY
   FULL_SCAN
 }
@@ -770,11 +776,16 @@ model DiscoveredDevice {
   enrichmentData Json?  @map("enrichment_data")   // Raw WMI/SSH/SNMP collection results
   enrichmentStatus String @default("BASIC") @map("enrichment_status") // BASIC, ENRICHED, FAILED
   approvedAssetId String? @map("approved_asset_id") @db.Uuid
+  riskScore    Int      @default(0) @map("risk_score")   // 0-100, higher = riskier
+  firstSeenAt  DateTime @default(now()) @map("first_seen_at")
+  lastSeenAt   DateTime @default(now()) @map("last_seen_at")
+  seenCount    Int      @default(1) @map("seen_count")
   createdAt    DateTime @default(now()) @map("created_at")
 
   tenant       Tenant   @relation(fields: [tenantId], references: [id])
   scanJob      ScanJob  @relation(fields: [scanJobId], references: [id], onDelete: Cascade)
 
+  @@unique([tenantId, ipAddress])
   @@index([tenantId])
   @@index([scanJobId])
   @@map("discovered_devices")
@@ -1577,4 +1588,42 @@ model Payment {
 
   @@index([subscriptionId])
   @@map("payments")
+}
+
+model Trip {
+  id            String    @id @default(uuid()) @db.Uuid
+  tenantId      String    @map("tenant_id") @db.Uuid
+  assetId       String    @map("asset_id") @db.Uuid
+  startTime     DateTime  @map("start_time")
+  endTime       DateTime? @map("end_time")
+  distanceKm    Float     @map("distance_km")
+  maxSpeed      Float     @map("max_speed")
+  avgSpeed      Float     @map("avg_speed")
+  startLocation String?   @map("start_location")
+  endLocation   String?   @map("end_location")
+  routeCoords   Json?     @map("route_coords") // Array of {lat, lng, speed, timestamp}
+  createdAt     DateTime  @default(now()) @map("created_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  asset  Asset  @relation(fields: [assetId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, assetId])
+  @@map("trips")
+}
+
+model GpsTelemetry {
+  id          String   @id @default(uuid()) @db.Uuid
+  tenantId    String   @map("tenant_id") @db.Uuid
+  assetId     String   @map("asset_id") @db.Uuid
+  latitude    Float
+  longitude   Float
+  speed       Float
+  fuelLevel   Float?   @map("fuel_level")
+  collectedAt DateTime @default(now()) @map("collected_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  asset  Asset  @relation(fields: [assetId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, assetId])
+  @@map("gps_telemetries")
 }

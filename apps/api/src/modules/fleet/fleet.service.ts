@@ -59,6 +59,30 @@ export class FleetService {
     });
     if (!vehicle) return { trips: [] };
 
+    const dbTrips = await this.prisma.trip.findMany({
+      where: { tenantId, assetId: vehicleId },
+      orderBy: { startTime: 'desc' },
+    });
+
+    if (dbTrips && dbTrips.length > 0) {
+      return {
+        vehicleId,
+        vehicleName: vehicle.name,
+        trips: dbTrips.map(t => ({
+          id: t.id,
+          vehicleId: t.assetId,
+          startTime: t.startTime,
+          endTime: t.endTime,
+          distanceKm: t.distanceKm,
+          maxSpeed: t.maxSpeed,
+          avgSpeed: t.avgSpeed,
+          startLocation: t.startLocation,
+          endLocation: t.endLocation,
+          points: t.routeCoords || [],
+        })),
+      };
+    }
+
     // Return deterministic trip data derived from the vehicle's stored position
     // In production, these would come from a GPS telematics table
     const baseLat = vehicle.latitude || 28.6139;
@@ -104,21 +128,29 @@ export class FleetService {
     });
     if (!vehicle) return null;
 
-    // Return the actual stored position — no random jitter
-    const lastUpdated = vehicle.updatedAt || new Date();
+    const latestTelemetry = await this.prisma.gpsTelemetry.findFirst({
+      where: { tenantId, assetId: vehicleId },
+      orderBy: { collectedAt: 'desc' },
+    });
+
+    const lat = latestTelemetry ? latestTelemetry.latitude : vehicle.latitude;
+    const lng = latestTelemetry ? latestTelemetry.longitude : vehicle.longitude;
+    const speed = latestTelemetry ? latestTelemetry.speed : 0;
+    const fuelLevel = latestTelemetry ? latestTelemetry.fuelLevel : null;
+    const lastUpdated = latestTelemetry ? latestTelemetry.collectedAt : (vehicle.updatedAt || new Date());
     const isStale = (Date.now() - new Date(lastUpdated).getTime()) > 3600 * 1000; // >1 hour old
 
     return {
       vehicleId,
       vehicleName: vehicle.name,
-      latitude: vehicle.latitude,
-      longitude: vehicle.longitude,
-      speed: 0, // Real speed would come from GPS telematics feed
+      latitude: lat,
+      longitude: lng,
+      speed,
       heading: 0,
       status: vehicle.status,
       lastUpdated: new Date(lastUpdated).toISOString(),
       ignition: vehicle.status === 'ACTIVE' ? 'ON' : 'OFF',
-      fuelLevel: null, // No fuel sensor — show null instead of fake
+      fuelLevel,
       stale: isStale,
     };
   }

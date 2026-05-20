@@ -43,6 +43,7 @@ export default function ServiceCatalogPage() {
   const [requestNotes, setRequestNotes] = useState("");
   const [requesting, setRequesting] = useState(false);
   const [success, setSuccess] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     apiFetch("/service-catalog").then(data => {
@@ -56,14 +57,16 @@ export default function ServiceCatalogPage() {
   async function submitRequest() {
     if (!requestModal) return;
     setRequesting(true);
+    setError(null);
+    setSuccess(null);
     try {
       await apiFetch(`/service-catalog/${requestModal.id}/request`, {
         method: "POST", body: JSON.stringify({ notes: requestNotes, priority: "MEDIUM" }),
       });
       setSuccess(`Request submitted for "${requestModal.name}". A ticket has been created.`);
       setRequestModal(null); setRequestNotes("");
-    } catch {
-      setSuccess(`Request submitted for "${requestModal.name}".`);
+    } catch (err: any) {
+      setError(err?.message || `Failed to submit request for "${requestModal.name}". Please try again.`);
       setRequestModal(null); setRequestNotes("");
     } finally { setRequesting(false); }
   }
@@ -97,6 +100,15 @@ export default function ServiceCatalogPage() {
           <CheckCircle2 size={16} color="#10b981" />
           <span style={{ fontSize: 13, color: "#10b981", fontWeight: 600, flex: 1 }}>{success}</span>
           <button onClick={() => setSuccess(null)} style={{ background: "none", border: "none", color: "var(--text-tertiary)", cursor: "pointer" }}>✕</button>
+        </div>
+      )}
+
+      {/* Error Banner */}
+      {error && (
+        <div className="card" style={{ padding: "12px 16px", marginBottom: 16, display: "flex", alignItems: "center", gap: 10, border: "1px solid rgba(239,68,68,0.3)", background: "rgba(239,68,68,0.06)", backdropFilter: "blur(8px)" }}>
+          <AlertTriangle size={16} color="#ef4444" />
+          <span style={{ fontSize: 13, color: "#ef4444", fontWeight: 600, flex: 1 }}>{error}</span>
+          <button onClick={() => setError(null)} style={{ background: "none", border: "none", color: "var(--text-tertiary)", cursor: "pointer" }}>✕</button>
         </div>
       )}
 

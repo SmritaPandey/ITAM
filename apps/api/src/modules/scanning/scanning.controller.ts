@@ -6,10 +6,13 @@ import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { ScanningService } from './scanning.service';
 import { TenantMeteringService } from '../tenants/tenant-metering.service';
+import { ModuleGuard } from '../../common/guards/module.guard';
+import { RequireModule } from '../../common/decorators/require-module.decorator';
 
 @ApiTags('scanning')
 @ApiBearerAuth()
-@UseGuards(JwtAuthGuard, RolesGuard)
+@UseGuards(JwtAuthGuard, RolesGuard, ModuleGuard)
+@RequireModule('SECURITY_SCAN')
 @Controller('scanning')
 export class ScanningController {
   constructor(

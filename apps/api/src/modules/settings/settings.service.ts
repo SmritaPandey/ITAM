@@ -1,5 +1,6 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../common/database/prisma.service';
+import { getResolvedModules, getActiveModules } from '../../common/utils/modules';
 
 @Injectable()
 export class SettingsService {
@@ -11,12 +12,19 @@ export class SettingsService {
       select: { id: true, name: true, slug: true, domain: true, plan: true, settings: true },
     });
     if (!tenant) throw new NotFoundException('Tenant not found');
+
+    const settingsObj = typeof tenant.settings === 'object' ? (tenant.settings as Record<string, any>) : {};
+    const allowedModules = getResolvedModules(tenant.plan, tenant.settings);
+    const activeModules = getActiveModules(tenant.plan, tenant.settings);
+
     return {
       tenantId: tenant.id,
       orgName: tenant.name,
       domain: tenant.domain,
       plan: tenant.plan,
-      ...(typeof tenant.settings === 'object' ? tenant.settings as Record<string, any> : {}),
+      allowedModules,
+      activeModules,
+      ...settingsObj,
     };
   }
 
@@ -34,12 +42,18 @@ export class SettingsService {
     if (data.domain) update.domain = data.domain;
 
     const result = await this.prisma.tenant.update({ where: { id: tenantId }, data: update });
+    const settingsObj = typeof result.settings === 'object' ? (result.settings as Record<string, any>) : {};
+    const allowedModules = getResolvedModules(result.plan, result.settings);
+    const activeModules = getActiveModules(result.plan, result.settings);
+
     return {
       tenantId: result.id,
       orgName: result.name,
       domain: result.domain,
       plan: result.plan,
-      ...(typeof result.settings === 'object' ? result.settings as Record<string, any> : {}),
+      allowedModules,
+      activeModules,
+      ...settingsObj,
     };
   }
 
@@ -135,20 +149,32 @@ export class SettingsService {
       ],
       plans: [
         {
-          name: 'STARTER', displayName: 'Starter', price: 0, billingLabel: 'Free forever',
+          name: 'STARTER', displayName: 'Starter',
+          priceUSD: 0, priceINR: 0,
+          discountedUSD: 0, discountedINR: 0,
+          billingLabelUSD: 'Free forever', billingLabelINR: 'Free forever',
           features: ['Up to 100 assets', '5 users', '4 core modules', 'Community support', 'Basic reports'],
         },
         {
-          name: 'PROFESSIONAL', displayName: 'Professional', price: 4999, billingLabel: '₹4,999/mo',
+          name: 'PROFESSIONAL', displayName: 'Professional',
+          priceUSD: 199, priceINR: 16999,
+          discountedUSD: 99, discountedINR: 7999,
+          billingLabelUSD: '$199/mo', billingLabelINR: '₹16,999/mo',
           features: ['Unlimited assets', '50 users', 'All 12 modules', 'Priority support', 'Advanced reports', 'API access', 'Custom integrations'],
           popular: true,
         },
         {
-          name: 'ENTERPRISE', displayName: 'Enterprise', price: 14999, billingLabel: '₹14,999/mo',
+          name: 'ENTERPRISE', displayName: 'Enterprise',
+          priceUSD: 499, priceINR: 39999,
+          discountedUSD: 249, discountedINR: 19999,
+          billingLabelUSD: '$499/mo', billingLabelINR: '₹39,999/mo',
           features: ['Unlimited everything', 'Unlimited users', 'All 12 modules', 'Dedicated support', 'On-premise option', 'SLA guarantee', 'Custom development', 'SSO & SAML'],
         },
         {
-          name: 'CUSTOM', displayName: 'Custom', price: -1, billingLabel: 'Contact Sales',
+          name: 'CUSTOM', displayName: 'Custom',
+          priceUSD: -1, priceINR: -1,
+          discountedUSD: -1, discountedINR: -1,
+          billingLabelUSD: 'Contact Sales', billingLabelINR: 'Contact Sales',
           features: ['Everything in Enterprise', 'Custom asset limits', 'Negotiated pricing', 'Dedicated account manager', 'Custom SLA', 'White-label option', 'Priority onboarding'],
           contactSales: true,
         },
@@ -170,7 +196,7 @@ export class SettingsService {
     });
   }
 
-  async requestUpgrade(tenantId: string, plan: string, billingCycle?: string) {
+  async requestUpgrade(tenantId: string, plan: string, billingCycle?: string, currency?: string) {
     const validPlans = ['STARTER', 'PROFESSIONAL', 'ENTERPRISE'];
     if (!validPlans.includes(plan)) throw new NotFoundException('Invalid plan');
 
@@ -184,9 +210,12 @@ export class SettingsService {
       data: { plan: plan as any },
     });
 
-    // Calculate effective MRR with billing cycle discount
-    const limits = this.PLAN_LIMITS[plan] || this.PLAN_LIMITS.STARTER;
-    const baseMrr = limits.price;
+    // Calculate effective MRR with billing cycle discount and dynamic currency selection
+    const isUSD = (currency || 'INR').toUpperCase() === 'USD';
+    const usdPrices: Record<string, number> = { STARTER: 0, PROFESSIONAL: 99, ENTERPRISE: 249 };
+    const inrPrices: Record<string, number> = { STARTER: 0, PROFESSIONAL: 7999, ENTERPRISE: 19999 };
+
+    const baseMrr = isUSD ? usdPrices[plan] : inrPrices[plan];
     const effectiveMrr = baseMrr * (1 - cycleDiscount / 100);
     const existing = await this.prisma.subscription.findFirst({ where: { tenantId } });
 

@@ -623,6 +623,86 @@ async function main() {
     data: { cooldownMinutes: 15 },
   });
   console.log('  ✅ Automation Rules: cooldown values applied (15 min default)');
+ 
+  // ─── Fleet Telematics Seeding ────────────────────────────────────
+  console.log('  🛞 Seeding Fleet Telematics (Trips & Live Coordinates)...');
+  await prisma.trip.deleteMany();
+  await prisma.gpsTelemetry.deleteMany();
+
+  const vehicle = await prisma.asset.findFirst({
+    where: { assetTag: 'VEH-001', tenantId: tenant.id },
+  });
+
+  if (vehicle) {
+    // Seed 3 historical trips in Mumbai
+    const route1 = [
+      { lat: 19.0974, lng: 72.8752, speed: 40, timestamp: new Date(Date.now() - 3 * 3600 * 1000 - 30 * 60 * 1000) },
+      { lat: 19.0886, lng: 72.8680, speed: 55, timestamp: new Date(Date.now() - 3 * 3600 * 1000 - 25 * 60 * 1000) },
+      { lat: 19.0768, lng: 72.8601, speed: 60, timestamp: new Date(Date.now() - 3 * 3600 * 1000 - 20 * 60 * 1000) },
+      { lat: 19.0682, lng: 72.8550, speed: 45, timestamp: new Date(Date.now() - 3 * 3600 * 1000 - 15 * 60 * 1000) },
+      { lat: 19.0596, lng: 72.8641, speed: 30, timestamp: new Date(Date.now() - 3 * 3600 * 1000 - 10 * 60 * 1000) },
+      { lat: 19.0620, lng: 72.8727, speed: 20, timestamp: new Date(Date.now() - 3 * 3600 * 1000) },
+    ];
+    await prisma.trip.create({
+      data: {
+        tenantId: tenant.id,
+        assetId: vehicle.id,
+        startTime: route1[0].timestamp,
+        endTime: route1[route1.length - 1].timestamp,
+        distanceKm: 8.5,
+        maxSpeed: 60,
+        avgSpeed: 41.6,
+        startLocation: 'Chhatrapati Shivaji Maharaj International Airport (BOM)',
+        endLocation: 'Bandra Kurla Complex (BKC)',
+        routeCoords: route1,
+      }
+    });
+
+    const route2 = [
+      { lat: 19.0620, lng: 72.8727, speed: 30, timestamp: new Date(Date.now() - 2 * 3600 * 1000 - 45 * 60 * 1000) },
+      { lat: 19.0330, lng: 72.8580, speed: 65, timestamp: new Date(Date.now() - 2 * 3600 * 1000 - 35 * 60 * 1000) },
+      { lat: 18.9920, lng: 72.8150, speed: 80, timestamp: new Date(Date.now() - 2 * 3600 * 1000 - 25 * 60 * 1000) },
+      { lat: 18.9580, lng: 72.8060, speed: 50, timestamp: new Date(Date.now() - 2 * 3600 * 1000 - 15 * 60 * 1000) },
+      { lat: 18.9220, lng: 72.8340, speed: 25, timestamp: new Date(Date.now() - 2 * 3600 * 1000) },
+    ];
+    await prisma.trip.create({
+      data: {
+        tenantId: tenant.id,
+        assetId: vehicle.id,
+        startTime: route2[0].timestamp,
+        endTime: route2[route2.length - 1].timestamp,
+        distanceKm: 18.2,
+        maxSpeed: 80,
+        avgSpeed: 50,
+        startLocation: 'Bandra Kurla Complex (BKC)',
+        endLocation: 'Gateway of India, Colaba',
+        routeCoords: route2,
+      }
+    });
+
+    const activeRoute = [
+      { lat: 19.1136, lng: 72.8697, speed: 0, fuel: 82.5 },
+      { lat: 19.1150, lng: 72.8720, speed: 35, fuel: 82.1 },
+      { lat: 19.1180, lng: 72.8750, speed: 45, fuel: 81.8 },
+      { lat: 19.1220, lng: 72.8790, speed: 50, fuel: 81.5 },
+      { lat: 19.1250, lng: 72.8830, speed: 20, fuel: 81.2 },
+    ];
+
+    for (let j = 0; j < activeRoute.length; j++) {
+      await prisma.gpsTelemetry.create({
+        data: {
+          tenantId: tenant.id,
+          assetId: vehicle.id,
+          latitude: activeRoute[j].lat,
+          longitude: activeRoute[j].lng,
+          speed: activeRoute[j].speed,
+          fuelLevel: activeRoute[j].fuel,
+          collectedAt: new Date(Date.now() - (activeRoute.length - 1 - j) * 60 * 1000),
+        }
+      });
+    }
+    console.log('  ✅ Fleet Telematics: Trips and telemetry points successfully seeded');
+  }
 
   console.log('\n🎉 Seed complete!');
   console.log('   Login: admin@acme.com / Admin@123');

@@ -113,13 +113,34 @@ export class AdminService {
     return tenant;
   }
 
-  async updateTenant(id: string, dto: { plan?: string; status?: string; settings?: any }) {
-    const data: any = {};
+  async updateTenant(id: string, dto: {
+    plan?: string;
+    status?: string;
+    settings?: any;
+    customAllowedModules?: string[];
+    customBlockedModules?: string[];
+  }) {
+    const tenant = await this.prisma.tenant.findUnique({ where: { id } });
+    if (!tenant) throw new NotFoundException('Tenant not found');
+
+    const existingSettings = typeof tenant.settings === 'object' ? (tenant.settings as Record<string, any>) : {};
+    const newSettings = {
+      ...existingSettings,
+      ...(dto.settings || {}),
+    };
+
+    if (dto.customAllowedModules !== undefined) {
+      newSettings.customAllowedModules = dto.customAllowedModules;
+    }
+    if (dto.customBlockedModules !== undefined) {
+      newSettings.customBlockedModules = dto.customBlockedModules;
+    }
+
+    const data: any = { settings: newSettings };
     if (dto.plan) data.plan = dto.plan;
     if (dto.status) data.status = dto.status;
-    if (dto.settings) data.settings = dto.settings;
 
-    const tenant = await this.prisma.tenant.update({ where: { id }, data });
+    const updated = await this.prisma.tenant.update({ where: { id }, data });
 
     // Also update subscription plan if plan changed
     if (dto.plan) {
@@ -131,7 +152,7 @@ export class AdminService {
     }
 
     this.logger.log(`Tenant ${id} updated: ${JSON.stringify(dto)}`);
-    return tenant;
+    return updated;
   }
 
   async deleteTenant(id: string) {

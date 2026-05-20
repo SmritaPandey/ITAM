@@ -11,6 +11,7 @@ interface SettingsSection { id: string; label: string; icon: React.ReactNode; }
 
 const SECTIONS: SettingsSection[] = [
   { id: "general", label: "General", icon: <Settings size={16} /> },
+  { id: "workspace", label: "Workspace Customization", icon: <Palette size={16} /> },
   { id: "account", label: "Account", icon: <User size={16} /> },
   { id: "billing", label: "Billing & Plan", icon: <CreditCard size={16} /> },
   { id: "invoices", label: "Invoices", icon: <Receipt size={16} /> },
@@ -18,6 +19,37 @@ const SECTIONS: SettingsSection[] = [
   { id: "security", label: "Security & Auth", icon: <Shield size={16} /> },
   { id: "discovery", label: "Discovery & Scanning", icon: <Server size={16} /> },
   { id: "integrations", label: "Integrations", icon: <Globe size={16} /> },
+];
+
+const ALL_MODULES = [
+  { key: "DASHBOARD", name: "Dashboard", desc: "Core dashboard with resource summaries, quick actions, and overall system status widgets.", category: "Core Features" },
+  { key: "MY_PORTAL", name: "My Portal", desc: "Personal workspace for ticket reporting, asset assignments, and self-service requests.", category: "Core Features" },
+  { key: "ALL_ASSETS", name: "All Assets", desc: "Unified repository tracking all physical, digital, and cloud-hosted configuration items.", category: "Asset Management" },
+  { key: "IT_ASSETS", name: "IT Assets", desc: "Deep IT inventory tracing hardware specs, CPU, RAM, disk space, serials, and OS details.", category: "Asset Management" },
+  { key: "NON_IT_ASSETS", name: "Non-IT Assets", desc: "Asset tracker for furniture, facility machinery, office equipment, and other non-digital items.", category: "Asset Management" },
+  { key: "CMDB", name: "CMDB", desc: "Visual topology maps and dependency chain mapping across services and physical servers.", category: "Asset Management", tier: "Professional" },
+  { key: "TICKETS", name: "Tickets", desc: "Core service desk incident management system supporting SLA tracking and automated assigning.", category: "Core Features" },
+  { key: "WORK_ORDERS", name: "Work Orders", desc: "Technician work assignments, scheduled preventive maintenance, and part inventory updates.", category: "Operations", tier: "Professional" },
+  { key: "DISCOVERY", name: "Discovery", desc: "Subnet scanning engine discovering SNMP, WMI, and cloud systems to auto-populate inventory.", category: "Operations", tier: "Professional" },
+  { key: "PATCH_MGMT", name: "Patch Mgmt", desc: "Cross-platform OS patching system showing update status and scheduling software updates.", category: "Operations", tier: "Professional" },
+  { key: "NETWORK", name: "Network (NMS)", desc: "ICMP responses, network interface traffic graphs, switch port mappings, and offline alarms.", category: "Operations", tier: "Professional" },
+  { key: "SECURITY_SCAN", name: "Security Scan", desc: "Vulnerability analysis scanners auditing open ports, SSL expiry, and missing patch CVEs.", category: "Operations", tier: "Professional" },
+  { key: "COMPLIANCE", name: "Compliance", desc: "Automated regulatory checklists auditing security controls for SOC2, ISO27001, and HIPAA.", category: "Operations", tier: "Enterprise" },
+  { key: "PROCUREMENT", name: "Procurement", desc: "Vendor catalog purchase orders, RFQs, depreciation schedules, and hardware birth record logs.", category: "Operations", tier: "Enterprise" },
+  { key: "CHANGES", name: "Changes", desc: "ITIL-compliant change approval boards managing risk calculations and rollback playbooks.", category: "Operations", tier: "Enterprise" },
+  { key: "PROBLEMS", name: "Problems", desc: "Problem ticket correlation managing root cause analysis folders and known error libraries.", category: "Operations", tier: "Enterprise" },
+  { key: "FLEET", name: "Fleet / GPS", desc: "Real-time vehicle GPS tracker showing geo-fences, driver safety alerts, and fuel card logs.", category: "Monitoring", tier: "Enterprise" },
+  { key: "CCTV", name: "CCTV", desc: "Contextual video cameras linked directly to locations, server racks, and security incidents.", category: "Monitoring", tier: "Professional" },
+  { key: "VDI", name: "VDI", desc: "Cloud virtual desktop orchestrator provisioning isolated dev environments with WebRTC access.", category: "Monitoring", tier: "Enterprise" },
+  { key: "AUTOMATION", name: "Automation", desc: "Low-code system runbooks automatically resolving incident alerts via agent CLI hooks.", category: "Management", tier: "Enterprise" },
+  { key: "LICENSES", name: "Licenses", desc: "Software license key allocation matrices automatically triggering warning alerts on overages.", category: "Management", tier: "Professional" },
+  { key: "KNOWLEDGE_BASE", name: "Knowledge Base", desc: "Self-service article publisher featuring rich markdown tools and interactive user FAQ widgets.", category: "Management", tier: "Professional" },
+  { key: "SERVICE_CATALOG", name: "Service Catalog", desc: "IT support service request publisher with dynamic workflows for provisioning resources.", category: "Core Features" },
+  { key: "REPORTS", name: "Reports", desc: "Advanced schedule query builder exporting visually rich PDF/CSV charts and summaries.", category: "Management", tier: "Professional" },
+  { key: "USERS", name: "Users", desc: "Central workspace identity and team settings.", category: "Management" },
+  { key: "AUDIT_LOGS", name: "Audit Logs", desc: "Tamper-proof event logs detailing every action inside the workspace for compliance audits.", category: "Management", tier: "Professional" },
+  { key: "HELP", name: "Help & Docs", desc: "Documentation, troubleshooting guides, and contact support.", category: "Core Features" },
+  { key: "SETTINGS", name: "Settings", desc: "Organization profile, integration links, security guidelines, and workspace tuning.", category: "Core Features" }
 ];
 
 export default function SettingsPage() {
@@ -36,13 +68,50 @@ export default function SettingsPage() {
   const [subscription, setSubscription] = useState<any>(null);
   const [invoices, setInvoices] = useState<any[]>([]);
   const [upgrading, setUpgrading] = useState(false);
+  const [currency, setCurrency] = useState<"USD" | "INR">("INR");
+  const [applyPromo, setApplyPromo] = useState(true);
+
+  const [allowedModules, setAllowedModules] = useState<string[]>([]);
+  const [activeModules, setActiveModules] = useState<string[]>([]);
+  const [userDisabledModules, setUserDisabledModules] = useState<string[]>([]);
 
   useEffect(() => {
     apiFetch("/settings")
       .then(data => {
         setSettings(prev => ({ ...prev, ...data }));
+        if (data.allowedModules) setAllowedModules(data.allowedModules);
+        if (data.activeModules) setActiveModules(data.activeModules);
+        if (data.userDisabledModules) setUserDisabledModules(data.userDisabledModules);
       }).catch(() => {}).finally(() => setLoading(false));
   }, []);
+
+  // Hash deep-linking
+  useEffect(() => {
+    function handleHash() {
+      if (typeof window !== "undefined" && window.location.hash) {
+        const hash = window.location.hash.replace("#", "");
+        const matched = SECTIONS.find(s => s.id === hash);
+        if (matched) {
+          setActiveSection(matched.id);
+        }
+      }
+    }
+    handleHash();
+    window.addEventListener("hashchange", handleHash);
+    return () => window.removeEventListener("hashchange", handleHash);
+  }, []);
+
+  function toggleWorkspaceModule(moduleKey: string) {
+    if (!allowedModules.includes(moduleKey)) return;
+    setUserDisabledModules(prev => {
+      const exists = prev.includes(moduleKey);
+      if (exists) {
+        return prev.filter(m => m !== moduleKey);
+      } else {
+        return [...prev, moduleKey];
+      }
+    });
+  }
 
   // Load account data when tab is activated
   useEffect(() => {
@@ -60,8 +129,19 @@ export default function SettingsPage() {
   async function handleSave() {
     setSaving(true);
     try {
-      await apiFetch("/settings", { method: "PATCH", body: JSON.stringify(settings) });
+      await apiFetch("/settings", { method: "PATCH", body: JSON.stringify({ ...settings, userDisabledModules }) });
       setSaved(true);
+      
+      // Dispatch custom event to notify layout sidebar
+      window.dispatchEvent(new CustomEvent("workspace-modules-updated"));
+
+      // Refresh modules list
+      const fresh = await apiFetch("/settings");
+      if (fresh) {
+        setAllowedModules(fresh.allowedModules || []);
+        setActiveModules(fresh.activeModules || []);
+        setUserDisabledModules(fresh.userDisabledModules || []);
+      }
       setTimeout(() => setSaved(false), 2000);
     } catch {} finally { setSaving(false); }
   }
@@ -69,7 +149,7 @@ export default function SettingsPage() {
   async function handleUpgrade(plan: string) {
     setUpgrading(true);
     try {
-      await apiFetch("/settings/upgrade", { method: "POST", body: JSON.stringify({ plan }) });
+      await apiFetch("/settings/upgrade", { method: "POST", body: JSON.stringify({ plan, billingCycle: "MONTHLY", currency }) });
       // Reload subscription data
       const sub = await apiFetch("/settings/subscription");
       setSubscription(sub);
@@ -118,6 +198,134 @@ export default function SettingsPage() {
 
         {/* Content */}
         <div className="card">
+          {activeSection === "workspace" && (
+            <>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
+                <h2 style={{ fontSize: 18, fontWeight: 800, letterSpacing: "-0.02em" }}>Workspace Customization</h2>
+                <div style={{
+                  fontSize: 11,
+                  fontWeight: 600,
+                  color: "#06b6d4",
+                  background: "rgba(6,182,212,0.08)",
+                  padding: "4px 10px",
+                  borderRadius: 6,
+                }}>
+                  {allowedModules.length} / {ALL_MODULES.length} Modules Unlocked
+                </div>
+              </div>
+              <p style={{ fontSize: 13, color: "var(--text-tertiary)", marginBottom: 24 }}>
+                Personalize your workspace sidebar layout. Enable or disable unlocked modules to keep your dashboard clean.
+              </p>
+
+              <div style={{ display: "grid", gap: 24 }}>
+                {Array.from(new Set(ALL_MODULES.map(m => m.category))).map(category => {
+                  const categoryModules = ALL_MODULES.filter(m => m.category === category);
+                  return (
+                    <div key={category}>
+                      <h3 style={{
+                        fontSize: 12,
+                        fontWeight: 700,
+                        textTransform: "uppercase",
+                        letterSpacing: "0.08em",
+                        color: "var(--text-tertiary)",
+                        marginBottom: 12,
+                        borderBottom: "1px solid var(--border-primary)",
+                        paddingBottom: 6,
+                      }}>{category}</h3>
+                      
+                      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+                        {categoryModules.map(module => {
+                          const isUnlocked = allowedModules.includes(module.key);
+                          const isDisabled = userDisabledModules.includes(module.key);
+                          const isActive = isUnlocked && !isDisabled;
+
+                          return (
+                            <div key={module.key} style={{
+                              padding: 16,
+                              borderRadius: 12,
+                              background: isUnlocked 
+                                ? "var(--bg-elevated)" 
+                                : "rgba(15, 23, 42, 0.15)",
+                              border: `1px solid ${isActive ? "rgba(6,182,212,0.2)" : "var(--border-primary)"}`,
+                              opacity: isUnlocked ? 1 : 0.65,
+                              display: "flex",
+                              justifyContent: "space-between",
+                              gap: 16,
+                              transition: "all 0.2s ease",
+                            }}>
+                              <div style={{ flex: 1 }}>
+                                <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
+                                  <span style={{
+                                    fontSize: 13,
+                                    fontWeight: 700,
+                                    color: isActive ? "var(--text-primary)" : "var(--text-secondary)"
+                                  }}>{module.name}</span>
+                                  
+                                  {module.tier && !isUnlocked && (
+                                    <span style={{
+                                      fontSize: 9,
+                                      fontWeight: 800,
+                                      textTransform: "uppercase",
+                                      color: module.tier === "Enterprise" ? "#8b5cf6" : "#06b6d4",
+                                      background: module.tier === "Enterprise" ? "rgba(139,92,246,0.1)" : "rgba(6,182,212,0.1)",
+                                      padding: "2px 6px",
+                                      borderRadius: 4,
+                                      letterSpacing: "0.04em"
+                                    }}>
+                                      {module.tier} Plan
+                                    </span>
+                                  )}
+                                </div>
+                                <p style={{ fontSize: 11, color: "var(--text-tertiary)", lineHeight: 1.4 }}>{module.desc}</p>
+                              </div>
+
+                              <div style={{ display: "flex", alignItems: "center", alignSelf: "center" }}>
+                                {isUnlocked ? (
+                                  <button
+                                    onClick={() => toggleWorkspaceModule(module.key)}
+                                    style={{
+                                      background: "none",
+                                      border: "none",
+                                      cursor: "pointer",
+                                      color: isActive ? "#10b981" : "var(--text-tertiary)",
+                                      padding: 0,
+                                      transition: "color 0.2s",
+                                    }}
+                                  >
+                                    {isActive ? <ToggleRight size={28} /> : <ToggleLeft size={28} />}
+                                  </button>
+                                ) : (
+                                  <button
+                                    onClick={() => setActiveSection("billing")}
+                                    style={{
+                                      background: "var(--bg-card)",
+                                      border: "1px solid rgba(255,255,255,0.05)",
+                                      borderRadius: 8,
+                                      padding: "6px 12px",
+                                      color: "var(--brand-400)",
+                                      fontSize: 11,
+                                      fontWeight: 700,
+                                      cursor: "pointer",
+                                      display: "flex",
+                                      alignItems: "center",
+                                      gap: 4,
+                                    }}
+                                  >
+                                    <Lock size={10} /> Upgrade
+                                  </button>
+                                )}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </>
+          )}
+
           {activeSection === "general" && (
             <>
               <h2 style={{ fontSize: 16, fontWeight: 700, marginBottom: 20 }}>General Settings</h2>
@@ -203,7 +411,7 @@ export default function SettingsPage() {
                       </div>
                       <div style={{ textAlign: "right" }}>
                         <div style={{ fontSize: 36, fontWeight: 800, letterSpacing: "-0.03em", color: "var(--text-primary)" }}>
-                          {subscription.subscription.mrr === 0 ? "Free" : `₹${Math.round(subscription.subscription.mrr).toLocaleString("en-IN")}`}
+                          {subscription.subscription.mrr === 0 ? "Free" : `${subscription.subscription.mrr >= 1000 ? "₹" : "$"}${Math.round(subscription.subscription.mrr).toLocaleString()}`}
                         </div>
                         {subscription.subscription.mrr > 0 && (
                           <div style={{ fontSize: 12, color: "var(--text-tertiary)", marginTop: 2 }}>per month</div>
@@ -212,23 +420,112 @@ export default function SettingsPage() {
                     </div>
                   </div>
 
+                  {/* ── Pricing Toggle Controls ── */}
+                  <div style={{
+                    display: "flex",
+                    justifyContent: "space-between",
+                    alignItems: "center",
+                    background: "rgba(15, 23, 42, 0.3)",
+                    backdropFilter: "blur(12px)",
+                    border: "1px solid rgba(255, 255, 255, 0.05)",
+                    padding: "12px 20px",
+                    borderRadius: 12,
+                    marginBottom: 8,
+                    gap: 16,
+                    flexWrap: "wrap",
+                  }}>
+                    {/* Currency Segmented Control */}
+                    <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                      <span style={{ fontSize: 13, fontWeight: 500, color: "var(--text-secondary)" }}>Billing Currency:</span>
+                      <div style={{
+                        display: "flex",
+                        background: "var(--bg-elevated)",
+                        borderRadius: 8,
+                        padding: 3,
+                        border: "1px solid var(--border-primary)",
+                      }}>
+                        <button
+                          onClick={() => setCurrency("USD")}
+                          style={{
+                            padding: "6px 16px",
+                            borderRadius: 6,
+                            border: "none",
+                            fontSize: 12,
+                            fontWeight: 600,
+                            cursor: "pointer",
+                            background: currency === "USD" ? "linear-gradient(135deg, #06b6d4, #0891b2)" : "transparent",
+                            color: currency === "USD" ? "white" : "var(--text-secondary)",
+                            transition: "all 0.2s ease",
+                          }}
+                        >
+                          USD ($)
+                        </button>
+                        <button
+                          onClick={() => setCurrency("INR")}
+                          style={{
+                            padding: "6px 16px",
+                            borderRadius: 6,
+                            border: "none",
+                            fontSize: 12,
+                            fontWeight: 600,
+                            cursor: "pointer",
+                            background: currency === "INR" ? "linear-gradient(135deg, #06b6d4, #0891b2)" : "transparent",
+                            color: currency === "INR" ? "white" : "var(--text-secondary)",
+                            transition: "all 0.2s ease",
+                          }}
+                        >
+                          INR (₹)
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Founder Discount Switch */}
+                    <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                      <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end" }}>
+                        <span style={{ fontSize: 13, fontWeight: 600, color: "#10b981", display: "flex", alignItems: "center", gap: 4 }}>
+                          <Star size={14} style={{ fill: "#10b981" }} /> Exclusive Founder Discount Active
+                        </span>
+                        <span style={{ fontSize: 10, color: "var(--text-tertiary)" }}>Get 50% lifetime discount on select plans</span>
+                      </div>
+                      <button
+                        onClick={() => setApplyPromo(!applyPromo)}
+                        style={{
+                          background: "none",
+                          border: "none",
+                          cursor: "pointer",
+                          color: applyPromo ? "#10b981" : "var(--text-tertiary)",
+                          padding: 0,
+                          display: "flex",
+                          alignItems: "center",
+                          transition: "color 0.2s",
+                        }}
+                      >
+                        {applyPromo ? <ToggleRight size={32} /> : <ToggleLeft size={32} />}
+                      </button>
+                    </div>
+                  </div>
+
                   {/* ── Plan Cards with Psychology ── */}
                   <div>
-                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16 }}>
+                    <div style={{ display: "flex", alignItems: "center", justifyItems: "space-between", marginBottom: 16, justifyContent: "space-between" }}>
                       <h3 style={{ fontSize: 16, fontWeight: 700, letterSpacing: "-0.02em" }}>Choose Your Plan</h3>
                       <div style={{ fontSize: 11, color: "var(--text-tertiary)", display: "flex", alignItems: "center", gap: 6 }}>
                         <Zap size={12} style={{ color: "#f59e0b" }} />
-                        Save up to 20% with annual billing
+                        Founder Launch Pricing Live
                       </div>
                     </div>
 
                     <div className="settings-plans-grid" style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 12 }}>
-                      {subscription.plans.map((plan: any, idx: number) => {
+                      {subscription.plans.map((plan: any) => {
                         const isCurrent = plan.name === subscription.currentPlan;
                         const isPopular = plan.popular;
                         const isCustom = plan.contactSales;
-                        const annualPrice = plan.price > 0 ? Math.round(plan.price * 0.8) : plan.price;
-                        const monthlySavings = plan.price > 0 ? plan.price - annualPrice : 0;
+
+                        const basePrice = currency === "USD" ? plan.priceUSD : plan.priceINR;
+                        const discountedPrice = currency === "USD" ? plan.discountedUSD : plan.discountedINR;
+                        const finalPrice = applyPromo && discountedPrice > 0 ? discountedPrice : basePrice;
+                        const curSymbol = currency === "USD" ? "$" : "₹";
+                        const monthlySavings = basePrice > finalPrice ? basePrice - finalPrice : 0;
 
                         return (
                           <div key={plan.name} style={{
@@ -277,7 +574,7 @@ export default function SettingsPage() {
 
                               {/* Pricing */}
                               <div style={{ marginBottom: 16 }}>
-                                {plan.price === 0 ? (
+                                {basePrice === 0 ? (
                                   <div style={{ fontSize: 28, fontWeight: 800, letterSpacing: "-0.03em", color: "var(--text-primary)" }}>Free</div>
                                 ) : isCustom ? (
                                   <div>
@@ -286,23 +583,26 @@ export default function SettingsPage() {
                                   </div>
                                 ) : (
                                   <div>
-                                    {/* Anchoring: Show annual savings */}
                                     <div style={{ display: "flex", alignItems: "baseline", gap: 4 }}>
                                       <span style={{ fontSize: 28, fontWeight: 800, letterSpacing: "-0.03em", color: "var(--text-primary)" }}>
-                                        ₹{annualPrice.toLocaleString("en-IN")}
+                                        {curSymbol}{finalPrice.toLocaleString(currency === "USD" ? "en-US" : "en-IN")}
                                       </span>
                                       <span style={{ fontSize: 11, color: "var(--text-tertiary)" }}>/mo</span>
                                     </div>
-                                    {/* Strikethrough original price (price anchoring) */}
-                                    <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 2 }}>
-                                      <span style={{ fontSize: 12, color: "var(--text-muted)", textDecoration: "line-through" }}>
-                                        ₹{plan.price.toLocaleString("en-IN")}
-                                      </span>
-                                      <span style={{
-                                        fontSize: 10, fontWeight: 700, padding: "1px 6px", borderRadius: 4,
-                                        background: "rgba(16,185,129,0.12)", color: "#10b981",
-                                      }}>Save ₹{(monthlySavings * 12).toLocaleString("en-IN")}/yr</span>
-                                    </div>
+                                    {/* Anchoring: Show strikethrough original price & savings */}
+                                    {monthlySavings > 0 ? (
+                                      <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 2 }}>
+                                        <span style={{ fontSize: 12, color: "var(--text-muted)", textDecoration: "line-through" }}>
+                                          {curSymbol}{basePrice.toLocaleString(currency === "USD" ? "en-US" : "en-IN")}
+                                        </span>
+                                        <span style={{
+                                          fontSize: 10, fontWeight: 700, padding: "1px 6px", borderRadius: 4,
+                                          background: "rgba(16,185,129,0.12)", color: "#10b981",
+                                        }}>Save 50%</span>
+                                      </div>
+                                    ) : (
+                                      <div style={{ height: 18 }} />
+                                    )}
                                   </div>
                                 )}
                               </div>
@@ -354,7 +654,7 @@ export default function SettingsPage() {
                                       color: isPopular ? "white" : "var(--text-primary)",
                                       boxShadow: isPopular ? "0 4px 12px rgba(6,182,212,0.25)" : "none",
                                     }}>
-                                    {upgrading ? "Processing..." : plan.price > (subscription.subscription.mrr || 0) ? "Upgrade Now →" : "Switch Plan"}
+                                    {upgrading ? "Processing..." : basePrice > (subscription.subscription.mrr || 0) ? "Upgrade Now →" : "Switch Plan"}
                                   </button>
                                 )}
                               </div>
@@ -406,7 +706,9 @@ export default function SettingsPage() {
                     {invoices.map((inv: any) => (
                       <tr key={inv.id} style={{ borderBottom: "1px solid var(--border-primary)" }}>
                         <td style={{ padding: "12px", fontSize: 13 }}>{new Date(inv.paidAt || inv.createdAt).toLocaleDateString("en-IN")}</td>
-                        <td style={{ padding: "12px", fontSize: 13, fontWeight: 600 }}>₹{inv.amount?.toLocaleString("en-IN")}</td>
+                        <td style={{ padding: "12px", fontSize: 13, fontWeight: 600 }}>
+                          {inv.currency === "USD" ? "$" : "₹"}{inv.amount?.toLocaleString(inv.currency === "USD" ? "en-US" : "en-IN")}
+                        </td>
                         <td style={{ padding: "12px", fontSize: 13 }}>{inv.method || "—"}</td>
                         <td style={{ padding: "12px" }}>
                           <span className={`badge ${inv.status === "COMPLETED" ? "green" : inv.status === "PENDING" ? "yellow" : "gray"}`} style={{ fontSize: 10 }}>

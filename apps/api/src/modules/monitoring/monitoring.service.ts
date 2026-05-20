@@ -737,8 +737,8 @@ export class MonitoringService {
 
   // ─── Generic CRUD ───────────────────────────────────────────────
   async createDevice(tenantId: string, body: any) {
-    const { name, ipAddress, type, snmpCommunity, snmpVersion, location, notes } = body;
-    const config: any = {};
+    const { name, ipAddress, type, snmpCommunity, snmpVersion, location, notes, config: customConfig, metrics: customMetrics } = body;
+    const config: any = customConfig || {};
     if (snmpCommunity) config.snmpCommunity = snmpCommunity;
     if (snmpVersion) config.snmpVersion = snmpVersion;
     if (notes) config.notes = notes;
@@ -750,7 +750,8 @@ export class MonitoringService {
         ipAddress: ipAddress || null,
         type: (type as any) || 'NETWORK_DEVICE',
         ...(location && { location }),
-        ...(Object.keys(config).length > 0 && { config }),
+        config: config,
+        metrics: customMetrics || {},
       },
     });
     if (device.status === 'OFFLINE') {

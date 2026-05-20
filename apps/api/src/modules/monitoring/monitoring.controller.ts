@@ -8,10 +8,12 @@ import { SnmpPollerService } from './snmp-poller.service';
 import { SnmpTrapReceiverService } from './snmp-trap-receiver.service';
 import { OnvifDiscoveryService } from './onvif-discovery.service';
 import { VdiHypervisorService } from './vdi-hypervisor.service';
+import { ModuleGuard } from '../../common/guards/module.guard';
+import { RequireModule } from '../../common/decorators/require-module.decorator';
 
 @ApiTags('monitoring')
 @ApiBearerAuth()
-@UseGuards(JwtAuthGuard, RolesGuard)
+@UseGuards(JwtAuthGuard, RolesGuard, ModuleGuard)
 @Controller('monitoring')
 export class MonitoringController {
   constructor(
@@ -24,6 +26,7 @@ export class MonitoringController {
 
   // ─── CCTV ─────────────────────────────────────────────────────
 
+  @RequireModule('CCTV')
   @Get('cameras')
   @Roles('Tenant Admin', 'IT Admin')
   @ApiOperation({ summary: 'List CCTV cameras with stats' })
@@ -31,6 +34,7 @@ export class MonitoringController {
     return this.service.getCameras(req.user.tenantId);
   }
 
+  @RequireModule('CCTV')
   @Get('cameras/:id/stream')
   @Roles('Tenant Admin', 'IT Admin')
   @ApiOperation({ summary: 'Get camera stream URL (RTSP/HTTP)' })
@@ -38,6 +42,7 @@ export class MonitoringController {
     return this.service.getCameraStream(id, req.user.tenantId);
   }
 
+  @RequireModule('CCTV')
   @Get('cameras/:id/events')
   @Roles('Tenant Admin', 'IT Admin')
   @ApiOperation({ summary: 'Get camera events (motion, tamper, offline)' })
@@ -45,6 +50,7 @@ export class MonitoringController {
     return this.service.getCameraEvents(id, req.user.tenantId);
   }
 
+  @RequireModule('CCTV')
   @Post('cameras/discover')
   @Roles('Tenant Admin')
   @ApiOperation({ summary: 'Discover ONVIF cameras on the network via WS-Discovery' })
@@ -54,6 +60,7 @@ export class MonitoringController {
 
   // ─── Network (NMS) ───────────────────────────────────────────
 
+  @RequireModule('NETWORK')
   @Get('network')
   @Roles('Tenant Admin', 'IT Admin')
   @ApiOperation({ summary: 'List NMS network devices with stats' })
@@ -61,6 +68,7 @@ export class MonitoringController {
     return this.service.getNetworkDevices(req.user.tenantId);
   }
 
+  @RequireModule('NETWORK')
   @Get('network/topology')
   @Roles('Tenant Admin', 'IT Admin')
   @ApiOperation({ summary: 'Get network topology map data (nodes + links)' })
@@ -68,6 +76,7 @@ export class MonitoringController {
     return this.service.getTopology(req.user.tenantId);
   }
 
+  @RequireModule('NETWORK')
   @Get('network/devices/:id/interfaces')
   @Roles('Tenant Admin', 'IT Admin')
   @ApiOperation({ summary: 'Get device interface table (ports, VLANs, traffic)' })
@@ -75,6 +84,7 @@ export class MonitoringController {
     return this.service.getDeviceInterfaces(id, req.user.tenantId);
   }
 
+  @RequireModule('NETWORK')
   @Get('network/traps')
   @Roles('Tenant Admin', 'IT Admin')
   @ApiOperation({ summary: 'Get recent SNMP traps and events' })
@@ -82,6 +92,7 @@ export class MonitoringController {
     return this.service.getTraps(req.user.tenantId);
   }
 
+  @RequireModule('NETWORK')
   @Get('network/traps/live')
   @Roles('Tenant Admin', 'IT Admin')
   @ApiOperation({ summary: 'Get recent SNMP traps from the live trap receiver' })
@@ -90,6 +101,7 @@ export class MonitoringController {
     return { traps, total: traps.length };
   }
 
+  @RequireModule('NETWORK')
   @Get('network/traps/stats')
   @Roles('Tenant Admin', 'IT Admin')
   @ApiOperation({ summary: 'Get SNMP trap receiver statistics' })
@@ -97,6 +109,7 @@ export class MonitoringController {
     return this.trapReceiver.getStats();
   }
 
+  @RequireModule('NETWORK')
   @Post('network/scan')
   @Roles('Tenant Admin')
   @ApiOperation({ summary: 'Trigger a real ICMP/TCP network scan of all devices' })
@@ -104,6 +117,7 @@ export class MonitoringController {
     return this.service.runNetworkScan(req.user.tenantId);
   }
 
+  @RequireModule('NETWORK')
   @Post('network/devices/:id/probe')
   @Roles('Tenant Admin', 'IT Admin')
   @ApiOperation({ summary: 'Probe a single network device (ping + port scan)' })
@@ -111,6 +125,7 @@ export class MonitoringController {
     return this.service.probeDevice(id, req.user.tenantId);
   }
 
+  @RequireModule('NETWORK')
   @Post('network/auto-discover')
   @Roles('Tenant Admin')
   @ApiOperation({ summary: 'Auto-create monitored devices from existing assets with IPs' })
@@ -120,6 +135,7 @@ export class MonitoringController {
 
   // ─── Nmap Deep Scanning ────────────────────────────────────────
 
+  @RequireModule('NETWORK')
   @Get('nmap/status')
   @Roles('Tenant Admin', 'IT Admin')
   @ApiOperation({ summary: 'Check if nmap is installed and available' })
@@ -127,6 +143,7 @@ export class MonitoringController {
     return this.service.getNmapStatus();
   }
 
+  @RequireModule('NETWORK')
   @Post('nmap/scan')
   @Roles('Tenant Admin')
   @ApiOperation({ summary: 'Run nmap deep scan on a subnet (quick/standard/deep)' })
@@ -134,6 +151,7 @@ export class MonitoringController {
     return this.service.deepScanSubnet(req.user.tenantId, body.subnet, body.scanType || 'standard');
   }
 
+  @RequireModule('NETWORK')
   @Post('nmap/devices/:id/scan')
   @Roles('Tenant Admin', 'IT Admin')
   @ApiOperation({ summary: 'Run nmap deep scan on a single device' })
@@ -143,6 +161,7 @@ export class MonitoringController {
 
   // ─── SNMP Polling ───────────────────────────────────────────
 
+  @RequireModule('NETWORK')
   @Post('snmp/poll')
   @Roles('Tenant Admin')
   @ApiOperation({ summary: 'Trigger SNMP poll for all tenant devices' })
@@ -151,6 +170,7 @@ export class MonitoringController {
     return { message: 'SNMP poll completed' };
   }
 
+  @RequireModule('NETWORK')
   @Post('snmp/devices/:id/poll')
   @Roles('Tenant Admin', 'IT Admin')
   @ApiOperation({ summary: 'SNMP poll a single device' })
@@ -158,6 +178,7 @@ export class MonitoringController {
     return this.snmpPoller.pollDevice(id, req.user.tenantId);
   }
 
+  @RequireModule('NETWORK')
   @Get('snmp/devices/:id/history')
   @Roles('Tenant Admin', 'IT Admin')
   @ApiOperation({ summary: 'Get SNMP metrics history for charts' })
@@ -167,6 +188,7 @@ export class MonitoringController {
 
   // ─── VDI ──────────────────────────────────────────────────────
 
+  @RequireModule('VDI')
   @Get('vdi')
   @Roles('Tenant Admin', 'IT Admin')
   @ApiOperation({ summary: 'List virtual machines with stats' })
@@ -174,6 +196,7 @@ export class MonitoringController {
     return this.service.getVirtualMachines(req.user.tenantId);
   }
 
+  @RequireModule('VDI')
   @Get('vdi/pools')
   @Roles('Tenant Admin', 'IT Admin')
   @ApiOperation({ summary: 'Get VDI pool overview' })
@@ -181,6 +204,7 @@ export class MonitoringController {
     return this.service.getVdiPools(req.user.tenantId);
   }
 
+  @RequireModule('VDI')
   @Get('vdi/sessions')
   @Roles('Tenant Admin', 'IT Admin')
   @ApiOperation({ summary: 'Get active VDI sessions' })
@@ -188,6 +212,7 @@ export class MonitoringController {
     return this.service.getVdiSessions(req.user.tenantId);
   }
 
+  @RequireModule('VDI')
   @Get('vdi/metrics')
   @Roles('Tenant Admin', 'IT Admin')
   @ApiOperation({ summary: 'Get VDI performance metrics' })
@@ -195,6 +220,7 @@ export class MonitoringController {
     return this.service.getVdiMetrics(req.user.tenantId);
   }
 
+  @RequireModule('VDI')
   @Get('vdi/hypervisors')
   @Roles('Tenant Admin')
   @ApiOperation({ summary: 'Get configured hypervisors for this tenant' })
@@ -202,6 +228,7 @@ export class MonitoringController {
     return this.vdiHypervisor.getHypervisors(req.user.tenantId);
   }
 
+  @RequireModule('VDI')
   @Post('vdi/sync')
   @Roles('Tenant Admin')
   @ApiOperation({ summary: 'Sync VMs from a hypervisor (VMware Horizon / Proxmox)' })
@@ -211,6 +238,7 @@ export class MonitoringController {
 
   // ─── Device CRUD ──────────────────────────────────────────────
 
+  @RequireModule('NETWORK')
   @Get('devices')
   @Roles('Tenant Admin', 'IT Admin')
   @ApiOperation({ summary: 'List all monitored devices' })
@@ -218,6 +246,7 @@ export class MonitoringController {
     return this.service.getNetworkDevices(req.user.tenantId);
   }
 
+  @RequireModule('NETWORK')
   @Get('alerts')
   @Roles('Tenant Admin', 'IT Admin')
   @ApiOperation({ summary: 'Get monitoring alerts' })
@@ -225,6 +254,7 @@ export class MonitoringController {
     return this.service.getAlerts(req.user.tenantId);
   }
 
+  @RequireModule('NETWORK')
   @Get('topology')
   @Roles('Tenant Admin', 'IT Admin')
   @ApiOperation({ summary: 'Get network topology (shorthand)' })
@@ -232,6 +262,7 @@ export class MonitoringController {
     return this.service.getTopology(req.user.tenantId);
   }
 
+  @RequireModule('NETWORK')
   @Post('devices')
   @Roles('Tenant Admin')
   @ApiOperation({ summary: 'Create a monitored device' })
@@ -239,6 +270,7 @@ export class MonitoringController {
     return this.service.createDevice(req.user.tenantId, body);
   }
 
+  @RequireModule('NETWORK')
   @Patch('devices/:id')
   @Roles('Tenant Admin')
   @ApiOperation({ summary: 'Update a monitored device' })
@@ -246,6 +278,7 @@ export class MonitoringController {
     return this.service.updateDevice(id, req.user.tenantId, body);
   }
 
+  @RequireModule('NETWORK')
   @Delete('devices/:id')
   @Roles('Tenant Admin')
   @ApiOperation({ summary: 'Delete a monitored device' })

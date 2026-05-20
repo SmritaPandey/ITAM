@@ -20,6 +20,30 @@ const PORT_SERVICE_MAP: Record<number, string> = {
   5432: 'PostgreSQL', 5900: 'VNC', 8080: 'HTTP-Alt', 8443: 'HTTPS-Alt', 9100: 'JetDirect',
 };
 
+// Normalize scan type strings to valid Prisma enum values
+const VALID_SCAN_TYPES = ['PING_SWEEP', 'ARP_SCAN', 'PORT_SCAN', 'TCP_PORT_SCAN', 'SNMP_DISCOVERY', 'FULL_SCAN'];
+function normalizeScanType(raw?: string): string {
+  if (!raw) return 'PING_SWEEP';
+  const upper = raw.toUpperCase().replace(/-/g, '_');
+  return VALID_SCAN_TYPES.includes(upper) ? upper : 'PING_SWEEP';
+}
+
+// Calculate risk score (0-100) from open ports and device info
+function calculateRiskScore(openPorts: { port: number; service: string }[], hostname?: string, deviceType?: string): number {
+  let score = 0;
+  const portNumbers = new Set(openPorts.map(p => p.port));
+  if (portNumbers.has(3389)) score += 20;   // RDP exposed
+  if (portNumbers.has(5900)) score += 30;   // VNC exposed
+  if (portNumbers.has(22)) score += 10;     // SSH exposed
+  if (portNumbers.has(23)) score += 35;     // Telnet (very risky)
+  if (portNumbers.has(445)) score += 15;    // SMB exposed
+  if (portNumbers.has(3306) || portNumbers.has(5432)) score += 20; // DB exposed
+  if (!hostname) score += 15;               // No hostname = unmanaged
+  if (deviceType === 'Unknown' || !deviceType) score += 10;
+  if (openPorts.length > 8) score += 10;    // Too many open ports
+  return Math.min(score, 100);
+}
+
 @Injectable()
 export class DiscoveryService {
   private readonly logger = new Logger(DiscoveryService.name);
@@ -56,12 +80,13 @@ export class DiscoveryService {
   async createScan(tenantId: string, userId: string, data: {
     subnet: string; scanType?: string; name?: string; portRange?: string; credentialId?: string;
   }) {
+    const scanTypeNormalized = normalizeScanType(data.scanType);
     const scanJob = await this.prisma.scanJob.create({
       data: {
         tenantId,
         triggeredById: userId,
         subnet: data.subnet,
-        scanType: (data.scanType as any) || 'PING_SWEEP',
+        scanType: scanTypeNormalized as any,
         name: data.name || `Scan ${data.subnet}`,
         portRange: data.portRange,
         status: 'PENDING',
@@ -69,7 +94,7 @@ export class DiscoveryService {
     });
 
     // Run scan asynchronously
-    this.runScan(scanJob.id, tenantId, data.subnet, data.scanType || 'PING_SWEEP').catch(err =>
+    this.runScan(scanJob.id, tenantId, data.subnet, scanTypeNormalized).catch(err =>
       this.logger.error(`Scan ${scanJob.id} failed: ${err.message}`),
     );
 
@@ -208,8 +233,9 @@ export class DiscoveryService {
         }
       } catch { this.logger.warn('ARP table read failed'); }
 
-      // Phase 2: Port scan (for TCP_PORT_SCAN and FULL_SCAN types)
-      if (scanType === 'TCP_PORT_SCAN' || scanType === 'FULL_SCAN') {
+      // Phase 2: Port scan (for PORT_SCAN, TCP_PORT_SCAN, and FULL_SCAN)
+      const isPortScan = ['PORT_SCAN', 'TCP_PORT_SCAN', 'FULL_SCAN'].includes(scanType);
+      if (isPortScan) {
         this.logger.log(`Running port scan on ${aliveHosts.length} hosts...`);
         const portBatchSize = 10;
         for (let i = 0; i < aliveHosts.length; i += portBatchSize) {
@@ -225,7 +251,6 @@ export class DiscoveryService {
       }
 
       // Phase 3: SNMP discovery (for SNMP_DISCOVERY and FULL_SCAN)
-      // SNMP v2c community "public" read — check port 161 on responsive hosts
       if (scanType === 'SNMP_DISCOVERY' || scanType === 'FULL_SCAN') {
         for (const host of aliveHosts) {
           const snmpOpen = await this.probePort(host.ip, 161, 1000);
@@ -239,41 +264,65 @@ export class DiscoveryService {
         }
       }
 
-      // Check which are new vs existing
+      // Phase 4: Classify ALL hosts (even ping-only) using ARP + basic heuristics
+      for (const host of aliveHosts) {
+        if (!host.classification) {
+          const mac = arpEntries[host.ip];
+          host.classification = this.classifyDevice(host.openPorts || [], mac);
+        }
+      }
+
+      // Check which IPs already exist as managed assets (for auto-merge)
       const existingAssets = await this.prisma.asset.findMany({
         where: { tenantId, deletedAt: null, ipAddress: { in: aliveHosts.map(h => h.ip) } },
-        select: { ipAddress: true },
+        select: { id: true, ipAddress: true },
       });
-      const existingIps = new Set(existingAssets.map(a => a.ipAddress));
+      const assetByIp = new Map(existingAssets.map(a => [a.ipAddress, a.id]));
 
-      // Store discovered devices with enriched data
+      // Upsert discovered devices (deduplication by tenantId + ipAddress)
       let newCount = 0;
       for (const host of aliveHosts) {
         const mac = arpEntries[host.ip];
-        const isNew = !existingIps.has(host.ip);
-        if (isNew) newCount++;
+        const existingAssetId = assetByIp.get(host.ip);
+        const classification = host.classification;
+        const riskScore = calculateRiskScore(host.openPorts || [], host.hostname, classification?.deviceType);
 
-        const classification = host.classification || this.classifyDevice(host.openPorts || [], mac);
+        const deviceData = {
+          scanJobId: scanJobId,
+          macAddress: mac || null,
+          hostname: host.hostname || null,
+          deviceType: classification?.deviceType || 'Unknown',
+          osInfo: classification?.osGuess || null,
+          openPorts: host.openPorts ? JSON.stringify(host.openPorts) : null,
+          services: classification?.services ? JSON.stringify(classification.services) : null,
+          riskScore,
+          lastSeenAt: new Date(),
+        };
 
-        await this.prisma.discoveredDevice.create({
-          data: {
+        const result = await this.prisma.discoveredDevice.upsert({
+          where: { tenantId_ipAddress: { tenantId, ipAddress: host.ip } },
+          create: {
             tenantId,
-            scanJobId: scanJobId,
             ipAddress: host.ip,
-            macAddress: mac || null,
-            hostname: host.hostname || null,
-            deviceType: classification.deviceType,
-            osInfo: classification.osGuess,
-            openPorts: host.openPorts ? JSON.stringify(host.openPorts) : null,
-            services: classification.services ? JSON.stringify(classification.services) : null,
-            status: isNew ? 'PENDING_REVIEW' : 'MERGED',
+            ...deviceData,
+            status: existingAssetId ? 'MERGED' : 'PENDING_REVIEW',
+            approvedAssetId: existingAssetId || null,
+            firstSeenAt: new Date(),
+            seenCount: 1,
+          },
+          update: {
+            ...deviceData,
+            seenCount: { increment: 1 },
+            // Don't overwrite APPROVED/IGNORED status on rescan
+            ...(existingAssetId ? { status: 'MERGED', approvedAssetId: existingAssetId } : {}),
           },
         });
 
-        // Emit event for new devices
-        if (isNew) {
+        // Count as new only if freshly created with PENDING_REVIEW
+        if (result.seenCount === 1 && result.status === 'PENDING_REVIEW') {
+          newCount++;
           this.eventBus.emitDiscoveryEvent(tenantId, 'new_device', {
-            ipAddress: host.ip, deviceType: classification.deviceType,
+            ipAddress: host.ip, deviceType: classification?.deviceType,
             hostname: host.hostname, mac, scanJobId,
           });
         }
@@ -337,25 +386,43 @@ export class DiscoveryService {
   async findPendingDevices(tenantId: string) {
     return this.prisma.discoveredDevice.findMany({
       where: { tenantId, status: 'PENDING_REVIEW' },
-      include: { scanJob: { select: { name: true, subnet: true } } },
-      orderBy: { createdAt: 'desc' },
+      include: { scanJob: { select: { name: true, subnet: true, scanType: true } } },
+      orderBy: [{ riskScore: 'desc' }, { lastSeenAt: 'desc' }],
     });
   }
 
   async approveDevice(deviceId: string, tenantId: string, userId: string, data: {
-    name: string; assetTypeId: string;
+    name?: string; assetTypeId?: string;
   }) {
     const device = await this.prisma.discoveredDevice.findFirst({
       where: { id: deviceId, tenantId },
     });
     if (!device) throw new NotFoundException('Device not found');
 
+    // Auto-resolve asset type if not provided
+    let assetTypeId = data.assetTypeId;
+    if (!assetTypeId) {
+      const typeName = this.mapDeviceTypeToAssetType(device.deviceType || undefined);
+      let assetType = await this.prisma.assetType.findFirst({
+        where: { tenantId, name: { contains: typeName, mode: 'insensitive' } },
+      });
+      if (!assetType) {
+        // Create the asset type automatically
+        assetType = await this.prisma.assetType.create({
+          data: { tenantId, name: typeName, icon: this.getAssetTypeIcon(typeName) },
+        });
+      }
+      assetTypeId = assetType.id;
+    }
+
+    const deviceName = data.name || device.hostname || `${device.deviceType || 'Device'} (${device.ipAddress})`;
+
     const asset = await this.prisma.asset.create({
       data: {
-        tenantId, name: data.name, assetTypeId: data.assetTypeId,
+        tenantId, name: deviceName, assetTypeId,
         ipAddress: device.ipAddress, macAddress: device.macAddress,
         hostname: device.hostname, status: 'ACTIVE',
-        discoverySource: 'SNMP', createdById: userId,
+        discoverySource: 'NETWORK_SCAN', createdById: userId,
       },
     });
 
@@ -364,12 +431,50 @@ export class DiscoveryService {
       data: { status: 'APPROVED', approvedAssetId: asset.id },
     });
 
-    // Emit asset created event
     this.eventBus.emitAssetEvent(tenantId, 'created', {
       assetId: asset.id, name: asset.name, source: 'discovery',
     });
 
     return asset;
+  }
+
+  async bulkApprove(tenantId: string, userId: string, deviceIds: string[]) {
+    const results = [];
+    for (const id of deviceIds) {
+      try {
+        const asset = await this.approveDevice(id, tenantId, userId, {});
+        results.push({ id, status: 'approved', assetId: asset.id });
+      } catch (err: any) {
+        results.push({ id, status: 'failed', error: err.message });
+      }
+    }
+    return results;
+  }
+
+  async bulkIgnore(tenantId: string, deviceIds: string[]) {
+    await this.prisma.discoveredDevice.updateMany({
+      where: { id: { in: deviceIds }, tenantId, status: 'PENDING_REVIEW' },
+      data: { status: 'IGNORED' },
+    });
+    return { ignored: deviceIds.length };
+  }
+
+  private mapDeviceTypeToAssetType(deviceType?: string): string {
+    const map: Record<string, string> = {
+      'Windows Server': 'Server', 'Linux Server': 'Server', 'Web Server': 'Server',
+      'Windows Workstation': 'Workstation', 'Linux Workstation': 'Workstation',
+      'Apple Device': 'Workstation', 'Printer': 'Printer',
+      'Network Device': 'Network Equipment', 'Virtual Machine': 'Virtual Machine',
+    };
+    return map[deviceType || ''] || 'Other';
+  }
+
+  private getAssetTypeIcon(typeName: string): string {
+    const icons: Record<string, string> = {
+      'Server': 'server', 'Workstation': 'monitor', 'Printer': 'printer',
+      'Network Equipment': 'network', 'Virtual Machine': 'cloud', 'Other': 'help-circle',
+    };
+    return icons[typeName] || 'help-circle';
   }
 
   async ignoreDevice(deviceId: string, tenantId: string) {

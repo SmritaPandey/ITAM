@@ -7,10 +7,13 @@ import { ReportsService } from './reports.service';
 import { ReportGeneratorService } from './report-generator.service';
 import { PrismaService } from '../../common/database/prisma.service';
 import type { Response } from 'express';
+import { ModuleGuard } from '../../common/guards/module.guard';
+import { RequireModule } from '../../common/decorators/require-module.decorator';
 
 @ApiTags('reports')
 @ApiBearerAuth()
-@UseGuards(JwtAuthGuard, RolesGuard)
+@UseGuards(JwtAuthGuard, RolesGuard, ModuleGuard)
+@RequireModule('REPORTS')
 @Controller('reports')
 export class ReportsController {
   constructor(

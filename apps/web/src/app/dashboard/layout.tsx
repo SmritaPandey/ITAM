@@ -7,11 +7,271 @@ import {
   BarChart3, Zap, Users, Building2, Package, LogOut, User,
   AlertTriangle, CheckCircle2, Info, Clock, X, Radar, Key, FileText, BookOpen,
   Headphones, UserCircle, Wrench, Scan, ShoppingCart, GitBranch, AlertOctagon,
-  Sun, Moon, Menu,
+  Sun, Moon, Menu, Lock, CheckCircle
 } from "lucide-react";
 
 import { apiFetch, safeFetch, getToken } from "@/lib/api";
 import { WalkthroughProvider } from "@/components/HelpSystem";
+
+const nameToModuleKeyMap: Record<string, string> = {
+  "Dashboard": "DASHBOARD",
+  "My Portal": "MY_PORTAL",
+  "All Assets": "ALL_ASSETS",
+  "IT Assets": "IT_ASSETS",
+  "Non-IT Assets": "NON_IT_ASSETS",
+  "CMDB": "CMDB",
+  "Tickets": "TICKETS",
+  "Work Orders": "WORK_ORDERS",
+  "Discovery": "DISCOVERY",
+  "Patch Mgmt": "PATCH_MGMT",
+  "Network (NMS)": "NETWORK",
+  "Security Scan": "SECURITY_SCAN",
+  "Compliance": "COMPLIANCE",
+  "Procurement": "PROCUREMENT",
+  "Changes": "CHANGES",
+  "Problems": "PROBLEMS",
+  "Fleet / GPS": "FLEET",
+  "CCTV": "CCTV",
+  "VDI": "VDI",
+  "Automation": "AUTOMATION",
+  "Licenses": "LICENSES",
+  "Knowledge Base": "KNOWLEDGE_BASE",
+  "Service Catalog": "SERVICE_CATALOG",
+  "Reports": "REPORTS",
+  "Users": "USERS",
+  "Audit Logs": "AUDIT_LOGS",
+  "Help & Docs": "HELP",
+  "Settings": "SETTINGS",
+};
+
+const hrefToModuleKeyMap: Record<string, string> = {
+  "/dashboard/cmdb": "CMDB",
+  "/dashboard/work-orders": "WORK_ORDERS",
+  "/dashboard/discovery": "DISCOVERY",
+  "/dashboard/patches": "PATCH_MGMT",
+  "/dashboard/network": "NETWORK",
+  "/dashboard/scanning": "SECURITY_SCAN",
+  "/dashboard/compliance": "COMPLIANCE",
+  "/dashboard/procurement": "PROCUREMENT",
+  "/dashboard/changes": "CHANGES",
+  "/dashboard/problems": "PROBLEMS",
+  "/dashboard/fleet": "FLEET",
+  "/dashboard/cctv": "CCTV",
+  "/dashboard/vdi": "VDI",
+  "/dashboard/automation": "AUTOMATION",
+  "/dashboard/licenses": "LICENSES",
+  "/dashboard/knowledge-base": "KNOWLEDGE_BASE",
+  "/dashboard/service-catalog": "SERVICE_CATALOG",
+  "/dashboard/reports": "REPORTS",
+  "/dashboard/users": "USERS",
+  "/dashboard/audit-logs": "AUDIT_LOGS",
+};
+
+const MODULE_METADATA: Record<string, {
+  name: string;
+  tier: "Professional" | "Enterprise" | "On-Premise";
+  desc: string;
+  benefits: string[];
+}> = {
+  CMDB: {
+    name: "CMDB & Relationship Mapper",
+    tier: "Professional",
+    desc: "Map complex dependency chains across your entire infrastructure.",
+    benefits: [
+      "Visual infrastructure mapping",
+      "Impact analysis for outages",
+      "CI relationship tracking",
+      "Automatic topology updates",
+    ],
+  },
+  WORK_ORDERS: {
+    name: "Work Orders & Maintenance",
+    tier: "Professional",
+    desc: "Create and track maintenance workflows, preventative schedules, and technicians.",
+    benefits: [
+      "Preventative maintenance scheduling",
+      "Technician dispatch & tracking",
+      "SLA breach notifications",
+      "Parts inventory integration",
+    ],
+  },
+  DISCOVERY: {
+    name: "Automatic Discovery",
+    tier: "Professional",
+    desc: "Scan networks, subnets, and clouds automatically to ingest and sync assets.",
+    benefits: [
+      "Subnet & range automatic scanning",
+      "Agentless SNMP & WMI collection",
+      "Cloud asset auto-ingestion",
+      "Scheduled reconciliation rules",
+    ],
+  },
+  PATCH_MGMT: {
+    name: "Patch Management",
+    tier: "Professional",
+    desc: "Deploy, verify, and monitor software and OS patches across all user devices.",
+    benefits: [
+      "Automated OS patching (Windows/macOS)",
+      "Vulnerability patching validation",
+      "Third-party software updates",
+      "Compliance audit reporting",
+    ],
+  },
+  NETWORK: {
+    name: "Network Monitoring System (NMS)",
+    tier: "Professional",
+    desc: "Real-time network traffic audits, interface status, ping telemetry, and topology tracking.",
+    benefits: [
+      "Live ping & response monitoring",
+      "Port-level traffic statistics",
+      "Alerts for node down states",
+      "Network switch mapping",
+    ],
+  },
+  SECURITY_SCAN: {
+    name: "Security Vulnerability Scanning",
+    tier: "Professional",
+    desc: "Perform automated vulnerability assessments, SSL checks, and port auditing.",
+    benefits: [
+      "Automated port scanning",
+      "SSL certificate expiry tracking",
+      "Vulnerability index lookup",
+      "Remediation checklist export",
+    ],
+  },
+  LICENSES: {
+    name: "Software Licenses & Compliance",
+    tier: "Professional",
+    desc: "Audit license keys, calculate compliance scores, and track upcoming renewals.",
+    benefits: [
+      "Volume license key tracking",
+      "Software installation auditing",
+      "Under/over-licensing warning triggers",
+      "Renewal calendar with notifications",
+    ],
+  },
+  KNOWLEDGE_BASE: {
+    name: "Knowledge Base",
+    tier: "Professional",
+    desc: "Create self-service guides, support articles, and standard operating procedures.",
+    benefits: [
+      "Interactive editor with templates",
+      "Role-based reading settings",
+      "Ticket link integration",
+      "FAQ widget embed helper",
+    ],
+  },
+  REPORTS: {
+    name: "Advanced Reports & Analytics",
+    tier: "Professional",
+    desc: "Build complex custom query filters and schedules with visual chart builders.",
+    benefits: [
+      "Visual chart builder interface",
+      "Automated PDF report schedules",
+      "Custom filter presets",
+      "Export directly to CSV & Excel",
+    ],
+  },
+  AUDIT_LOGS: {
+    name: "Audit Logs",
+    tier: "Professional",
+    desc: "Access full, tamper-evident logs of every admin and tenant action in the system.",
+    benefits: [
+      "Detailed event log query system",
+      "Actor IP and device logging",
+      "Compliance audit export helper",
+      "Historical state change records",
+    ],
+  },
+  CCTV: {
+    name: "CCTV Integrations",
+    tier: "Professional",
+    desc: "Connect your security cameras and view feeds directly context-linked to locations and assets.",
+    benefits: [
+      "RTSP camera stream embedding",
+      "Location-linked feeds",
+      "Live layout grid editor",
+      "Motion event notification triggers",
+    ],
+  },
+  COMPLIANCE: {
+    name: "Regulatory Compliance",
+    tier: "Enterprise",
+    desc: "Track SOC2, ISO27001, HIPAA, and custom compliance frameworks across assets.",
+    benefits: [
+      "Policy mapping and templates",
+      "Audit preparation drawers",
+      "Non-compliance tracking alerts",
+      "Officer task assignments",
+    ],
+  },
+  PROCUREMENT: {
+    name: "Procurement & Purchase Orders",
+    tier: "Enterprise",
+    desc: "Manage purchase orders, vendor databases, and request-for-quotes.",
+    benefits: [
+      "Vendor catalog database",
+      "Purchase order workflows",
+      "Asset birth-record generation",
+      "Budget category analysis",
+    ],
+  },
+  CHANGES: {
+    name: "Change Management (ITIL)",
+    tier: "Enterprise",
+    desc: "Structure, review, and authorize change requests with dynamic approval boards.",
+    benefits: [
+      "ITIL-aligned RFC structures",
+      "CAB approval dashboard",
+      "Risk calculation models",
+      "Post-implementation reviews",
+    ],
+  },
+  PROBLEMS: {
+    name: "Problem Management",
+    tier: "Enterprise",
+    desc: "Track root cause analysis and link multiple tickets to central problems.",
+    benefits: [
+      "RCA (Root Cause Analysis) workspace",
+      "Ticket mapping & mass resolve",
+      "Known-error database",
+      "SLA breach tracking",
+    ],
+  },
+  FLEET: {
+    name: "Fleet & GPS Tracking",
+    tier: "Enterprise",
+    desc: "Track company vehicles, GPS telemetry, fuel receipts, and maintenance logs.",
+    benefits: [
+      "Real-time GPS route overlays",
+      "Fuel log receipts & economy analytics",
+      "Driver assignment & log auditing",
+      "Vehicle preventative service triggers",
+    ],
+  },
+  VDI: {
+    name: "Virtual Desktop Infrastructure (VDI)",
+    tier: "Enterprise",
+    desc: "Provision, manage, and remote-session directly into cloud and on-premise VDIs.",
+    benefits: [
+      "WebRTC direct session frame",
+      "Resource allocation sliders",
+      "Host group scaling rules",
+      "VDI health telemetry reporting",
+    ],
+  },
+  AUTOMATION: {
+    name: "Automation Runbooks",
+    tier: "Enterprise",
+    desc: "Build low-code trigger-and-action scripts to automatically heal infrastructure.",
+    benefits: [
+      "Low-code automation builder",
+      "Pre-built system task libraries",
+      "Remote agent script execution",
+      "Trigger rules (webhook, alerts)",
+    ],
+  },
+};
 
 const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4100/api/v1";
 
@@ -96,6 +356,33 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const profileRef = useRef<HTMLDivElement>(null);
   const [theme, setTheme] = useState<"dark" | "light">("dark");
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
+  const [allowedModules, setAllowedModules] = useState<string[] | null>(null);
+  const [activeModules, setActiveModules] = useState<string[] | null>(null);
+
+  // Fetch workspace and dynamic modules settings
+  useEffect(() => {
+    async function fetchSettings() {
+      try {
+        const data = await safeFetch("/settings");
+        if (data) {
+          setAllowedModules(data.allowedModules || []);
+          setActiveModules(data.activeModules || []);
+        }
+      } catch (e) {
+        console.error("Failed to fetch settings", e);
+      }
+    }
+    fetchSettings();
+
+    const handleUpdate = () => {
+      fetchSettings();
+    };
+
+    window.addEventListener("workspace-modules-updated", handleUpdate);
+    return () => {
+      window.removeEventListener("workspace-modules-updated", handleUpdate);
+    };
+  }, [pathname]);
 
   // Hydrate theme from localStorage
   useEffect(() => {
@@ -196,6 +483,20 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     return () => clearTimeout(timer);
   }, [searchQuery]);
 
+  // Intercept direct path routing
+  let interceptedModuleKey: string | null = null;
+  for (const [routePrefix, moduleKey] of Object.entries(hrefToModuleKeyMap)) {
+    if (pathname.startsWith(routePrefix)) {
+      interceptedModuleKey = moduleKey;
+      break;
+    }
+  }
+
+  const isRouteIntercepted =
+    interceptedModuleKey &&
+    allowedModules &&
+    !allowedModules.includes(interceptedModuleKey);
+
   if (!user) return null;
 
   return (
@@ -214,24 +515,35 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           </a>
         </div>
         <nav className="sidebar-nav">
-          {navSections.map((section) => (
-            <div key={section.label}>
-              <div className="sidebar-section-label">{section.label}</div>
-              {section.items.map((item) => {
-                const isActive = pathname === item.href || (item.href !== "/dashboard" && pathname.startsWith(item.href));
-                const badge = item.name === "Tickets" && ticketCount > 0 ? String(ticketCount) : item.badge;
-                return (
-                  <a key={item.href} href={item.href}
-                    className={`sidebar-item${isActive ? " active" : ""}`}
-                    onClick={(e) => { e.preventDefault(); router.push(item.href); }}>
-                    <item.icon className="sidebar-item-icon" size={18} />
-                    <span>{item.name}</span>
-                    {badge && <span className="sidebar-badge">{badge}</span>}
-                  </a>
-                );
-              })}
-            </div>
-          ))}
+          {navSections.map((section) => {
+            const filteredItems = section.items.filter((item) => {
+              const key = nameToModuleKeyMap[item.name];
+              if (!key) return true;
+              if (!activeModules) return true;
+              return activeModules.includes(key);
+            });
+
+            if (filteredItems.length === 0) return null;
+
+            return (
+              <div key={section.label}>
+                <div className="sidebar-section-label">{section.label}</div>
+                {filteredItems.map((item) => {
+                  const isActive = pathname === item.href || (item.href !== "/dashboard" && pathname.startsWith(item.href));
+                  const badge = item.name === "Tickets" && ticketCount > 0 ? String(ticketCount) : item.badge;
+                  return (
+                    <a key={item.href} href={item.href}
+                      className={`sidebar-item${isActive ? " active" : ""}`}
+                      onClick={(e) => { e.preventDefault(); router.push(item.href); }}>
+                      <item.icon className="sidebar-item-icon" size={18} />
+                      <span>{item.name}</span>
+                      {badge && <span className="sidebar-badge">{badge}</span>}
+                    </a>
+                  );
+                })}
+              </div>
+            );
+          })}
         </nav>
       </aside>
 
@@ -360,7 +672,156 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         </header>
 
         <div className="page-content">
-          {children}
+          {isRouteIntercepted && interceptedModuleKey && MODULE_METADATA[interceptedModuleKey] ? (
+            <div style={{
+              display: "flex",
+              flexDirection: "column",
+              alignItems: "center",
+              justifyContent: "center",
+              minHeight: "70vh",
+              padding: "40px 20px",
+            }}>
+              <div className="lock-teaser-container" style={{
+                maxWidth: 580,
+                width: "100%",
+                background: "var(--bg-card)",
+                backdropFilter: "blur(20px) saturate(180%)",
+                border: "1px solid var(--border-primary)",
+                borderRadius: 24,
+                padding: 40,
+                boxShadow: "0 24px 80px rgba(0,0,0,0.35), inset 0 1px 0 rgba(255,255,255,0.05)",
+                textAlign: "center",
+                position: "relative",
+                overflow: "hidden",
+              }}>
+                {/* Glowing light sphere backdrop */}
+                <div style={{
+                  position: "absolute",
+                  top: -80,
+                  right: -80,
+                  width: 240,
+                  height: 240,
+                  borderRadius: "50%",
+                  background: "radial-gradient(circle, var(--brand-400) 0%, transparent 70%)",
+                  opacity: 0.15,
+                  pointerEvents: "none",
+                }} />
+                
+                {/* Lock icon with premium rings */}
+                <div style={{
+                  width: 72,
+                  height: 72,
+                  borderRadius: 20,
+                  background: "linear-gradient(135deg, rgba(139,92,246,0.1) 0%, rgba(6,182,212,0.1) 100%)",
+                  border: "1px solid rgba(6,182,212,0.2)",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  margin: "0 auto 24px auto",
+                  boxShadow: "0 12px 30px rgba(6,182,212,0.1)",
+                  position: "relative",
+                }}>
+                  <Lock size={28} style={{ color: "var(--brand-400)" }} />
+                </div>
+
+                <div style={{
+                  fontSize: 10,
+                  fontWeight: 800,
+                  textTransform: "uppercase",
+                  letterSpacing: "0.15em",
+                  color: "#8b5cf6",
+                  background: "rgba(139,92,246,0.1)",
+                  padding: "4px 12px",
+                  borderRadius: 6,
+                  display: "inline-block",
+                  marginBottom: 16,
+                }}>
+                  {MODULE_METADATA[interceptedModuleKey].tier} Feature
+                </div>
+
+                <h2 style={{
+                  fontSize: 24,
+                  fontWeight: 800,
+                  letterSpacing: "-0.03em",
+                  color: "var(--text-primary)",
+                  marginBottom: 8,
+                }}>
+                  Unlock {MODULE_METADATA[interceptedModuleKey].name}
+                </h2>
+                
+                <p style={{
+                  fontSize: 14,
+                  color: "var(--text-secondary)",
+                  lineHeight: 1.5,
+                  marginBottom: 28,
+                  maxWidth: 440,
+                  marginLeft: "auto",
+                  marginRight: "auto",
+                }}>
+                  {MODULE_METADATA[interceptedModuleKey].desc} Upgrading your subscription plan unlocks access to this and other premium workflows instantly.
+                </p>
+
+                {/* Benefits List */}
+                <div style={{
+                  background: "var(--bg-elevated)",
+                  borderRadius: 16,
+                  border: "1px solid var(--border-primary)",
+                  padding: "20px 24px",
+                  textAlign: "left",
+                  marginBottom: 32,
+                }}>
+                  <div style={{
+                    fontSize: 11,
+                    fontWeight: 700,
+                    textTransform: "uppercase",
+                    letterSpacing: "0.08em",
+                    color: "var(--text-tertiary)",
+                    marginBottom: 12,
+                  }}>
+                    What is included:
+                  </div>
+                  <div style={{ display: "grid", gap: 10 }}>
+                    {MODULE_METADATA[interceptedModuleKey].benefits.map((benefit) => (
+                      <div key={benefit} style={{ display: "flex", alignItems: "center", gap: 10, fontSize: 13, color: "var(--text-secondary)" }}>
+                        <CheckCircle size={14} style={{ color: "#10b981", flexShrink: 0 }} />
+                        <span>{benefit}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Upgrade CTA */}
+                <button
+                  onClick={() => router.push("/dashboard/settings#billing")}
+                  style={{
+                    width: "100%",
+                    padding: "12px 24px",
+                    borderRadius: 12,
+                    border: "none",
+                    background: "linear-gradient(135deg, #06b6d4, #8b5cf6)",
+                    color: "white",
+                    fontSize: 14,
+                    fontWeight: 700,
+                    cursor: "pointer",
+                    boxShadow: "0 10px 25px rgba(6,182,212,0.25)",
+                    transition: "all 0.2s ease",
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.transform = "translateY(-1px)";
+                    e.currentTarget.style.boxShadow = "0 12px 30px rgba(6,182,212,0.35)";
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.transform = "none";
+                    e.currentTarget.style.boxShadow = "0 10px 25px rgba(6,182,212,0.25)";
+                  }}
+                >
+                  Upgrade to {MODULE_METADATA[interceptedModuleKey].tier} Plan
+                </button>
+              </div>
+            </div>
+          ) : (
+            children
+          )}
         </div>
       </main>
 

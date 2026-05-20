@@ -5,10 +5,13 @@ import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { PrismaService } from '../../common/database/prisma.service';
 import * as crypto from 'crypto';
+import { ModuleGuard } from '../../common/guards/module.guard';
+import { RequireModule } from '../../common/decorators/require-module.decorator';
 
 @ApiTags('monitoring')
 @ApiBearerAuth()
-@UseGuards(JwtAuthGuard, RolesGuard)
+@UseGuards(JwtAuthGuard, RolesGuard, ModuleGuard)
+@RequireModule('NETWORK')
 @Controller('monitoring/network/configs')
 export class NetworkConfigController {
   constructor(private prisma: PrismaService) {}

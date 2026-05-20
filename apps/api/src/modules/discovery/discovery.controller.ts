@@ -5,10 +5,13 @@ import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { DiscoveryService } from './discovery.service';
 import { CredentialVaultService } from './credential-vault.service';
+import { ModuleGuard } from '../../common/guards/module.guard';
+import { RequireModule } from '../../common/decorators/require-module.decorator';
 
 @ApiTags('discovery')
 @ApiBearerAuth()
-@UseGuards(JwtAuthGuard, RolesGuard)
+@UseGuards(JwtAuthGuard, RolesGuard, ModuleGuard)
+@RequireModule('DISCOVERY')
 @Controller('discovery')
 export class DiscoveryController {
   constructor(
@@ -65,9 +68,23 @@ export class DiscoveryController {
   @Roles('Tenant Admin', 'IT Admin')
   @ApiOperation({ summary: 'Approve discovered device → create asset' })
   async approveDevice(@Request() req: any, @Param('id') id: string, @Body() body: {
-    name: string; assetTypeId: string;
+    name?: string; assetTypeId?: string;
   }) {
     return this.discoveryService.approveDevice(id, req.user.tenantId, req.user.sub, body);
+  }
+
+  @Post('devices/bulk-approve')
+  @Roles('Tenant Admin', 'IT Admin')
+  @ApiOperation({ summary: 'Bulk approve multiple discovered devices' })
+  async bulkApprove(@Request() req: any, @Body() body: { deviceIds: string[] }) {
+    return this.discoveryService.bulkApprove(req.user.tenantId, req.user.sub, body.deviceIds);
+  }
+
+  @Post('devices/bulk-ignore')
+  @Roles('Tenant Admin', 'IT Admin')
+  @ApiOperation({ summary: 'Bulk ignore multiple discovered devices' })
+  async bulkIgnore(@Request() req: any, @Body() body: { deviceIds: string[] }) {
+    return this.discoveryService.bulkIgnore(req.user.tenantId, body.deviceIds);
   }
 
   @Post('devices/:id/ignore')

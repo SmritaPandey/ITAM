@@ -3,7 +3,8 @@ import { useEffect, useState, useCallback } from "react";
 import {
   Radar, Play, Clock, CheckCircle2, XCircle, Wifi, Monitor,
   Server, Printer, HelpCircle, Loader2, RefreshCw, Plus, Search,
-  ArrowRight, Eye, EyeOff, Network, Shield, Key, Calendar, Bot, Trash2
+  ArrowRight, Eye, EyeOff, Network, Shield, Key, Calendar, Bot, Trash2,
+  AlertTriangle, Zap, Check, ChevronDown, ChevronRight as ChevronRightIcon
 } from "lucide-react";
 import { apiFetch } from "@/lib/api";
 import { PageHelp, Tip } from "@/components/HelpSystem";
@@ -43,6 +44,10 @@ export default function DiscoveryPage() {
   const [scanType, setScanType] = useState("PING_SWEEP");
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState<"scans" | "pending" | "schedules" | "credentials" | "agents">("scans");
+  const [selectedDevices, setSelectedDevices] = useState<Set<string>>(new Set());
+  const [expandedDevice, setExpandedDevice] = useState<string | null>(null);
+  const [enriching, setEnriching] = useState<string | null>(null);
+  const [pendingFilter, setPendingFilter] = useState<string>("all");
 
   const refresh = useCallback(async () => {
     try {
@@ -106,15 +111,63 @@ export default function DiscoveryPage() {
 
   async function approveDevice(deviceId: string) {
     await apiFetch(`/discovery/devices/${deviceId}/approve`, {
-      method: "POST",
-      body: JSON.stringify({ name: `Discovered Device`, assetTypeId: "" }),
+      method: "POST", body: JSON.stringify({}),
     });
+    setSelectedDevices(prev => { const n = new Set(prev); n.delete(deviceId); return n; });
     await refresh();
   }
 
   async function ignoreDevice(deviceId: string) {
     await apiFetch(`/discovery/devices/${deviceId}/ignore`, { method: "POST" });
+    setSelectedDevices(prev => { const n = new Set(prev); n.delete(deviceId); return n; });
     await refresh();
+  }
+
+  async function bulkApprove() {
+    if (selectedDevices.size === 0) return;
+    await apiFetch("/discovery/devices/bulk-approve", {
+      method: "POST", body: JSON.stringify({ deviceIds: Array.from(selectedDevices) }),
+    });
+    setSelectedDevices(new Set());
+    await refresh();
+  }
+
+  async function bulkIgnore() {
+    if (selectedDevices.size === 0) return;
+    await apiFetch("/discovery/devices/bulk-ignore", {
+      method: "POST", body: JSON.stringify({ deviceIds: Array.from(selectedDevices) }),
+    });
+    setSelectedDevices(new Set());
+    await refresh();
+  }
+
+  async function enrichDevice(deviceId: string) {
+    setEnriching(deviceId);
+    try {
+      await apiFetch(`/discovery/devices/${deviceId}/enrich`, { method: "POST", body: JSON.stringify({}) });
+      await refresh();
+      setExpandedDevice(deviceId);
+    } catch {} finally { setEnriching(null); }
+  }
+
+  function getRiskBadge(score: number) {
+    if (score >= 70) return { label: "Critical", color: "#ef4444", bg: "rgba(239,68,68,0.1)" };
+    if (score >= 40) return { label: "High", color: "#f59e0b", bg: "rgba(245,158,11,0.1)" };
+    if (score >= 20) return { label: "Medium", color: "#06b6d4", bg: "rgba(6,182,212,0.1)" };
+    return { label: "Low", color: "#10b981", bg: "rgba(16,185,129,0.1)" };
+  }
+
+  function toggleDevice(id: string) {
+    setSelectedDevices(prev => {
+      const n = new Set(prev);
+      n.has(id) ? n.delete(id) : n.add(id);
+      return n;
+    });
+  }
+
+  function toggleAll() {
+    if (selectedDevices.size === pending.length) setSelectedDevices(new Set());
+    else setSelectedDevices(new Set(pending.map((d: any) => d.id)));
   }
 
   if (loading) return (
@@ -265,38 +318,167 @@ export default function DiscoveryPage() {
 
       {/* Pending Review Tab */}
       {tab === "pending" && (
-        <div className="card" style={{ padding: 0, overflow: "hidden" }}>
+        <div>
           {pending.length === 0 ? (
-            <div style={{ textAlign: "center", padding: 48, color: "var(--text-tertiary)" }}>
+            <div className="card" style={{ textAlign: "center", padding: 48, color: "var(--text-tertiary)" }}>
               <CheckCircle2 size={36} style={{ margin: "0 auto 12px", color: "#10b981" }} />
               <div style={{ fontSize: 14, fontWeight: 600 }}>All clear!</div>
-              <p style={{ fontSize: 12 }}>No devices pending review</p>
+              <p style={{ fontSize: 12 }}>No devices pending review. Run a scan to discover new devices.</p>
             </div>
           ) : (
-            <table className="data-table">
-              <thead><tr><th>IP Address</th><th>MAC</th><th>Hostname</th><th>Type</th><th>Source Scan</th><th>Actions</th></tr></thead>
-              <tbody>
-                {pending.map((d: any) => (
-                  <tr key={d.id}>
-                    <td><code style={{ fontSize: 11, color: "var(--brand-400)" }}>{d.ipAddress}</code></td>
-                    <td style={{ fontSize: 11, fontFamily: "monospace", color: "var(--text-secondary)" }}>{d.macAddress || "—"}</td>
-                    <td style={{ fontWeight: 500, color: "var(--text-primary)" }}>{d.hostname || "—"}</td>
-                    <td>
-                      <span style={{ display: "inline-flex", alignItems: "center", gap: 4, fontSize: 11, color: "var(--text-secondary)" }}>
-                        {DEVICE_ICONS[d.deviceType] || DEVICE_ICONS.Unknown} {d.deviceType}
-                      </span>
-                    </td>
-                    <td style={{ fontSize: 11, color: "var(--text-tertiary)" }}>{d.scanJob?.subnet || "—"}</td>
-                    <td style={{ display: "flex", gap: 4 }}>
-                      <button className="btn btn-secondary" style={{ padding: "3px 8px", fontSize: 10 }}
-                        onClick={() => ignoreDevice(d.id)}>
-                        <EyeOff size={10} /> Ignore
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+            <>
+              {/* Summary Cards */}
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(130px, 1fr))", gap: 10, marginBottom: 16 }}>
+                {(() => {
+                  const types: Record<string, number> = {};
+                  let critical = 0, high = 0;
+                  pending.forEach((d: any) => {
+                    types[d.deviceType || "Unknown"] = (types[d.deviceType || "Unknown"] || 0) + 1;
+                    if ((d.riskScore || 0) >= 70) critical++;
+                    else if ((d.riskScore || 0) >= 40) high++;
+                  });
+                  return [
+                    { label: "Total Pending", value: pending.length, color: "var(--brand-400)" },
+                    ...Object.entries(types).slice(0, 4).map(([k, v]) => ({ label: k, value: v, color: "var(--text-secondary)" })),
+                    ...(critical > 0 ? [{ label: "Critical Risk", value: critical, color: "#ef4444" }] : []),
+                    ...(high > 0 ? [{ label: "High Risk", value: high, color: "#f59e0b" }] : []),
+                  ].map((c, i) => (
+                    <div key={i} className="stat-card">
+                      <div className="stat-label">{c.label}</div>
+                      <div style={{ fontSize: 22, fontWeight: 800, color: c.color }}>{c.value}</div>
+                    </div>
+                  ));
+                })()}
+              </div>
+
+              {/* Bulk Actions Bar */}
+              <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12, flexWrap: "wrap" }}>
+                <button className="btn btn-primary" style={{ padding: "6px 14px", fontSize: 11 }}
+                  disabled={selectedDevices.size === 0} onClick={bulkApprove}>
+                  <CheckCircle2 size={12} /> Approve Selected ({selectedDevices.size})
+                </button>
+                <button className="btn btn-secondary" style={{ padding: "6px 14px", fontSize: 11 }}
+                  disabled={selectedDevices.size === 0} onClick={bulkIgnore}>
+                  <EyeOff size={12} /> Ignore Selected
+                </button>
+                <button className="btn btn-secondary" style={{ padding: "6px 14px", fontSize: 11, marginLeft: "auto" }}
+                  onClick={() => { setSelectedDevices(new Set(pending.map((d: any) => d.id))); }}>
+                  <Check size={12} /> Select All
+                </button>
+              </div>
+
+              {/* Device Table */}
+              <div className="card" style={{ padding: 0, overflow: "hidden" }}>
+                <table className="data-table">
+                  <thead><tr>
+                    <th style={{ width: 32 }}>
+                      <input type="checkbox" checked={selectedDevices.size === pending.length && pending.length > 0}
+                        onChange={toggleAll} style={{ cursor: "pointer" }} />
+                    </th>
+                    <th>IP Address</th><th>Hostname</th><th>Type</th><th>Risk</th>
+                    <th>Seen</th><th>Source</th><th>Actions</th>
+                  </tr></thead>
+                  <tbody>
+                    {pending.map((d: any) => {
+                      const risk = getRiskBadge(d.riskScore || 0);
+                      const isExpanded = expandedDevice === d.id;
+                      const ago = d.firstSeenAt ? Math.round((Date.now() - new Date(d.firstSeenAt).getTime()) / 3600000) : 0;
+                      const agoStr = ago < 1 ? "<1h ago" : ago < 24 ? `${ago}h ago` : `${Math.round(ago / 24)}d ago`;
+                      return (
+                        <>
+                          <tr key={d.id} style={{ cursor: "pointer" }} onClick={() => setExpandedDevice(isExpanded ? null : d.id)}>
+                            <td onClick={e => e.stopPropagation()}>
+                              <input type="checkbox" checked={selectedDevices.has(d.id)}
+                                onChange={() => toggleDevice(d.id)} style={{ cursor: "pointer" }} />
+                            </td>
+                            <td>
+                              <code style={{ fontSize: 11, color: "var(--brand-400)" }}>{d.ipAddress}</code>
+                              {d.macAddress && <div style={{ fontSize: 9, fontFamily: "monospace", color: "var(--text-tertiary)", marginTop: 1 }}>{d.macAddress}</div>}
+                            </td>
+                            <td style={{ fontWeight: 500, color: "var(--text-primary)" }}>{d.hostname || "—"}</td>
+                            <td>
+                              <span style={{ display: "inline-flex", alignItems: "center", gap: 4, fontSize: 11, color: "var(--text-secondary)" }}>
+                                {DEVICE_ICONS[d.deviceType] || DEVICE_ICONS.Unknown} {d.deviceType || "Unknown"}
+                              </span>
+                            </td>
+                            <td>
+                              <span style={{ display: "inline-flex", alignItems: "center", gap: 3, padding: "2px 8px", borderRadius: 6,
+                                fontSize: 10, fontWeight: 600, background: risk.bg, color: risk.color }}>
+                                {(d.riskScore || 0) >= 40 && <AlertTriangle size={10} />}
+                                {risk.label} ({d.riskScore || 0})
+                              </span>
+                            </td>
+                            <td style={{ fontSize: 10, color: "var(--text-tertiary)" }}>
+                              {d.seenCount || 1}× · {agoStr}
+                            </td>
+                            <td style={{ fontSize: 11, color: "var(--text-tertiary)" }}>{d.scanJob?.subnet || "—"}</td>
+                            <td onClick={e => e.stopPropagation()}>
+                              <div style={{ display: "flex", gap: 4 }}>
+                                <button className="btn btn-primary" style={{ padding: "3px 8px", fontSize: 10 }}
+                                  onClick={() => approveDevice(d.id)}>
+                                  <CheckCircle2 size={10} /> Approve
+                                </button>
+                                <button className="btn btn-secondary" style={{ padding: "3px 8px", fontSize: 10 }}
+                                  onClick={() => enrichDevice(d.id)} disabled={enriching === d.id}>
+                                  {enriching === d.id ? <Loader2 size={10} style={{ animation: "spin 1s linear infinite" }} /> : <Zap size={10} />} Enrich
+                                </button>
+                                <button className="btn btn-secondary" style={{ padding: "3px 8px", fontSize: 10 }}
+                                  onClick={() => ignoreDevice(d.id)}>
+                                  <EyeOff size={10} />
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                          {isExpanded && (
+                            <tr key={`${d.id}-detail`}>
+                              <td colSpan={8} style={{ background: "var(--bg-elevated)", padding: 16 }}>
+                                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12 }}>
+                                  <div>
+                                    <div style={{ fontSize: 10, fontWeight: 600, color: "var(--text-tertiary)", marginBottom: 4, textTransform: "uppercase", letterSpacing: "0.05em" }}>Device Info</div>
+                                    <div style={{ fontSize: 12 }}>OS: {d.osInfo || d.osGuess || "Unknown"}</div>
+                                    <div style={{ fontSize: 12 }}>MAC: {d.macAddress || "Unknown"}</div>
+                                    <div style={{ fontSize: 12 }}>Type: {d.deviceType || "Unknown"}</div>
+                                  </div>
+                                  <div>
+                                    <div style={{ fontSize: 10, fontWeight: 600, color: "var(--text-tertiary)", marginBottom: 4, textTransform: "uppercase", letterSpacing: "0.05em" }}>Open Ports</div>
+                                    {(() => {
+                                      try {
+                                        const ports = d.openPorts ? JSON.parse(d.openPorts) : [];
+                                        return ports.length > 0
+                                          ? <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>{ports.map((p: any, i: number) => (
+                                              <span key={i} className="badge cyan" style={{ fontSize: 9 }}>{p.port} {p.service}</span>
+                                            ))}</div>
+                                          : <div style={{ fontSize: 12, color: "var(--text-tertiary)" }}>No ports scanned</div>;
+                                      } catch { return <div style={{ fontSize: 12, color: "var(--text-tertiary)" }}>—</div>; }
+                                    })()}
+                                  </div>
+                                  <div>
+                                    <div style={{ fontSize: 10, fontWeight: 600, color: "var(--text-tertiary)", marginBottom: 4, textTransform: "uppercase", letterSpacing: "0.05em" }}>Enrichment</div>
+                                    {d.enrichmentStatus === "ENRICHED" && d.enrichmentData ? (
+                                      <div style={{ fontSize: 12 }}>
+                                        {d.enrichmentData.hardware?.cpuModel && <div>CPU: {d.enrichmentData.hardware.cpuModel} ({d.enrichmentData.hardware.cpuCores} cores)</div>}
+                                        {d.enrichmentData.hardware?.totalRamMb && <div>RAM: {Math.round(d.enrichmentData.hardware.totalRamMb / 1024)}GB</div>}
+                                        {d.enrichmentData.operatingSystem?.name && <div>OS: {d.enrichmentData.operatingSystem.name}</div>}
+                                        {d.enrichmentData.security?.firewallStatus && <div>Firewall: {d.enrichmentData.security.firewallStatus}</div>}
+                                      </div>
+                                    ) : (
+                                      <div style={{ fontSize: 12, color: "var(--text-tertiary)" }}>Not enriched — click Enrich to scan</div>
+                                    )}
+                                  </div>
+                                </div>
+                                <div style={{ marginTop: 10, fontSize: 10, color: "var(--text-tertiary)" }}>
+                                  First seen: {d.firstSeenAt ? new Date(d.firstSeenAt).toLocaleString() : "—"} · Last seen: {d.lastSeenAt ? new Date(d.lastSeenAt).toLocaleString() : "—"} · Seen in {d.seenCount || 1} scan(s)
+                                </div>
+                              </td>
+                            </tr>
+                          )}
+                        </>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </>
           )}
         </div>
       )}

@@ -5,6 +5,7 @@ import {
   LayoutDashboard, Building2, Users, MessageSquare, CreditCard, Shield,
   Activity, LogOut, ChevronRight, ArrowLeft, Sun, Moon,
 } from "lucide-react";
+import { LogoIcon } from "@/components/Logo";
 
 const adminNav = [
   { name: "Dashboard", icon: LayoutDashboard, href: "/admin" },
@@ -68,12 +69,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         {/* Logo */}
         <div style={{ padding: "20px 16px", borderBottom: "1px solid var(--border-primary)" }}>
           <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 6 }}>
-            <div style={{
-              width: 34, height: 34, borderRadius: 9,
-              background: "linear-gradient(135deg, #06b6d4, #8b5cf6)",
-              display: "flex", alignItems: "center", justifyContent: "center",
-              color: "white", fontSize: 14, fontWeight: 800,
-            }}>QS</div>
+            <LogoIcon size={34} />
             <div>
               <div style={{ fontSize: 14, fontWeight: 700, color: "var(--text-primary)" }}>Platform Console</div>
               <div style={{ fontSize: 10, color: "#06b6d4", fontWeight: 600 }}>OWNER ACCESS</div>

@@ -5,6 +5,7 @@ import {
   LayoutDashboard, Ticket, Package, Plus, LogOut, User,
   Bell, Shield, ChevronDown, Search
 } from "lucide-react";
+import { LogoIcon } from "@/components/Logo";
 
 
 // Portal layout doesn't make API calls — token used only for JWT decode
@@ -65,7 +66,7 @@ export default function PortalLayout({ children }: { children: React.ReactNode }
           borderBottom: "1px solid var(--border-primary)",
         }}>
           <a href="/portal" onClick={(e) => { e.preventDefault(); router.push("/portal"); }} style={{ display: "flex", alignItems: "center", gap: 10, textDecoration: "none", color: "inherit" }}>
-            <img src="/favicon.png" alt="QS Asset" style={{ width: 32, height: 32, borderRadius: 8 }} />
+            <LogoIcon size={32} />
             <div>
               <div style={{ fontSize: 14, fontWeight: 700, color: "var(--text-primary)", letterSpacing: "-0.01em" }}>Employee Portal</div>
               <div style={{ fontSize: 9, color: "var(--text-tertiary)", fontWeight: 600, letterSpacing: "0.03em" }}>QS ASSET</div>

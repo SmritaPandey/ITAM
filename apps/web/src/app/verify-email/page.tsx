@@ -4,6 +4,7 @@ import { useSearchParams } from "next/navigation";
 import { Suspense } from "react";
 import Link from "next/link";
 import { CheckCircle2, XCircle, Loader2, Mail, ArrowRight } from "lucide-react";
+import { LogoIcon } from "@/components/Logo";
 
 function VerifyEmailContent() {
   const searchParams = useSearchParams();
@@ -52,11 +53,12 @@ function VerifyEmailContent() {
       }}>
         {/* Logo */}
         <div style={{
-          width: 56, height: 56, borderRadius: 14, margin: "0 auto 20px",
-          background: "linear-gradient(135deg, #06b6d4, #8b5cf6)",
-          display: "flex", alignItems: "center", justifyContent: "center",
-          color: "white", fontWeight: 800, fontSize: 20,
-        }}>QS</div>
+          margin: "0 auto 20px",
+          display: "flex",
+          justifyContent: "center",
+        }}>
+          <LogoIcon size={56} />
+        </div>
 
         {status === "loading" && (
           <>

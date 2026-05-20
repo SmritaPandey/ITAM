@@ -5,6 +5,7 @@ import {
   Server, Shield, Building2, Mail, Lock, User, ArrowRight,
   CheckCircle2, Loader2, Zap, AlertTriangle,
 } from "lucide-react";
+import { LogoIcon } from "@/components/Logo";
 
 export default function SetupPage() {
   const router = useRouter();
@@ -84,12 +85,11 @@ export default function SetupPage() {
         {/* Logo */}
         <div style={{ textAlign: "center", marginBottom: 32 }}>
           <div style={{
-            width: 56, height: 56, borderRadius: 16, margin: "0 auto 16px",
-            background: "linear-gradient(135deg, #06b6d4, #3b82f6)",
-            display: "flex", alignItems: "center", justifyContent: "center",
-            boxShadow: "0 0 30px rgba(34, 211, 238, 0.3)",
+            margin: "0 auto 16px",
+            display: "flex",
+            justifyContent: "center",
           }}>
-            <Server size={28} color="#fff" />
+            <LogoIcon size={56} />
           </div>
           <h1 style={{ fontSize: 24, fontWeight: 700, margin: 0, letterSpacing: "-0.5px" }}>
             QS Asset

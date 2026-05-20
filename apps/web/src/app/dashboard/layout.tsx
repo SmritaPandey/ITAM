@@ -12,6 +12,7 @@ import {
 
 import { apiFetch, safeFetch, getToken } from "@/lib/api";
 import { WalkthroughProvider } from "@/components/HelpSystem";
+import { LogoIcon } from "@/components/Logo";
 
 const nameToModuleKeyMap: Record<string, string> = {
   "Dashboard": "DASHBOARD",
@@ -510,7 +511,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       <aside className={`sidebar${mobileSidebarOpen ? " sidebar-open" : ""}`}>
         <div className="sidebar-brand">
           <a href="/dashboard" style={{ display: "flex", alignItems: "center", gap: 8, textDecoration: "none", color: "inherit" }} onClick={(e) => { e.preventDefault(); router.push("/dashboard"); }}>
-            <img src="/favicon.png" alt="QS Asset" style={{ width: 32, height: 32, borderRadius: 8 }} />
+            <LogoIcon size={32} />
             <span className="sidebar-brand-text">QS Asset</span>
           </a>
         </div>

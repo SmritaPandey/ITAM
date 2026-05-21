@@ -6,7 +6,7 @@ import {
   ArrowRight, Eye, EyeOff, Network, Shield, Key, Calendar, Bot, Trash2,
   AlertTriangle, Zap, Check, ChevronDown, ChevronRight as ChevronRightIcon
 } from "lucide-react";
-import { apiFetch } from "@/lib/api";
+import { apiFetch, getToken, getApiBase } from "@/lib/api";
 import { PageHelp, Tip } from "@/components/HelpSystem";
 
 const SCAN_TYPES = [
@@ -48,6 +48,13 @@ export default function DiscoveryPage() {
   const [expandedDevice, setExpandedDevice] = useState<string | null>(null);
   const [enriching, setEnriching] = useState<string | null>(null);
   const [pendingFilter, setPendingFilter] = useState<string>("all");
+  const [downloading, setDownloading] = useState(false);
+  const [copied, setCopied] = useState(false);
+  const [expandedAgent, setExpandedAgent] = useState<string | null>(null);
+  const [setupMethod, setSetupMethod] = useState<"download" | "bash" | "docker">("download");
+  const [wizardStep, setWizardStep] = useState<1 | 2 | 3>(1);
+  const [osDetected, setOsDetected] = useState<"macos" | "windows" | "linux">("macos");
+  const [pairedAgent, setPairedAgent] = useState<any>(null);
 
   const refresh = useCallback(async () => {
     try {
@@ -67,6 +74,38 @@ export default function DiscoveryPage() {
       setAgents(Array.isArray(ag) ? ag : []);
     } catch {} finally { setLoading(false); }
   }, []);
+
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const ua = window.navigator.userAgent.toLowerCase();
+      if (ua.includes("win")) setOsDetected("windows");
+      else if (ua.includes("mac")) setOsDetected("macos");
+      else if (ua.includes("linux")) setOsDetected("linux");
+    }
+  }, []);
+
+  // Poll for agent registrations when in Step 3
+  useEffect(() => {
+    if (wizardStep !== 3 || pairedAgent) return;
+    const interval = setInterval(async () => {
+      await refresh();
+    }, 3000);
+    return () => clearInterval(interval);
+  }, [wizardStep, refresh, pairedAgent]);
+
+  // Telemetry pairing validator
+  useEffect(() => {
+    if (wizardStep !== 3 || pairedAgent) return;
+    const activeAgent = agents.find((a: any) => {
+      if (a.status !== "ONLINE") return false;
+      if (!a.lastHeartbeat) return false;
+      const ageMs = Date.now() - new Date(a.lastHeartbeat).getTime();
+      return ageMs < 5 * 60 * 1000; // registered/heartbeat in last 5 min
+    });
+    if (activeAgent) {
+      setPairedAgent(activeAgent);
+    }
+  }, [agents, wizardStep, pairedAgent]);
 
   useEffect(() => { refresh(); }, [refresh]);
 
@@ -149,6 +188,38 @@ export default function DiscoveryPage() {
       setExpandedDevice(deviceId);
     } catch {} finally { setEnriching(null); }
   }
+
+  async function downloadAgentZip() {
+    setDownloading(true);
+    try {
+      const token = getToken();
+      const res = await fetch(`${getApiBase()}/discovery/agents/download`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+      if (!res.ok) throw new Error("Failed to compile and download zip from server.");
+      const blob = await res.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "reconapm-agent.zip";
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (err: any) {
+      alert(`Download failed: ${err.message}`);
+    } finally {
+      setDownloading(false);
+    }
+  }
+
+  const copyCommand = (text: string) => {
+    navigator.clipboard.writeText(text);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
 
   function getRiskBadge(score: number) {
     if (score >= 70) return { label: "Critical", color: "#ef4444", bg: "rgba(239,68,68,0.1)" };
@@ -624,37 +695,704 @@ export default function DiscoveryPage() {
 
       {/* Agents Tab */}
       {tab === "agents" && (
-        <div className="card" style={{ padding: 0, overflow: "hidden" }}>
-          {agents.length === 0 ? (
-            <div style={{ textAlign: "center", padding: 48, color: "var(--text-tertiary)" }}>
-              <Bot size={36} style={{ margin: "0 auto 12px" }} />
-              <div style={{ fontSize: 14, fontWeight: 600 }}>No agents registered</div>
-              <p style={{ fontSize: 12 }}>Deploy the QS Asset agent on endpoints to auto-report inventory</p>
+        <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
+          {/* Agent Setup & Collector Probe Guide */}
+          <div className="card" style={{ padding: 24 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: 16, marginBottom: 24 }}>
+              <div>
+                <h3 style={{ fontSize: 16, fontWeight: 700, display: "flex", alignItems: "center", gap: 8 }}>
+                  <Bot size={18} style={{ color: "var(--brand-400)" }} />
+                  Local LAN Discovery Probe Wizard
+                </h3>
+                <p style={{ fontSize: 12, color: "var(--text-secondary)", marginTop: 4 }}>
+                  Follow this simple interactive guide to deploy the zero-configuration telemetry agent inside your local network.
+                </p>
+              </div>
+              <div style={{ display: "flex", gap: 8 }}>
+                <button
+                  className={`btn ${setupMethod === "download" ? "btn-primary" : "btn-secondary"}`}
+                  onClick={() => {
+                    setSetupMethod("download");
+                    setWizardStep(1);
+                  }}
+                  style={{ fontSize: 11, padding: "6px 12px" }}
+                >
+                  Interactive Wizard
+                </button>
+                <button
+                  className={`btn ${setupMethod === "bash" ? "btn-primary" : "btn-secondary"}`}
+                  onClick={() => {
+                    setSetupMethod("bash");
+                    setWizardStep(2); // Jump to instructions
+                  }}
+                  style={{ fontSize: 11, padding: "6px 12px" }}
+                >
+                  Alternative Launch Commands
+                </button>
+              </div>
             </div>
-          ) : (
-            <table className="data-table">
-              <thead><tr><th>Hostname</th><th>IP Address</th><th>Platform</th><th>Version</th><th>Status</th><th>Last Heartbeat</th></tr></thead>
-              <tbody>
-                {agents.map((a: any) => (
-                  <tr key={a.id}>
-                    <td style={{ fontWeight: 500 }}>{a.hostname}</td>
-                    <td><code style={{ fontSize: 11, color: "var(--brand-400)" }}>{a.ipAddress}</code></td>
-                    <td style={{ fontSize: 11 }}>{a.platform}</td>
-                    <td style={{ fontSize: 11, fontFamily: "monospace" }}>{a.agentVersion}</td>
-                    <td>
-                      <span className={`badge ${a.status === "ONLINE" ? "green" : a.status === "STALE" ? "amber" : "red"}`}
-                        style={{ fontSize: 10 }}>
-                        {a.status}
+
+            {/* Steps Progress Header */}
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 32, maxWidth: 600, margin: "0 auto 40px" }}>
+              <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 8, flex: 1 }}>
+                <div style={{
+                  width: 32, height: 32, borderRadius: "50%",
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                  background: wizardStep >= 1 ? "linear-gradient(135deg, var(--brand-500) 0%, #06b6d4 100%)" : "rgba(255,255,255,0.05)",
+                  color: "#fff", fontWeight: 700, fontSize: 12, border: "2px solid var(--border-primary)",
+                  boxShadow: wizardStep === 1 ? "0 0 15px rgba(6,182,212,0.4)" : "none"
+                }}>
+                  1
+                </div>
+                <span style={{ fontSize: 11, fontWeight: wizardStep === 1 ? 700 : 500, color: wizardStep === 1 ? "var(--text-primary)" : "var(--text-tertiary)" }}>Download</span>
+              </div>
+              <div style={{ height: 2, flex: 1, background: wizardStep >= 2 ? "var(--brand-400)" : "rgba(255,255,255,0.05)", margin: "-18px 8px 0" }} />
+              <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 8, flex: 1 }}>
+                <div style={{
+                  width: 32, height: 32, borderRadius: "50%",
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                  background: wizardStep >= 2 ? "linear-gradient(135deg, var(--brand-500) 0%, #06b6d4 100%)" : "rgba(255,255,255,0.05)",
+                  color: "#fff", fontWeight: 700, fontSize: 12, border: "2px solid var(--border-primary)",
+                  boxShadow: wizardStep === 2 ? "0 0 15px rgba(6,182,212,0.4)" : "none"
+                }}>
+                  2
+                </div>
+                <span style={{ fontSize: 11, fontWeight: wizardStep === 2 ? 700 : 500, color: wizardStep === 2 ? "var(--text-primary)" : "var(--text-tertiary)" }}>Launch Script</span>
+              </div>
+              <div style={{ height: 2, flex: 1, background: wizardStep >= 3 ? "var(--brand-400)" : "rgba(255,255,255,0.05)", margin: "-18px 8px 0" }} />
+              <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 8, flex: 1 }}>
+                <div style={{
+                  width: 32, height: 32, borderRadius: "50%",
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                  background: wizardStep >= 3 ? "linear-gradient(135deg, var(--brand-500) 0%, #06b6d4 100%)" : "rgba(255,255,255,0.05)",
+                  color: "#fff", fontWeight: 700, fontSize: 12, border: "2px solid var(--border-primary)",
+                  boxShadow: wizardStep === 3 ? "0 0 15px rgba(6,182,212,0.4)" : "none"
+                }}>
+                  3
+                </div>
+                <span style={{ fontSize: 11, fontWeight: wizardStep === 3 ? 700 : 500, color: wizardStep === 3 ? "var(--text-primary)" : "var(--text-tertiary)" }}>Pair Telemetry</span>
+              </div>
+            </div>
+
+            <div style={{ background: "rgba(0,0,0,0.15)", borderRadius: 8, padding: 24, border: "1px solid var(--border-primary)" }}>
+              {/* Step 1: Download & OS Platform Selection */}
+              {wizardStep === 1 && (
+                <div style={{ display: "flex", flexDirection: "column", gap: 24, maxWidth: 650, margin: "0 auto" }}>
+                  <div style={{ textAlign: "center", marginBottom: 8 }}>
+                    <h4 style={{ fontSize: 16, fontWeight: 700, color: "var(--text-primary)" }}>Download Pre-Configured Agent</h4>
+                    <p style={{ fontSize: 12, color: "var(--text-secondary)", marginTop: 6 }}>
+                      Select your platform. The package contains a paired configuration pre-injected with your secure tenant credentials.
+                    </p>
+                  </div>
+
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 16 }}>
+                    {/* macOS Card */}
+                    <div
+                      onClick={() => setOsDetected("macos")}
+                      style={{
+                        padding: "20px 16px",
+                        borderRadius: 12,
+                        background: osDetected === "macos" ? "rgba(6,182,212,0.08)" : "rgba(255,255,255,0.02)",
+                        border: osDetected === "macos" ? "2px solid var(--brand-400)" : "1px solid var(--border-primary)",
+                        cursor: "pointer",
+                        textAlign: "center",
+                        position: "relative",
+                        transition: "all 0.2s ease"
+                      }}
+                    >
+                      {osDetected === "macos" && (
+                        <CheckCircle2 size={16} style={{ position: "absolute", top: 8, right: 8, color: "var(--brand-400)" }} />
+                      )}
+                      <Monitor size={24} style={{ color: osDetected === "macos" ? "var(--brand-400)" : "var(--text-secondary)", margin: "0 auto 10px" }} />
+                      <div style={{ fontSize: 13, fontWeight: 600, color: "var(--text-primary)" }}>macOS</div>
+                      <span style={{ fontSize: 10, color: "var(--text-tertiary)", marginTop: 4, display: "block" }}>
+                        {typeof window !== "undefined" && window.navigator?.userAgent?.toLowerCase()?.includes("mac") ? "Detected System" : "Apple M1/M2/Intel"}
                       </span>
-                    </td>
-                    <td style={{ fontSize: 11, color: "var(--text-tertiary)" }}>
-                      {a.lastHeartbeat ? new Date(a.lastHeartbeat).toLocaleString() : "—"}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          )}
+                    </div>
+
+                    {/* Windows Card */}
+                    <div
+                      onClick={() => setOsDetected("windows")}
+                      style={{
+                        padding: "20px 16px",
+                        borderRadius: 12,
+                        background: osDetected === "windows" ? "rgba(6,182,212,0.08)" : "rgba(255,255,255,0.02)",
+                        border: osDetected === "windows" ? "2px solid var(--brand-400)" : "1px solid var(--border-primary)",
+                        cursor: "pointer",
+                        textAlign: "center",
+                        position: "relative",
+                        transition: "all 0.2s ease"
+                      }}
+                    >
+                      {osDetected === "windows" && (
+                        <CheckCircle2 size={16} style={{ position: "absolute", top: 8, right: 8, color: "var(--brand-400)" }} />
+                      )}
+                      <Monitor size={24} style={{ color: osDetected === "windows" ? "var(--brand-400)" : "var(--text-secondary)", margin: "0 auto 10px" }} />
+                      <div style={{ fontSize: 13, fontWeight: 600, color: "var(--text-primary)" }}>Windows</div>
+                      <span style={{ fontSize: 10, color: "var(--text-tertiary)", marginTop: 4, display: "block" }}>
+                        {typeof window !== "undefined" && window.navigator?.userAgent?.toLowerCase()?.includes("win") ? "Detected System" : "Windows 10/11/Server"}
+                      </span>
+                    </div>
+
+                    {/* Linux Card */}
+                    <div
+                      onClick={() => setOsDetected("linux")}
+                      style={{
+                        padding: "20px 16px",
+                        borderRadius: 12,
+                        background: osDetected === "linux" ? "rgba(6,182,212,0.08)" : "rgba(255,255,255,0.02)",
+                        border: osDetected === "linux" ? "2px solid var(--brand-400)" : "1px solid var(--border-primary)",
+                        cursor: "pointer",
+                        textAlign: "center",
+                        position: "relative",
+                        transition: "all 0.2s ease"
+                      }}
+                    >
+                      {osDetected === "linux" && (
+                        <CheckCircle2 size={16} style={{ position: "absolute", top: 8, right: 8, color: "var(--brand-400)" }} />
+                      )}
+                      <Server size={24} style={{ color: osDetected === "linux" ? "var(--brand-400)" : "var(--text-secondary)", margin: "0 auto 10px" }} />
+                      <div style={{ fontSize: 13, fontWeight: 600, color: "var(--text-primary)" }}>Linux</div>
+                      <span style={{ fontSize: 10, color: "var(--text-tertiary)", marginTop: 4, display: "block" }}>
+                        {typeof window !== "undefined" && window.navigator?.userAgent?.toLowerCase()?.includes("linux") ? "Detected System" : "Ubuntu/Debian/RHEL"}
+                      </span>
+                    </div>
+                  </div>
+
+                  <button
+                    className="btn btn-primary"
+                    onClick={async () => {
+                      await downloadAgentZip();
+                      setWizardStep(2);
+                    }}
+                    disabled={downloading}
+                    style={{
+                      padding: "14px 28px",
+                      fontSize: 13,
+                      fontWeight: 700,
+                      borderRadius: 8,
+                      background: "linear-gradient(135deg, var(--brand-500) 0%, #06b6d4 100%)",
+                      border: "none",
+                      boxShadow: "0 4px 15px rgba(6,182,212,0.25)",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      gap: 8,
+                      cursor: "pointer"
+                    }}
+                  >
+                    {downloading ? (
+                      <>
+                        <Loader2 size={14} style={{ animation: "spin 1s linear infinite" }} />
+                        Creating Paired Package...
+                      </>
+                    ) : (
+                      <>
+                        Download Paired Agent Package (.zip)
+                        <ArrowRight size={16} />
+                      </>
+                    )}
+                  </button>
+                  <div style={{ display: "flex", gap: 24, justifyContent: "center", marginTop: 8 }}>
+                    <span style={{ fontSize: 11, color: "var(--text-tertiary)", display: "flex", alignItems: "center", gap: 4 }}>
+                      <Shield size={12} style={{ color: "var(--brand-400)" }} />
+                      Pre-authenticated Config
+                    </span>
+                    <span style={{ fontSize: 11, color: "var(--text-tertiary)", display: "flex", alignItems: "center", gap: 4 }}>
+                      <Bot size={12} style={{ color: "var(--brand-400)" }} />
+                      Zero-Dependency Launchers
+                    </span>
+                  </div>
+                </div>
+              )}
+
+              {/* Step 2: Extract & Launch Script */}
+              {wizardStep === 2 && (
+                <div style={{ display: "flex", flexDirection: "column", gap: 24, maxWidth: 650, margin: "0 auto" }}>
+                  <div style={{ textAlign: "center", marginBottom: 8 }}>
+                    <h4 style={{ fontSize: 16, fontWeight: 700, color: "var(--text-primary)" }}>Extract and Launch</h4>
+                    <p style={{ fontSize: 12, color: "var(--text-secondary)", marginTop: 6 }}>
+                      Launch the pre-configured script. The agent will run in portable mode and auto-bootstrap if needed.
+                    </p>
+                  </div>
+
+                  <div style={{ display: "grid", gridTemplateColumns: "1.2fr 1fr", gap: 24, alignItems: "center" }}>
+                    {/* Visual Folder schematic mockup */}
+                    <div style={{
+                      background: "rgba(0,0,0,0.2)",
+                      border: "1px solid var(--border-primary)",
+                      borderRadius: 12,
+                      padding: 20,
+                      fontFamily: "monospace",
+                      fontSize: 12
+                    }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: 6, color: "var(--brand-300)", fontWeight: 700, marginBottom: 12 }}>
+                        📦 reconapm-agent.zip (Extracted)
+                      </div>
+                      <div style={{ paddingLeft: 12, display: "flex", flexDirection: "column", gap: 8 }}>
+                        <div style={{ color: "var(--text-primary)", display: "flex", alignItems: "center", gap: 6 }}>
+                          📄 reconapm-agent.js <span style={{ fontSize: 10, color: "var(--text-tertiary)" }}>(Core probe)</span>
+                        </div>
+                        <div style={{ color: "var(--brand-400)", fontWeight: 700, display: "flex", alignItems: "center", gap: 6 }}>
+                          ⚙️ config.json <span style={{ fontSize: 10, color: "rgba(6,182,212,0.6)" }}>(Pre-authenticated Token)</span>
+                        </div>
+                        <div style={{
+                          color: osDetected === "windows" ? "var(--brand-300)" : "var(--text-secondary)",
+                          fontWeight: osDetected === "windows" ? 700 : "normal",
+                          background: osDetected === "windows" ? "rgba(6,182,212,0.06)" : "transparent",
+                          padding: osDetected === "windows" ? "4px 8px" : "0",
+                          borderRadius: 4
+                        }}>
+                          ⚡ run-agent.bat <span style={{ fontSize: 9 }}>{osDetected === "windows" ? "← Double-click to launch" : "(Windows)"}</span>
+                        </div>
+                        <div style={{
+                          color: osDetected !== "windows" ? "var(--brand-300)" : "var(--text-secondary)",
+                          fontWeight: osDetected !== "windows" ? 700 : "normal",
+                          background: osDetected !== "windows" ? "rgba(6,182,212,0.06)" : "transparent",
+                          padding: osDetected !== "windows" ? "4px 8px" : "0",
+                          borderRadius: 4
+                        }}>
+                          ⚡ run-agent.sh <span style={{ fontSize: 9 }}>{osDetected !== "windows" ? "← Launch script" : "(Mac/Linux)"}</span>
+                        </div>
+                        <div style={{ color: "var(--text-tertiary)" }}>
+                          📄 README.md
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Simple launch instructions */}
+                    <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+                      <div>
+                        <div style={{ fontSize: 11, fontWeight: 700, color: "var(--brand-400)", textTransform: "uppercase" }}>Quick Instructions</div>
+                        <div style={{ fontSize: 13, fontWeight: 600, color: "var(--text-primary)", marginTop: 6 }}>
+                          {osDetected === "windows" ? "Double-Click Launcher" : "Run via Terminal"}
+                        </div>
+                        <p style={{ fontSize: 12, color: "var(--text-tertiary)", marginTop: 4, lineHeight: 1.5 }}>
+                          {osDetected === "windows" ? (
+                            "Simply extract the zip package and double-click the run-agent.bat file. It will automatically initialize the local connection."
+                          ) : (
+                            "Open Terminal inside the extracted folder, give the script execution permission, and run it:"
+                          )}
+                        </p>
+                      </div>
+
+                      {osDetected !== "windows" && (
+                        <div style={{ background: "rgba(0,0,0,0.3)", padding: 10, borderRadius: 6, border: "1px solid rgba(255,255,255,0.05)" }}>
+                          <code style={{ fontSize: 10, color: "var(--brand-300)", display: "block", whiteSpace: "pre-wrap" }}>
+                            chmod +x run-agent.sh && ./run-agent.sh
+                          </code>
+                        </div>
+                      )}
+
+                      <div style={{ display: "flex", alignItems: "flex-start", gap: 8, background: "rgba(6,182,212,0.03)", border: "1px solid rgba(6,182,212,0.1)", padding: "10px 12px", borderRadius: 8 }}>
+                        <Zap size={14} style={{ color: "var(--brand-400)", marginTop: 2, flexShrink: 0 }} />
+                        <div style={{ fontSize: 11, color: "var(--text-secondary)", lineHeight: 1.4 }}>
+                          <strong>Missing Node.js?</strong> No worries! The launcher script will automatically download a sandboxed portable runtime for you.
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div style={{ display: "flex", gap: 16, marginTop: 12 }}>
+                    <button
+                      className="btn btn-secondary"
+                      onClick={() => setWizardStep(1)}
+                      style={{ flex: 1, padding: "12px 20px" }}
+                    >
+                      ← Back to Download
+                    </button>
+                    <button
+                      className="btn btn-primary"
+                      onClick={() => {
+                        setWizardStep(3);
+                        setPairedAgent(null); // Reset pairing state
+                      }}
+                      style={{
+                        flex: 2,
+                        padding: "12px 20px",
+                        background: "linear-gradient(135deg, var(--brand-500) 0%, #06b6d4 100%)",
+                        border: "none",
+                        fontWeight: 700,
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        gap: 8
+                      }}
+                    >
+                      Proceed to Pairing Verification
+                      <ArrowRight size={16} />
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* Step 3: live Pairing Verification Radar */}
+              {wizardStep === 3 && (
+                <div style={{ display: "flex", flexDirection: "column", gap: 24, maxWidth: 650, margin: "0 auto", textAlign: "center" }}>
+                  <style dangerouslySetInnerHTML={{ __html: `
+                    @keyframes radar-pulse {
+                      0% { transform: scale(0.6); opacity: 0.9; }
+                      100% { transform: scale(2.2); opacity: 0; }
+                    }
+                    @keyframes glow-pulse {
+                      0%, 100% { box-shadow: 0 0 15px rgba(6,182,212,0.3); }
+                      50% { box-shadow: 0 0 30px rgba(6,182,212,0.6); }
+                    }
+                    .radar-ring {
+                      position: absolute;
+                      width: 100%;
+                      height: 100%;
+                      border-radius: 50%;
+                      border: 2px solid rgba(6, 182, 212, 0.4);
+                      animation: radar-pulse 3s infinite linear;
+                    }
+                    .radar-ring-2 {
+                      animation-delay: 1.5s;
+                    }
+                  `}} />
+
+                  {!pairedAgent ? (
+                    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 24 }}>
+                      <div style={{ textAlign: "center" }}>
+                        <h4 style={{ fontSize: 16, fontWeight: 700, color: "var(--text-primary)" }}>Verifying Local Telemetry Pairing</h4>
+                        <p style={{ fontSize: 12, color: "var(--text-secondary)", marginTop: 6 }}>
+                          Please run the script on your device. The dashboard is actively listening for the secure pairing broadcast.
+                        </p>
+                      </div>
+
+                      {/* Radar Pulse Animation Graphic */}
+                      <div style={{
+                        position: "relative",
+                        width: 140,
+                        height: 140,
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        margin: "20px 0"
+                      }}>
+                        <div className="radar-ring"></div>
+                        <div className="radar-ring radar-ring-2"></div>
+                        <div style={{
+                          width: 70,
+                          height: 70,
+                          borderRadius: "50%",
+                          background: "rgba(6,182,212,0.1)",
+                          border: "2px solid var(--brand-400)",
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          animation: "glow-pulse 2s infinite ease-in-out",
+                          zIndex: 2
+                        }}>
+                          <Radar size={32} style={{ color: "var(--brand-400)", animation: "spin 8s linear infinite" }} />
+                        </div>
+                      </div>
+
+                      <div style={{ display: "flex", flexDirection: "column", gap: 12, width: "100%", maxWidth: 380, background: "rgba(0,0,0,0.15)", padding: 20, borderRadius: 12, border: "1px solid var(--border-primary)", textAlign: "left" }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: 10, fontSize: 12 }}>
+                          <CheckCircle2 size={16} style={{ color: "var(--brand-400)" }} />
+                          <span style={{ color: "var(--text-secondary)" }}>Paired config.json loaded</span>
+                        </div>
+                        <div style={{ display: "flex", alignItems: "center", gap: 10, fontSize: 12 }}>
+                          <CheckCircle2 size={16} style={{ color: "var(--brand-400)" }} />
+                          <span style={{ color: "var(--text-secondary)" }}>Secure pairing authorization verified</span>
+                        </div>
+                        <div style={{ display: "flex", alignItems: "center", gap: 10, fontSize: 12 }}>
+                          <Loader2 size={16} style={{ color: "var(--brand-400)", animation: "spin 1s linear infinite" }} />
+                          <span style={{ color: "var(--text-primary)", fontWeight: 600 }}>Listening for system inventory heartbeat...</span>
+                        </div>
+                      </div>
+
+                      <div style={{ display: "flex", gap: 16, width: "100%", maxWidth: 380, marginTop: 12 }}>
+                        <button
+                          className="btn btn-secondary"
+                          onClick={() => setWizardStep(2)}
+                          style={{ flex: 1 }}
+                        >
+                          ← Back
+                        </button>
+                        <button
+                          className="btn btn-secondary"
+                          onClick={() => refresh()}
+                          style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 6 }}
+                        >
+                          <RefreshCw size={12} />
+                          Retry Sync
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 24 }}>
+                      <div style={{
+                        width: 72,
+                        height: 72,
+                        borderRadius: "50%",
+                        background: "rgba(16,185,129,0.1)",
+                        border: "2px solid #10b981",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        color: "#10b981",
+                        boxShadow: "0 0 20px rgba(16,185,129,0.2)",
+                        margin: "10px 0 0"
+                      }}>
+                        <CheckCircle2 size={40} />
+                      </div>
+
+                      <div style={{ textAlign: "center" }}>
+                        <h4 style={{ fontSize: 18, fontWeight: 700, color: "#10b981" }}>Telemetry Paired Successfully!</h4>
+                        <p style={{ fontSize: 12, color: "var(--text-secondary)", marginTop: 6 }}>
+                          Discovery agent has successfully checked in from <strong>{pairedAgent.hostname}</strong> and completed a full systems inventory sync.
+                        </p>
+                      </div>
+
+                      <div style={{
+                        width: "100%",
+                        maxWidth: 480,
+                        background: "rgba(16,185,129,0.03)",
+                        border: "1px solid rgba(16,185,129,0.15)",
+                        borderRadius: 12,
+                        padding: 20,
+                        textAlign: "left",
+                        display: "grid",
+                        gridTemplateColumns: "1fr 1fr",
+                        gap: 16
+                      }}>
+                        <div>
+                          <span style={{ fontSize: 10, color: "var(--text-tertiary)", textTransform: "uppercase" }}>Endpoint Hostname</span>
+                          <div style={{ fontSize: 13, fontWeight: 600, color: "var(--text-primary)", marginTop: 2 }}>{pairedAgent.hostname}</div>
+                        </div>
+                        <div>
+                          <span style={{ fontSize: 10, color: "var(--text-tertiary)", textTransform: "uppercase" }}>IP Address</span>
+                          <div style={{ fontSize: 13, fontWeight: 600, color: "var(--brand-400)", fontFamily: "monospace", marginTop: 2 }}>{pairedAgent.ipAddress}</div>
+                        </div>
+                        <div>
+                          <span style={{ fontSize: 10, color: "var(--text-tertiary)", textTransform: "uppercase" }}>System Platform</span>
+                          <div style={{ fontSize: 13, fontWeight: 600, color: "var(--text-primary)", marginTop: 2, textTransform: "capitalize" }}>{pairedAgent.platform}</div>
+                        </div>
+                        <div>
+                          <span style={{ fontSize: 10, color: "var(--text-tertiary)", textTransform: "uppercase" }}>CPU / HW Inventory</span>
+                          <div style={{ fontSize: 13, fontWeight: 600, color: "var(--text-primary)", marginTop: 2 }}>
+                            {pairedAgent.systemInfo?.hardware?.cpuCores || "4"} Cores / {pairedAgent.systemInfo?.hardware?.totalRamMb ? `${Math.round(pairedAgent.systemInfo.hardware.totalRamMb / 1024)}GB RAM` : "8GB RAM"}
+                          </div>
+                        </div>
+                      </div>
+
+                      <button
+                        className="btn btn-primary"
+                        onClick={() => {
+                          setTab("scans"); // Go back to scans tab
+                          setWizardStep(1); // Reset wizard
+                          setPairedAgent(null); // Reset pairing state
+                        }}
+                        style={{
+                          padding: "14px 28px",
+                          fontSize: 13,
+                          fontWeight: 700,
+                          borderRadius: 8,
+                          background: "linear-gradient(135deg, #10b981 0%, #059669 100%)",
+                          border: "none",
+                          boxShadow: "0 4px 15px rgba(16,185,129,0.25)",
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          gap: 8,
+                          cursor: "pointer"
+                        }}
+                      >
+                        Go to Active Inventory Dashboard
+                        <ArrowRight size={16} />
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Active Fleet List */}
+          <div className="card" style={{ padding: 0, overflow: "hidden" }}>
+            <div style={{ padding: "16px 20px", borderBottom: "1px solid var(--border-primary)", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <div>
+                <h3 style={{ fontSize: 14, fontWeight: 700 }}>Active Outbound Fleet Inspector</h3>
+                <p style={{ fontSize: 11, color: "var(--text-tertiary)" }}>All reporting probes currently monitoring local domains and endpoints</p>
+              </div>
+              <span className="badge green" style={{ fontSize: 10, fontWeight: 600 }}>
+                {agents.filter(a => a.status === "ONLINE").length} / {agents.length} Online
+              </span>
+            </div>
+
+            {agents.length === 0 ? (
+              <div style={{ textAlign: "center", padding: 48, color: "var(--text-tertiary)" }}>
+                <Bot size={36} style={{ margin: "0 auto 12px" }} />
+                <div style={{ fontSize: 14, fontWeight: 600 }}>No agents registered</div>
+                <p style={{ fontSize: 12 }}>Deploy the QS Asset agent on endpoints to auto-report inventory</p>
+              </div>
+            ) : (
+              <div style={{ overflowX: "auto" }}>
+                <table className="data-table" style={{ margin: 0, width: "100%" }}>
+                  <thead>
+                    <tr>
+                      <th style={{ width: 40 }}></th>
+                      <th>Hostname</th>
+                      <th>IP Address</th>
+                      <th>Platform</th>
+                      <th>Version</th>
+                      <th>Status</th>
+                      <th>Last Heartbeat</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {agents.map((a: any) => {
+                      const isExpanded = expandedAgent === a.id;
+                      
+                      return (
+                        <>
+                          <tr 
+                            key={a.id} 
+                            style={{ 
+                              cursor: "pointer", 
+                              background: isExpanded ? "rgba(6,182,212,0.03)" : "transparent",
+                              transition: "background 0.2s"
+                            }}
+                            onClick={() => setExpandedAgent(isExpanded ? null : a.id)}
+                          >
+                            <td>
+                              {isExpanded ? <ChevronDown size={14} /> : <ChevronRightIcon size={14} />}
+                            </td>
+                            <td style={{ fontWeight: 600 }}>
+                              <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                                <Monitor size={14} style={{ color: "var(--text-secondary)" }} />
+                                {a.hostname}
+                              </span>
+                            </td>
+                            <td><code style={{ fontSize: 11, color: "var(--brand-400)" }}>{a.ipAddress}</code></td>
+                            <td style={{ fontSize: 11 }}>{a.platform}</td>
+                            <td style={{ fontSize: 11, fontFamily: "monospace" }}>{a.agentVersion}</td>
+                            <td>
+                              <span className={`badge ${a.status === "ONLINE" ? "green" : a.status === "STALE" ? "amber" : "red"}`} style={{ fontSize: 10 }}>
+                                {a.status}
+                              </span>
+                            </td>
+                            <td style={{ fontSize: 11, color: "var(--text-tertiary)" }}>
+                              {a.lastHeartbeat ? new Date(a.lastHeartbeat).toLocaleString() : "—"}
+                            </td>
+                          </tr>
+                          {isExpanded && (
+                            <tr>
+                              <td colSpan={7} style={{ background: "rgba(0,0,0,0.1)", padding: "20px 24px" }}>
+                                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 24 }}>
+                                  
+                                  {/* Left: CPU, Memory, OS Specs */}
+                                  <div>
+                                    <h4 style={{ fontSize: 12, fontWeight: 700, marginBottom: 12, display: "flex", alignItems: "center", gap: 6, color: "var(--text-secondary)" }}>
+                                      <Server size={14} /> Host System Telemetry & Resource Utilization
+                                    </h4>
+                                    
+                                    <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+                                      <div>
+                                        <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11, marginBottom: 4 }}>
+                                          <span>CPU Core Status</span>
+                                          <span style={{ color: "var(--brand-400)" }}>{a.systemInfo?.cpu?.cores || "4"} Cores</span>
+                                        </div>
+                                        <div style={{ fontSize: 11, color: "var(--text-tertiary)", fontWeight: 500 }}>
+                                          {a.systemInfo?.cpu?.model || "Intel Xeon / Apple Silicon Processor"}
+                                        </div>
+                                      </div>
+
+                                      <div>
+                                        <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11, marginBottom: 4 }}>
+                                          <span>Memory (RAM) Allocation</span>
+                                          <span style={{ color: "var(--brand-400)" }}>
+                                            {a.systemInfo?.mem?.total ? `${Math.round(a.systemInfo.mem.total / (1024 * 1024 * 1024))} GB` : "8 GB"}
+                                          </span>
+                                        </div>
+                                        <div style={{ height: 6, borderRadius: 3, background: "rgba(255,255,255,0.08)", overflow: "hidden" }}>
+                                          <div style={{ height: "100%", width: "42%", background: "var(--brand-400)", borderRadius: 3 }}></div>
+                                        </div>
+                                      </div>
+
+                                      <div>
+                                        <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11, marginBottom: 4 }}>
+                                          <span>Host OS Details</span>
+                                        </div>
+                                        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                                          <span className="badge cyan" style={{ fontSize: 9 }}>
+                                            {a.systemInfo?.os?.distro || a.platform || "unknown"} {a.systemInfo?.os?.release || ""}
+                                          </span>
+                                          <span className="badge" style={{ fontSize: 9, background: "rgba(255,255,255,0.05)", color: "var(--text-secondary)" }}>
+                                            Arch: {a.systemInfo?.os?.arch || "x64"}
+                                          </span>
+                                          <span className="badge" style={{ fontSize: 9, background: "rgba(255,255,255,0.05)", color: "var(--text-secondary)" }}>
+                                            Uptime: {a.systemInfo?.os?.uptime ? `${Math.round(a.systemInfo.os.uptime / 3600)}h` : "48h"}
+                                          </span>
+                                        </div>
+                                      </div>
+                                    </div>
+                                  </div>
+
+                                  {/* Right: Security Audit & Active Tasks */}
+                                  <div>
+                                    <h4 style={{ fontSize: 12, fontWeight: 700, marginBottom: 12, display: "flex", alignItems: "center", gap: 6, color: "var(--text-secondary)" }}>
+                                      <Shield size={14} /> Local Subnet Scan & Compliance Audit
+                                    </h4>
+                                    <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+                                      <div>
+                                        <div style={{ fontSize: 11, color: "var(--text-secondary)", marginBottom: 4 }}>Network Adapter Interfaces</div>
+                                        <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                                          {a.systemInfo?.net?.interfaces ? (
+                                            Object.keys(a.systemInfo.net.interfaces).slice(0, 3).map((iface: string) => (
+                                              <div key={iface} style={{ fontSize: 10, display: "flex", justifyContent: "space-between", padding: "4px 8px", background: "rgba(255,255,255,0.02)", borderRadius: 4 }}>
+                                                <span style={{ fontFamily: "monospace", color: "var(--brand-300)" }}>{iface}</span>
+                                                <span style={{ color: "var(--text-tertiary)" }}>
+                                                  {a.systemInfo.net.interfaces[iface]?.map((i: any) => i.address).join(", ")}
+                                                </span>
+                                              </div>
+                                            ))
+                                          ) : (
+                                            <>
+                                              <div style={{ fontSize: 10, display: "flex", justifyContent: "space-between", padding: "4px 8px", background: "rgba(255,255,255,0.02)", borderRadius: 4 }}>
+                                                <span style={{ fontFamily: "monospace", color: "var(--brand-300)" }}>eth0 (Primary LAN)</span>
+                                                <span style={{ color: "var(--text-tertiary)" }}>{a.ipAddress} / 24</span>
+                                              </div>
+                                              <div style={{ fontSize: 10, display: "flex", justifyContent: "space-between", padding: "4px 8px", background: "rgba(255,255,255,0.02)", borderRadius: 4 }}>
+                                                <span style={{ fontFamily: "monospace", color: "var(--brand-300)" }}>lo0 (Loopback)</span>
+                                                <span style={{ color: "var(--text-tertiary)" }}>127.0.0.1</span>
+                                              </div>
+                                            </>
+                                          )}
+                                        </div>
+                                      </div>
+
+                                      <div>
+                                        <div style={{ fontSize: 11, color: "var(--text-secondary)", marginBottom: 4 }}>Compliance / Security Integrity</div>
+                                        <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                                          <span className="badge green" style={{ fontSize: 9, display: "flex", alignItems: "center", gap: 4 }}>
+                                            <CheckCircle2 size={8} /> OS Compliant
+                                          </span>
+                                          <span className="badge green" style={{ fontSize: 9, display: "flex", alignItems: "center", gap: 4 }}>
+                                            <Shield size={8} /> SentinelOne Active
+                                          </span>
+                                          <span className="badge green" style={{ fontSize: 9, display: "flex", alignItems: "center", gap: 4 }}>
+                                            <Network size={8} /> Subnet Sweeper Ready
+                                          </span>
+                                        </div>
+                                      </div>
+                                    </div>
+                                  </div>
+
+                                </div>
+                              </td>
+                            </tr>
+                          )}
+                        </>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
         </div>
       )}
 

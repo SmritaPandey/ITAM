@@ -7,6 +7,9 @@ import { promisify } from 'util';
 import * as os from 'os';
 import * as dns from 'dns';
 import * as net from 'net';
+import * as path from 'path';
+import * as fs from 'fs';
+import AdmZip from 'adm-zip';
 import { SshScanner } from '../../common/scanners/ssh.scanner';
 
 const execAsync = promisify(exec);
@@ -738,4 +741,49 @@ export class DiscoveryService {
     if (memStr.includes('M') || memStr.includes('m')) return Math.round(num);
     return Math.round(num);
   }
+
+  /**
+   * Package all agent collector files into an in-memory ZIP buffer.
+   */
+  getAgentZipPackage(serverUrl?: string, token?: string): Buffer {
+    const zip = new AdmZip();
+    
+    // Support running from build directory vs source development root
+    let agentDir = path.resolve(process.cwd(), 'agent');
+    if (!fs.existsSync(agentDir)) {
+      agentDir = path.resolve(process.cwd(), '../../agent');
+    }
+    
+    if (!fs.existsSync(agentDir)) {
+      this.logger.error(`Discovery agent directory not found at: ${agentDir}`);
+      throw new NotFoundException('Discovery Agent template files not found on the server.');
+    }
+
+    const files = ['reconapm-agent.js', 'run-agent.sh', 'run-agent.bat', 'README.md'];
+    for (const file of files) {
+      const filePath = path.join(agentDir, file);
+      if (fs.existsSync(filePath)) {
+        zip.addLocalFile(filePath);
+      } else {
+        this.logger.warn(`Agent packager: missing file: ${file}`);
+      }
+    }
+
+    // Dynamic configuration generation & injection
+    if (serverUrl && token) {
+      try {
+        const configJson = {
+          server: serverUrl,
+          token: token,
+        };
+        zip.addFile('config.json', Buffer.from(JSON.stringify(configJson, null, 2), 'utf-8'));
+        this.logger.log(`Agent packager: dynamically injected paired config.json (server: ${serverUrl})`);
+      } catch (err: any) {
+        this.logger.error(`Failed to inject config.json: ${err.message}`);
+      }
+    }
+
+    return zip.toBuffer();
+  }
 }
+

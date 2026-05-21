@@ -31,6 +31,9 @@ const { execSync } = require('child_process');
 const https = require('https');
 const http = require('http');
 
+const fs = require('fs');
+const path = require('path');
+
 const VERSION = '1.1.0';
 
 // ─── Parse Args ─────────────────────────────────────────────
@@ -41,13 +44,28 @@ function getArg(flag, envKey, fallback) {
   return process.env[envKey] || fallback;
 }
 
-const SERVER = getArg('--server', 'RECONAPM_SERVER', 'http://localhost:4100');
-const USER = getArg('--user', 'RECONAPM_USER', '');
-const PASS = getArg('--pass', 'RECONAPM_PASS', '');
+let SERVER = getArg('--server', 'RECONAPM_SERVER', 'http://localhost:4100');
+let USER = getArg('--user', 'RECONAPM_USER', '');
+let PASS = getArg('--pass', 'RECONAPM_PASS', '');
 const INTERVAL = parseInt(getArg('--interval', 'RECONAPM_INTERVAL', '60'), 10);
+
+let tokenFromFile = '';
+const configPath = path.join(__dirname, 'config.json');
+
+if (fs.existsSync(configPath)) {
+  try {
+    const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+    if (config.server) SERVER = config.server;
+    if (config.token) tokenFromFile = config.token;
+    console.log('📦 Loaded local config.json successfully');
+  } catch (e) {
+    console.error('⚠️ Failed to parse config.json:', e.message);
+  }
+}
+
 const API_BASE = `${SERVER}/api/v1`;
 
-if (!USER || !PASS) {
+if (!tokenFromFile && (!USER || !PASS)) {
   console.error('❌ Usage: node reconapm-agent.js --server http://SERVER:4100 --user EMAIL --pass PASSWORD');
   process.exit(1);
 }
@@ -96,6 +114,11 @@ function request(method, path, body) {
 
 // ─── Login ──────────────────────────────────────────────────
 async function login() {
+  if (tokenFromFile) {
+    console.log('🔑 Authenticating using pre-seeded secure token...');
+    accessToken = tokenFromFile;
+    return true;
+  }
   console.log(`🔑 Authenticating as ${USER}...`);
   const res = await request('POST', '/auth/login', { email: USER, password: PASS });
   if (res.status === 200 || res.status === 201) {

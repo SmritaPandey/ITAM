@@ -3,6 +3,8 @@ import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { LogoIcon } from "@/components/Logo";
+import Header from "@/components/Header";
+import Footer from "@/components/Footer";
 import {
   Shield, Monitor, Ticket, Network, Package, BarChart3, Lock, Zap, ChevronRight,
   ArrowRight, CheckCircle2, Globe, Server, Cpu, Sun, Moon, Camera, Car, Laptop,
@@ -235,47 +237,8 @@ export default function LandingPage() {
         zIndex: 0
       }} />
 
-      {/* ─── NAVIGATION BAR (APPLE GLASS STYLE) ─── */}
-      <nav style={{
-        position: "fixed",
-        top: 0,
-        left: 0,
-        right: 0,
-        zIndex: 100,
-        padding: "16px 6%",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "space-between",
-        background: L ? "rgba(255,255,255,0.75)" : "rgba(2, 2, 5, 0.65)",
-        backdropFilter: "blur(30px) saturate(1.8)",
-        WebkitBackdropFilter: "blur(30px) saturate(1.8)",
-        borderBottom: `1px solid ${border}`,
-        boxShadow: L ? "0 4px 30px rgba(15, 23, 42, 0.03)" : "none",
-        transition: "background 0.3s"
-      }}>
-        <Link href="/" style={{ display: "flex", alignItems: "center", gap: 10, textDecoration: "none", color: "inherit" }}>
-          <LogoIcon size={32} glow={!L} />
-          <span style={{ fontSize: 16, fontWeight: 900, letterSpacing: "-0.04em" }}>QS Asset</span>
-        </Link>
-        
-        <div className="landing-nav-links" style={{ display: "flex", alignItems: "center", gap: 32 }}>
-          {[
-            { l: "Platform", h: "#nerve-system" },
-            { l: "Security", h: "#immune-system" },
-            { l: "Comparison", h: "#3d-comparison" },
-            { l: "ROI", h: "#savings-engine" },
-            { l: "Modules", h: "#modules-grid" }
-          ].map(t => (
-            <a key={t.l} href={t.h} style={{ fontSize: 13, fontWeight: 600, color: muted, textDecoration: "none", transition: "color 0.2s" }}>{t.l}</a>
-          ))}
-          <button onClick={toggle} style={{ width: 34, height: 34, borderRadius: 9, border: `1px solid ${border}`, cursor: "pointer", background: L ? "rgba(0,0,0,0.03)" : "rgba(255,255,255,0.04)", color: muted, display: "flex", alignItems: "center", justifyContent: "center" }}>
-            {L ? <Moon size={15} /> : <Sun size={15} />}
-          </button>
-          <button onClick={() => router.push("/login")} style={{ padding: "8px 20px", borderRadius: 8, border: "none", background: "linear-gradient(135deg, #06b6d4, #0891b2)", color: "white", fontSize: 13, fontWeight: 800, cursor: "pointer", boxShadow: "0 4px 16px rgba(6, 182, 212, 0.2)", display: "flex", alignItems: "center", gap: 6, letterSpacing: "-0.01em" }}>
-            Sign In <ArrowRight size={13} />
-          </button>
-        </div>
-      </nav>
+      {/* ─── SHARED NAVIGATION BAR ─── */}
+      <Header theme={theme} onToggleTheme={toggle} />
 
       {/* ─── HERO CHAPTER: THE GENESIS (APPLE DRAMATIC STYLE) ─── */}
       <section style={{ paddingTop: 180, paddingBottom: 110, textAlign: "center", position: "relative", zIndex: 1 }}>
@@ -1285,41 +1248,8 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* ─── FOOTER ─── */}
-      <footer style={{ padding: "80px 6% 36px", borderTop: `1.5px solid ${border}`, maxWidth: 1240, margin: "0 auto" }}>
-        <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr 1fr 1fr", gap: 48, marginBottom: 40 }}>
-          <div>
-            <Link href="/" style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 16, textDecoration: "none", color: "inherit" }}>
-              <LogoIcon size={24} glow={!L} />
-              <span style={{ fontSize: 15, fontWeight: 900, letterSpacing: "-0.03em" }}>QS Asset</span>
-            </Link>
-            <p style={{ fontSize: 12.5, color: muted, lineHeight: 1.7, maxWidth: 300 }}>
-              Autonomous IT asset lifecycle management, real-time SNMP topology, and security mitigation engine. Crafted by NeurQ AI Labs.
-            </p>
-          </div>
-          <div>
-            <h4 style={{ fontSize: 11, fontWeight: 800, textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 16, color: muted }}>Product</h4>
-            {[{ l: "Platform", h: "#nerve-system" }, { l: "Security", h: "#immune-system" }, { l: "Pricing", h: "#pricing" }].map(a => (
-              <a key={a.l} href={a.h} style={{ display: "block", fontSize: 13, color: txt, textDecoration: "none", marginBottom: 10, opacity: 0.7, fontWeight: 600 }}>{a.l}</a>
-            ))}
-          </div>
-          <div>
-            <h4 style={{ fontSize: 11, fontWeight: 800, textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 16, color: muted }}>Company</h4>
-            {[{ l: "Contact Sales", h: "/contact" }].map(a => (
-              <a key={a.l} href={a.h} style={{ display: "block", fontSize: 13, color: txt, textDecoration: "none", marginBottom: 10, opacity: 0.7, fontWeight: 600 }}>{a.l}</a>
-            ))}
-          </div>
-          <div>
-            <h4 style={{ fontSize: 11, fontWeight: 800, textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 16, color: muted }}>Legal</h4>
-            {[{ l: "Privacy Policy", h: "/privacy" }, { l: "Terms of Service", h: "/terms" }].map(a => (
-              <a key={a.l} href={a.h} style={{ display: "block", fontSize: 13, color: txt, textDecoration: "none", marginBottom: 10, opacity: 0.7, fontWeight: 600 }}>{a.l}</a>
-            ))}
-          </div>
-        </div>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", paddingTop: 24, borderTop: `1px solid ${border}` }}>
-          <p style={{ fontSize: 12, color: muted, margin: 0 }}>&copy; 2026 NeurQ AI Labs Pvt Ltd. All rights reserved. Crafted in India 🇮🇳</p>
-        </div>
-      </footer>
+      {/* ─── SHARED FOOTER ─── */}
+      <Footer theme={theme} />
 
       {/* ─── PREMIUM SCROLL EFFECTS & INTERACTIONS ─── */}
       <style>{`
@@ -1352,7 +1282,6 @@ export default function LandingPage() {
           box-shadow: 0 20px 40px rgba(6, 182, 212, 0.1) !important;
         }
         @media (max-width: 1024px) {
-          .landing-nav-links { display: none !important; }
           h1 { font-size: 52px !important; }
         }
         @media (max-width: 768px) {

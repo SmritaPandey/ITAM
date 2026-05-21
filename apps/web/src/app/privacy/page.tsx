@@ -1,63 +1,349 @@
 "use client";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { Shield, ArrowLeft } from "lucide-react";
+import Header from "@/components/Header";
+import Footer from "@/components/Footer";
+import { Shield, CheckCircle2, Lock, Eye, AlertTriangle } from "lucide-react";
+
+const SECTIONS = [
+  { id: "section-1", title: "1. Introduction" },
+  { id: "section-2", title: "2. Data We Collect" },
+  { id: "section-3", title: "3. How We Use Data" },
+  { id: "section-4", title: "4. Data Storage & Security" },
+  { id: "section-5", title: "5. Data Retention Limits" },
+  { id: "section-6", title: "6. Rights (DPDP Act 2023)" },
+  { id: "section-7", title: "7. Cookie Storage" },
+  { id: "section-8", title: "8. Grievance Officer" },
+];
 
 export default function PrivacyPage() {
   const router = useRouter();
-  const bg = "#0a0e1a", card = "rgba(26,31,53,0.7)", border = "rgba(42,49,80,0.5)", muted = "#94a3b8", txt = "#f1f5f9";
+  const [activeSection, setActiveSection] = useState("section-1");
+
+  const [theme, setTheme] = useState<"dark" | "light">("light");
+  useEffect(() => {
+    const s = localStorage.getItem("theme") as "dark" | "light" | null;
+    const t = s || "light";
+    setTheme(t);
+    document.documentElement.setAttribute("data-theme", t);
+  }, []);
+  function toggleTheme() {
+    const n = theme === "dark" ? "light" : "dark";
+    setTheme(n);
+    localStorage.setItem("theme", n);
+    document.documentElement.setAttribute("data-theme", n);
+  }
+  const L = theme === "light";
+  const bg = L ? "#f9fafb" : "#020205";
+  const txt = L ? "#0f172a" : "#f3f4f6";
+  const muted = L ? "#475569" : "#8a8f98";
+  const border = L ? "rgba(15, 23, 42, 0.08)" : "rgba(255, 255, 255, 0.06)";
+  const card = L ? "rgba(255,255,255,0.7)" : "rgba(16, 22, 42, 0.65)";
+  const cyanGlow = "rgba(6, 182, 212, 0.15)";
+
+  useEffect(() => {
+    const observerOptions = {
+      root: null,
+      rootMargin: "-20% 0px -65% 0px",
+      threshold: 0,
+    };
+
+    const observer = new IntersectionObserver((entries) => {
+      entries.forEach((entry) => {
+        if (entry.isIntersecting) {
+          setActiveSection(entry.target.id);
+        }
+      });
+    }, observerOptions);
+
+    SECTIONS.forEach((sec) => {
+      const el = document.getElementById(sec.id);
+      if (el) observer.observe(el);
+    });
+
+    return () => observer.disconnect();
+  }, []);
+
+  const scrollTo = (id: string) => {
+    const el = document.getElementById(id);
+    if (el) {
+      const offset = 100; // sticky header spacing
+      const bodyRect = document.body.getBoundingClientRect().top;
+      const elementRect = el.getBoundingClientRect().top;
+      const elementPosition = elementRect - bodyRect;
+      const offsetPosition = elementPosition - offset;
+
+      window.scrollTo({
+        top: offsetPosition,
+        behavior: "smooth"
+      });
+    }
+  };
 
   return (
-    <div style={{ minHeight: "100vh", background: bg, color: txt, fontFamily: "'Inter',system-ui,sans-serif" }}>
-      <nav style={{ padding: "14px 40px", display: "flex", alignItems: "center", justifyContent: "space-between", borderBottom: `1px solid ${border}`, background: "rgba(10,14,26,0.95)", backdropFilter: "blur(16px)", position: "sticky", top: 0, zIndex: 100 }}>
-        <div onClick={() => router.push("/")} style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer" }}>
-          <Shield size={24} style={{ color: "#06b6d4" }} />
-          <span style={{ fontSize: 16, fontWeight: 800 }}>QS Asset Management</span>
+    <div style={{ minHeight: '100vh', background: bg, color: txt, fontFamily: "'Plus Jakarta Sans', 'Inter', system-ui, sans-serif", transition: 'background 0.5s, color 0.5s' }}>
+      <Header theme={theme} onToggleTheme={toggleTheme} />
+
+      <div style={{ position: "relative", overflowX: "hidden" }}>
+      {/* Dynamic Ambient Background Glows */}
+      <div style={{ position: "absolute", top: "-10%", right: "10%", width: "50%", height: "500px", background: "radial-gradient(ellipse at center, rgba(6,182,212,0.05) 0%, rgba(139,92,246,0.02) 60%, transparent 100%)", pointerEvents: "none", filter: "blur(80px)", zIndex: 0 }} />
+      <div style={{ position: "absolute", bottom: "10%", left: "5%", width: "45%", height: "600px", background: "radial-gradient(ellipse at center, rgba(139,92,246,0.04) 0%, rgba(6,182,212,0.01) 50%, transparent 100%)", pointerEvents: "none", filter: "blur(100px)", zIndex: 0 }} />
+
+      <div style={{ maxWidth: 1080, margin: "0 auto", padding: "64px 24px 120px", paddingTop: 80, position: "relative", zIndex: 1 }}>
+        <div style={{ marginBottom: 48 }}>
+          <div style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "6px 14px", borderRadius: 20, background: "rgba(6,182,212,0.05)", border: "1px solid rgba(6,182,212,0.15)", marginBottom: 16, fontSize: 11, fontWeight: 700, color: "#06b6d4", letterSpacing: "0.05em", textTransform: "uppercase" }}>
+            <Shield size={11} /> Compliance & Privacy Division
+          </div>
+          <h1 style={{ fontSize: 42, fontWeight: 900, marginBottom: 8, letterSpacing: "-0.04em" }}>Privacy Policy</h1>
+          <p style={{ fontSize: 14, color: muted }}>Last updated: May 21, 2026 • Effective Date: May 21, 2026</p>
         </div>
-        <button onClick={() => router.back()} style={{ display: "flex", alignItems: "center", gap: 6, padding: "6px 14px", borderRadius: 8, border: `1px solid ${border}`, background: "transparent", color: muted, fontSize: 12, cursor: "pointer" }}>
-          <ArrowLeft size={14} /> Back
-        </button>
-      </nav>
 
-      <div style={{ maxWidth: 760, margin: "0 auto", padding: "48px 24px 80px" }}>
-        <h1 style={{ fontSize: 32, fontWeight: 800, marginBottom: 6 }}>Privacy Policy</h1>
-        <p style={{ fontSize: 13, color: muted, marginBottom: 32 }}>Last updated: May 13, 2026 • Effective: May 13, 2026</p>
+        <div className="legal-container">
+          {/* Sticky Left Table of Contents */}
+          <div className="legal-toc">
+            <div style={{ fontSize: 11, fontWeight: 800, color: "#06b6d4", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 14, paddingLeft: 12 }}>
+              Outline Index
+            </div>
+            {SECTIONS.map((sec) => (
+              <button
+                key={sec.id}
+                onClick={() => scrollTo(sec.id)}
+                className={`legal-toc-item ${activeSection === sec.id ? "active" : ""}`}
+              >
+                {sec.title}
+              </button>
+            ))}
+          </div>
 
-        <div style={{ background: card, border: `1px solid ${border}`, borderRadius: 14, padding: "28px 32px", lineHeight: 1.8, fontSize: 14, color: "#cbd5e1" }}>
-          <Section title="1. Introduction">
-            NeurQ AI Labs Private Limited (&quot;we&quot;, &quot;us&quot;, &quot;our&quot;) operates the QS Asset Management platform. This Privacy Policy describes how we collect, use, and protect your personal data in compliance with the Digital Personal Data Protection Act, 2023 (DPDP Act) of India and applicable international regulations.
-          </Section>
-          <Section title="2. Data We Collect">
-            <b>Account Data:</b> Name, email, company name, and password (hashed with bcrypt). <b>Usage Data:</b> Login timestamps, IP addresses, feature usage metrics. <b>Device Data:</b> Network device information (IPs, MAC addresses, hostnames) discovered through scanning. <b>Agent Data:</b> System telemetry collected by the QS Asset Management Agent (CPU, RAM, disk, OS, installed software). All data is collected with your explicit consent and used solely for platform functionality.
-          </Section>
-          <Section title="3. How We Use Your Data">
-            We process your data to: (a) Provide and maintain the QS Asset Management service, (b) Authenticate your identity, (c) Generate reports and analytics, (d) Send critical service notifications, (e) Improve platform performance. We do NOT sell, rent, or share your personal data with third parties for marketing purposes.
-          </Section>
-          <Section title="4. Data Storage & Security">
-            All data is stored in encrypted PostgreSQL databases hosted on SOC 2 compliant infrastructure. Data in transit is protected with TLS 1.3. Passwords are hashed with bcrypt (cost factor 12). Audit logs use SHA-256 hash chains for tamper detection. Multi-tenant architecture ensures strict data isolation between organizations.
-          </Section>
-          <Section title="5. Data Retention">
-            Device metrics history: 90 days. Audit logs: 365 days. Scan results: 180 days. Account data: retained while account is active, deleted within 30 days of account closure. You may request data export or deletion at any time.
-          </Section>
-          <Section title="6. Your Rights (DPDP Act 2023)">
-            You have the right to: (a) Access your personal data, (b) Correct inaccurate data, (c) Request erasure of your data, (d) Data portability — export in standard formats, (e) Withdraw consent at any time, (f) Nominate a representative. To exercise these rights, contact privacy@neurqai.com.
-          </Section>
-          <Section title="7. Cookies">
-            We use only essential cookies for authentication (JWT tokens stored in localStorage). We do not use tracking cookies, advertising cookies, or third-party analytics.
-          </Section>
-          <Section title="8. Contact">
-            Data Protection Officer: NeurQ AI Labs Pvt Ltd, IIIT Lucknow, Uttar Pradesh, India. Email: privacy@neurqai.com
-          </Section>
+          {/* Right Scrolling Content Area */}
+          <div className="legal-content">
+            <div style={{ background: card, backdropFilter: "blur(12px)", WebkitBackdropFilter: "blur(12px)", border: `1px solid ${border}`, borderRadius: 20, padding: "40px 48px", display: "flex", flexDirection: "column", gap: 36 }}>
+              
+              <section id="section-1">
+                <h2 style={{ fontSize: 20, fontWeight: 800, color: "#f1f5f9", marginBottom: 14, letterSpacing: "-0.02em", display: "flex", alignItems: "center", gap: 8 }}>
+                  1. Introduction & Regulatory Stand
+                </h2>
+                <p style={{ margin: 0, color: "#cbd5e1", fontSize: 14, lineHeight: 1.8 }}>
+                  NeurQ AI Labs Private Limited (&quot;we&quot;, &quot;us&quot;, &quot;our&quot;) operates the <strong>QS Asset APM Platform</strong>. We are unconditionally committed to protecting the privacy, digital assets, and sensitive telemetry data of our enterprise organizations and individual administrators. 
+                </p>
+                <p style={{ marginTop: 12, marginBottom: 0, color: "#cbd5e1", fontSize: 14, lineHeight: 1.8 }}>
+                  This Privacy Policy delineates our rigorous methodologies for data collection, processing, transit security, and absolute isolation. This platform operates in strict compliance with the **Digital Personal Data Protection Act, 2023 (DPDP Act)** of India, the **General Data Protection Regulation (GDPR)** for EU citizens, and relevant regional regulatory frameworks.
+                </p>
+              </section>
+
+              <section id="section-2">
+                <h2 style={{ fontSize: 20, fontWeight: 800, color: "#f1f5f9", marginBottom: 14, letterSpacing: "-0.02em" }}>
+                  2. Data We Collect & Lawful Bases
+                </h2>
+                <p style={{ margin: 0, color: "#cbd5e1", fontSize: 14, lineHeight: 1.8 }}>
+                  We strictly process data based on your explicit consent, which is requested at the time of account creation. We gather the following categories of telemetry and parameters:
+                </p>
+                <ul style={{ margin: "14px 0 0", paddingLeft: 20, color: "#cbd5e1", fontSize: 14, lineHeight: 1.8, display: "flex", flexDirection: "column", gap: 10 }}>
+                  <li>
+                    <strong style={{ color: "#f1f5f9" }}>Administrative Account Details:</strong> Name, work email address, phone number, corporate entity parameters, and credentials (securely transformed utilizing salt-workload factor 12 <code style={{ background: "rgba(6,182,212,0.08)", border: "1px solid rgba(6,182,212,0.15)", padding: "1px 6px", borderRadius: 4, color: "#22d3ee" }}>bcrypt</code> hashes).
+                  </li>
+                  <li>
+                    <strong style={{ color: "#f1f5f9" }}>Discovery Scanning Data:</strong> Hostnames, local IP allocations, MAC coordinates, responding service interfaces, operating system signatures, network switch configurations, SNMP-enabled equipment metrics, ONVIF CCTV capabilities, and physical vehicle GPS coordinate values discovered through active system scans.
+                  </li>
+                  <li>
+                    <strong style={{ color: "#f1f5f9" }}>Host Agent System Telemetry:</strong> CPU cores, memory utilization arrays, disk volume limits, running daemon instances, active user sessions, and comprehensive software manifests gathered by the QS Asset Management Agent.
+                  </li>
+                </ul>
+              </section>
+
+              <section id="section-3">
+                <h2 style={{ fontSize: 20, fontWeight: 800, color: "#f1f5f9", marginBottom: 14, letterSpacing: "-0.02em" }}>
+                  3. Purpose Bound Processing Specifications
+                </h2>
+                <p style={{ margin: 0, color: "#cbd5e1", fontSize: 14, lineHeight: 1.8 }}>
+                  We process the collected telemetry strictly for bounded purposes:
+                </p>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginTop: 16 }}>
+                  <div style={{ padding: 16, borderRadius: 12, background: "rgba(255,255,255,0.02)", border: `1px solid ${border}` }}>
+                    <div style={{ fontSize: 13, fontWeight: 700, color: "#06b6d4", marginBottom: 4 }}>OPERATIONAL DELIVERY</div>
+                    <p style={{ fontSize: 12, color: muted, margin: 0, lineHeight: 1.6 }}>Populating real-time infrastructure topology, issuing priority alert dispatches, and managing helpdesk service requests.</p>
+                  </div>
+                  <div style={{ padding: 16, borderRadius: 12, background: "rgba(255,255,255,0.02)", border: `1px solid ${border}` }}>
+                    <div style={{ fontSize: 13, fontWeight: 700, color: "#8b5cf6", marginBottom: 4 }}>VULNERABILITY MITIGATION</div>
+                    <p style={{ fontSize: 12, color: muted, margin: 0, lineHeight: 1.6 }}>Correlating operating systems and daemon variations against globally verified Common Vulnerabilities and Exposures (CVE) repositories.</p>
+                  </div>
+                </div>
+                <div style={{ marginTop: 16, padding: "14px 18px", borderRadius: 12, background: "rgba(6,182,212,0.03)", border: "1px solid rgba(6,182,212,0.12)", display: "flex", gap: 12, alignItems: "start" }}>
+                  <CheckCircle2 size={16} style={{ color: "#06b6d4", flexShrink: 0, marginTop: 2 }} />
+                  <p style={{ margin: 0, fontSize: 13, color: "#cbd5e1", lineHeight: 1.6 }}>
+                    <strong style={{ color: "#f8fafc" }}>Zero External Monetization Commitments:</strong> We strictly declare that your data is never sold, leased, shared, or compiled for targeted consumer profiling or external advertising under any circumstances.
+                  </p>
+                </div>
+              </section>
+
+              <section id="section-4">
+                <h2 style={{ fontSize: 20, fontWeight: 800, color: "#f1f5f9", marginBottom: 14, letterSpacing: "-0.02em", display: "flex", alignItems: "center", gap: 8 }}>
+                  4. Data Storage & SOC 2 Security Protocols
+                </h2>
+                <p style={{ margin: 0, color: "#cbd5e1", fontSize: 14, lineHeight: 1.8 }}>
+                  We mandate state-of-the-art technical protections across our infrastructure to preserve the integrity of your telemetry data:
+                </p>
+                <ul style={{ margin: "14px 0 0", paddingLeft: 20, color: "#cbd5e1", fontSize: 14, lineHeight: 1.8, display: "flex", flexDirection: "column", gap: 10 }}>
+                  <li>
+                    <strong style={{ color: "#f1f5f9" }}>Encryption-in-Transit:</strong> All interface interaction, API transport, and remote agent telemetry are encapsulated within TLS 1.3 packets with mandatory HSTS (HTTP Strict Transport Security) active.
+                  </li>
+                  <li>
+                    <strong style={{ color: "#f1f5f9" }}>Encryption-at-Rest:</strong> Physical storage uses AES-256 block-level disk encryption. Highly sensitive variables (like ticketing credentials or network community keys) are individually salted and encrypted within PostgreSQL columns.
+                  </li>
+                  <li>
+                    <strong style={{ color: "#f1f5f9" }}>Multi-Tenant Isolation:</strong> Virtual environments are segmented using foreign-key organization schemas. Direct cross-tenant data requests are programmatically intercepted and neutralized at the middleware layer.
+                  </li>
+                  <li>
+                    <strong style={{ color: "#f1f5f9" }}>Tamper-Proof Audit Logging:</strong> System audit logs utilize sequential cryptographically-linked SHA-256 hash chains. Any unauthorized alteration instantly invalidates the subsequent validation checks, alerting security command centers immediately.
+                  </li>
+                </ul>
+              </section>
+
+              <section id="section-5">
+                <h2 style={{ fontSize: 20, fontWeight: 800, color: "#f1f5f9", marginBottom: 14, letterSpacing: "-0.02em" }}>
+                  5. Data Retention Limits & Disposal
+                </h2>
+                <p style={{ margin: 0, color: "#cbd5e1", fontSize: 14, lineHeight: 1.8 }}>
+                  To guarantee compliance with data minimization directives, telemetry is automatically pruned based on strict lifecycle boundaries:
+                </p>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 14, marginTop: 16 }}>
+                  <div style={{ padding: "16px 20px", borderRadius: 12, background: "rgba(255,255,255,0.02)", border: `1px solid ${border}`, textAlign: "center" }}>
+                    <div style={{ fontSize: 24, fontWeight: 900, color: "#06b6d4" }}>90 Days</div>
+                    <div style={{ fontSize: 11, color: muted, fontWeight: 700, textTransform: "uppercase", marginTop: 4 }}>Agent Telemetry</div>
+                  </div>
+                  <div style={{ padding: "16px 20px", borderRadius: 12, background: "rgba(255,255,255,0.02)", border: `1px solid ${border}`, textAlign: "center" }}>
+                    <div style={{ fontSize: 24, fontWeight: 900, color: "#3b82f6" }}>180 Days</div>
+                    <div style={{ fontSize: 11, color: muted, fontWeight: 700, textTransform: "uppercase", marginTop: 4 }}>Discovery Scans</div>
+                  </div>
+                  <div style={{ padding: "16px 20px", borderRadius: 12, background: "rgba(255,255,255,0.02)", border: `1px solid ${border}`, textAlign: "center" }}>
+                    <div style={{ fontSize: 24, fontWeight: 900, color: "#8b5cf6" }}>365 Days</div>
+                    <div style={{ fontSize: 11, color: muted, fontWeight: 700, textTransform: "uppercase", marginTop: 4 }}>Audit Event Logs</div>
+                  </div>
+                </div>
+                <p style={{ marginTop: 16, marginBottom: 0, color: "#cbd5e1", fontSize: 14, lineHeight: 1.8 }}>
+                  Following user account termination, user parameters are flagged for deletion. Complete zero-residual sanitization across database engines is completed automatically within <strong>30 days</strong>.
+                </p>
+              </section>
+
+              <section id="section-6">
+                <h2 style={{ fontSize: 20, fontWeight: 800, color: "#f1f5f9", marginBottom: 14, letterSpacing: "-0.02em", display: "flex", alignItems: "center", gap: 8 }}>
+                  6. User Rights & Consent Management (DPDP Act 2023)
+                </h2>
+                <p style={{ margin: 0, color: "#cbd5e1", fontSize: 14, lineHeight: 1.8 }}>
+                  In accordance with the India DPDP Act 2023, you retain absolute authority over your digital personal data. You are entitled to exercise these rights at any time:
+                </p>
+                <ul style={{ margin: "14px 0 0", paddingLeft: 20, color: "#cbd5e1", fontSize: 14, lineHeight: 1.8, display: "flex", flexDirection: "column", gap: 10 }}>
+                  <li>
+                    <strong style={{ color: "#f1f5f9" }}>Right to Access & Summary:</strong> Request a comprehensive, structured output of all personal datasets and logs related to your identity held by NeurQ AI Labs.
+                  </li>
+                  <li>
+                    <strong style={{ color: "#f1f5f9" }}>Right to Correction & Erasure:</strong> Rectify inaccurate, obsolete, or incomplete coordinates immediately. You may request physical erasure of all records if they are no longer required for lawful, bounded purposes.
+                  </li>
+                  <li>
+                    <strong style={{ color: "#f1f5f9" }}>Right to Consent Withdrawal:</strong> Revoke authorization for future data processing at your convenience. Note that withdrawing authentication permissions may limit our ability to deliver platform functionalities.
+                  </li>
+                  <li>
+                    <strong style={{ color: "#f1f5f9" }}>Right to Data Portability:</strong> Export all system parameters in a standard, machine-readable JSON structure for transfer to other monitoring services.
+                  </li>
+                </ul>
+              </section>
+
+              <section id="section-7">
+                <h2 style={{ fontSize: 20, fontWeight: 800, color: "#f1f5f9", marginBottom: 14, letterSpacing: "-0.02em" }}>
+                  7. First-Party Storage Mechanisms
+                </h2>
+                <p style={{ margin: 0, color: "#cbd5e1", fontSize: 14, lineHeight: 1.8 }}>
+                  We enforce a strict <strong>Zero Third-Party Cookie Policy</strong>. No advertising pixels, tracking tags, or external behavioral marketing blocks are integrated into our pages. 
+                </p>
+                <p style={{ marginTop: 12, marginBottom: 0, color: "#cbd5e1", fontSize: 14, lineHeight: 1.8 }}>
+                  We utilize first-party browser <code style={{ background: "rgba(6,182,212,0.08)", border: "1px solid rgba(6,182,212,0.15)", padding: "1px 6px", borderRadius: 4, color: "#22d3ee" }}>localStorage</code> parameters to support essential platform controls: active JWT session storage, visual layout theme configuration, and cookie banner consent values. Please refer to our complete <a href="/cookies" style={{ color: "#06b6d4", textDecoration: "none", fontWeight: 600 }}>Cookie Policy</a> for detailed schemas.
+                </p>
+              </section>
+
+              <section id="section-8">
+                <h2 style={{ fontSize: 20, fontWeight: 800, color: "#f1f5f9", marginBottom: 14, letterSpacing: "-0.02em", display: "flex", alignItems: "center", gap: 8 }}>
+                  8. Grievance Redressal & Contact Coordinates
+                </h2>
+                <p style={{ margin: 0, color: "#cbd5e1", fontSize: 14, lineHeight: 1.8 }}>
+                  For inquiries concerning privacy regulations, data access requests, or to register a formal concern, you may contact our appointed Data Protection Officer directly:
+                </p>
+                <div style={{ marginTop: 20, padding: 24, borderRadius: 16, background: "rgba(255,255,255,0.01)", border: `1px solid ${border}` }}>
+                  <div style={{ fontWeight: 800, color: "#f1f5f9", fontSize: 15, marginBottom: 4 }}>Grievance Redressal Cell</div>
+                  <div style={{ color: muted, fontSize: 13, marginBottom: 10 }}>NeurQ AI Labs Private Limited</div>
+                  
+                  <div style={{ display: "flex", flexDirection: "column", gap: 8, fontSize: 13, color: "#cbd5e1" }}>
+                    <div>📍 <span style={{ color: muted }}>Address:</span> Incubation Cell, IIIT Lucknow, Chak Ganjaria, Lucknow - 226002, India</div>
+                    <div>✉️ <span style={{ color: muted }}>Direct Desk:</span> privacy@neurqai.com</div>
+                    <div>📞 <span style={{ color: muted }}>Emergency Line:</span> +91 (522) 430-1020</div>
+                  </div>
+                </div>
+              </section>
+
+            </div>
+          </div>
         </div>
       </div>
-    </div>
-  );
-}
+      </div>
 
-function Section({ title, children }: { title: string; children: React.ReactNode }) {
-  return (
-    <div style={{ marginBottom: 20 }}>
-      <h2 style={{ fontSize: 16, fontWeight: 700, color: "#f1f5f9", marginBottom: 6 }}>{title}</h2>
-      <p style={{ margin: 0 }}>{children}</p>
+      <style jsx global>{`
+        .legal-container {
+          display: grid;
+          grid-template-columns: 260px 1fr;
+          gap: 40px;
+          align-items: start;
+        }
+        .legal-toc {
+          position: sticky;
+          top: 100px;
+          display: flex;
+          flex-direction: column;
+          gap: 8px;
+          background: rgba(16, 22, 42, 0.45);
+          border: 1px solid rgba(42, 49, 80, 0.4);
+          border-radius: 16px;
+          padding: 20px;
+          backdrop-filter: blur(12px);
+          -webkit-backdrop-filter: blur(12px);
+        }
+        .legal-toc-item {
+          display: block;
+          width: 100%;
+          text-align: left;
+          background: none;
+          border: 1px solid transparent;
+          padding: 10px 14px;
+          border-radius: 8px;
+          color: #94a3b8;
+          font-size: 13px;
+          font-weight: 500;
+          cursor: pointer;
+          transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+          font-family: inherit;
+        }
+        .legal-toc-item:hover {
+          color: #22d3ee;
+          background: rgba(6, 182, 212, 0.04);
+        }
+        .legal-toc-item.active {
+          color: #06b6d4;
+          background: rgba(6, 182, 212, 0.08);
+          border-color: rgba(6, 182, 212, 0.2);
+          font-weight: 700;
+          box-shadow: inset 0 0 12px rgba(6, 182, 212, 0.05);
+        }
+        @media (max-width: 900px) {
+          .legal-container {
+            grid-template-columns: 1fr;
+            gap: 32px;
+          }
+          .legal-toc {
+            position: relative;
+            top: 0;
+            padding: 14px;
+          }
+        }
+      `}</style>
+      <Footer theme={theme} />
     </div>
   );
 }

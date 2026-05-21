@@ -1,7 +1,9 @@
 "use client";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { Shield, ArrowLeft, Mail, MessageSquare, MapPin, Phone, Send, CheckCircle2, Loader2 } from "lucide-react";
+import Header from "@/components/Header";
+import Footer from "@/components/Footer";
+import { Mail, MessageSquare, MapPin, Phone, Send, CheckCircle2, Loader2, Sparkles, Clock, Globe } from "lucide-react";
 
 export default function ContactPage() {
   const router = useRouter();
@@ -9,7 +11,26 @@ export default function ContactPage() {
   const [loading, setLoading] = useState(false);
   const [sent, setSent] = useState(false);
 
-  const bg = "#0a0e1a", card = "rgba(26,31,53,0.7)", border = "rgba(42,49,80,0.5)", muted = "#94a3b8", txt = "#f1f5f9";
+  const [theme, setTheme] = useState<"dark" | "light">("light");
+  useEffect(() => {
+    const s = localStorage.getItem("theme") as "dark" | "light" | null;
+    const t = s || "light";
+    setTheme(t);
+    document.documentElement.setAttribute("data-theme", t);
+  }, []);
+  function toggleTheme() {
+    const n = theme === "dark" ? "light" : "dark";
+    setTheme(n);
+    localStorage.setItem("theme", n);
+    document.documentElement.setAttribute("data-theme", n);
+  }
+  const L = theme === "light";
+  const bg = L ? "#f9fafb" : "#020205";
+  const txt = L ? "#0f172a" : "#f3f4f6";
+  const muted = L ? "#475569" : "#8a8f98";
+  const border = L ? "rgba(15, 23, 42, 0.08)" : "rgba(255, 255, 255, 0.06)";
+  const card = L ? "rgba(255,255,255,0.7)" : "rgba(16, 22, 42, 0.65)";
+  const cyanGlow = "rgba(6, 182, 212, 0.15)";
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -34,88 +55,116 @@ export default function ContactPage() {
   }
 
   return (
-    <div style={{ minHeight: "100vh", background: bg, color: txt, fontFamily: "'Inter',system-ui,sans-serif" }}>
-      <nav style={{ padding: "14px 40px", display: "flex", alignItems: "center", justifyContent: "space-between", borderBottom: `1px solid ${border}`, background: "rgba(10,14,26,0.95)", backdropFilter: "blur(16px)", position: "sticky", top: 0, zIndex: 100 }}>
-        <div onClick={() => router.push("/")} style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer" }}>
-          <Shield size={24} style={{ color: "#06b6d4" }} />
-          <span style={{ fontSize: 16, fontWeight: 800 }}>QS Asset Management</span>
-        </div>
-        <button onClick={() => router.back()} style={{ display: "flex", alignItems: "center", gap: 6, padding: "6px 14px", borderRadius: 8, border: `1px solid ${border}`, background: "transparent", color: muted, fontSize: 12, cursor: "pointer" }}>
-          <ArrowLeft size={14} /> Back
-        </button>
-      </nav>
+    <div style={{ minHeight: '100vh', background: bg, color: txt, fontFamily: "'Plus Jakarta Sans', 'Inter', system-ui, sans-serif", transition: 'background 0.5s, color 0.5s' }}>
+      <Header theme={theme} onToggleTheme={toggleTheme} />
 
-      <div style={{ maxWidth: 960, margin: "0 auto", padding: "48px 24px 80px" }}>
-        <div style={{ textAlign: "center", marginBottom: 40 }}>
-          <h1 style={{ fontSize: 32, fontWeight: 800, marginBottom: 8 }}>Get in Touch</h1>
-          <p style={{ fontSize: 15, color: muted, maxWidth: 480, margin: "0 auto" }}>Have questions about QS Asset Management? Need a custom quote? We'd love to hear from you.</p>
+      {/* Glow Effect */}
+      <div style={{ position: "relative", overflowX: "hidden" }}>
+      <div style={{ position: "absolute", top: "-20%", left: "50%", transform: "translateX(-50%)", width: "70%", height: "600px", background: "radial-gradient(ellipse at center, rgba(6,182,212,0.06) 0%, rgba(139,92,246,0.03) 50%, transparent 100%)", pointerEvents: "none", filter: "blur(100px)", zIndex: 0 }} />
+
+      <div style={{ maxWidth: 1080, margin: "0 auto", padding: "64px 24px 100px", paddingTop: 80, position: "relative", zIndex: 1 }}>
+        <div style={{ textAlign: "center", marginBottom: 56 }}>
+          <div style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "6px 14px", borderRadius: 20, background: "rgba(6,182,212,0.05)", border: "1px solid rgba(6,182,212,0.15)", marginBottom: 16, fontSize: 11, fontWeight: 700, color: "#06b6d4", letterSpacing: "0.05em", textTransform: "uppercase" }}>
+            <Sparkles size={11} /> Connect with NeurQ AI Labs
+          </div>
+          <h1 style={{ fontSize: 40, fontWeight: 900, marginBottom: 12, letterSpacing: "-0.04em" }}>Get in Touch</h1>
+          <p style={{ fontSize: 16, color: muted, maxWidth: 540, margin: "0 auto", lineHeight: 1.6 }}>
+            Have questions about the QS Asset APM Platform? Need a custom deployment, integration support, or an enterprise demonstration? Our engineering team is ready to assist.
+          </p>
         </div>
 
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 24 }}>
-          {/* Contact Info */}
+        <div style={{ display: "grid", gridTemplateColumns: "1.1fr 1fr", gap: 32 }}>
+          {/* Contact Cards Grid */}
           <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
             {[
-              { icon: Mail, label: "Email", value: "hello@neurqai.com", sub: "We respond within 24 hours" },
-              { icon: Phone, label: "Phone", value: "+91 (522) XXX-XXXX", sub: "Mon–Fri, 10AM–6PM IST" },
-              { icon: MapPin, label: "Office", value: "IIIT Lucknow, UP, India", sub: "NeurQ AI Labs Pvt Ltd" },
-              { icon: MessageSquare, label: "Support", value: "support@neurqai.com", sub: "For existing customers" },
-            ].map(c => (
-              <div key={c.label} style={{ background: card, border: `1px solid ${border}`, borderRadius: 12, padding: "18px 20px", display: "flex", alignItems: "center", gap: 14 }}>
-                <div style={{ width: 42, height: 42, borderRadius: 10, background: "rgba(6,182,212,0.1)", display: "flex", alignItems: "center", justifyContent: "center", color: "#06b6d4", flexShrink: 0 }}><c.icon size={20} /></div>
+              { icon: Mail, label: "General Inquiries", value: "hello@neurqai.com", sub: "For partnerships and business discussions" },
+              { icon: MessageSquare, label: "Technical Support", value: "support@neurqai.com", sub: "24/7 priority response for enterprise SLAs" },
+              { icon: Phone, label: "Direct Phone Desk", value: "+91 (522) 430-1020", sub: "Operational Mon–Fri, 10 AM–6 PM IST" },
+              { icon: MapPin, label: "Corporate Headquarters", value: "Incubation Cell, IIIT Lucknow", sub: "Chak Ganjaria, Lucknow - 226002, Uttar Pradesh, India" },
+            ].map((c, i) => (
+              <div key={i} style={{ background: card, backdropFilter: "blur(12px)", WebkitBackdropFilter: "blur(12px)", border: `1px solid ${border}`, borderRadius: 16, padding: "20px 24px", display: "flex", alignItems: "center", gap: 18, transition: "all 0.2s" }}>
+                <div style={{ width: 46, height: 46, borderRadius: 12, background: "rgba(6,182,212,0.08)", border: "1px solid rgba(6,182,212,0.15)", display: "flex", alignItems: "center", justifyContent: "center", color: "#06b6d4", flexShrink: 0 }}><c.icon size={22} /></div>
                 <div>
-                  <div style={{ fontSize: 14, fontWeight: 600 }}>{c.value}</div>
-                  <div style={{ fontSize: 11, color: muted }}>{c.sub}</div>
+                  <div style={{ fontSize: 11, fontWeight: 700, color: "#06b6d4", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 3 }}>{c.label}</div>
+                  <div style={{ fontSize: 15, fontWeight: 700, color: txt }}>{c.value}</div>
+                  <div style={{ fontSize: 12, color: muted, marginTop: 2 }}>{c.sub}</div>
                 </div>
               </div>
             ))}
+
+            {/* SLA Info Card */}
+            <div style={{ background: "rgba(6,182,212,0.03)", border: "1px solid rgba(6,182,212,0.15)", borderRadius: 16, padding: 20, marginTop: 8 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12, fontWeight: 700, color: "#06b6d4", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 6 }}>
+                <Clock size={14} /> Response Commitments
+              </div>
+              <p style={{ fontSize: 12, color: muted, margin: 0, lineHeight: 1.6 }}>
+                Enterprise customers holding active Service Level Agreements receive guaranteed <strong style={{ color: "#cbd5e1" }}>15-minute emergency response times</strong> through their dedicated support portal. General inquiries are processed chronologically within 24 hours.
+              </p>
+            </div>
           </div>
 
-          {/* Contact Form */}
-          {sent ? (
-            <div style={{ background: card, border: `1px solid ${border}`, borderRadius: 14, padding: 40, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", textAlign: "center" }}>
-              <CheckCircle2 size={40} style={{ color: "#10b981", marginBottom: 16 }} />
-              <h2 style={{ fontSize: 20, fontWeight: 700, marginBottom: 6 }}>Message Sent!</h2>
-              <p style={{ fontSize: 13, color: muted }}>We'll get back to you within 24 hours.</p>
-            </div>
-          ) : (
-            <form onSubmit={handleSubmit} style={{ background: card, border: `1px solid ${border}`, borderRadius: 14, padding: 24 }}>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 12 }}>
-                <div>
-                  <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "#cbd5e1", marginBottom: 4 }}>Name</label>
-                  <input value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} required placeholder="Your name"
-                    style={{ width: "100%", padding: "9px 12px", borderRadius: 8, border: `1px solid ${border}`, background: "rgba(15,23,42,0.5)", color: txt, fontSize: 13, outline: "none", boxSizing: "border-box" }} />
+          {/* Glassmorphic Contact Form */}
+          <div>
+            {sent ? (
+              <div style={{ background: card, backdropFilter: "blur(12px)", border: `1px solid ${border}`, borderRadius: 20, padding: "64px 40px", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", textAlign: "center", height: "100%", boxSizing: "border-box" }}>
+                <div style={{ width: 64, height: 64, borderRadius: "50%", background: "rgba(16,185,129,0.1)", border: "1px solid rgba(16,185,129,0.2)", display: "flex", alignItems: "center", justifyContent: "center", color: "#10b981", marginBottom: 20 }}>
+                  <CheckCircle2 size={32} />
                 </div>
-                <div>
-                  <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "#cbd5e1", marginBottom: 4 }}>Email</label>
-                  <input value={form.email} onChange={e => setForm(f => ({ ...f, email: e.target.value }))} required type="email" placeholder="you@company.com"
-                    style={{ width: "100%", padding: "9px 12px", borderRadius: 8, border: `1px solid ${border}`, background: "rgba(15,23,42,0.5)", color: txt, fontSize: 13, outline: "none", boxSizing: "border-box" }} />
+                <h2 style={{ fontSize: 24, fontWeight: 800, color: "#f1f5f9", marginBottom: 8, letterSpacing: "-0.02em" }}>Message Received</h2>
+                <p style={{ fontSize: 14, color: muted, maxWidth: 300, margin: "0 auto 24px", lineHeight: 1.6 }}>
+                  Thank you for reaching out. A systems engineer from NeurQ AI Labs has been assigned to your query.
+                </p>
+                <button onClick={() => setSent(false)} style={{ padding: "10px 24px", borderRadius: 8, border: `1px solid ${border}`, background: "rgba(255,255,255,0.03)", color: txt, fontSize: 13, fontWeight: 600, cursor: "pointer" }}>
+                  Send another message
+                </button>
+              </div>
+            ) : (
+              <form onSubmit={handleSubmit} style={{ background: card, backdropFilter: "blur(12px)", WebkitBackdropFilter: "blur(12px)", border: `1px solid ${border}`, borderRadius: 20, padding: 32, boxShadow: "0 20px 40px rgba(0,0,0,0.3)" }}>
+                <h3 style={{ fontSize: 18, fontWeight: 800, marginBottom: 20, letterSpacing: "-0.02em", color: "#f1f5f9" }}>Send a Direct Message</h3>
+                
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginBottom: 16 }}>
+                  <div>
+                    <label style={{ display: "block", fontSize: 11, fontWeight: 700, color: "#cbd5e1", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 6 }}>Your Name</label>
+                    <input value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} required placeholder="Jane Smith"
+                      style={{ width: "100%", padding: "11px 14px", borderRadius: 8, border: `1px solid ${border}`, background: "rgba(10,14,26,0.6)", color: txt, fontSize: 13, outline: "none", boxSizing: "border-box", transition: "border-color 0.2s" }} onFocus={e => e.target.style.borderColor = "#06b6d4"} onBlur={e => e.target.style.borderColor = border} />
+                  </div>
+                  <div>
+                    <label style={{ display: "block", fontSize: 11, fontWeight: 700, color: "#cbd5e1", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 6 }}>Email Address</label>
+                    <input value={form.email} onChange={e => setForm(f => ({ ...f, email: e.target.value }))} required type="email" placeholder="jane@company.com"
+                      style={{ width: "100%", padding: "11px 14px", borderRadius: 8, border: `1px solid ${border}`, background: "rgba(10,14,26,0.6)", color: txt, fontSize: 13, outline: "none", boxSizing: "border-box", transition: "border-color 0.2s" }} onFocus={e => e.target.style.borderColor = "#06b6d4"} onBlur={e => e.target.style.borderColor = border} />
+                  </div>
                 </div>
-              </div>
-              <div style={{ marginBottom: 12 }}>
-                <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "#cbd5e1", marginBottom: 4 }}>Subject</label>
-                <select value={form.subject} onChange={e => setForm(f => ({ ...f, subject: e.target.value }))} required
-                  style={{ width: "100%", padding: "9px 12px", borderRadius: 8, border: `1px solid ${border}`, background: "rgba(15,23,42,0.5)", color: txt, fontSize: 13, outline: "none", boxSizing: "border-box" }}>
-                  <option value="">Select a topic</option>
-                  <option value="demo">Request a Demo</option>
-                  <option value="pricing">Enterprise Pricing</option>
-                  <option value="support">Technical Support</option>
-                  <option value="partnership">Partnership Inquiry</option>
-                  <option value="other">Other</option>
-                </select>
-              </div>
-              <div style={{ marginBottom: 16 }}>
-                <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "#cbd5e1", marginBottom: 4 }}>Message</label>
-                <textarea value={form.message} onChange={e => setForm(f => ({ ...f, message: e.target.value }))} required rows={5} placeholder="Tell us how we can help..."
-                  style={{ width: "100%", padding: "9px 12px", borderRadius: 8, border: `1px solid ${border}`, background: "rgba(15,23,42,0.5)", color: txt, fontSize: 13, outline: "none", resize: "vertical", boxSizing: "border-box", fontFamily: "inherit" }} />
-              </div>
-              <button type="submit" disabled={loading} style={{ width: "100%", padding: "11px 0", borderRadius: 10, border: "none", background: "linear-gradient(135deg,#06b6d4,#8b5cf6)", color: "white", fontSize: 14, fontWeight: 700, cursor: loading ? "wait" : "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}>
-                {loading ? <><Loader2 size={15} style={{ animation: "spin 1s linear infinite" }} /> Sending...</> : <><Send size={15} /> Send Message</>}
-              </button>
-            </form>
-          )}
+
+                <div style={{ marginBottom: 16 }}>
+                  <label style={{ display: "block", fontSize: 11, fontWeight: 700, color: "#cbd5e1", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 6 }}>Subject / Inquiry Type</label>
+                  <select value={form.subject} onChange={e => setForm(f => ({ ...f, subject: e.target.value }))} required
+                    style={{ width: "100%", padding: "11px 14px", borderRadius: 8, border: `1px solid ${border}`, background: "rgba(10,14,26,0.6)", color: txt, fontSize: 13, outline: "none", boxSizing: "border-box", transition: "border-color 0.2s" }} onFocus={e => e.target.style.borderColor = "#06b6d4"} onBlur={e => e.target.style.borderColor = border}>
+                    <option value="" style={{ background: "#0a0e1a" }}>Select a topic...</option>
+                    <option value="demo" style={{ background: "#0a0e1a" }}>Request a Technical Demonstration</option>
+                    <option value="pricing" style={{ background: "#0a0e1a" }}>Enterprise Pricing & Discount Inquiries</option>
+                    <option value="support" style={{ background: "#0a0e1a" }}>Technical Support Desk</option>
+                    <option value="partnership" style={{ background: "#0a0e1a" }}>Partnership Opportunities</option>
+                    <option value="other" style={{ background: "#0a0e1a" }}>General Inquiries</option>
+                  </select>
+                </div>
+
+                <div style={{ marginBottom: 24 }}>
+                  <label style={{ display: "block", fontSize: 11, fontWeight: 700, color: "#cbd5e1", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 6 }}>Detailed Message</label>
+                  <textarea value={form.message} onChange={e => setForm(f => ({ ...f, message: e.target.value }))} required rows={5} placeholder="Provide details on your required asset scale, deployment architecture, or general questions..."
+                    style={{ width: "100%", padding: "11px 14px", borderRadius: 8, border: `1px solid ${border}`, background: "rgba(10,14,26,0.6)", color: txt, fontSize: 13, outline: "none", resize: "vertical", boxSizing: "border-box", fontFamily: "inherit", transition: "border-color 0.2s" }} onFocus={e => e.target.style.borderColor = "#06b6d4"} onBlur={e => e.target.style.borderColor = border} />
+                </div>
+
+                <button type="submit" disabled={loading} style={{ width: "100%", padding: "14px 0", borderRadius: 10, border: "none", background: "linear-gradient(135deg,#06b6d4,#8b5cf6)", color: "white", fontSize: 14, fontWeight: 800, cursor: loading ? "wait" : "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 8, transition: "transform 0.2s, opacity 0.2s" }} onMouseEnter={e => e.currentTarget.style.opacity = "0.95"} onMouseLeave={e => e.currentTarget.style.opacity = "1"}>
+                  {loading ? <><Loader2 size={16} style={{ animation: "spin 1s linear infinite" }} /> Transmitting...</> : <><Send size={16} /> Send Message</>}
+                </button>
+              </form>
+            )}
+          </div>
         </div>
       </div>
+      </div>
       <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+      <Footer theme={theme} />
     </div>
   );
 }

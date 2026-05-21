@@ -1,6 +1,7 @@
 "use client";
 import { useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
+import { LogoIcon } from "@/components/Logo";
 import {
   Shield, ArrowRight, CheckCircle2, Loader2, Building2, Mail, Lock, User,
   Eye, EyeOff, AlertCircle, Info, XCircle, ArrowLeft, Zap
@@ -137,11 +138,9 @@ export default function RegisterPage() {
       <div style={{ width: "100%", maxWidth: 460, position: "relative", zIndex: 1 }}>
         {/* Header */}
         <div style={{ textAlign: "center", marginBottom: 28 }}>
-          <div onClick={() => router.push("/")} style={{ display: "inline-flex", alignItems: "center", gap: 9, cursor: "pointer", marginBottom: 18 }} title="Back to homepage">
-            <div style={{ width: 32, height: 32, borderRadius: 9, background: "linear-gradient(135deg,#06b6d4,#8b5cf6)", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 4px 16px rgba(6,182,212,0.2)" }}>
-              <Shield size={18} style={{ color: "white" }} />
-            </div>
-            <span style={{ fontSize: 19, fontWeight: 800, color: "#f1f5f9", letterSpacing: "-0.04em" }}>QS Asset</span>
+          <div onClick={() => router.push("/")} style={{ display: "inline-flex", alignItems: "center", gap: 10, cursor: "pointer", marginBottom: 18 }} title="Back to homepage">
+            <LogoIcon size={36} />
+            <span style={{ fontSize: 24, fontWeight: 900, color: "#f1f5f9", letterSpacing: "-0.04em", fontFamily: "'Outfit', 'Inter', sans-serif", background: "linear-gradient(to right, #f1f5f9 65%, #22d3ee 100%)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent" }}>QS Asset</span>
           </div>
           <h1 style={{ fontSize: 24, fontWeight: 800, color: "#f1f5f9", marginBottom: 6, letterSpacing: "-0.03em" }}>Create Your Workspace</h1>
           <p style={{ fontSize: 13, color: muted, letterSpacing: "-0.01em" }}>Free plan includes 5 assets and 4 users • <a href="/contact" style={{ color: "#06b6d4", textDecoration: "none", fontWeight: 600 }} title="Contact us for enterprise pricing">Need more?</a></p>

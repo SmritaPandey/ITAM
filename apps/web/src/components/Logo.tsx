@@ -10,7 +10,7 @@ export function LogoIcon({ size = 32, glow = true }: LogoIconProps) {
     <svg
       width={size}
       height={size}
-      viewBox="0 0 48 48"
+      viewBox="8 8 32 32"
       fill="none"
       xmlns="http://www.w3.org/2000/svg"
       style={{
@@ -29,26 +29,7 @@ export function LogoIcon({ size = 32, glow = true }: LogoIconProps) {
           <stop offset="0%" stopColor="#10b981" />
           <stop offset="100%" stopColor="#06b6d4" />
         </linearGradient>
-        <linearGradient id="qs-shield-grad" x1="0%" y1="0%" x2="100%" y2="100%">
-          <stop offset="0%" stopColor="rgba(34, 211, 238, 0.45)" />
-          <stop offset="50%" stopColor="rgba(99, 102, 241, 0.15)" />
-          <stop offset="100%" stopColor="rgba(16, 185, 129, 0.45)" />
-        </linearGradient>
       </defs>
-
-      {/* Futuristic Precision Outer Hexagonal Shield */}
-      <path
-        d="M24 3 L42.5 13.7 L42.5 35.3 L24 46 L5.5 35.3 L5.5 13.7 Z"
-        stroke="url(#qs-shield-grad)"
-        strokeWidth="1.5"
-        strokeLinejoin="round"
-        fill="rgba(6, 182, 212, 0.01)"
-      />
-
-      {/* Cybernetic Tech Detailing Accent Markers (Adds premium aerospace-grid feel) */}
-      <path d="M11.5 8.7 L7.5 11" stroke="rgba(34, 211, 238, 0.35)" strokeWidth="1.2" strokeLinecap="round" />
-      <path d="M36.5 8.7 L40.5 11" stroke="rgba(34, 211, 238, 0.35)" strokeWidth="1.2" strokeLinecap="round" />
-      <path d="M24 40.5 L24 43" stroke="rgba(139, 92, 246, 0.35)" strokeWidth="1.2" strokeLinecap="round" />
 
       {/* High-Fidelity Interlocking 'Q' Ring */}
       <path

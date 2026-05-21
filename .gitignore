@@ -40,3 +40,4 @@ docker-data/
 # Logs
 *.log
 npm-debug.log*
+.vercel

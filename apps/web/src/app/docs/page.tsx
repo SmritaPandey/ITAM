@@ -1,6 +1,9 @@
 "use client";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { Shield, ArrowLeft, BookOpen, Terminal, Server, Cpu, Network, Monitor, Camera, Car, HardDrive, ExternalLink, ChevronRight } from "lucide-react";
+import Header from "@/components/Header";
+import Footer from "@/components/Footer";
+import { BookOpen, Terminal, Server, Cpu, Network, Monitor, Camera, Car, HardDrive, ExternalLink, ChevronRight } from "lucide-react";
 
 const SECTIONS = [
   {
@@ -45,22 +48,32 @@ const SECTIONS = [
 
 export default function DocsPage() {
   const router = useRouter();
-  const bg = "#0a0e1a", card = "rgba(26,31,53,0.7)", border = "rgba(42,49,80,0.5)", muted = "#94a3b8", txt = "#f1f5f9";
+
+  const [theme, setTheme] = useState<"dark" | "light">("light");
+  useEffect(() => {
+    const s = localStorage.getItem("theme") as "dark" | "light" | null;
+    const t = s || "light";
+    setTheme(t);
+    document.documentElement.setAttribute("data-theme", t);
+  }, []);
+  function toggleTheme() {
+    const n = theme === "dark" ? "light" : "dark";
+    setTheme(n);
+    localStorage.setItem("theme", n);
+    document.documentElement.setAttribute("data-theme", n);
+  }
+  const L = theme === "light";
+  const bg = L ? "#f9fafb" : "#020205";
+  const txt = L ? "#0f172a" : "#f3f4f6";
+  const muted = L ? "#475569" : "#8a8f98";
+  const border = L ? "rgba(15, 23, 42, 0.08)" : "rgba(255, 255, 255, 0.06)";
+  const card = L ? "rgba(255,255,255,0.7)" : "rgba(26,31,53,0.7)";
 
   return (
-    <div style={{ minHeight: "100vh", background: bg, color: txt, fontFamily: "'Inter',system-ui,sans-serif" }}>
-      <nav style={{ padding: "14px 40px", display: "flex", alignItems: "center", justifyContent: "space-between", borderBottom: `1px solid ${border}`, background: "rgba(10,14,26,0.95)", backdropFilter: "blur(16px)", position: "sticky", top: 0, zIndex: 100 }}>
-        <div onClick={() => router.push("/")} style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer" }}>
-          <Shield size={24} style={{ color: "#06b6d4" }} />
-          <span style={{ fontSize: 16, fontWeight: 800 }}>QS Asset Management</span>
-          <span style={{ fontSize: 12, color: muted, marginLeft: 4 }}>/ Docs</span>
-        </div>
-        <button onClick={() => router.push("/")} style={{ display: "flex", alignItems: "center", gap: 6, padding: "6px 14px", borderRadius: 8, border: `1px solid ${border}`, background: "transparent", color: muted, fontSize: 12, cursor: "pointer" }}>
-          <ArrowLeft size={14} /> Home
-        </button>
-      </nav>
+    <div style={{ minHeight: '100vh', background: bg, color: txt, fontFamily: "'Plus Jakarta Sans', 'Inter', system-ui, sans-serif", transition: 'background 0.5s, color 0.5s' }}>
+      <Header theme={theme} onToggleTheme={toggleTheme} />
 
-      <div style={{ maxWidth: 1000, margin: "0 auto", padding: "48px 24px 80px" }}>
+      <div style={{ maxWidth: 1000, margin: "0 auto", padding: "48px 24px 80px", paddingTop: 80 }}>
         <div style={{ textAlign: "center", marginBottom: 40 }}>
           <h1 style={{ fontSize: 32, fontWeight: 800, marginBottom: 8 }}>Documentation</h1>
           <p style={{ fontSize: 15, color: muted, maxWidth: 520, margin: "0 auto" }}>Everything you need to deploy, configure, and operate QS Asset Management.</p>
@@ -101,6 +114,7 @@ export default function DocsPage() {
           );
         })}
       </div>
+      <Footer theme={theme} />
     </div>
   );
 }

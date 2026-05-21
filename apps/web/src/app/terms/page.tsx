@@ -1,72 +1,335 @@
 "use client";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { Shield, ArrowLeft } from "lucide-react";
+import Header from "@/components/Header";
+import Footer from "@/components/Footer";
+import { Scale, CheckCircle2, ShieldAlert, Award } from "lucide-react";
+
+const SECTIONS = [
+  { id: "section-1", title: "1. Agreement & Acceptance" },
+  { id: "section-2", title: "2. Service Descriptions" },
+  { id: "section-3", title: "3. Plans & Billing Cycles" },
+  { id: "section-4", title: "4. Scanning Policies" },
+  { id: "section-5", title: "5. Telemetry Ownership" },
+  { id: "section-6", title: "6. Platform Integrity" },
+  { id: "section-7", title: "7. Uptime SLA Commitments" },
+  { id: "section-8", title: "8. Liability Limitations" },
+  { id: "section-9", title: "9. Account Termination" },
+  { id: "section-10", title: "10. Jurisdiction & Law" },
+  { id: "section-11", title: "11. Legal Notifications" },
+];
 
 export default function TermsPage() {
   const router = useRouter();
-  const bg = "#0a0e1a", card = "rgba(26,31,53,0.7)", border = "rgba(42,49,80,0.5)", muted = "#94a3b8", txt = "#f1f5f9";
+  const [activeSection, setActiveSection] = useState("section-1");
+
+  const [theme, setTheme] = useState<"dark" | "light">("light");
+  useEffect(() => {
+    const s = localStorage.getItem("theme") as "dark" | "light" | null;
+    const t = s || "light";
+    setTheme(t);
+    document.documentElement.setAttribute("data-theme", t);
+  }, []);
+  function toggleTheme() {
+    const n = theme === "dark" ? "light" : "dark";
+    setTheme(n);
+    localStorage.setItem("theme", n);
+    document.documentElement.setAttribute("data-theme", n);
+  }
+  const L = theme === "light";
+  const bg = L ? "#f9fafb" : "#020205";
+  const txt = L ? "#0f172a" : "#f3f4f6";
+  const muted = L ? "#475569" : "#8a8f98";
+  const border = L ? "rgba(15, 23, 42, 0.08)" : "rgba(255, 255, 255, 0.06)";
+  const card = L ? "rgba(255,255,255,0.7)" : "rgba(16, 22, 42, 0.65)";
+
+  useEffect(() => {
+    const observerOptions = {
+      root: null,
+      rootMargin: "-20% 0px -65% 0px",
+      threshold: 0,
+    };
+
+    const observer = new IntersectionObserver((entries) => {
+      entries.forEach((entry) => {
+        if (entry.isIntersecting) {
+          setActiveSection(entry.target.id);
+        }
+      });
+    }, observerOptions);
+
+    SECTIONS.forEach((sec) => {
+      const el = document.getElementById(sec.id);
+      if (el) observer.observe(el);
+    });
+
+    return () => observer.disconnect();
+  }, []);
+
+  const scrollTo = (id: string) => {
+    const el = document.getElementById(id);
+    if (el) {
+      const offset = 100; // sticky header spacing
+      const bodyRect = document.body.getBoundingClientRect().top;
+      const elementRect = el.getBoundingClientRect().top;
+      const elementPosition = elementRect - bodyRect;
+      const offsetPosition = elementPosition - offset;
+
+      window.scrollTo({
+        top: offsetPosition,
+        behavior: "smooth"
+      });
+    }
+  };
 
   return (
-    <div style={{ minHeight: "100vh", background: bg, color: txt, fontFamily: "'Inter',system-ui,sans-serif" }}>
-      <nav style={{ padding: "14px 40px", display: "flex", alignItems: "center", justifyContent: "space-between", borderBottom: `1px solid ${border}`, background: "rgba(10,14,26,0.95)", backdropFilter: "blur(16px)", position: "sticky", top: 0, zIndex: 100 }}>
-        <div onClick={() => router.push("/")} style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer" }}>
-          <Shield size={24} style={{ color: "#06b6d4" }} />
-          <span style={{ fontSize: 16, fontWeight: 800 }}>QS Asset Management</span>
+    <div style={{ minHeight: '100vh', background: bg, color: txt, fontFamily: "'Plus Jakarta Sans', 'Inter', system-ui, sans-serif", transition: 'background 0.5s, color 0.5s' }}>
+      <Header theme={theme} onToggleTheme={toggleTheme} />
+
+      <div style={{ position: "relative", overflowX: "hidden" }}>
+      {/* Glow Effects */}
+      <div style={{ position: "absolute", top: "-10%", left: "10%", width: "50%", height: "500px", background: "radial-gradient(ellipse at center, rgba(139,92,246,0.05) 0%, rgba(6,182,212,0.02) 60%, transparent 100%)", pointerEvents: "none", filter: "blur(80px)", zIndex: 0 }} />
+      <div style={{ position: "absolute", bottom: "10%", right: "5%", width: "45%", height: "600px", background: "radial-gradient(ellipse at center, rgba(6,182,212,0.04) 0%, rgba(139,92,246,0.01) 50%, transparent 100%)", pointerEvents: "none", filter: "blur(100px)", zIndex: 0 }} />
+
+      <div style={{ maxWidth: 1080, margin: "0 auto", padding: "64px 24px 120px", paddingTop: 80, position: "relative", zIndex: 1 }}>
+        <div style={{ marginBottom: 48 }}>
+          <div style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "6px 14px", borderRadius: 20, background: "rgba(6,182,212,0.05)", border: "1px solid rgba(6,182,212,0.15)", marginBottom: 16, fontSize: 11, fontWeight: 700, color: "#06b6d4", letterSpacing: "0.05em", textTransform: "uppercase" }}>
+            <Scale size={11} /> Legal & Platform Governance
+          </div>
+          <h1 style={{ fontSize: 42, fontWeight: 900, marginBottom: 8, letterSpacing: "-0.04em" }}>Terms of Service</h1>
+          <p style={{ fontSize: 14, color: muted }}>Last updated: May 21, 2026 • Effective Date: May 21, 2026</p>
         </div>
-        <button onClick={() => router.back()} style={{ display: "flex", alignItems: "center", gap: 6, padding: "6px 14px", borderRadius: 8, border: `1px solid ${border}`, background: "transparent", color: muted, fontSize: 12, cursor: "pointer" }}>
-          <ArrowLeft size={14} /> Back
-        </button>
-      </nav>
 
-      <div style={{ maxWidth: 760, margin: "0 auto", padding: "48px 24px 80px" }}>
-        <h1 style={{ fontSize: 32, fontWeight: 800, marginBottom: 6 }}>Terms of Service</h1>
-        <p style={{ fontSize: 13, color: muted, marginBottom: 32 }}>Last updated: May 13, 2026 • Effective: May 13, 2026</p>
+        <div className="legal-container">
+          {/* Sticky Left Table of Contents */}
+          <div className="legal-toc">
+            <div style={{ fontSize: 11, fontWeight: 800, color: "#06b6d4", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 14, paddingLeft: 12 }}>
+              Outline Index
+            </div>
+            {SECTIONS.map((sec) => (
+              <button
+                key={sec.id}
+                onClick={() => scrollTo(sec.id)}
+                className={`legal-toc-item ${activeSection === sec.id ? "active" : ""}`}
+              >
+                {sec.title}
+              </button>
+            ))}
+          </div>
 
-        <div style={{ background: card, border: `1px solid ${border}`, borderRadius: 14, padding: "28px 32px", lineHeight: 1.8, fontSize: 14, color: "#cbd5e1" }}>
-          <Section title="1. Acceptance">
-            By accessing QS Asset Management, you agree to these Terms of Service. If you are using QS Asset Management on behalf of an organization, you represent that you have authority to bind that organization.
-          </Section>
-          <Section title="2. Service Description">
-            QS Asset Management is an enterprise IT asset management, network monitoring, and security platform. It provides asset tracking, ITSM ticketing, vulnerability scanning, SNMP monitoring, CCTV management, fleet GPS, VDI management, and compliance reporting.
-          </Section>
-          <Section title="3. Plans & Billing">
-            <b>Starter (Free):</b> Up to 100 assets, 5 users. <b>Professional:</b> Unlimited assets, all modules, priority support. <b>Enterprise:</b> Custom pricing, on-premise option, dedicated support. Paid plans are billed monthly or annually. You may cancel at any time; access continues until the end of the billing period.
-          </Section>
-          <Section title="4. Acceptable Use">
-            You agree NOT to: (a) Use QS Asset Management to scan networks you do not own or have authorization to scan, (b) Attempt to bypass tenant isolation or access other tenants' data, (c) Use the platform for illegal surveillance or unauthorized monitoring, (d) Reverse-engineer the platform, (e) Exceed your plan limits through automation.
-          </Section>
-          <Section title="5. Data Ownership">
-            You retain full ownership of all data you upload or generate in QS Asset Management. We do not claim any intellectual property rights over your data. You may export or delete your data at any time.
-          </Section>
-          <Section title="6. Security">
-            We implement industry-standard security measures including encrypted storage, JWT authentication, bcrypt password hashing, RBAC, and SHA-256 audit chains. However, no system is 100% secure, and you are responsible for safeguarding your credentials.
-          </Section>
-          <Section title="7. SLA">
-            Professional and Enterprise plans include a 99.9% uptime SLA. Downtime due to scheduled maintenance (announced 48h in advance) is excluded. Credit requests must be submitted within 30 days.
-          </Section>
-          <Section title="8. Limitation of Liability">
-            To the maximum extent permitted by law, NeurQ AI Labs' total liability is limited to the amount paid by you in the 12 months preceding the claim. We are not liable for indirect, incidental, or consequential damages.
-          </Section>
-          <Section title="9. Termination">
-            Either party may terminate at any time. Upon termination, your data will be available for export for 30 days, after which it will be permanently deleted.
-          </Section>
-          <Section title="10. Governing Law">
-            These terms are governed by the laws of India. Disputes shall be resolved in the courts of Lucknow, Uttar Pradesh.
-          </Section>
-          <Section title="11. Contact">
-            NeurQ AI Labs Pvt Ltd, IIIT Lucknow, Uttar Pradesh, India. Email: legal@neurqai.com
-          </Section>
+          {/* Right Scrolling Content Area */}
+          <div className="legal-content">
+            <div style={{ background: card, backdropFilter: "blur(12px)", WebkitBackdropFilter: "blur(12px)", border: `1px solid ${border}`, borderRadius: 20, padding: "40px 48px", display: "flex", flexDirection: "column", gap: 36 }}>
+
+              <section id="section-1">
+                <h2 style={{ fontSize: 20, fontWeight: 800, color: "#f1f5f9", marginBottom: 14, letterSpacing: "-0.02em" }}>
+                  1. Agreement & Acceptance of Terms
+                </h2>
+                <p style={{ margin: 0, color: "#cbd5e1", fontSize: 14, lineHeight: 1.8 }}>
+                  By accessing, establishing a tenant workspace, downloading monitoring agents, or interacting with the **QS Asset APM Platform**, you explicitly agree to compile and maintain compliance with these Terms of Service. If you act on behalf of a corporate entity, you declare and warrant that you hold legitimate administrative authority to bind said entity to these constraints.
+                </p>
+              </section>
+
+              <section id="section-2">
+                <h2 style={{ fontSize: 20, fontWeight: 800, color: "#f1f5f9", marginBottom: 14, letterSpacing: "-0.02em" }}>
+                  2. Service Descriptions & Delivery Scope
+                </h2>
+                <p style={{ margin: 0, color: "#cbd5e1", fontSize: 14, lineHeight: 1.8 }}>
+                  QS Asset is a comprehensive IT and non-IT active asset discovery, network monitoring, vulnerability scoring, and service desk management SaaS framework operated by NeurQ AI Labs Private Limited. The service scope encompasses:
+                </p>
+                <ul style={{ margin: "14px 0 0", paddingLeft: 20, color: "#cbd5e1", fontSize: 14, lineHeight: 1.8, display: "flex", flexDirection: "column", gap: 8 }}>
+                  <li>Active SNMP, Nmap, and ICMP system scanning discovery tools.</li>
+                  <li>Host-based software and hardware telemetry gathering agent distributions.</li>
+                  <li>Unified CCTV ONVIF stream state alerts and camera health audits.</li>
+                  <li>GPS-enabled enterprise fleet and vehicle asset tracking maps.</li>
+                  <li>Integrated ITSM ticketing with strict SLA response routing metrics.</li>
+                </ul>
+              </section>
+
+              <section id="section-3">
+                <h2 style={{ fontSize: 20, fontWeight: 800, color: "#f1f5f9", marginBottom: 14, letterSpacing: "-0.02em" }}>
+                  3. Subscription Plans, Billing & Cancellations
+                </h2>
+                <p style={{ margin: 0, color: "#cbd5e1", fontSize: 14, lineHeight: 1.8 }}>
+                  Our platform is provisioned across structured pricing tiers:
+                </p>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginTop: 16 }}>
+                  <div style={{ padding: 16, borderRadius: 12, background: "rgba(255,255,255,0.02)", border: `1px solid ${border}` }}>
+                    <div style={{ fontSize: 13, fontWeight: 700, color: "#06b6d4", marginBottom: 4 }}>STARTER & FREE PLAN</div>
+                    <p style={{ fontSize: 12, color: muted, margin: 0, lineHeight: 1.6 }}>Supports up to 100 discovered assets, 5 administrative user allocations, and standard priority community ticket boards.</p>
+                  </div>
+                  <div style={{ padding: 16, borderRadius: 12, background: "rgba(255,255,255,0.02)", border: `1px solid ${border}` }}>
+                    <div style={{ fontSize: 13, fontWeight: 700, color: "#8b5cf6", marginBottom: 4 }}>PROFESSIONAL & ENTERPRISE</div>
+                    <p style={{ fontSize: 12, color: muted, margin: 0, lineHeight: 1.6 }}>Unlimited assets, multi-node agent orchestration, customizable vulnerability rules, and direct engineers support SLAs.</p>
+                  </div>
+                </div>
+                <p style={{ marginTop: 16, marginBottom: 0, color: "#cbd5e1", fontSize: 14, lineHeight: 1.8 }}>
+                  Paid contracts are calculated chronologically monthly or annually. You may submit termination directives at any time; access parameters persist unchanged until the resolution of the current active pre-paid billing block. No pro-rated refunds are issued.
+                </p>
+              </section>
+
+              <section id="section-4">
+                <h2 style={{ fontSize: 20, fontWeight: 800, color: "#f1f5f9", marginBottom: 14, letterSpacing: "-0.02em", display: "flex", alignItems: "center", gap: 8 }}>
+                  4. Acceptable Scanning Policies & Mandatory Rules
+                </h2>
+                <p style={{ margin: 0, color: "#cbd5e1", fontSize: 14, lineHeight: 1.8 }}>
+                  Because the platform implements deep port, vulnerability, and SNMP scanning utilities, you must maintain absolute ethical boundaries:
+                </p>
+                <div style={{ marginTop: 16, padding: "16px 20px", borderRadius: 12, background: "rgba(239,68,68,0.03)", border: "1px solid rgba(239,68,68,0.15)", display: "flex", gap: 12, alignItems: "start" }}>
+                  <ShieldAlert size={18} style={{ color: "#ef4444", flexShrink: 0, marginTop: 2 }} />
+                  <div style={{ fontSize: 13, color: "#cbd5e1", lineHeight: 1.6 }}>
+                    <strong style={{ color: "#f8fafc" }}>Authorization Mandatory Constraint:</strong> You strictly declare, warrant, and commit that you will **ONLY** target and scan subnet allocations, physical machines, switches, or networks that you explicitly own, operate, or maintain written authorization to audit. Unauthorized network scanning constitutes a severe breach of this contract and local laws.
+                  </div>
+                </div>
+                <p style={{ marginTop: 16, marginBottom: 0, color: "#cbd5e1", fontSize: 14, lineHeight: 1.8 }}>
+                  You shall not attempt to breach tenant isolation layers, trigger Distributed Denial of Service (DDoS) simulations on our endpoints, script excessive API queries bypassing system throttling boundaries, or reverse-engineer binary agent distributions.
+                </p>
+              </section>
+
+              <section id="section-5">
+                <h2 style={{ fontSize: 20, fontWeight: 800, color: "#f1f5f9", marginBottom: 14, letterSpacing: "-0.02em" }}>
+                  5. Customer Telemetry & Intellectual Property
+                </h2>
+                <p style={{ margin: 0, color: "#cbd5e1", fontSize: 14, lineHeight: 1.8 }}>
+                  You retain absolute ownership, rights, and intellectual claims over all database entities, device coordinates, ticketing text, and tracking parameters uploaded, generated, or cataloged within your tenant space. NeurQ AI Labs does not establish any proprietary claim over customer datasets. We claim all intellectual property, copyright, and patent frameworks relating to our code, agent binaries, custom layout systems, and visual styling tokens.
+                </p>
+              </section>
+
+              <section id="section-6">
+                <h2 style={{ fontSize: 20, fontWeight: 800, color: "#f1f5f9", marginBottom: 14, letterSpacing: "-0.02em" }}>
+                  6. Platform Integrity & Safety Boundaries
+                </h2>
+                <p style={{ margin: 0, color: "#cbd5e1", fontSize: 14, lineHeight: 1.8 }}>
+                  While our engineering teams deliver extremely hardened environments (employing strict row-level multitenant locks, continuous database replication, and zero-trust firewall configurations), you recognize that absolute security does not exist. You commit to safeguarding administrative passwords, enforcing multi-factor verification across your administrator teams, and immediately notifying us at `security@neurqai.com` if you discover any local key leaks.
+                </p>
+              </section>
+
+              <section id="section-7">
+                <h2 style={{ fontSize: 20, fontWeight: 800, color: "#f1f5f9", marginBottom: 14, letterSpacing: "-0.02em", display: "flex", alignItems: "center", gap: 8 }}>
+                  7. 99.9% Uptime Service Level Agreement (SLA)
+                </h2>
+                <p style={{ margin: 0, color: "#cbd5e1", fontSize: 14, lineHeight: 1.8 }}>
+                  Professional and Enterprise tiers are governed by a strict <strong style={{ color: "#06b6d4" }}>99.9% Uptime Commitment</strong>. In the event that monthly cumulative availability drops below this baseline, you are eligible for service credits applied to subsequent billing cycles:
+                </p>
+                <ul style={{ margin: "14px 0 0", paddingLeft: 20, color: "#cbd5e1", fontSize: 14, lineHeight: 1.8, display: "flex", flexDirection: "column", gap: 6 }}>
+                  <li><strong>Availability &ge; 99.0% and &lt; 99.9%:</strong> 10% monthly subscription credit value back.</li>
+                  <li><strong>Availability &ge; 95.0% and &lt; 99.0%:</strong> 25% monthly subscription credit value back.</li>
+                  <li><strong>Availability &lt; 95.0%:</strong> 50% monthly subscription credit value back.</li>
+                </ul>
+                <p style={{ marginTop: 12, marginBottom: 0, color: "#cbd5e1", fontSize: 14, lineHeight: 1.8 }}>
+                  This SLA excludes outages occurring due to scheduled platform maintenance announced at least <strong>48 hours</strong> in advance, or catastrophic upstream network failures.
+                </p>
+              </section>
+
+              <section id="section-8">
+                <h2 style={{ fontSize: 20, fontWeight: 800, color: "#f1f5f9", marginBottom: 14, letterSpacing: "-0.02em" }}>
+                  8. Direct Limitation of Liability Clauses
+                </h2>
+                <p style={{ margin: 0, color: "#cbd5e1", fontSize: 14, lineHeight: 1.8 }}>
+                  To the maximum extent permitted by applicable commercial regulations, the total cumulative liability of NeurQ AI Labs Private Limited for any direct legal claims, software anomalies, loss of operational telemetry, or downtime damages is strictly capped at the **total financial amount paid by you** in the twelve (12) months preceding the initiation of the legal claim. We are not liable for any indirect, consequential, or incidental operational losses.
+                </p>
+              </section>
+
+              <section id="section-9">
+                <h2 style={{ fontSize: 20, fontWeight: 800, color: "#f1f5f9", marginBottom: 14, letterSpacing: "-0.02em" }}>
+                  9. Account Termination & Data Disposal
+                </h2>
+                <p style={{ margin: 0, color: "#cbd5e1", fontSize: 14, lineHeight: 1.8 }}>
+                  You may close your workspace at any time. Upon termination, active data processing ceases immediately. We preserve your database records for a grace period of **30 days** to allow comprehensive export of tracking configurations and ticket logs. Upon resolution of this grace period, all records undergo permanent zero-residual physical destruction.
+                </p>
+              </section>
+
+              <section id="section-10">
+                <h2 style={{ fontSize: 20, fontWeight: 800, color: "#f1f5f9", marginBottom: 14, letterSpacing: "-0.02em", display: "flex", alignItems: "center", gap: 8 }}>
+                  10. Governing Law & Judicial Jurisdiction
+                </h2>
+                <p style={{ margin: 0, color: "#cbd5e1", fontSize: 14, lineHeight: 1.8 }}>
+                  These terms, platform access coordinates, and all regulatory declarations are governed by and construed in strict alignment with the **laws of the Republic of India**. Any unresolved commercial disputes or legal controversies arising from these policies shall be subject to the exclusive jurisdiction of the competent courts located in **Lucknow, Uttar Pradesh, India**.
+                </p>
+              </section>
+
+              <section id="section-11">
+                <h2 style={{ fontSize: 20, fontWeight: 800, color: "#f1f5f9", marginBottom: 14, letterSpacing: "-0.02em" }}>
+                  11. Contact & Legal Notifications
+                </h2>
+                <p style={{ margin: 0, color: "#cbd5e1", fontSize: 14, lineHeight: 1.8 }}>
+                  For official contract notifications, legal processes, or to initiate a service credit verification claim under the SLA, please direct formal correspondence to our legal department:
+                </p>
+                <div style={{ marginTop: 20, padding: 24, borderRadius: 16, background: "rgba(255,255,255,0.01)", border: `1px solid ${border}` }}>
+                  <div style={{ fontWeight: 800, color: "#f1f5f9", fontSize: 15, marginBottom: 4 }}>Legal Affairs & Governance Desk</div>
+                  <div style={{ color: muted, fontSize: 13, marginBottom: 12 }}>NeurQ AI Labs Private Limited</div>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 8, fontSize: 13, color: "#cbd5e1" }}>
+                    <div>✉️ <span style={{ color: muted }}>Email:</span> legal@neurqai.com</div>
+                    <div>📍 <span style={{ color: muted }}>Registered Address:</span> Incubation Cell, IIIT Lucknow, Uttar Pradesh - 226002, India</div>
+                  </div>
+                </div>
+              </section>
+
+            </div>
+          </div>
         </div>
       </div>
-    </div>
-  );
-}
+      </div>
 
-function Section({ title, children }: { title: string; children: React.ReactNode }) {
-  return (
-    <div style={{ marginBottom: 20 }}>
-      <h2 style={{ fontSize: 16, fontWeight: 700, color: "#f1f5f9", marginBottom: 6 }}>{title}</h2>
-      <p style={{ margin: 0 }}>{children}</p>
+      <style jsx global>{`
+        .legal-container {
+          display: grid;
+          grid-template-columns: 260px 1fr;
+          gap: 40px;
+          align-items: start;
+        }
+        .legal-toc {
+          position: sticky;
+          top: 100px;
+          display: flex;
+          flex-direction: column;
+          gap: 8px;
+          background: rgba(16, 22, 42, 0.45);
+          border: 1px solid rgba(42, 49, 80, 0.4);
+          border-radius: 16px;
+          padding: 20px;
+          backdrop-filter: blur(12px);
+          -webkit-backdrop-filter: blur(12px);
+        }
+        .legal-toc-item {
+          display: block;
+          width: 100%;
+          text-align: left;
+          background: none;
+          border: 1px solid transparent;
+          padding: 10px 14px;
+          border-radius: 8px;
+          color: #94a3b8;
+          font-size: 13px;
+          font-weight: 500;
+          cursor: pointer;
+          transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+          font-family: inherit;
+        }
+        .legal-toc-item:hover {
+          color: #22d3ee;
+          background: rgba(6, 182, 212, 0.04);
+        }
+        .legal-toc-item.active {
+          color: #06b6d4;
+          background: rgba(6, 182, 212, 0.08);
+          border-color: rgba(6, 182, 212, 0.2);
+          font-weight: 700;
+          box-shadow: inset 0 0 12px rgba(6, 182, 212, 0.05);
+        }
+        @media (max-width: 900px) {
+          .legal-container {
+            grid-template-columns: 1fr;
+            gap: 32px;
+          }
+          .legal-toc {
+            position: relative;
+            top: 0;
+            padding: 14px;
+          }
+        }
+      `}</style>
+      <Footer theme={theme} />
     </div>
   );
 }

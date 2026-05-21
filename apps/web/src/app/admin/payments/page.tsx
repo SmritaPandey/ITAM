@@ -36,6 +36,24 @@ export default function PaymentsPage() {
     load();
   }
 
+  function formatRevenue(rev: Record<string, number> | number | undefined) {
+    if (typeof rev === "number") {
+      return `₹${rev.toLocaleString()}`;
+    }
+    if (!rev) return "₹0";
+    const parts: string[] = [];
+    if (rev.INR !== undefined && rev.INR > 0) {
+      parts.push(`₹${Number(rev.INR).toLocaleString()}`);
+    }
+    if (rev.USD !== undefined && rev.USD > 0) {
+      parts.push(`$${Number(rev.USD).toLocaleString()}`);
+    }
+    if (parts.length === 0) {
+      return "₹0";
+    }
+    return parts.join(" / ");
+  }
+
   return (
     <div>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
@@ -43,9 +61,9 @@ export default function PaymentsPage() {
           <h1 style={{ fontSize: 22, fontWeight: 800, color: "var(--text-primary)" }}>Payment Tracking</h1>
           <p style={{ fontSize: 12, color: "var(--text-tertiary)" }}>{data?.total || 0} payments recorded</p>
         </div>
-        <button onClick={openModal} style={{
+        <button onClick={openModal} className="btn btn-primary" style={{
           display: "flex", alignItems: "center", gap: 6, padding: "8px 16px", borderRadius: 8,
-          border: "none", background: "#dc2626", color: "white", fontSize: 12, fontWeight: 600, cursor: "pointer",
+          fontSize: 12, fontWeight: 600, cursor: "pointer",
         }}>
           <Plus size={14} /> Record Payment
         </button>
@@ -55,11 +73,11 @@ export default function PaymentsPage() {
       {data?.summary && (
         <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 14, marginBottom: 24 }}>
           {[
-            { label: "Total Revenue", value: `₹${Number(data.summary.totalRevenue || 0).toLocaleString()}`, icon: TrendingUp, color: "#10b981" },
-            { label: "This Month", value: `₹${Number(data.summary.monthRevenue || 0).toLocaleString()}`, icon: Calendar, color: "#06b6d4" },
-            { label: "Total Payments", value: data.total, icon: CreditCard, color: "#8b5cf6" },
+            { label: "Total Revenue", value: formatRevenue(data.summary.totalRevenue), icon: TrendingUp, color: "var(--brand-500)" },
+            { label: "This Month", value: formatRevenue(data.summary.monthRevenue), icon: Calendar, color: "var(--brand-400)" },
+            { label: "Total Payments", value: data.total, icon: CreditCard, color: "var(--accent-500)" },
           ].map(s => (
-            <div key={s.label} style={{ padding: 20, borderRadius: 12, background: "var(--bg-card)", border: "1px solid var(--border-primary)" }}>
+            <div key={s.label} className="card" style={{ padding: 20, display: "flex", flexDirection: "column", justifyContent: "center" }}>
               <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>
                 <div style={{ width: 36, height: 36, borderRadius: 8, background: `${s.color}15`, display: "flex", alignItems: "center", justifyContent: "center", color: s.color }}>
                   <s.icon size={16} />
@@ -73,10 +91,10 @@ export default function PaymentsPage() {
       )}
 
       {/* Table */}
-      <div style={{ background: "var(--bg-card)", border: "1px solid var(--border-primary)", borderRadius: 12, overflow: "hidden" }}>
+      <div className="card" style={{ padding: 0, overflow: "hidden" }}>
         <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
           <thead>
-            <tr style={{ borderBottom: "1px solid var(--border-primary)" }}>
+            <tr style={{ borderBottom: "1px solid var(--border-primary)", background: "var(--bg-secondary)" }}>
               {["Tenant", "Amount", "Method", "Reference", "Status", "Date"].map(h => (
                 <th key={h} style={{ padding: "12px 14px", textAlign: "left", fontWeight: 600, fontSize: 11, color: "var(--text-tertiary)", textTransform: "uppercase", letterSpacing: 1 }}>{h}</th>
               ))}
@@ -93,9 +111,9 @@ export default function PaymentsPage() {
                   <div style={{ fontWeight: 600, color: "var(--text-primary)" }}>{p.subscription?.tenant?.name || "—"}</div>
                   <div style={{ fontSize: 11, color: "var(--text-tertiary)" }}>{p.subscription?.plan}</div>
                 </td>
-                <td style={{ padding: "12px 14px", fontWeight: 700, color: "#10b981" }}>
-                  ₹{Number(p.amount).toLocaleString()}
-                  <span style={{ fontSize: 10, color: "var(--text-tertiary)", fontWeight: 400, marginLeft: 4 }}>{p.currency}</span>
+                <td style={{ padding: "12px 14px", fontWeight: 700, color: "var(--success)" }}>
+                  {p.currency === "USD" ? "$" : "₹"}{Number(p.amount).toLocaleString()}
+                  <span style={{ fontSize: 10, color: "var(--text-tertiary)", fontWeight: 500, marginLeft: 4 }}>{p.currency}</span>
                 </td>
                 <td style={{ padding: "12px 14px", color: "var(--text-secondary)" }}>{p.method || "—"}</td>
                 <td style={{ padding: "12px 14px", color: "var(--text-tertiary)", fontSize: 12 }}>{p.referenceId || "—"}</td>
@@ -103,7 +121,7 @@ export default function PaymentsPage() {
                   <span style={{
                     fontSize: 10, fontWeight: 600, padding: "2px 8px", borderRadius: 6,
                     background: p.status === "COMPLETED" ? "rgba(16,185,129,0.1)" : "rgba(239,68,68,0.1)",
-                    color: p.status === "COMPLETED" ? "#10b981" : "#ef4444",
+                    color: p.status === "COMPLETED" ? "var(--success)" : "var(--error)",
                   }}>{p.status}</span>
                 </td>
                 <td style={{ padding: "12px 14px", color: "var(--text-tertiary)", fontSize: 12 }}>{new Date(p.paidAt).toLocaleDateString()}</td>
@@ -117,7 +135,7 @@ export default function PaymentsPage() {
       {showModal && (
         <>
           <div onClick={() => setShowModal(false)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", zIndex: 2000, backdropFilter: "blur(4px)" }} />
-          <div style={{ position: "fixed", top: "50%", left: "50%", transform: "translate(-50%, -50%)", width: 440, background: "var(--bg-card)", border: "1px solid var(--border-primary)", borderRadius: 14, padding: 28, zIndex: 2001 }}>
+          <div style={{ position: "fixed", top: "50%", left: "50%", transform: "translate(-50%, -50%)", width: 440, background: "var(--bg-card)", border: "1px solid var(--border-primary)", borderRadius: 14, padding: 28, zIndex: 2001, boxShadow: "var(--modal-shadow)" }}>
             <h3 style={{ fontSize: 16, fontWeight: 700, color: "var(--text-primary)", marginBottom: 16 }}>Record Payment</h3>
             <form onSubmit={recordPayment}>
               <div style={{ marginBottom: 12 }}>
@@ -128,11 +146,18 @@ export default function PaymentsPage() {
                   {tenants.map(t => <option key={t.id} value={t.id}>{t.name} ({t.plan})</option>)}
                 </select>
               </div>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 12 }}>
+              <div style={{ display: "grid", gridTemplateColumns: "1.5fr 1fr 1.5fr", gap: 10, marginBottom: 12 }}>
                 <div>
                   <label style={{ fontSize: 11, fontWeight: 600, color: "var(--text-tertiary)", display: "block", marginBottom: 4 }}>Amount</label>
                   <input type="number" step="0.01" value={form.amount} onChange={e => setForm(f => ({ ...f, amount: e.target.value }))} required placeholder="0.00"
                     style={{ width: "100%", padding: "8px 10px", borderRadius: 8, border: "1px solid var(--border-primary)", background: "var(--bg-input)", color: "var(--text-primary)", fontSize: 13, boxSizing: "border-box" }} />
+                </div>
+                <div>
+                  <label style={{ fontSize: 11, fontWeight: 600, color: "var(--text-tertiary)", display: "block", marginBottom: 4 }}>Currency</label>
+                  <select value={form.currency} onChange={e => setForm(f => ({ ...f, currency: e.target.value }))}
+                    style={{ width: "100%", padding: "8px 10px", borderRadius: 8, border: "1px solid var(--border-primary)", background: "var(--bg-input)", color: "var(--text-primary)", fontSize: 13 }}>
+                    {["INR", "USD"].map(c => <option key={c} value={c}>{c}</option>)}
+                  </select>
                 </div>
                 <div>
                   <label style={{ fontSize: 11, fontWeight: 600, color: "var(--text-tertiary)", display: "block", marginBottom: 4 }}>Method</label>
@@ -153,8 +178,8 @@ export default function PaymentsPage() {
                   style={{ width: "100%", padding: "8px 10px", borderRadius: 8, border: "1px solid var(--border-primary)", background: "var(--bg-input)", color: "var(--text-primary)", fontSize: 13, boxSizing: "border-box", fontFamily: "inherit", resize: "none" }} />
               </div>
               <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
-                <button type="button" onClick={() => setShowModal(false)} style={{ padding: "8px 16px", borderRadius: 8, border: "1px solid var(--border-primary)", background: "transparent", color: "var(--text-secondary)", fontSize: 12, cursor: "pointer" }}>Cancel</button>
-                <button type="submit" disabled={saving} style={{ padding: "8px 20px", borderRadius: 8, border: "none", background: "#dc2626", color: "white", fontSize: 12, fontWeight: 600, cursor: saving ? "wait" : "pointer" }}>
+                <button type="button" onClick={() => setShowModal(false)} className="btn btn-secondary" style={{ fontSize: 12, padding: "8px 16px" }}>Cancel</button>
+                <button type="submit" disabled={saving} className="btn btn-primary" style={{ fontSize: 12, padding: "8px 20px", cursor: saving ? "wait" : "pointer" }}>
                   {saving ? "Recording..." : "Record Payment"}
                 </button>
               </div>

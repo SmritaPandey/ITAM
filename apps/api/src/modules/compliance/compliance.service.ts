@@ -24,7 +24,7 @@ export class ComplianceService {
   // DIFF ENGINE — Compares two system snapshots
   // ═══════════════════════════════════════════════════════════════
 
-  diffSnapshots(prev: any, curr: any): ChangeDetection[] {
+  diffSnapshots(prev: any, curr: any, policies?: any[]): ChangeDetection[] {
     const changes: ChangeDetection[] = [];
     if (!prev || !curr) return changes;
 
@@ -156,6 +156,102 @@ export class ComplianceService {
       }
     }
 
+    // 8. OS User accounts (UNAUTHORIZED_ACCESS)
+    const prevUsers = prev?.security?.users || [];
+    const currUsers = curr?.security?.users || [];
+    const addedUsers = currUsers.filter((u: string) => !prevUsers.includes(u));
+    for (const u of addedUsers) {
+      changes.push({
+        category: 'UNAUTHORIZED_ACCESS',
+        changeType: 'ADDED',
+        summary: `New OS user account created: "${u}"`,
+        previousValue: null,
+        newValue: { username: u },
+      });
+    }
+
+    // 9. Active shell sessions (UNAUTHORIZED_ACCESS)
+    const prevShells = prev?.security?.activeShellUsers || [];
+    const currShells = curr?.security?.activeShellUsers || [];
+    const addedShells = currShells.filter((u: string) => !prevShells.includes(u));
+    for (const u of addedShells) {
+      changes.push({
+        category: 'UNAUTHORIZED_ACCESS',
+        changeType: 'ADDED',
+        summary: `Unauthorized active terminal shell login: "${u}"`,
+        previousValue: null,
+        newValue: { username: u },
+      });
+    }
+
+    // 10. Failed login attempts (UNAUTHORIZED_ACCESS)
+    const prevFailed = prev?.security?.failedLoginsCount || 0;
+    const currFailed = curr?.security?.failedLoginsCount || 0;
+    if (currFailed > prevFailed && currFailed >= 3) {
+      changes.push({
+        category: 'UNAUTHORIZED_ACCESS',
+        changeType: 'MODIFIED',
+        summary: `Suspicious elevated failed login attempts: ${currFailed} attempts`,
+        previousValue: { failedLoginsCount: prevFailed },
+        newValue: { failedLoginsCount: currFailed },
+      });
+    }
+
+    // 11. New Listening Ports (UNAUTHORIZED_ACCESS)
+    const prevPorts = (prev?.security?.openPorts || []).map((p: any) => p.port);
+    const currPorts = curr?.security?.openPorts || [];
+    for (const p of currPorts) {
+      if (!prevPorts.includes(p.port)) {
+        changes.push({
+          category: 'UNAUTHORIZED_ACCESS',
+          changeType: 'ADDED',
+          summary: `New open listening port detected: ${p.port} (${p.process || 'Unknown process'})`,
+          previousValue: null,
+          newValue: p,
+        });
+      }
+    }
+
+    // 12. Active Process Block / Blacklist Threat Control (PROCESS_BLOCKED)
+    const currProcs = curr?.processes || [];
+    const processPolicies = (policies || []).filter(p => p.category === 'PROCESS_BLOCKED' && p.isActive);
+    
+    // Seed standard dangerous processes keywords
+    const blockedKeywords = ['miner', 'torrent', 'wireshark', 'nmap', 'nc', 'netcat', 'john the ripper', 'hashcat', 'hydra', 'metasploit'];
+    
+    for (const p of processPolicies) {
+      const pattern = p.matchPattern as any;
+      if (pattern?.blockedProcesses && Array.isArray(pattern.blockedProcesses)) {
+        blockedKeywords.push(...pattern.blockedProcesses);
+      }
+      if (pattern?.blockedKeywords && Array.isArray(pattern.blockedKeywords)) {
+        blockedKeywords.push(...pattern.blockedKeywords);
+      }
+    }
+    const uniqueBlockedKeywords = Array.from(new Set(blockedKeywords.map(k => k.toLowerCase())));
+
+    for (const proc of currProcs) {
+      const procName = (proc.name || '').toLowerCase();
+      const procCmd = (proc.command || '').toLowerCase();
+      const matchedKeyword = uniqueBlockedKeywords.find(k => procName.includes(k) || procCmd.includes(k));
+
+      if (matchedKeyword) {
+        changes.push({
+          category: 'PROCESS_BLOCKED',
+          changeType: 'ADDED',
+          summary: `Suspicious process execution detected: ${proc.name || proc.command || 'Unknown'} (PID: ${proc.pid || 'N/A'})`,
+          previousValue: null,
+          newValue: {
+            name: proc.name || proc.command || 'Unknown',
+            pid: proc.pid ? String(proc.pid) : undefined,
+            command: proc.command || '',
+            user: proc.user || '',
+            matchedKeyword,
+          },
+        });
+      }
+    }
+
     return changes;
   }
 
@@ -180,6 +276,46 @@ export class ComplianceService {
     const results = [];
 
     for (const change of changes) {
+      // ─── Duplicate & Manual Approval Gates Check ────────────────
+      if (change.category === 'PROCESS_BLOCKED') {
+        const processName = change.newValue?.name;
+        const existingChanges = await this.prisma.endpointChange.findMany({
+          where: { agentId, category: 'PROCESS_BLOCKED' },
+        });
+        const matched = existingChanges.find(c => (c.newValue as any)?.name === processName);
+        if (matched) {
+          if (matched.status === 'APPROVED') {
+            continue; // Already approved by admin! Allow process execution.
+          }
+          results.push(matched); // Skip recreating log row, keep active change
+          continue;
+        }
+      }
+
+      if (change.category === 'UNAUTHORIZED_ACCESS') {
+        const username = change.newValue?.username;
+        const port = change.newValue?.port;
+        const existingChanges = await this.prisma.endpointChange.findMany({
+          where: { agentId, category: 'UNAUTHORIZED_ACCESS' },
+        });
+
+        if (username) {
+          const matched = existingChanges.find(c => (c.newValue as any)?.username === username);
+          if (matched) {
+            if (matched.status === 'APPROVED') continue;
+            results.push(matched);
+            continue;
+          }
+        } else if (port) {
+          const matched = existingChanges.find(c => (c.newValue as any)?.port === port);
+          if (matched) {
+            if (matched.status === 'APPROVED') continue;
+            results.push(matched);
+            continue;
+          }
+        }
+      }
+
       // Find matching policy
       const matchedPolicy = policies.find(p => {
         if (p.category !== change.category) return false;
@@ -285,8 +421,79 @@ export class ComplianceService {
       return [];
     }
 
-    // Diff against baseline
-    const changes = this.diffSnapshots(baseline.snapshot as any, newSnapshot);
+    // Load active policies for the tenant
+    let policies = await this.prisma.endpointPolicy.findMany({
+      where: { tenantId, isActive: true },
+    });
+
+    // Auto-seed default policies if the tenant has zero active policies
+    if (policies.length === 0) {
+      this.logger.log(`No active compliance policies found for tenant ${tenantId}. Auto-seeding default templates...`);
+      await this.seedDefaultPolicies(tenantId);
+      policies = await this.prisma.endpointPolicy.findMany({
+        where: { tenantId, isActive: true },
+      });
+    }
+
+    // --- Active Threat Auto-Resolution Loop ---
+    try {
+      const activeThreats = await this.prisma.endpointChange.findMany({
+        where: {
+          agentId,
+          status: { in: ['PENDING_REVIEW', 'VIOLATION'] },
+          category: { in: ['PROCESS_BLOCKED', 'UNAUTHORIZED_ACCESS'] },
+        },
+      });
+
+      for (const threat of activeThreats) {
+        const val = threat.newValue as any;
+        if (!val) continue;
+
+        if (threat.category === 'PROCESS_BLOCKED') {
+          const stillRunning = (newSnapshot.processes || []).some((proc: any) => {
+            if (val.pid && String(proc.pid) === String(val.pid)) return true;
+            if (val.name && (proc.name === val.name || proc.command === val.name)) return true;
+            if (val.command && (proc.command === val.command || proc.name === val.command)) return true;
+            return false;
+          });
+          if (!stillRunning) {
+            await this.prisma.endpointChange.update({
+              where: { id: threat.id },
+              data: { status: 'RESOLVED' },
+            });
+            this.logger.log(`Suspicious process threat auto-resolved (terminated): ${val.name} (PID: ${val.pid || 'N/A'})`);
+          }
+        } else if (threat.category === 'UNAUTHORIZED_ACCESS') {
+          if (val.port !== undefined && val.port !== null) {
+            const portStillOpen = (newSnapshot.security?.openPorts || []).some((p: any) => p.port === val.port);
+            if (!portStillOpen) {
+              await this.prisma.endpointChange.update({
+                where: { id: threat.id },
+                data: { status: 'RESOLVED' },
+              });
+              this.logger.log(`Unauthorized open port threat auto-resolved (blocked): Port ${val.port}`);
+            }
+          } else if (val.username) {
+            const isShellSession = threat.summary?.includes('terminal') || threat.summary?.includes('shell') || threat.summary?.includes('login');
+            if (isShellSession) {
+              const shellStillActive = (newSnapshot.security?.activeShellUsers || []).includes(val.username);
+              if (!shellStillActive) {
+                await this.prisma.endpointChange.update({
+                  where: { id: threat.id },
+                  data: { status: 'RESOLVED' },
+                });
+                this.logger.log(`Unauthorized terminal shell threat auto-resolved (disconnected): User "${val.username}"`);
+              }
+            }
+          }
+        }
+      }
+    } catch (err: any) {
+      this.logger.warn(`Threat auto-resolution failed for agent ${agentId}: ${err.message}`);
+    }
+
+    // Diff against baseline using active policies
+    const changes = this.diffSnapshots(baseline.snapshot as any, newSnapshot, policies);
 
     // Evaluate against policies and record
     const results = await this.evaluateAndRecord(
@@ -513,6 +720,26 @@ export class ComplianceService {
         matchPattern: { securityDegradation: true },
         scope: {},
       },
+      {
+        name: 'Unauthorized OS Access',
+        description: 'Detect and alert on new OS users, suspicious terminal shell logins, or failed brute force attempts',
+        category: 'UNAUTHORIZED_ACCESS',
+        severity: 'CRITICAL',
+        action: 'REQUIRE_APPROVAL',
+        matchPattern: {},
+        scope: {},
+      },
+      {
+        name: 'Suspicious Process Execution',
+        description: 'Flag and forcefully terminate unauthorized software execution (P2P, gaming, miners, tools)',
+        category: 'PROCESS_BLOCKED',
+        severity: 'CRITICAL',
+        action: 'REQUIRE_APPROVAL',
+        matchPattern: {
+          blockedProcesses: ['miner', 'torrent', 'wireshark', 'nmap', 'nc', 'netcat', 'john the ripper', 'hashcat', 'hydra', 'metasploit'],
+        },
+        scope: {},
+      },
     ];
   }
 
@@ -575,10 +802,15 @@ export class ComplianceService {
       },
       security: {
         firewallEnabled: ssh.firewallStatus ? ssh.firewallStatus.includes('active') || ssh.firewallStatus.includes('enabled') : false,
+        users: ssh.users || [],
+        activeShellUsers: ssh.activeShellUsers || [],
+        failedLoginsCount: ssh.failedLoginsCount || 0,
+        openPorts: ssh.openPorts || [],
       },
       software: (ssh.runningServices || []).map((s: any) => ({
         name: s.name, version: s.status || '',
       })),
+      processes: ssh.processes || [],
       services: ssh.runningServices || [],
       usbDevices: [],
     };

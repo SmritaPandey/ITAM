@@ -1,6 +1,8 @@
 "use client";
 import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
+import { LogoIcon } from "@/components/Logo";
 import {
   Shield, Monitor, Ticket, Network, Package, BarChart3, Lock, Zap, ChevronRight,
   ArrowRight, CheckCircle2, Globe, Server, Cpu, Sun, Moon, Camera, Car, Laptop,
@@ -191,29 +193,18 @@ export default function LandingPage() {
         boxShadow: L ? "0 4px 30px rgba(15, 23, 42, 0.03)" : "none",
         transition: "background 0.3s"
       }}>
-        <a href="/" style={{ display: "flex", alignItems: "center", gap: 10, textDecoration: "none", color: "inherit" }}>
-          <div style={{
-            width: 32,
-            height: 32,
-            borderRadius: 8,
-            background: "linear-gradient(135deg, #06b6d4, #8b5cf6)",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            boxShadow: "0 4px 20px rgba(6, 182, 212, 0.25)"
-          }}>
-            <img src="/favicon.png" alt="QS" style={{ width: 20, height: 20, borderRadius: 4 }} />
-          </div>
+        <Link href="/" style={{ display: "flex", alignItems: "center", gap: 10, textDecoration: "none", color: "inherit" }}>
+          <LogoIcon size={32} glow={!L} />
           <span style={{ fontSize: 16, fontWeight: 900, letterSpacing: "-0.04em" }}>QS Asset</span>
-        </a>
+        </Link>
         
         <div className="landing-nav-links" style={{ display: "flex", alignItems: "center", gap: 32 }}>
           {[
-            { l: "Nerve System", h: "#nerve-system" },
-            { l: "Immune Radar", h: "#immune-system" },
-            { l: "3D Comparison", h: "#3d-comparison" },
-            { l: "Savings Engine", h: "#savings-engine" },
-            { l: "12 Modules", h: "#modules-grid" }
+            { l: "Platform", h: "#nerve-system" },
+            { l: "Security", h: "#immune-system" },
+            { l: "Comparison", h: "#3d-comparison" },
+            { l: "ROI", h: "#savings-engine" },
+            { l: "Modules", h: "#modules-grid" }
           ].map(t => (
             <a key={t.l} href={t.h} style={{ fontSize: 13, fontWeight: 600, color: muted, textDecoration: "none", transition: "color 0.2s" }}>{t.l}</a>
           ))}
@@ -1025,19 +1016,17 @@ export default function LandingPage() {
       <footer style={{ padding: "80px 6% 36px", borderTop: `1.5px solid ${border}`, maxWidth: 1240, margin: "0 auto" }}>
         <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr 1fr 1fr", gap: 48, marginBottom: 40 }}>
           <div>
-            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 16 }}>
-              <div style={{ width: 28, height: 28, borderRadius: 7, background: "linear-gradient(135deg, #06b6d4, #8b5cf6)", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                <img src="/favicon.png" alt="QS" style={{ width: 17, height: 17, borderRadius: 4 }} />
-              </div>
+            <Link href="/" style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 16, textDecoration: "none", color: "inherit" }}>
+              <LogoIcon size={24} glow={!L} />
               <span style={{ fontSize: 15, fontWeight: 900, letterSpacing: "-0.03em" }}>QS Asset</span>
-            </div>
+            </Link>
             <p style={{ fontSize: 12.5, color: muted, lineHeight: 1.7, maxWidth: 300 }}>
               Autonomous IT asset lifecycle management, real-time SNMP topology, and security mitigation engine. Crafted by NeurQ AI Labs.
             </p>
           </div>
           <div>
             <h4 style={{ fontSize: 11, fontWeight: 800, textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 16, color: muted }}>Product</h4>
-            {[{ l: "Nerve System", h: "#nerve-system" }, { l: "Immune Radar", h: "#immune-system" }, { l: "Pricing", h: "#pricing" }].map(a => (
+            {[{ l: "Platform", h: "#nerve-system" }, { l: "Security", h: "#immune-system" }, { l: "Pricing", h: "#pricing" }].map(a => (
               <a key={a.l} href={a.h} style={{ display: "block", fontSize: 13, color: txt, textDecoration: "none", marginBottom: 10, opacity: 0.7, fontWeight: 600 }}>{a.l}</a>
             ))}
           </div>

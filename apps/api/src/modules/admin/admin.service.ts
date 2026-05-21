@@ -264,16 +264,35 @@ export class AdminService {
     // Revenue summary
     const now = new Date();
     const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-    const [totalRevenue, monthRevenue] = await Promise.all([
-      this.prisma.payment.aggregate({ where: { status: 'COMPLETED' }, _sum: { amount: true } }),
-      this.prisma.payment.aggregate({ where: { status: 'COMPLETED', paidAt: { gte: startOfMonth } }, _sum: { amount: true } }),
+    const [totalGrouped, monthGrouped] = await Promise.all([
+      this.prisma.payment.groupBy({
+        by: ['currency'],
+        where: { status: 'COMPLETED' },
+        _sum: { amount: true },
+      }),
+      this.prisma.payment.groupBy({
+        by: ['currency'],
+        where: { status: 'COMPLETED', paidAt: { gte: startOfMonth } },
+        _sum: { amount: true },
+      }),
     ]);
+
+    const totalRevenue: Record<string, number> = {};
+    const monthRevenue: Record<string, number> = {};
+
+    totalGrouped.forEach(item => {
+      totalRevenue[item.currency] = item._sum.amount ? Number(item._sum.amount) : 0;
+    });
+
+    monthGrouped.forEach(item => {
+      monthRevenue[item.currency] = item._sum.amount ? Number(item._sum.amount) : 0;
+    });
 
     return {
       data, total,
       summary: {
-        totalRevenue: totalRevenue._sum.amount || 0,
-        monthRevenue: monthRevenue._sum.amount || 0,
+        totalRevenue,
+        monthRevenue,
       },
     };
   }

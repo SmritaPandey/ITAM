@@ -74,7 +74,7 @@ describe('ReportGeneratorService', () => {
 
   describe('generate', () => {
     it('should generate asset report with correct structure', async () => {
-      const report = await service.generate('tenant-1', 'assets');
+      const report = await service.generate('tenant-1', 'assets') as any;
       expect(report.title).toBe('Asset Inventory Report');
       expect(report.headers).toContain('Asset Tag');
       expect(report.rows).toHaveLength(2);
@@ -83,7 +83,7 @@ describe('ReportGeneratorService', () => {
     });
 
     it('should generate ticket report with SLA data', async () => {
-      const report = await service.generate('tenant-1', 'tickets');
+      const report = await service.generate('tenant-1', 'tickets') as any;
       expect(report.title).toBe('Ticket SLA Performance Report');
       expect(report.summary.total).toBe(2);
       expect(report.summary.resolved).toBe(1);
@@ -91,7 +91,7 @@ describe('ReportGeneratorService', () => {
     });
 
     it('should generate license report', async () => {
-      const report = await service.generate('tenant-1', 'licenses');
+      const report = await service.generate('tenant-1', 'licenses') as any;
       expect(report.title).toBe('License Utilization Report');
       expect(report.summary.total).toBe(1);
       expect(report.summary.compliant).toBe(1);
@@ -99,7 +99,7 @@ describe('ReportGeneratorService', () => {
     });
 
     it('should generate network report', async () => {
-      const report = await service.generate('tenant-1', 'network');
+      const report = await service.generate('tenant-1', 'network') as any;
       expect(report.title).toBe('Network Health Report');
       expect(report.summary.total).toBe(2);
       expect(report.summary.online).toBe(1);
@@ -107,14 +107,14 @@ describe('ReportGeneratorService', () => {
     });
 
     it('should generate patch compliance report', async () => {
-      const report = await service.generate('tenant-1', 'patches');
+      const report = await service.generate('tenant-1', 'patches') as any;
       expect(report.title).toBe('Patch Compliance Report');
       expect(report.summary.total).toBe(1);
       expect(report.summary.criticalPending).toBe(1);
     });
 
     it('should generate executive report combining all sections', async () => {
-      const report = await service.generate('tenant-1', 'executive');
+      const report = await service.generate('tenant-1', 'executive') as any;
       expect(report.title).toBe('Executive Dashboard Report');
       expect(report.sections.assets).toBeDefined();
       expect(report.sections.tickets).toBeDefined();
@@ -124,14 +124,14 @@ describe('ReportGeneratorService', () => {
     });
 
     it('should return error for unknown report type', async () => {
-      const result = await service.generate('tenant-1', 'nonexistent');
+      const result = await service.generate('tenant-1', 'nonexistent') as any;
       expect(result.error).toContain('Unknown report type');
     });
   });
 
   describe('toCSV', () => {
     it('should generate valid CSV from report data', async () => {
-      const report = await service.generate('tenant-1', 'assets');
+      const report = await service.generate('tenant-1', 'assets') as any;
       const csv = service.toCSV(report);
       expect(csv).toContain('Asset Tag');
       expect(csv).toContain('IT-001');
@@ -153,7 +153,7 @@ describe('ReportGeneratorService', () => {
 
   describe('toXLSX', () => {
     it('should generate XLSX buffer from report data', async () => {
-      const report = await service.generate('tenant-1', 'assets');
+      const report = await service.generate('tenant-1', 'assets') as any;
       const buffer = await service.toXLSX(report);
       expect(buffer).toBeInstanceOf(Buffer);
       expect(buffer.length).toBeGreaterThan(0);

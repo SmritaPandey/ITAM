@@ -20,7 +20,7 @@ function VerifyEmailContent() {
       return;
     }
 
-    const apiUrl = process.env.NEXT_PUBLIC_API_URL || "https://api-production-fe27.up.railway.app/api/v1";
+    const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4100/api/v1";
     fetch(`${apiUrl}/auth/verify-email?token=${token}`)
       .then(res => res.json())
       .then(data => {

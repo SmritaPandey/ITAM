@@ -73,42 +73,32 @@ if (!tokenFromFile && (!USER || !PASS)) {
 let accessToken = '';
 let agentId = '';
 
-// ─── HTTP Helper ────────────────────────────────────────────
+process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
+
 function request(method, path, body) {
   return new Promise((resolve, reject) => {
-    const url = new URL(`${API_BASE}${path}`);
-    const isHttps = url.protocol === 'https:';
-    const lib = isHttps ? https : http;
-    const data = body ? JSON.stringify(body) : null;
-
+    const url = `${API_BASE}${path}`;
     const options = {
-      hostname: url.hostname,
-      port: url.port,
-      path: url.pathname + url.search,
       method,
       headers: {
         'Content-Type': 'application/json',
         ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
-        ...(data ? { 'Content-Length': Buffer.byteLength(data) } : {}),
       },
-      rejectUnauthorized: false,
+      body: body ? JSON.stringify(body) : undefined,
     };
 
-    const req = lib.request(options, (res) => {
-      let responseData = '';
-      res.on('data', (chunk) => responseData += chunk);
-      res.on('end', () => {
+    fetch(url, options)
+      .then(async (res) => {
+        const text = await res.text();
+        let responseData;
         try {
-          resolve({ status: res.statusCode, data: JSON.parse(responseData) });
+          responseData = JSON.parse(text);
         } catch {
-          resolve({ status: res.statusCode, data: responseData });
+          responseData = text;
         }
-      });
-    });
-
-    req.on('error', reject);
-    if (data) req.write(data);
-    req.end();
+        resolve({ status: res.status, data: responseData });
+      })
+      .catch(reject);
   });
 }
 
@@ -227,10 +217,22 @@ function getRunningProcesses() {
         return { name: parts[0], pid: parts[1], memKb: parseInt(parts[4]?.replace(/\D/g, '') || '0') };
       }).filter(p => p.name);
     } else {
-      return exec('ps aux --sort=-%mem 2>/dev/null | head -15 || ps aux | head -15').split('\n').slice(1).map(l => {
+      const output = exec('ps aux 2>/dev/null');
+      if (!output) return [];
+      const lines = output.split('\n').slice(1);
+      const procs = lines.map(l => {
         const p = l.trim().split(/\s+/);
-        return { user: p[0], pid: p[1], cpu: p[2], mem: p[3], command: p.slice(10).join(' ') };
-      });
+        if (p.length < 11) return null;
+        return {
+          user: p[0],
+          pid: p[1],
+          cpu: p[2],
+          mem: p[3],
+          command: p.slice(10).join(' ')
+        };
+      }).filter(Boolean);
+      procs.sort((a, b) => parseFloat(b.mem || 0) - parseFloat(a.mem || 0));
+      return procs.slice(0, 15);
     }
   } catch { return []; }
 }
@@ -316,6 +318,206 @@ function getRunningServices() {
   return [];
 }
 
+function getSystemUsers() {
+  const platform = os.platform();
+  const users = new Set();
+  try {
+    if (platform === 'win32') {
+      const output = exec('net user');
+      const lines = output.split('\n');
+      let startParsing = false;
+      for (const line of lines) {
+        if (line.includes('---')) {
+          startParsing = true;
+          continue;
+        }
+        if (line.includes('The command completed successfully')) {
+          break;
+        }
+        if (startParsing) {
+          const parts = line.split(/\s{2,}/).map(u => u.trim()).filter(Boolean);
+          for (const u of parts) {
+            users.add(u);
+          }
+        }
+      }
+    } else if (platform === 'darwin') {
+      if (fs.existsSync('/Users')) {
+        const dirs = fs.readdirSync('/Users');
+        for (const dir of dirs) {
+          if (dir && dir !== 'Shared' && dir !== 'Guest' && !dir.startsWith('.')) {
+            users.add(dir);
+          }
+        }
+      }
+      const dscl = exec('dscl . -list /Users');
+      dscl.split('\n').forEach(u => {
+        const username = u.trim();
+        if (username && !username.startsWith('_') && username !== 'nobody' && username !== 'daemon') {
+          users.add(username);
+        }
+      });
+    } else {
+      if (fs.existsSync('/etc/passwd')) {
+        const content = fs.readFileSync('/etc/passwd', 'utf8');
+        content.split('\n').forEach(line => {
+          const parts = line.split(':');
+          const username = parts[0];
+          const uid = parseInt(parts[2], 10);
+          if (username && uid >= 1000 && uid < 60000) {
+            users.add(username);
+          }
+        });
+      }
+    }
+  } catch (e) {
+    users.add(os.userInfo().username);
+  }
+  if (users.size === 0) {
+    users.add(os.userInfo().username);
+  }
+  return Array.from(users);
+}
+
+function getActiveShellUsers() {
+  const platform = os.platform();
+  const active = new Set();
+  try {
+    if (platform === 'win32') {
+      const output = exec('query user');
+      const lines = output.split('\n').slice(1);
+      for (const line of lines) {
+        const parts = line.trim().split(/\s+/);
+        if (parts[0]) {
+          const username = parts[0].replace('>', '');
+          active.add(username);
+        }
+      }
+    } else {
+      const output = exec('who');
+      output.split('\n').forEach(line => {
+        const parts = line.trim().split(/\s+/);
+        if (parts[0]) active.add(parts[0]);
+      });
+    }
+  } catch (e) {
+    active.add(os.userInfo().username);
+  }
+  if (active.size === 0) {
+    active.add(os.userInfo().username);
+  }
+  return Array.from(active);
+}
+
+let mockFailedLoginCounter = 0;
+function getFailedLoginsCount() {
+  const platform = os.platform();
+  try {
+    if (platform === 'win32') {
+      const output = exec('wevtutil qe Security "/q:*[System[(EventID=4625)]]" /c:20 /f:text');
+      const count = (output.match(/Event ID:\s*4625/g) || []).length;
+      return count;
+    } else if (platform === 'darwin') {
+      const output = exec('log show --predicate \'eventMessage contains "failed login" || eventMessage contains "Authentication failed"\' --last 10m 2>/dev/null');
+      const count = (output.match(/fail/gi) || []).length;
+      if (count === 0) {
+        return mockFailedLoginCounter;
+      }
+      return count;
+    } else {
+      let count = 0;
+      if (fs.existsSync('/var/log/auth.log')) {
+        const content = exec('grep -i "fail" /var/log/auth.log | wc -l');
+        count = parseInt(content, 10) || 0;
+      } else if (fs.existsSync('/var/log/secure.log')) {
+        const content = exec('grep -i "fail" /var/log/secure.log | wc -l');
+        count = parseInt(content, 10) || 0;
+      }
+      return count;
+    }
+  } catch {
+    return mockFailedLoginCounter;
+  }
+}
+
+function getListeningPorts() {
+  const platform = os.platform();
+  const ports = [];
+  try {
+    if (platform === 'win32') {
+      const output = exec('netstat -ano');
+      const lines = output.split('\n');
+      for (const line of lines) {
+        if (line.includes('LISTENING')) {
+          const parts = line.trim().split(/\s+/);
+          if (parts.length >= 5) {
+            const proto = parts[0];
+            const localAddr = parts[1];
+            const pid = parts[parts.length - 1];
+            const portStr = localAddr.split(':').pop();
+            const port = parseInt(portStr, 10);
+            if (port && !isNaN(port)) {
+              let processName = 'Unknown';
+              try {
+                const taskOutput = exec(`tasklist /fi "PID eq ${pid}" /fo csv /nh`);
+                const taskMatch = taskOutput.split(',')[0];
+                if (taskMatch) processName = taskMatch.replace(/"/g, '');
+              } catch {}
+              ports.push({ port, process: processName, pid, protocol: proto });
+            }
+          }
+        }
+      }
+    } else {
+      const lsofOutput = exec('lsof -i -P -n -sTCP:LISTEN 2>/dev/null');
+      if (lsofOutput) {
+        const lines = lsofOutput.split('\n').slice(1);
+        for (const line of lines) {
+          const parts = line.trim().split(/\s+/);
+          if (parts.length >= 8) {
+            const proc = parts[0];
+            const pid = parts[1];
+            const proto = parts[4];
+            const nameNode = parts[8];
+            const portStr = nameNode.split(':').pop();
+            const port = parseInt(portStr, 10);
+            if (port && !isNaN(port)) {
+              ports.push({ port, process: proc, pid, protocol: proto });
+            }
+          }
+        }
+      } else {
+        const netstatOutput = exec('netstat -an 2>/dev/null');
+        const lines = netstatOutput.split('\n');
+        for (const line of lines) {
+          if (line.toLowerCase().includes('listen')) {
+            const parts = line.trim().split(/\s+/);
+            const proto = parts[0];
+            const localAddr = parts[3];
+            const portStr = localAddr.split(/[\.:]/).pop();
+            const port = parseInt(portStr, 10);
+            if (port && !isNaN(port)) {
+              ports.push({ port, process: 'Unknown', protocol: proto });
+            }
+          }
+        }
+      }
+    }
+  } catch (e) {
+    console.error('⚠️ Failed to get listening ports:', e.message);
+  }
+
+  const uniqPorts = [];
+  const seenPorts = new Set();
+  for (const p of ports) {
+    if (!seenPorts.has(p.port)) {
+      seenPorts.add(p.port);
+      uniqPorts.push(p);
+    }
+  }
+  return uniqPorts;
+}
+
 function collectSystemInfo() {
   const cpus = os.cpus();
   const totalMem = os.totalmem();
@@ -354,7 +556,13 @@ function collectSystemInfo() {
       loadAvg15m: loadAvg[2]?.toFixed(2),
       cpuUsagePercent: Math.round(loadAvg[0] / cpus.length * 100),
     },
-    security: getSecurityInfo(),
+    security: {
+      ...getSecurityInfo(),
+      users: getSystemUsers(),
+      activeShellUsers: getActiveShellUsers(),
+      failedLoginsCount: getFailedLoginsCount(),
+      openPorts: getListeningPorts(),
+    },
     software: getInstalledSoftware(),
     processes: getRunningProcesses(),
     usbDevices: getUsbDevices(),
@@ -396,6 +604,153 @@ async function sendHeartbeat() {
     if (res.status === 200 || res.status === 201) {
       const mem = systemInfo.hardware;
       console.log(`💓 Heartbeat sent — CPU: ${systemInfo.performance.cpuUsagePercent}% | RAM: ${mem.ramUsagePercent}% (${mem.usedRamMb}/${mem.totalRamMb} MB) | Uptime: ${systemInfo.operatingSystem.uptimeHours}h`);
+      
+      // Parse active mitigation actions from API response
+      if (res.data && Array.isArray(res.data.actions) && res.data.actions.length > 0) {
+        console.log(`🛡️  Received ${res.data.actions.length} security action directives from admin...`);
+        for (const act of res.data.actions) {
+          if (act.type === 'KILL_PROCESS') {
+            const { processName, pid } = act;
+            console.log(`⚠️  ACTION: Terminating unauthorized process "${processName}" (PID: ${pid})...`);
+            try {
+              if (pid) {
+                // Check if PID is still active
+                let isRunning = false;
+                try {
+                  if (os.platform() === 'win32') {
+                    const check = execSync(`tasklist /fi "PID eq ${pid}"`, { encoding: 'utf-8', timeout: 3000 });
+                    isRunning = check.includes(String(pid));
+                  } else {
+                    execSync(`ps -p ${pid}`, { stdio: 'ignore', timeout: 3000 });
+                    isRunning = true;
+                  }
+                } catch {
+                  isRunning = false;
+                }
+
+                if (!isRunning) {
+                  console.log(`✅ Process PID ${pid} is already terminated/inactive.`);
+                  continue;
+                }
+
+                // If running, terminate it
+                if (os.platform() === 'win32') {
+                  execSync(`taskkill /F /PID ${pid}`, { timeout: 5000 });
+                } else {
+                  execSync(`kill -9 ${pid}`, { timeout: 5000 });
+                }
+                console.log(`✅ Terminated PID ${pid} successfully.`);
+              } else if (processName) {
+                // Check if any instance of processName is running
+                let isRunning = false;
+                try {
+                  if (os.platform() === 'win32') {
+                    const check = execSync(`tasklist /fi "IMAGENAME eq ${processName}"`, { encoding: 'utf-8', timeout: 3000 });
+                    isRunning = check.toLowerCase().includes(processName.toLowerCase());
+                  } else {
+                    execSync(`pgrep "${processName}"`, { stdio: 'ignore', timeout: 3000 });
+                    isRunning = true;
+                  }
+                } catch {
+                  isRunning = false;
+                }
+
+                if (!isRunning) {
+                  console.log(`✅ Process "${processName}" is already terminated/inactive.`);
+                  continue;
+                }
+
+                // Try to kill
+                try {
+                  if (os.platform() === 'win32') {
+                    execSync(`taskkill /F /IM "${processName}"`, { timeout: 5000 });
+                  } else {
+                    execSync(`killall -9 "${processName}"`, { timeout: 5000 });
+                  }
+                  console.log(`✅ Terminated all instances of "${processName}" successfully.`);
+                } catch (killErr) {
+                  // Verify if the process actually died
+                  let stillRunning = false;
+                  try {
+                    if (os.platform() === 'win32') {
+                      const check = execSync(`tasklist /fi "IMAGENAME eq ${processName}"`, { encoding: 'utf-8', timeout: 3000 });
+                      stillRunning = check.toLowerCase().includes(processName.toLowerCase());
+                    } else {
+                      execSync(`pgrep "${processName}"`, { stdio: 'ignore', timeout: 3000 });
+                      stillRunning = true;
+                    }
+                  } catch {
+                    stillRunning = false;
+                  }
+
+                  if (!stillRunning) {
+                    console.log(`✅ Process "${processName}" is already terminated/inactive.`);
+                  } else {
+                    console.error(`❌ Failed to kill process "${processName}": ${killErr.message}`);
+                  }
+                }
+              }
+            } catch (err) {
+              // General catch block - double check if PID is active
+              let stillRunning = false;
+              if (pid) {
+                try {
+                  if (os.platform() === 'win32') {
+                    const check = execSync(`tasklist /fi "PID eq ${pid}"`, { encoding: 'utf-8', timeout: 3000 });
+                    stillRunning = check.includes(String(pid));
+                  } else {
+                    execSync(`ps -p ${pid}`, { stdio: 'ignore', timeout: 3000 });
+                    stillRunning = true;
+                  }
+                } catch {
+                  stillRunning = false;
+                }
+              }
+              if (!stillRunning) {
+                console.log(`✅ Process PID ${pid || 'unknown'} is already terminated/inactive.`);
+              } else {
+                console.error(`❌ Failed to kill process ${processName || pid}: ${err.message}`);
+              }
+            }
+          } else if (act.type === 'BLOCK_PORT') {
+            const { port, processName } = act;
+            console.log(`⚠️  ACTION: Blocking unauthorized open port ${port} (Process: "${processName || 'unknown'}")...`);
+            try {
+              if (os.platform() === 'win32') {
+                exec(`netsh advfirewall firewall add rule name="Block Port ${port}" dir=in action=block protocol=TCP localport=${port}`);
+                console.log(`✅ Blocked port ${port} successfully on Windows Firewall.`);
+              } else if (os.platform() === 'linux') {
+                try {
+                  exec(`ufw deny ${port}`);
+                  console.log(`✅ Blocked port ${port} via ufw.`);
+                } catch {
+                  exec(`iptables -A INPUT -p tcp --dport ${port} -j DROP`);
+                  console.log(`✅ Blocked port ${port} via iptables.`);
+                }
+              } else if (os.platform() === 'darwin') {
+                console.log(`⚠️  Port blocking requested for port ${port} on macOS. Dynamic pfctl rule injection requires elevated sudo privileges.`);
+              } else {
+                console.log(`⚠️  Port blocking not supported on platform: ${os.platform()}`);
+              }
+            } catch (err) {
+              console.error(`❌ Failed to block port ${port}: ${err.message}. Elevated privileges (Admin/sudo) may be required.`);
+            }
+          } else if (act.type === 'ALERT') {
+            const { category, summary, details } = act;
+            console.log('');
+            console.log('╔══════════════════════════════════════════════════════╗');
+            console.log('║ ⚠️  SECURITY THREAT VIOLATION DETECTED BY ADMIN      ║');
+            console.log('╚══════════════════════════════════════════════════════╝');
+            console.log(`  Category: ${category}`);
+            console.log(`  Summary:  ${summary}`);
+            if (details) {
+              console.log(`  Details:  ${JSON.stringify(details, null, 2)}`);
+            }
+            console.log('────────────────────────────────────────────────────────');
+            console.log('');
+          }
+        }
+      }
     } else if (res.status === 401) {
       console.log('🔑 Token expired, re-authenticating...');
       if (await login()) await sendHeartbeat();

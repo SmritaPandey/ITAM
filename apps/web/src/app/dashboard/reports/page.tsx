@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 import {
   FileText, Download, BarChart3, PieChart as PieIcon, Calendar, Clock,
   Filter, TrendingUp, Package, Ticket, Shield, ChevronRight, Loader2, AlertTriangle,
-  FileSpreadsheet, FileDown, Network, Activity, ClipboardList
+  FileSpreadsheet, FileDown, Network, Activity, ClipboardList, X, Play, Eye
 } from "lucide-react";
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
@@ -118,48 +118,116 @@ export default function ReportsPage() {
 
   return (
     <>
-      <div className="page-header">
+      <div className="page-header" style={{ marginBottom: 24 }}>
         <div>
-          <h1 className="page-title">Reports & Analytics</h1>
-          <p className="page-subtitle">Enterprise reporting powered by live data — 8 report types</p>
+          <h1 className="page-title" style={{ fontSize: 24, fontWeight: 800, letterSpacing: "-0.03em" }}>Reports & Analytics</h1>
+          <p className="page-subtitle" style={{ fontSize: 13, color: "var(--text-tertiary)" }}>Enterprise reports powered by real-time infrastructure logs</p>
         </div>
-        <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-          <input type="date" value={dateRange.start} onChange={e => setDateRange(p => ({ ...p, start: e.target.value }))}
-            style={{ padding: "6px 10px", borderRadius: 6, border: "1px solid var(--border-primary)", background: "var(--bg-card)", color: "var(--text-primary)", fontSize: 12 }}
-          />
-          <span style={{ color: "var(--text-tertiary)", fontSize: 11 }}>to</span>
+        <div style={{ display: "flex", gap: 10, alignItems: "center", background: "rgba(255,255,255,0.02)", padding: "6px 12px", borderRadius: 12, border: "1px solid var(--border-primary)" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+            <Calendar size={13} style={{ color: "var(--text-tertiary)" }} />
+            <input type="date" value={dateRange.start} onChange={e => setDateRange(p => ({ ...p, start: e.target.value }))}
+              style={{ padding: "4px 8px", borderRadius: 8, border: "1px solid var(--border-primary)", background: "var(--bg-input)", color: "var(--text-primary)", fontSize: 12, outline: "none" }}
+              className="date-focus"
+            />
+          </div>
+          <span style={{ color: "var(--text-tertiary)", fontSize: 11, fontWeight: 600 }}>to</span>
           <input type="date" value={dateRange.end} onChange={e => setDateRange(p => ({ ...p, end: e.target.value }))}
-            style={{ padding: "6px 10px", borderRadius: 6, border: "1px solid var(--border-primary)", background: "var(--bg-card)", color: "var(--text-primary)", fontSize: 12 }}
+            style={{ padding: "4px 8px", borderRadius: 8, border: "1px solid var(--border-primary)", background: "var(--bg-input)", color: "var(--text-primary)", fontSize: 12, outline: "none" }}
+            className="date-focus"
           />
         </div>
       </div>
 
       {error && (
-        <div className="card" style={{ marginBottom: 16, padding: "12px 16px", border: "1px solid rgba(239,68,68,0.3)", background: "rgba(239,68,68,0.06)" }}>
-          <span style={{ color: "#ef4444", fontSize: 13, fontWeight: 600 }}><AlertTriangle size={14} style={{ verticalAlign: "middle" }} /> {error}</span>
+        <div className="card" style={{ marginBottom: 20, padding: "14px 18px", border: "1px solid rgba(239,68,68,0.25)", background: "rgba(239,68,68,0.05)", borderRadius: 12 }}>
+          <span style={{ color: "#f87171", fontSize: 13, fontWeight: 650, display: "flex", alignItems: "center", gap: 8 }}>
+            <AlertTriangle size={16} /> {error}
+          </span>
         </div>
       )}
 
-      {/* Quick Stats */}
-      <div className="stats-grid" style={{ gridTemplateColumns: "repeat(4, 1fr)" }}>
-        <div className="stat-card"><div className="stat-icon cyan"><Package size={22} /></div><div className="stat-content"><div className="stat-label">Total Assets</div><div className="stat-value">{totalAssets}</div></div></div>
-        <div className="stat-card"><div className="stat-icon green"><Ticket size={22} /></div><div className="stat-content"><div className="stat-label">Open Tickets</div><div className="stat-value">{openTickets}</div></div></div>
-        <div className="stat-card"><div className="stat-icon purple"><Clock size={22} /></div><div className="stat-content"><div className="stat-label">Avg Resolution</div><div className="stat-value">{avgResHours}h</div></div></div>
-        <div className="stat-card"><div className="stat-icon amber"><TrendingUp size={22} /></div><div className="stat-content"><div className="stat-label">Total Asset Value</div><div className="stat-value">₹{totalAssetValue > 100000 ? `${(totalAssetValue / 100000).toFixed(1)}L` : totalAssetValue.toLocaleString()}</div></div></div>
+      {/* Cyberpunk Stat Cards */}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 16, marginBottom: 24 }}>
+        <div style={{
+          background: "linear-gradient(135deg, var(--bg-card) 0%, rgba(30, 37, 64, 0.4) 100%)",
+          border: "1px solid var(--border-primary)", borderRadius: 14, padding: 18, display: "flex", alignItems: "center", gap: 14,
+          boxShadow: "0 4px 20px rgba(0,0,0,0.15)", position: "relative", overflow: "hidden"
+        }}>
+          <div style={{ background: "rgba(6, 182, 212, 0.1)", border: "1px solid rgba(6, 182, 212, 0.2)", borderRadius: 10, width: 42, height: 42, display: "flex", alignItems: "center", justifyContent: "center", color: "#22d3ee" }}>
+            <Package size={20} />
+          </div>
+          <div>
+            <div style={{ fontSize: 12, color: "var(--text-tertiary)", fontWeight: 500, textTransform: "uppercase", letterSpacing: "0.05em" }}>Total Assets</div>
+            <div style={{ fontSize: 22, fontWeight: 800, color: "var(--text-primary)", marginTop: 2 }}>{totalAssets}</div>
+          </div>
+        </div>
+
+        <div style={{
+          background: "linear-gradient(135deg, var(--bg-card) 0%, rgba(30, 37, 64, 0.4) 100%)",
+          border: "1px solid var(--border-primary)", borderRadius: 14, padding: 18, display: "flex", alignItems: "center", gap: 14,
+          boxShadow: "0 4px 20px rgba(0,0,0,0.15)", position: "relative", overflow: "hidden"
+        }}>
+          <div style={{ background: "rgba(139, 92, 246, 0.1)", border: "1px solid rgba(139, 92, 246, 0.2)", borderRadius: 10, width: 42, height: 42, display: "flex", alignItems: "center", justifyContent: "center", color: "#a78bfa" }}>
+            <Ticket size={20} />
+          </div>
+          <div>
+            <div style={{ fontSize: 12, color: "var(--text-tertiary)", fontWeight: 500, textTransform: "uppercase", letterSpacing: "0.05em" }}>Open Tickets</div>
+            <div style={{ fontSize: 22, fontWeight: 800, color: "var(--text-primary)", marginTop: 2 }}>{openTickets}</div>
+          </div>
+        </div>
+
+        <div style={{
+          background: "linear-gradient(135deg, var(--bg-card) 0%, rgba(30, 37, 64, 0.4) 100%)",
+          border: "1px solid var(--border-primary)", borderRadius: 14, padding: 18, display: "flex", alignItems: "center", gap: 14,
+          boxShadow: "0 4px 20px rgba(0,0,0,0.15)", position: "relative", overflow: "hidden"
+        }}>
+          <div style={{ background: "rgba(16, 185, 129, 0.1)", border: "1px solid rgba(16, 185, 129, 0.2)", borderRadius: 10, width: 42, height: 42, display: "flex", alignItems: "center", justifyContent: "center", color: "#34d399" }}>
+            <Clock size={20} />
+          </div>
+          <div>
+            <div style={{ fontSize: 12, color: "var(--text-tertiary)", fontWeight: 500, textTransform: "uppercase", letterSpacing: "0.05em" }}>Avg Resolution</div>
+            <div style={{ fontSize: 22, fontWeight: 800, color: "var(--text-primary)", marginTop: 2 }}>{avgResHours}h</div>
+          </div>
+        </div>
+
+        <div style={{
+          background: "linear-gradient(135deg, var(--bg-card) 0%, rgba(30, 37, 64, 0.4) 100%)",
+          border: "1px solid var(--border-primary)", borderRadius: 14, padding: 18, display: "flex", alignItems: "center", gap: 14,
+          boxShadow: "0 4px 20px rgba(0,0,0,0.15)", position: "relative", overflow: "hidden"
+        }}>
+          <div style={{ background: "rgba(245, 158, 11, 0.1)", border: "1px solid rgba(245, 158, 11, 0.2)", borderRadius: 10, width: 42, height: 42, display: "flex", alignItems: "center", justifyContent: "center", color: "#fbbf24" }}>
+            <TrendingUp size={20} />
+          </div>
+          <div>
+            <div style={{ fontSize: 12, color: "var(--text-tertiary)", fontWeight: 500, textTransform: "uppercase", letterSpacing: "0.05em" }}>Total Asset Value</div>
+            <div style={{ fontSize: 22, fontWeight: 800, color: "var(--text-primary)", marginTop: 2 }}>₹{totalAssetValue > 100000 ? `${(totalAssetValue / 100000).toFixed(1)}L` : totalAssetValue.toLocaleString()}</div>
+          </div>
+        </div>
       </div>
 
-      {/* Charts */}
-      <div className="charts-grid-equal" style={{ marginBottom: 16 }}>
-        <div className="card">
-          <div className="card-header"><div><div className="card-title">Asset Lifecycle (6 Months)</div><div className="card-subtitle">Assets created per month</div></div></div>
+      {/* Visual Analytics Sections */}
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginBottom: 16 }} className="charts-grid-equal">
+        {/* Chart 1: Asset Lifecycle */}
+        <div className="card" style={{ padding: 24, borderRadius: 16, border: "1px solid var(--border-primary)", background: "linear-gradient(180deg, var(--bg-card) 0%, rgba(15,23,42,0.2) 100%)" }}>
+          <div style={{ marginBottom: 18 }}>
+            <h3 style={{ fontSize: 15, fontWeight: 800, margin: 0, color: "var(--text-primary)", letterSpacing: "-0.01em" }}>Asset Lifecycle Progression</h3>
+            <p style={{ fontSize: 12, color: "var(--text-tertiary)", margin: "4px 0 0" }}>Volume of hardware assets provisioned monthly</p>
+          </div>
           {assetLifecycle.length > 0 ? (
             <SafeChart height={220}>
-              <BarChart data={assetLifecycle} barSize={18}>
-                <CartesianGrid strokeDasharray="3 3" stroke="rgba(42,49,80,0.5)" vertical={false} />
-                <XAxis dataKey="month" tick={{ fill: "#64748b", fontSize: 11 }} axisLine={false} tickLine={false} />
-                <YAxis tick={{ fill: "#64748b", fontSize: 11 }} axisLine={false} tickLine={false} />
-                <Tooltip contentStyle={{ background: "#1a1f35", border: "1px solid #2a3150", borderRadius: 8, fontSize: 12 }} />
-                <Bar dataKey="created" fill="#06b6d4" radius={[4, 4, 0, 0]} name="Created" />
+              <BarChart data={assetLifecycle} barSize={14}>
+                <defs>
+                  <linearGradient id="barCyanGrad" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="#06b6d4" stopOpacity={0.8} />
+                    <stop offset="100%" stopColor="#06b6d4" stopOpacity={0.15} />
+                  </linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.03)" vertical={false} />
+                <XAxis dataKey="month" tick={{ fill: "var(--text-tertiary)", fontSize: 11 }} axisLine={false} tickLine={false} />
+                <YAxis tick={{ fill: "var(--text-tertiary)", fontSize: 11 }} axisLine={false} tickLine={false} />
+                <Tooltip contentStyle={{ background: "rgba(17, 24, 39, 0.95)", border: "1px solid var(--brand-500)", borderRadius: 10, fontSize: 12, boxShadow: "0 0 15px rgba(6,182,212,0.12)" }} />
+                <Bar dataKey="created" fill="url(#barCyanGrad)" radius={[4, 4, 0, 0]} name="Created Assets" />
               </BarChart>
             </SafeChart>
           ) : (
@@ -168,23 +236,28 @@ export default function ReportsPage() {
             </div>
           )}
         </div>
-        <div className="card">
-          <div className="card-header"><div><div className="card-title">Assets by Category</div><div className="card-subtitle">{totalAssets} total assets</div></div></div>
+
+        {/* Chart 2: Category Distribution */}
+        <div className="card" style={{ padding: 24, borderRadius: 16, border: "1px solid var(--border-primary)", background: "linear-gradient(180deg, var(--bg-card) 0%, rgba(15,23,42,0.2) 100%)" }}>
+          <div style={{ marginBottom: 18 }}>
+            <h3 style={{ fontSize: 15, fontWeight: 800, margin: 0, color: "var(--text-primary)", letterSpacing: "-0.01em" }}>Infrastructure Composition</h3>
+            <p style={{ fontSize: 12, color: "var(--text-tertiary)", margin: "4px 0 0" }}>Distribution by classification categories</p>
+          </div>
           {costData.length > 0 ? (
             <>
-              <SafeChart height={220}>
+              <SafeChart height={180}>
                 <PieChart>
-                  <Pie data={costData} dataKey="value" cx="50%" cy="50%" innerRadius={55} outerRadius={85} paddingAngle={3} strokeWidth={0}>
+                  <Pie data={costData} dataKey="value" cx="50%" cy="50%" innerRadius={50} outerRadius={75} paddingAngle={3} strokeWidth={0}>
                     {costData.map((d: any, i: number) => <Cell key={i} fill={d.color} />)}
                   </Pie>
-                  <Tooltip contentStyle={{ background: "#1a1f35", border: "1px solid #2a3150", borderRadius: 8, fontSize: 12 }} />
+                  <Tooltip contentStyle={{ background: "rgba(17, 24, 39, 0.95)", border: "1px solid var(--border-secondary)", borderRadius: 10, fontSize: 12 }} />
                 </PieChart>
               </SafeChart>
-              <div style={{ display: "flex", gap: 12, justifyContent: "center", flexWrap: "wrap" }}>
+              <div style={{ display: "flex", gap: 10, justifyContent: "center", flexWrap: "wrap", marginTop: 8 }}>
                 {costData.map((d: any) => (
-                  <div key={d.name} style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 10, color: "var(--text-secondary)" }}>
-                    <span style={{ width: 6, height: 6, borderRadius: 2, background: d.color, display: "inline-block" }} />
-                    {d.name} ({d.value})
+                  <div key={d.name} style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 11, color: "var(--text-secondary)" }}>
+                    <span style={{ width: 8, height: 8, borderRadius: "50%", background: d.color, display: "inline-block" }} />
+                    {d.name} <span style={{ color: "var(--text-tertiary)" }}>({d.value})</span>
                   </div>
                 ))}
               </div>
@@ -195,22 +268,31 @@ export default function ReportsPage() {
         </div>
       </div>
 
-      {/* Ticket Trend */}
-      <div className="card" style={{ marginBottom: 16 }}>
-        <div className="card-header"><div><div className="card-title">Ticket Volume (6 Months)</div><div className="card-subtitle">Opened vs resolved</div></div></div>
+      {/* Chart 3: Ticket Performance Area */}
+      <div className="card" style={{ padding: 24, borderRadius: 16, border: "1px solid var(--border-primary)", background: "linear-gradient(180deg, var(--bg-card) 0%, rgba(15,23,42,0.2) 100%)", marginBottom: 24 }}>
+        <div style={{ marginBottom: 18 }}>
+          <h3 style={{ fontSize: 15, fontWeight: 800, margin: 0, color: "var(--text-primary)", letterSpacing: "-0.01em" }}>Operations Ticket Flow Volume</h3>
+          <p style={{ fontSize: 12, color: "var(--text-tertiary)", margin: "4px 0 0" }}>SLA tickets opened vs resolved monthly progression</p>
+        </div>
         {ticketVolume.length > 0 ? (
-          <SafeChart height={180}>
+          <SafeChart height={200}>
             <AreaChart data={ticketVolume}>
               <defs>
-                <linearGradient id="openGrad" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#8b5cf6" stopOpacity={0.2} /><stop offset="100%" stopColor="#8b5cf6" stopOpacity={0} /></linearGradient>
-                <linearGradient id="closeGrad" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#10b981" stopOpacity={0.2} /><stop offset="100%" stopColor="#10b981" stopOpacity={0} /></linearGradient>
+                <linearGradient id="openPurpleGrad" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor="#8b5cf6" stopOpacity={0.25} />
+                  <stop offset="100%" stopColor="#8b5cf6" stopOpacity={0} />
+                </linearGradient>
+                <linearGradient id="closeGreenGrad" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor="#10b981" stopOpacity={0.25} />
+                  <stop offset="100%" stopColor="#10b981" stopOpacity={0} />
+                </linearGradient>
               </defs>
-              <CartesianGrid strokeDasharray="3 3" stroke="rgba(42,49,80,0.5)" vertical={false} />
-              <XAxis dataKey="month" tick={{ fill: "#64748b", fontSize: 11 }} axisLine={false} tickLine={false} />
-              <YAxis tick={{ fill: "#64748b", fontSize: 11 }} axisLine={false} tickLine={false} />
-              <Tooltip contentStyle={{ background: "#1a1f35", border: "1px solid #2a3150", borderRadius: 8, fontSize: 12 }} />
-              <Area type="monotone" dataKey="opened" stroke="#8b5cf6" fill="url(#openGrad)" strokeWidth={2} name="Opened" />
-              <Area type="monotone" dataKey="closed" stroke="#10b981" fill="url(#closeGrad)" strokeWidth={2} name="Resolved" />
+              <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.03)" vertical={false} />
+              <XAxis dataKey="month" tick={{ fill: "var(--text-tertiary)", fontSize: 11 }} axisLine={false} tickLine={false} />
+              <YAxis tick={{ fill: "var(--text-tertiary)", fontSize: 11 }} axisLine={false} tickLine={false} />
+              <Tooltip contentStyle={{ background: "rgba(17, 24, 39, 0.95)", border: "1px solid var(--border-secondary)", borderRadius: 10, fontSize: 12 }} />
+              <Area type="monotone" dataKey="opened" stroke="#8b5cf6" fill="url(#openPurpleGrad)" strokeWidth={2} name="Opened" />
+              <Area type="monotone" dataKey="closed" stroke="#10b981" fill="url(#closeGreenGrad)" strokeWidth={2} name="Resolved" />
             </AreaChart>
           </SafeChart>
         ) : (
@@ -218,37 +300,52 @@ export default function ReportsPage() {
         )}
       </div>
 
-      {/* Report Templates — Real Backend Export */}
-      <h2 style={{ fontSize: 16, fontWeight: 700, marginBottom: 12, color: "var(--text-primary)" }}>Export Reports</h2>
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(380px, 1fr))", gap: 12 }}>
+      {/* Report Templates Export Panel */}
+      <h2 style={{ fontSize: 16, fontWeight: 800, marginBottom: 16, color: "var(--text-primary)", letterSpacing: "-0.02em" }}>Export Report Center</h2>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(360px, 1fr))", gap: 16 }}>
         {REPORT_TYPES.map(r => (
-          <div key={r.id} className="card" style={{ display: "flex", gap: 14, alignItems: "center" }}>
+          <div key={r.id} className="report-export-card" style={{
+            display: "flex", gap: 14, alignItems: "flex-start", padding: 20, borderRadius: 16,
+            border: "1px solid var(--border-primary)", background: "linear-gradient(135deg, var(--bg-card) 0%, rgba(30, 37, 64, 0.45) 100%)",
+            transition: "all 0.2s"
+          }}>
             <div style={{
-              width: 44, height: 44, borderRadius: 10, background: `${r.color}15`,
+              width: 44, height: 44, borderRadius: 12, background: `${r.color}18`,
               display: "flex", alignItems: "center", justifyContent: "center", color: r.color, flexShrink: 0,
+              border: `1px solid ${r.color}35`
             }}>{r.icon}</div>
-            <div style={{ flex: 1 }}>
-              <div style={{ fontSize: 14, fontWeight: 600, color: "var(--text-primary)", marginBottom: 2 }}>{r.name}</div>
-              <div style={{ fontSize: 11, color: "var(--text-tertiary)", marginBottom: 6 }}>{r.desc}</div>
-              <div style={{ display: "flex", gap: 6 }}>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontSize: 14, fontWeight: 750, color: "var(--text-primary)", marginBottom: 4 }}>{r.name}</div>
+              <p style={{ fontSize: 12, color: "var(--text-tertiary)", margin: "0 0 12px", lineHeight: 1.4 }}>{r.desc}</p>
+              
+              <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
                 {r.formats.map(fmt => (
-                  <button key={fmt} className="btn btn-secondary" style={{ padding: "3px 8px", fontSize: 10, gap: 3 }}
+                  <button key={fmt} className="btn-format-chip" style={{
+                    padding: "6px 12px", fontSize: 11, borderRadius: 8, display: "flex", alignItems: "center", gap: 6,
+                    background: "rgba(255,255,255,0.03)", border: "1px solid var(--border-primary)",
+                    color: "var(--text-secondary)", fontWeight: 600, cursor: "pointer", transition: "all 0.2s"
+                  }}
                     onClick={() => downloadReport(r.id, fmt)}
                     disabled={downloading === `${r.id}-${fmt}`}
                   >
                     {downloading === `${r.id}-${fmt}` ? (
-                      <Loader2 size={10} style={{ animation: "spin 1s linear infinite" }} />
+                      <Loader2 size={12} style={{ animation: "spin 1s linear infinite" }} />
                     ) : fmt === "xlsx" ? (
-                      <FileSpreadsheet size={10} />
+                      <FileSpreadsheet size={12} style={{ color: "#34d399" }} />
                     ) : (
-                      <FileDown size={10} />
+                      <FileDown size={12} style={{ color: "#22d3ee" }} />
                     )}
                     {fmt.toUpperCase()}
                   </button>
                 ))}
-                <button className="btn btn-secondary" style={{ padding: "3px 8px", fontSize: 10 }}
+                
+                <button className="btn-format-chip" style={{
+                  padding: "6px 12px", fontSize: 11, borderRadius: 8, display: "flex", alignItems: "center", gap: 5,
+                  background: "var(--bg-elevated)", border: "1px solid var(--border-primary)",
+                  color: "var(--text-primary)", fontWeight: 600, cursor: "pointer", transition: "all 0.2s"
+                }}
                   onClick={() => previewReportData(r.id)}>
-                  <ChevronRight size={10} /> Preview
+                  <Eye size={12} /> Preview
                 </button>
               </div>
             </div>
@@ -256,63 +353,92 @@ export default function ReportsPage() {
         ))}
       </div>
 
-      {/* Preview Modal */}
+      {/* Preview Backdrop Blurred Modal */}
       {(previewReport || previewLoading) && (
         <>
-          <div onClick={() => setPreviewReport(null)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", zIndex: 1000, backdropFilter: "blur(4px)" }} />
+          <div onClick={() => setPreviewReport(null)} style={{
+            position: "fixed", inset: 0, background: "rgba(5, 7, 14, 0.7)", zIndex: 1000,
+            backdropFilter: "blur(12px)", animation: "fadeInBg 0.25s ease-out"
+          }} />
+          
           <div style={{
             position: "fixed", top: "50%", left: "50%", transform: "translate(-50%, -50%)",
-            width: "min(900px, 92vw)", maxHeight: "80vh", background: "var(--bg-card)",
-            zIndex: 1001, borderRadius: 12, border: "1px solid var(--border-primary)",
+            width: "min(880px, 94vw)", maxHeight: "85vh", background: "linear-gradient(135deg, #111827 0%, #0c0f1d 100%)",
+            zIndex: 1001, borderRadius: 16, border: "1px solid var(--border-primary)",
             display: "flex", flexDirection: "column", overflow: "hidden",
+            boxShadow: "0 24px 80px rgba(0,0,0,0.6), 0 0 20px rgba(6,182,212,0.06)",
+            animation: "modalZoomIn 0.3s cubic-bezier(0.16, 1, 0.3, 1)"
           }}>
-            <div style={{ padding: "16px 20px", borderBottom: "1px solid var(--border-primary)", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-              <h3 style={{ margin: 0, fontSize: 15, fontWeight: 700 }}>{previewReport?.title || "Loading..."}</h3>
-              <button onClick={() => setPreviewReport(null)} className="btn btn-secondary" style={{ padding: "4px 8px" }}>✕</button>
+            <div style={{ padding: "18px 24px", borderBottom: "1px solid var(--border-primary)", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <h3 style={{ margin: 0, fontSize: 16, fontWeight: 800, color: "var(--text-primary)", letterSpacing: "-0.01em" }}>
+                {previewReport?.title || "Report Preview Live Feed"}
+              </h3>
+              <button onClick={() => setPreviewReport(null)} style={{
+                background: "var(--bg-elevated)", border: "1px solid var(--border-primary)",
+                borderRadius: 8, width: 28, height: 28, display: "flex", alignItems: "center", justifyContent: "center",
+                color: "var(--text-secondary)", cursor: "pointer", transition: "all 0.15s"
+              }} className="modal-close-btn">
+                <X size={15} />
+              </button>
             </div>
-            <div style={{ flex: 1, overflowY: "auto", padding: 20 }}>
+            
+            <div style={{ flex: 1, overflowY: "auto", padding: 24 }}>
               {previewLoading ? (
-                <div style={{ height: 200, display: "flex", alignItems: "center", justifyContent: "center", color: "var(--text-tertiary)" }}>
-                  <Loader2 size={18} style={{ animation: "spin 1s linear infinite" }} />
+                <div style={{ height: 240, display: "flex", alignItems: "center", justifyContent: "center", color: "var(--text-tertiary)" }}>
+                  <Loader2 size={24} style={{ animation: "spin 1s linear infinite" }} />
                 </div>
               ) : previewReport?.headers ? (
                 <>
                   {previewReport.summary && (
-                    <div style={{ display: "flex", gap: 12, marginBottom: 16, flexWrap: "wrap" }}>
+                    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(130px, 1fr))", gap: 12, marginBottom: 20 }}>
                       {Object.entries(previewReport.summary).filter(([, v]) => typeof v === "number" || typeof v === "string").slice(0, 6).map(([k, v]) => (
-                        <div key={k} className="card" style={{ padding: "8px 14px", flex: "1 1 120px" }}>
-                          <div style={{ fontSize: 10, color: "var(--text-tertiary)", textTransform: "capitalize" }}>{k.replace(/([A-Z])/g, " $1")}</div>
-                          <div style={{ fontSize: 18, fontWeight: 700 }}>{typeof v === "number" && v > 10000 ? `${(v as number / 1000).toFixed(1)}K` : String(v)}</div>
+                        <div key={k} className="card" style={{ padding: "12px 16px", borderRadius: 12, background: "rgba(255,255,255,0.02)", border: "1px solid var(--border-primary)" }}>
+                          <div style={{ fontSize: 10, color: "var(--text-tertiary)", textTransform: "uppercase", letterSpacing: "0.04em", fontWeight: 600 }}>{k.replace(/([A-Z])/g, " $1")}</div>
+                          <div style={{ fontSize: 18, fontWeight: 800, marginTop: 4, color: "var(--text-primary)" }}>
+                            {typeof v === "number" && (v as number) > 100000 ? `₹${(v as number / 1000).toFixed(0)}K` : String(v)}
+                          </div>
                         </div>
                       ))}
                     </div>
                   )}
-                  <table className="data-table" style={{ fontSize: 11 }}>
-                    <thead>
-                      <tr>{previewReport.headers.map((h: string) => <th key={h}>{h}</th>)}</tr>
-                    </thead>
-                    <tbody>
-                      {(previewReport.rows || []).slice(0, 50).map((row: string[], i: number) => (
-                        <tr key={i}>{row.map((cell: string, j: number) => <td key={j}>{cell}</td>)}</tr>
-                      ))}
-                    </tbody>
-                  </table>
+                  
+                  <div style={{ overflowX: "auto", borderRadius: 12, border: "1px solid var(--border-primary)" }}>
+                    <table className="data-table" style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
+                      <thead>
+                        <tr style={{ background: "rgba(255,255,255,0.01)", borderBottom: "1px solid var(--border-primary)" }}>
+                          {previewReport.headers.map((h: string) => (
+                            <th key={h} style={{ padding: "12px 16px", textAlign: "left", color: "var(--text-tertiary)", fontWeight: 700, textTransform: "uppercase", fontSize: 11, letterSpacing: "0.04em" }}>{h}</th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {(previewReport.rows || []).slice(0, 50).map((row: string[], i: number) => (
+                          <tr key={i} style={{ borderBottom: "1px solid var(--border-primary)", background: i % 2 === 1 ? "rgba(255,255,255,0.01)" : "transparent" }}>
+                            {row.map((cell: string, j: number) => (
+                              <td key={j} style={{ padding: "12px 16px", color: "var(--text-secondary)" }}>{cell}</td>
+                            ))}
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                  
                   {(previewReport.rows?.length || 0) > 50 && (
-                    <div style={{ textAlign: "center", padding: 12, color: "var(--text-tertiary)", fontSize: 11 }}>
-                      Showing 50 of {previewReport.rows.length} rows. Download for full data.
+                    <div style={{ textAlign: "center", padding: 14, color: "var(--text-tertiary)", fontSize: 12, fontWeight: 500 }}>
+                      Showing 50 of {previewReport.rows.length} records. Download spreadsheet for full audit log.
                     </div>
                   )}
                 </>
               ) : previewReport?.sections ? (
-                <div style={{ display: "grid", gap: 12 }}>
+                <div style={{ display: "grid", gap: 16 }}>
                   {Object.entries(previewReport.sections).map(([section, data]: [string, any]) => (
-                    <div key={section} className="card" style={{ padding: 16 }}>
-                      <h4 style={{ fontSize: 13, fontWeight: 600, textTransform: "capitalize", marginBottom: 8 }}>{section}</h4>
-                      <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
+                    <div key={section} className="card" style={{ padding: 20, borderRadius: 12, border: "1px solid var(--border-primary)", background: "rgba(255,255,255,0.02)" }}>
+                      <h4 style={{ fontSize: 13, fontWeight: 800, textTransform: "uppercase", letterSpacing: "0.06em", color: "var(--brand-400)", marginBottom: 12, borderBottom: "1px solid var(--border-primary)", paddingBottom: 6 }}>{section}</h4>
+                      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))", gap: 12 }}>
                         {Object.entries(data).filter(([, v]) => typeof v === "number" || typeof v === "string").map(([k, v]) => (
-                          <div key={k} style={{ flex: "1 1 100px" }}>
-                            <div style={{ fontSize: 10, color: "var(--text-tertiary)", textTransform: "capitalize" }}>{k.replace(/([A-Z])/g, " $1")}</div>
-                            <div style={{ fontSize: 16, fontWeight: 600 }}>{String(v)}</div>
+                          <div key={k}>
+                            <div style={{ fontSize: 11, color: "var(--text-tertiary)", textTransform: "capitalize" }}>{k.replace(/([A-Z])/g, " $1")}</div>
+                            <div style={{ fontSize: 16, fontWeight: 700, color: "var(--text-primary)", marginTop: 2 }}>{String(v)}</div>
                           </div>
                         ))}
                       </div>
@@ -320,14 +446,43 @@ export default function ReportsPage() {
                   ))}
                 </div>
               ) : (
-                <div style={{ textAlign: "center", padding: 40, color: "var(--text-tertiary)" }}>No data available</div>
+                <div style={{ textAlign: "center", padding: 48, color: "var(--text-tertiary)" }}>No dataset records available</div>
               )}
             </div>
           </div>
         </>
       )}
 
-      <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+      <style>{`
+        .date-focus:focus {
+          border-color: var(--brand-400) !important;
+          box-shadow: 0 0 10px rgba(6,182,212,0.15);
+        }
+        .report-export-card:hover {
+          border-color: var(--border-secondary) !important;
+          box-shadow: 0 6px 20px rgba(0,0,0,0.25);
+        }
+        .btn-format-chip:hover {
+          background: var(--bg-card-hover) !important;
+          border-color: var(--brand-500) !important;
+          color: var(--text-primary) !important;
+        }
+        .modal-close-btn:hover {
+          background: var(--bg-card-hover) !important;
+          color: var(--text-primary) !important;
+        }
+        @keyframes fadeInBg {
+          from { opacity: 0; backdrop-filter: blur(0); }
+          to { opacity: 1; backdrop-filter: blur(12px); }
+        }
+        @keyframes modalZoomIn {
+          from { opacity: 0; transform: translate(-50%, -46%) scale(0.96); }
+          to { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+        }
+        @keyframes spin {
+          to { transform: rotate(360deg); }
+        }
+      `}</style>
     </>
   );
 }

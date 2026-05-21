@@ -2,6 +2,8 @@
 import { useState, useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense } from "react";
+import Link from "next/link";
+import { LogoIcon } from "@/components/Logo";
 import { Eye, EyeOff, Loader2, ArrowRight, Sun, Moon, Shield, Lock, Fingerprint, Globe2, Zap, BarChart3 } from "lucide-react";
 
 function decodeJwt(token: string) {
@@ -20,6 +22,7 @@ function LoginContent() {
   const [theme, setTheme] = useState<"dark" | "light">("dark");
   const [focused, setFocused] = useState<string | null>(null);
   const [oauthProviders] = useState<{ google: boolean; microsoft: boolean }>({ google: true, microsoft: true });
+  const [showForgotNotice, setShowForgotNotice] = useState(false);
   const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4100/api/v1";
 
   useEffect(() => {
@@ -92,20 +95,13 @@ function LoginContent() {
 
         <div style={{ position: "relative", zIndex: 1, maxWidth: 480 }}>
           {/* Brand */}
-          <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 48 }}>
-            <div style={{
-              width: 44, height: 44, borderRadius: 12,
-              background: "linear-gradient(135deg, #06b6d4, #8b5cf6)",
-              display: "flex", alignItems: "center", justifyContent: "center",
-              boxShadow: "0 8px 32px rgba(6,182,212,0.3)",
-            }}>
-              <img src="/favicon.png" alt="QS" style={{ width: 28, height: 28, borderRadius: 6 }} />
-            </div>
+          <Link href="/" style={{ display: "inline-flex", alignItems: "center", gap: 12, marginBottom: 48, textDecoration: "none", color: "inherit" }}>
+            <LogoIcon size={40} glow={dk} />
             <span style={{
               fontSize: 24, fontWeight: 800, letterSpacing: "-0.04em",
               color: dk ? "#f1f5f9" : "#0f172a",
             }}>QS Asset</span>
-          </div>
+          </Link>
 
           {/* Headline */}
           <h1 style={{
@@ -187,10 +183,10 @@ function LoginContent() {
         <div style={{ width: "100%", maxWidth: 380 }}>
           {/* Mobile-only brand */}
           <div className="login-mobile-brand" style={{ display: "none", textAlign: "center", marginBottom: 32 }}>
-            <a href="/" style={{ textDecoration: "none", display: "inline-flex", alignItems: "center", gap: 8 }}>
-              <img src="/favicon.png" alt="QS" style={{ width: 36, height: 36, borderRadius: 10 }} />
+            <Link href="/" style={{ textDecoration: "none", display: "inline-flex", alignItems: "center", gap: 8 }}>
+              <LogoIcon size={32} glow={dk} />
               <span style={{ fontSize: 20, fontWeight: 800, letterSpacing: "-0.03em", color: dk ? "#f1f5f9" : "#0f172a" }}>QS Asset</span>
-            </a>
+            </Link>
           </div>
 
           {/* Welcome */}
@@ -231,9 +227,10 @@ function LoginContent() {
                   fontSize: 13, fontWeight: 600,
                   color: dk ? "#a1a1aa" : "#71717a", letterSpacing: "-0.01em",
                 }}>Password</label>
-                <a href="#" style={{
+                <button type="button" onClick={() => setShowForgotNotice(true)} style={{
                   fontSize: 12, color: "#06b6d4", textDecoration: "none", fontWeight: 500,
-                }}>Forgot password?</a>
+                  background: "none", border: "none", padding: 0, cursor: "pointer", fontFamily: "inherit"
+                }}>Forgot password?</button>
               </div>
               <div style={{ position: "relative" }}>
                 <input type={showPw ? "text" : "password"} value={password}
@@ -395,6 +392,86 @@ function LoginContent() {
           </div>
         </div>
       </div>
+
+      {showForgotNotice && (
+        <div onClick={() => setShowForgotNotice(false)} style={{
+          position: "fixed", inset: 0,
+          background: "rgba(9, 9, 11, 0.8)",
+          backdropFilter: "blur(8px)",
+          zIndex: 9999,
+          display: "flex", alignItems: "center", justifyContent: "center",
+          padding: 20
+        }}>
+          <div onClick={e => e.stopPropagation()} style={{
+            maxWidth: 440, width: "100%",
+            background: dk ? "rgba(20, 20, 25, 0.9)" : "#ffffff",
+            border: `1px solid ${dk ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.08)"}`,
+            borderRadius: 16,
+            padding: 32,
+            boxShadow: "0 24px 48px rgba(0,0,0,0.4)",
+            position: "relative",
+            textAlign: "center",
+            display: "flex", flexDirection: "column", alignItems: "center"
+          }}>
+            {/* Icon Header */}
+            <div style={{
+              width: 56, height: 56, borderRadius: "50%",
+              background: "linear-gradient(135deg, #06b6d4, #8b5cf6)",
+              display: "flex", alignItems: "center", justifyContent: "center",
+              color: "white", marginBottom: 20,
+              boxShadow: "0 8px 24px rgba(6,182,212,0.3)"
+            }}>
+              <Shield size={24} />
+            </div>
+
+            {/* Title */}
+            <h3 style={{
+              fontSize: 20, fontWeight: 800,
+              color: dk ? "#f8fafc" : "#0f172a",
+              marginBottom: 12,
+              letterSpacing: "-0.02em"
+            }}>
+              Password Recovery Restricted
+            </h3>
+
+            {/* Message */}
+            <p style={{
+              fontSize: 14, lineHeight: 1.6,
+              color: dk ? "#a1a1aa" : "#4b5563",
+              marginBottom: 20,
+              textAlign: "center"
+            }}>
+              To maintain the strict security posture of your organization's workspace, password resets are restricted to <strong style={{ color: "#06b6d4" }}>Tenant Administrators</strong>.
+            </p>
+
+            <div style={{
+              padding: "12px 16px",
+              borderRadius: 10,
+              background: dk ? "rgba(255,255,255,0.02)" : "rgba(0,0,0,0.02)",
+              border: `1px solid ${dk ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.06)"}`,
+              fontSize: 12,
+              lineHeight: 1.5,
+              color: dk ? "#94a3b8" : "#4b5563",
+              marginBottom: 24,
+              textAlign: "left"
+            }}>
+              💡 <strong style={{ color: dk ? "#f8fafc" : "#0f172a" }}>Evaluating QS Asset?</strong> You can bypass this screen by selecting the pre-configured <strong style={{ color: "#06b6d4" }}>Demo Credentials</strong> at the bottom of the sign-in form for immediate platform access.
+            </div>
+
+            {/* Button */}
+            <button type="button" onClick={() => setShowForgotNotice(false)} style={{
+              width: "100%", padding: "12px 20px", borderRadius: 10,
+              border: "none", cursor: "pointer",
+              background: "linear-gradient(135deg, #06b6d4 0%, #0891b2 100%)",
+              color: "white", fontSize: 14, fontWeight: 700, fontFamily: "inherit",
+              boxShadow: "0 4px 16px rgba(6,182,212,0.25)",
+              transition: "all 0.2s ease"
+            }}>
+              Got it, thanks!
+            </button>
+          </div>
+        </div>
+      )}
 
       <style>{`
         @keyframes spin { to { transform: rotate(360deg); }  }

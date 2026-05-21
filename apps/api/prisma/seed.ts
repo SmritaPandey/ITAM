@@ -34,6 +34,37 @@ async function main() {
   await prisma.department.deleteMany();
   await prisma.site.deleteMany();
   await prisma.auditLog.deleteMany();
+  
+  // Clean up all new and dependent compliance/scanning/fleet/financial tables to avoid FK constraint errors
+  await prisma.scanResult.deleteMany();
+  await prisma.agent.deleteMany();
+  await prisma.endpointPolicy.deleteMany();
+  await prisma.endpointChange.deleteMany();
+  await prisma.agentBaseline.deleteMany();
+  await prisma.assetCheckout.deleteMany();
+  await prisma.changeRequest.deleteMany();
+  await prisma.problem.deleteMany();
+  await prisma.assetAttestation.deleteMany();
+  await prisma.notificationChannel.deleteMany();
+  await prisma.deviceMetricsHistory.deleteMany();
+  await prisma.contactSubmission.deleteMany();
+  await prisma.subscription.deleteMany();
+  await prisma.payment.deleteMany();
+  await prisma.trip.deleteMany();
+  await prisma.gpsTelemetry.deleteMany();
+  await prisma.userTelemetry.deleteMany();
+  await prisma.patchDeployment.deleteMany();
+  await prisma.scanCredential.deleteMany();
+  await prisma.scheduledReport.deleteMany();
+  await prisma.scriptLibrary.deleteMany();
+  await prisma.networkConfig.deleteMany();
+
+  // Financials and contracts ordering (children first)
+  await prisma.purchaseOrderItem.deleteMany();
+  await prisma.purchaseOrder.deleteMany();
+  await prisma.contract.deleteMany();
+  await prisma.vendor.deleteMany();
+
   await prisma.tenant.deleteMany();
 
   // 1. Create demo tenant

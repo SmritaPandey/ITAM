@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 import {
   Headphones, Laptop, Shield, Network, Wifi, Printer, HardDrive,
   Wrench, Users, Mail, Loader2, ChevronRight, CheckCircle2, Clock,
-  Search, AlertTriangle, Plus, Monitor, Server, Package
+  Search, AlertTriangle, Plus, Monitor, Server, Package, X
 } from "lucide-react";
 import { apiFetch } from "@/lib/api";
 
@@ -87,76 +87,128 @@ export default function ServiceCatalogPage() {
 
   return (
     <>
-      <div className="page-header" style={{ marginBottom: 20 }}>
+      <div className="page-header" style={{ marginBottom: 24 }}>
         <div>
-          <h1 className="page-title">Service Catalog</h1>
-          <p className="page-subtitle">{catalog.length} services available • Browse and request IT services</p>
+          <h1 className="page-title" style={{ fontSize: 24, fontWeight: 800, letterSpacing: "-0.03em" }}>Service Catalog</h1>
+          <p className="page-subtitle" style={{ fontSize: 13, color: "var(--text-tertiary)" }}>{catalog.length} professional services configured • Request IT support and provisioning</p>
         </div>
       </div>
 
       {/* Success Banner */}
       {success && (
-        <div className="card" style={{ padding: "12px 16px", marginBottom: 16, display: "flex", alignItems: "center", gap: 10, border: "1px solid rgba(16,185,129,0.3)", background: "rgba(16,185,129,0.06)" }}>
-          <CheckCircle2 size={16} color="#10b981" />
-          <span style={{ fontSize: 13, color: "#10b981", fontWeight: 600, flex: 1 }}>{success}</span>
-          <button onClick={() => setSuccess(null)} style={{ background: "none", border: "none", color: "var(--text-tertiary)", cursor: "pointer" }}>✕</button>
+        <div className="card" style={{
+          padding: "14px 18px", marginBottom: 20, display: "flex", alignItems: "center", gap: 12,
+          border: "1px solid rgba(16, 185, 129, 0.25)", background: "linear-gradient(135deg, rgba(16, 185, 129, 0.05) 0%, rgba(16, 185, 129, 0.02) 100%)",
+          borderRadius: 12, boxShadow: "0 4px 16px rgba(16, 185, 129, 0.05)"
+        }}>
+          <CheckCircle2 size={18} color="#34d399" />
+          <span style={{ fontSize: 13, color: "#34d399", fontWeight: 650, flex: 1 }}>{success}</span>
+          <button onClick={() => setSuccess(null)} style={{ background: "none", border: "none", color: "var(--text-tertiary)", cursor: "pointer", fontSize: 14 }}>✕</button>
         </div>
       )}
 
       {/* Error Banner */}
       {error && (
-        <div className="card" style={{ padding: "12px 16px", marginBottom: 16, display: "flex", alignItems: "center", gap: 10, border: "1px solid rgba(239,68,68,0.3)", background: "rgba(239,68,68,0.06)", backdropFilter: "blur(8px)" }}>
-          <AlertTriangle size={16} color="#ef4444" />
-          <span style={{ fontSize: 13, color: "#ef4444", fontWeight: 600, flex: 1 }}>{error}</span>
-          <button onClick={() => setError(null)} style={{ background: "none", border: "none", color: "var(--text-tertiary)", cursor: "pointer" }}>✕</button>
+        <div className="card" style={{
+          padding: "14px 18px", marginBottom: 20, display: "flex", alignItems: "center", gap: 12,
+          border: "1px solid rgba(239, 68, 68, 0.25)", background: "linear-gradient(135deg, rgba(239, 68, 68, 0.05) 0%, rgba(239, 68, 68, 0.02) 100%)",
+          borderRadius: 12, boxShadow: "0 4px 16px rgba(239, 68, 68, 0.05)"
+        }}>
+          <AlertTriangle size={18} color="#f87171" />
+          <span style={{ fontSize: 13, color: "#f87171", fontWeight: 650, flex: 1 }}>{error}</span>
+          <button onClick={() => setError(null)} style={{ background: "none", border: "none", color: "var(--text-tertiary)", cursor: "pointer", fontSize: 14 }}>✕</button>
         </div>
       )}
 
-      {/* Search & Filters */}
-      <div style={{ display: "flex", gap: 12, marginBottom: 20, flexWrap: "wrap" }}>
-        <div style={{ flex: 1, minWidth: 250, position: "relative" }}>
-          <Search size={15} style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", color: "var(--text-tertiary)" }} />
-          <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search services..."
-            style={{ width: "100%", padding: "9px 12px 9px 36px", background: "var(--bg-card)", border: "1px solid var(--border-primary)", borderRadius: 8, color: "var(--text-primary)", fontSize: 13, fontFamily: "inherit", outline: "none" }} />
+      {/* Search & Dynamic HSL Filters */}
+      <div style={{ display: "flex", gap: 16, marginBottom: 24, flexWrap: "wrap", alignItems: "center" }}>
+        <div style={{ flex: 1, minWidth: 280, position: "relative" }}>
+          <Search size={16} style={{ position: "absolute", left: 14, top: "50%", transform: "translateY(-50%)", color: "var(--text-tertiary)" }} />
+          <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search catalog for resources, hardware..."
+            style={{
+              width: "100%", padding: "10px 14px 10px 42px",
+              background: "var(--bg-card)", border: "1px solid var(--border-primary)", borderRadius: 12,
+              color: "var(--text-primary)", fontSize: 13, outline: "none", transition: "all 0.2s"
+            }}
+            className="search-focus" />
         </div>
-        <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
           <button onClick={() => setSelectedCategory(null)}
-            className={`btn ${!selectedCategory ? "btn-primary" : "btn-secondary"}`}
-            style={{ fontSize: 11, padding: "6px 12px" }}>All</button>
-          {categories.map(cat => (
-            <button key={cat} onClick={() => setSelectedCategory(cat === selectedCategory ? null : cat)}
-              className={`btn ${selectedCategory === cat ? "btn-primary" : "btn-secondary"}`}
-              style={{ fontSize: 11, padding: "6px 12px" }}>{cat}</button>
-          ))}
+            className="filter-pill"
+            style={{
+              fontSize: 11, padding: "6px 14px", borderRadius: 20, border: "1px solid var(--border-primary)",
+              background: !selectedCategory ? "var(--brand-500)" : "rgba(255,255,255,0.03)",
+              color: !selectedCategory ? "#fff" : "var(--text-secondary)",
+              fontWeight: 600, cursor: "pointer", transition: "all 0.2s"
+            }}>All</button>
+          {categories.map(cat => {
+            const catColor = CATEGORY_COLORS[cat] || "#64748b";
+            const isActive = selectedCategory === cat;
+            return (
+              <button key={cat} onClick={() => setSelectedCategory(cat === selectedCategory ? null : cat)}
+                className="filter-pill"
+                style={{
+                  fontSize: 11, padding: "6px 14px", borderRadius: 20,
+                  border: `1px solid ${isActive ? catColor : "var(--border-primary)"}`,
+                  background: isActive ? `${catColor}1c` : "rgba(255,255,255,0.03)",
+                  color: isActive ? catColor : "var(--text-secondary)",
+                  boxShadow: isActive ? `0 0 10px ${catColor}15` : "none",
+                  fontWeight: 600, cursor: "pointer", transition: "all 0.2s"
+                }}>{cat}</button>
+            );
+          })}
         </div>
       </div>
 
       {/* Catalog Grid */}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(340px, 1fr))", gap: 14 }}>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(320px, 1fr))", gap: 16 }}>
         {filtered.map(item => {
           const Icon = CATEGORY_ICONS[item.category] || Package;
           const color = CATEGORY_COLORS[item.category] || "#64748b";
           return (
-            <div key={item.id} className="card" style={{ padding: 20, cursor: "pointer", transition: "transform 0.15s, border-color 0.15s" }}
+            <div key={item.id} className="catalog-card"
+              style={{
+                padding: 20, cursor: "pointer", borderRadius: 16, border: "1px solid var(--border-primary)",
+                background: "linear-gradient(135deg, var(--bg-card) 0%, rgba(30, 37, 64, 0.4) 100%)",
+                transition: "all 0.25s cubic-bezier(0.16, 1, 0.3, 1)", position: "relative", overflow: "hidden"
+              }}
               onClick={() => { setRequestModal(item); setRequestNotes(""); }}>
-              <div style={{ display: "flex", alignItems: "flex-start", gap: 12, marginBottom: 12 }}>
-                <div style={{ width: 42, height: 42, borderRadius: 10, background: `${color}15`, display: "flex", alignItems: "center", justifyContent: "center", color, flexShrink: 0 }}>
+              
+              {/* Category glow background */}
+              <div style={{ position: "absolute", top: -10, right: -10, width: 70, height: 70, background: `${color}05`, borderRadius: "50%", filter: "blur(20px)" }} />
+              
+              <div style={{ display: "flex", alignItems: "flex-start", gap: 14, marginBottom: 12 }}>
+                <div style={{
+                  width: 44, height: 44, borderRadius: 12, background: `linear-gradient(135deg, ${color}22 0%, ${color}0b 100%)`,
+                  border: `1px solid ${color}35`, display: "flex", alignItems: "center", justifyContent: "center", color, flexShrink: 0
+                }}>
                   <Icon size={20} />
                 </div>
                 <div style={{ flex: 1, minWidth: 0 }}>
-                  <h3 style={{ fontSize: 14, fontWeight: 700, margin: 0, color: "var(--text-primary)" }}>{item.name}</h3>
-                  <span className="badge" style={{ fontSize: 9, background: `${color}15`, color, marginTop: 4 }}>{item.category}</span>
+                  <h3 style={{ fontSize: 15, fontWeight: 750, margin: 0, color: "var(--text-primary)", letterSpacing: "-0.01em" }}>{item.name}</h3>
+                  <span style={{
+                    fontSize: 9, background: `${color}15`, color, marginTop: 6, display: "inline-block",
+                    padding: "2px 8px", borderRadius: 5, fontWeight: 700, letterSpacing: "0.04em"
+                  }}>{item.category}</span>
                 </div>
-                <ChevronRight size={16} style={{ color: "var(--text-tertiary)", flexShrink: 0, marginTop: 4 }} />
+                <ChevronRight size={16} style={{ color: "var(--text-tertiary)", flexShrink: 0, marginTop: 4 }} className="chevron-hover" />
               </div>
-              <p style={{ fontSize: 12, lineHeight: 1.6, color: "var(--text-tertiary)", margin: "0 0 12px" }}>{item.description}</p>
-              <div style={{ display: "flex", gap: 12, fontSize: 11 }}>
-                <span style={{ display: "flex", alignItems: "center", gap: 4, color: "var(--text-tertiary)" }}>
-                  <Clock size={12} /> {item.estimatedDelivery}
+              
+              <p style={{ fontSize: 13, lineHeight: 1.5, color: "var(--text-tertiary)", margin: "0 0 16px", minHeight: 38 }}>
+                {item.description}
+              </p>
+              
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", borderTop: "1px solid var(--border-primary)", paddingTop: 12, fontSize: 12 }}>
+                <span style={{ display: "flex", alignItems: "center", gap: 6, color: "var(--text-secondary)", fontWeight: 500 }}>
+                  <Clock size={13} style={{ color: "var(--text-tertiary)" }} /> {item.estimatedDelivery}
                 </span>
-                {item.approvalRequired && (
-                  <span style={{ display: "flex", alignItems: "center", gap: 4, color: "#f59e0b" }}>
-                    <AlertTriangle size={12} /> Approval required
+                {item.approvalRequired ? (
+                  <span style={{ display: "flex", alignItems: "center", gap: 5, color: "#fbbf24", fontWeight: 600, background: "rgba(245,158,11,0.06)", padding: "2px 8px", borderRadius: 6, fontSize: 10 }}>
+                    <Shield size={12} /> Approval Required
+                  </span>
+                ) : (
+                  <span style={{ display: "flex", alignItems: "center", gap: 5, color: "#34d399", fontWeight: 600, background: "rgba(16,185,129,0.06)", padding: "2px 8px", borderRadius: 6, fontSize: 10 }}>
+                    <CheckCircle2 size={12} /> Instant Provision
                   </span>
                 )}
               </div>
@@ -166,52 +218,146 @@ export default function ServiceCatalogPage() {
       </div>
 
       {filtered.length === 0 && (
-        <div className="card" style={{ padding: 60, textAlign: "center" }}>
-          <Headphones size={36} style={{ color: "var(--text-tertiary)", marginBottom: 12 }} />
-          <h3 style={{ fontSize: 16, fontWeight: 600, color: "var(--text-secondary)", marginBottom: 4 }}>No services found</h3>
-          <p style={{ fontSize: 13, color: "var(--text-tertiary)" }}>Try adjusting your search or category filter.</p>
+        <div className="card" style={{ padding: 64, textAlign: "center", borderRadius: 16, border: "1px solid var(--border-primary)" }}>
+          <div style={{ background: "rgba(255,255,255,0.03)", width: 64, height: 64, borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 16px" }}>
+            <Headphones size={28} style={{ color: "var(--text-tertiary)" }} />
+          </div>
+          <h3 style={{ fontSize: 16, fontWeight: 700, color: "var(--text-secondary)", marginBottom: 4 }}>No services match</h3>
+          <p style={{ fontSize: 13, color: "var(--text-tertiary)", maxWidth: 300, margin: "0 auto" }}>Try clearing your search query or picking another service category pill.</p>
         </div>
       )}
 
-      {/* Request Modal */}
+      {/* Request Backdrop Blur Modal */}
       {requestModal && (
         <>
-          <div onClick={() => setRequestModal(null)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", zIndex: 1000, backdropFilter: "blur(4px)" }} />
-          <div style={{ position: "fixed", top: "50%", left: "50%", transform: "translate(-50%, -50%)", width: 480, background: "var(--bg-card)", border: "1px solid var(--border-primary)", borderRadius: 16, boxShadow: "0 24px 80px rgba(0,0,0,0.5)", zIndex: 1001, overflow: "hidden" }}>
-            <div style={{ padding: "18px 20px", borderBottom: "1px solid var(--border-primary)", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-              <h2 style={{ fontSize: 16, fontWeight: 700, margin: 0 }}>Request Service</h2>
-              <button onClick={() => setRequestModal(null)} className="btn btn-secondary" style={{ padding: "3px 8px" }}>✕</button>
+          {/* Glassmorphic Backdrop overlay */}
+          <div onClick={() => setRequestModal(null)} style={{
+            position: "fixed", inset: 0, background: "rgba(6, 9, 17, 0.7)", zIndex: 1000,
+            backdropFilter: "blur(12px)", animation: "fadeInBg 0.25s ease-out"
+          }} />
+          
+          <div style={{
+            position: "fixed", top: "50%", left: "50%", transform: "translate(-50%, -50%)",
+            width: "min(500px, 92vw)", background: "linear-gradient(135deg, #111827 0%, #0c0f1d 100%)",
+            border: "1px solid var(--border-primary)", borderRadius: 18,
+            boxShadow: "0 24px 80px rgba(0,0,0,0.6), 0 0 24px rgba(6,182,212,0.05)", zIndex: 1001, overflow: "hidden",
+            animation: "modalZoomIn 0.3s cubic-bezier(0.16, 1, 0.3, 1)"
+          }}>
+            {/* Modal Header */}
+            <div style={{ padding: "18px 24px", borderBottom: "1px solid var(--border-primary)", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <h2 style={{ fontSize: 16, fontWeight: 800, margin: 0, color: "var(--text-primary)", letterSpacing: "-0.01em" }}>Request Workspace Resource</h2>
+              <button onClick={() => setRequestModal(null)} style={{
+                background: "var(--bg-elevated)", border: "1px solid var(--border-primary)",
+                borderRadius: 8, width: 28, height: 28, display: "flex", alignItems: "center", justifyContent: "center",
+                color: "var(--text-secondary)", cursor: "pointer", transition: "all 0.15s"
+              }} className="modal-close-btn">
+                <X size={15} />
+              </button>
             </div>
-            <div style={{ padding: 20 }}>
-              <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 16, padding: 14, background: "var(--bg-elevated)", borderRadius: 10 }}>
-                {(() => { const Icon = CATEGORY_ICONS[requestModal.category] || Package; const color = CATEGORY_COLORS[requestModal.category] || "#64748b"; return (
-                  <div style={{ width: 40, height: 40, borderRadius: 10, background: `${color}15`, display: "flex", alignItems: "center", justifyContent: "center", color }}><Icon size={18} /></div>
-                ); })()}
+            
+            {/* Modal Content */}
+            <div style={{ padding: 24 }}>
+              <div style={{
+                display: "flex", alignItems: "center", gap: 14, marginBottom: 20, padding: 16,
+                background: "rgba(255,255,255,0.02)", border: "1px solid var(--border-primary)", borderRadius: 12
+              }}>
+                {(() => {
+                  const Icon = CATEGORY_ICONS[requestModal.category] || Package;
+                  const color = CATEGORY_COLORS[requestModal.category] || "#64748b";
+                  return (
+                    <div style={{
+                      width: 42, height: 42, borderRadius: 10, background: `linear-gradient(135deg, ${color}22 0%, ${color}0b 100%)`,
+                      border: `1px solid ${color}35`, display: "flex", alignItems: "center", justifyContent: "center", color
+                    }}><Icon size={20} /></div>
+                  );
+                })()}
                 <div>
-                  <div style={{ fontSize: 14, fontWeight: 700 }}>{requestModal.name}</div>
-                  <div style={{ fontSize: 11, color: "var(--text-tertiary)" }}>{requestModal.estimatedDelivery}</div>
+                  <div style={{ fontSize: 15, fontWeight: 800, color: "var(--text-primary)" }}>{requestModal.name}</div>
+                  <div style={{ fontSize: 12, color: "var(--text-tertiary)", marginTop: 2, display: "flex", alignItems: "center", gap: 4 }}>
+                    <Clock size={12} /> Deliverable: {requestModal.estimatedDelivery}
+                  </div>
                 </div>
               </div>
-              <p style={{ fontSize: 12, color: "var(--text-tertiary)", lineHeight: 1.6, marginBottom: 16 }}>{requestModal.description}</p>
+              
+              <p style={{ fontSize: 13, color: "var(--text-secondary)", lineHeight: 1.5, marginBottom: 20 }}>
+                {requestModal.description}
+              </p>
+              
               {requestModal.approvalRequired && (
-                <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 14, padding: "8px 12px", background: "rgba(245,158,11,0.08)", border: "1px solid rgba(245,158,11,0.2)", borderRadius: 8, fontSize: 12, color: "#f59e0b" }}>
-                  <AlertTriangle size={14} /> This service requires manager approval
+                <div style={{
+                  display: "flex", alignItems: "center", gap: 8, marginBottom: 18, padding: "10px 14px",
+                  background: "rgba(245,158,11,0.05)", border: "1px solid rgba(245,158,11,0.15)", borderRadius: 10,
+                  fontSize: 12, color: "#fbbf24", fontWeight: 500
+                }}>
+                  <AlertTriangle size={15} style={{ flexShrink: 0 }} /> 
+                  <span>Requires manager approval prior to fulfillment routing.</span>
                 </div>
               )}
-              <label style={{ fontSize: 12, fontWeight: 600, color: "var(--text-secondary)", display: "block", marginBottom: 6 }}>Additional Notes</label>
-              <textarea value={requestNotes} onChange={e => setRequestNotes(e.target.value)} rows={3} placeholder="Describe your request, any urgency, or specific requirements..."
-                style={{ width: "100%", padding: "10px 12px", background: "var(--bg-elevated)", border: "1px solid var(--border-primary)", borderRadius: 8, color: "var(--text-primary)", fontSize: 12, fontFamily: "inherit", resize: "vertical", outline: "none" }} />
-              <div style={{ display: "flex", gap: 10, marginTop: 16, justifyContent: "flex-end" }}>
-                <button onClick={() => setRequestModal(null)} className="btn btn-secondary">Cancel</button>
-                <button onClick={submitRequest} className="btn btn-primary" disabled={requesting}>
-                  {requesting ? <><Loader2 size={14} style={{ animation: "spin 1s linear infinite" }} /> Submitting...</> : <><Plus size={14} /> Submit Request</>}
+              
+              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                <label style={{ fontSize: 12, fontWeight: 700, color: "var(--text-primary)", letterSpacing: "0.02em" }}>Justification & Additional Context</label>
+                <textarea value={requestNotes} onChange={e => setRequestNotes(e.target.value)} rows={3}
+                  placeholder="Provide any details, required applications, office location, serial codes, or specific instructions for delivery..."
+                  style={{
+                    width: "100%", padding: "12px 14px", background: "var(--bg-input)",
+                    border: "1px solid var(--border-primary)", borderRadius: 10,
+                    color: "var(--text-primary)", fontSize: 13, outline: "none", resize: "none", transition: "all 0.2s"
+                  }}
+                  className="search-focus" />
+              </div>
+              
+              <div style={{ display: "flex", gap: 10, marginTop: 24, justifyContent: "flex-end" }}>
+                <button onClick={() => setRequestModal(null)} className="btn btn-secondary" style={{ borderRadius: 10, fontWeight: 600 }}>Cancel</button>
+                <button onClick={submitRequest} className="btn btn-primary" disabled={requesting}
+                  style={{ display: "flex", alignItems: "center", gap: 8, borderRadius: 10, fontWeight: 600 }}>
+                  {requesting ? (
+                    <><Loader2 size={14} style={{ animation: "spin 1s linear infinite" }} /> Dispatching...</>
+                  ) : (
+                    <><Plus size={15} /> Submit Request</>
+                  )}
                 </button>
               </div>
             </div>
           </div>
         </>
       )}
-      <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+
+      <style>{`
+        .search-focus:focus {
+          border-color: var(--brand-400) !important;
+          box-shadow: 0 0 12px rgba(6, 182, 212, 0.15);
+        }
+        .filter-pill:hover {
+          opacity: 0.9;
+        }
+        .catalog-card:hover {
+          transform: translateY(-4px);
+          border-color: rgba(6,182,212,0.3) !important;
+          box-shadow: 0 8px 30px rgba(0,0,0,0.3), 0 0 15px rgba(6,182,212,0.05);
+        }
+        .catalog-card:hover .chevron-hover {
+          color: var(--text-primary) !important;
+          transform: translateX(3px);
+        }
+        .chevron-hover {
+          transition: all 0.2s;
+        }
+        .modal-close-btn:hover {
+          background: var(--bg-card-hover) !important;
+          color: var(--text-primary) !important;
+        }
+        @keyframes fadeInBg {
+          from { opacity: 0; backdrop-filter: blur(0); }
+          to { opacity: 1; backdrop-filter: blur(12px); }
+        }
+        @keyframes modalZoomIn {
+          from { opacity: 0; transform: translate(-50%, -46%) scale(0.96); }
+          to { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+        }
+        @keyframes spin {
+          to { transform: rotate(360deg); }
+        }
+      `}</style>
     </>
   );
 }

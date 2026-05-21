@@ -4,7 +4,7 @@ import {
   ShoppingCart, Plus, Building2, FileText, Package, RefreshCw,
   Filter, Star, DollarSign, AlertTriangle, Calendar, CheckCircle2,
   Clock, Truck, ChevronRight, X, CreditCard, Hash, ArrowRight,
-  Loader2, TrendingUp, ShieldCheck,
+  Loader2, TrendingUp, ShieldCheck, Trash2,
 } from "lucide-react";
 import { apiFetch } from "@/lib/api";
 
@@ -36,6 +36,9 @@ export default function ProcurementPage() {
   const [form, setForm] = useState<any>({});
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [poItems, setPoItems] = useState<{ description: string; quantity: number; unitPrice: number }[]>([
+    { description: "", quantity: 1, unitPrice: 0 }
+  ]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -66,16 +69,29 @@ export default function ProcurementPage() {
   const submitPO = async (e: React.FormEvent) => {
     e.preventDefault(); setSaving(true);
     try {
+      if (poItems.length === 0) {
+        alert("Please add at least one line item.");
+        setSaving(false);
+        return;
+      }
+      for (const item of poItems) {
+        if (!item.description.trim()) {
+          alert("All items must have a description.");
+          setSaving(false);
+          return;
+        }
+      }
+
       await apiFetch("/procurement/purchase-orders", {
         method: "POST",
-        body: JSON.stringify({ ...form, items: form.items ? JSON.parse(form.items) : [] }),
+        body: JSON.stringify({ ...form, items: poItems }),
       }); closeModal(); load();
     } catch(e) { alert(String(e)); }
     setSaving(false);
   };
   const approvePO = async (id: string) => { await apiFetch(`/procurement/purchase-orders/${id}/approve`, { method: "POST" }); load(); };
   const receivePO = async (id: string) => { await apiFetch(`/procurement/purchase-orders/${id}/receive`, { method: "POST", body: JSON.stringify({}) }); load(); };
-  const closeModal = () => { setShowModal(""); setForm({}); };
+  const closeModal = () => { setShowModal(""); setForm({}); setPoItems([{ description: "", quantity: 1, unitPrice: 0 }]); };
 
   const inputStyle: React.CSSProperties = {
     padding: "10px 12px", borderRadius: 8, border: "1px solid var(--border-primary)",
@@ -321,7 +337,7 @@ export default function ProcurementPage() {
           <div onClick={closeModal} style={{ position: "fixed", inset: 0, background: "var(--modal-overlay)", zIndex: 2000, backdropFilter: "blur(4px)" }} />
           <div style={{
             position: "fixed", top: "50%", left: "50%", transform: "translate(-50%, -50%)",
-            width: 520, maxHeight: "85vh", overflowY: "auto",
+            width: showModal === "po" ? 720 : 520, maxHeight: "85vh", overflowY: "auto",
             background: "var(--bg-card)", border: "1px solid var(--border-primary)",
             borderRadius: 16, boxShadow: "var(--modal-shadow)", zIndex: 2001, padding: 24,
           }}>
@@ -403,15 +419,153 @@ export default function ProcurementPage() {
                   <label style={{ fontSize: 11, color: "var(--text-tertiary)", marginBottom: 4, display: "block" }}>Expected Delivery</label>
                   <input type="date" value={form.expectedDelivery || ""} onChange={e => setForm({ ...form, expectedDelivery: e.target.value })} style={inputStyle} />
                 </div>
+                
                 <div>
-                  <label style={{ fontSize: 11, color: "var(--text-tertiary)", marginBottom: 4, display: "block" }}>Line Items (JSON Array)</label>
-                  <textarea
-                    placeholder='[{"description":"Dell Latitude 5540","quantity":10,"unitPrice":85000}]'
-                    value={form.items || ""} onChange={e => setForm({ ...form, items: e.target.value })}
-                    rows={4}
-                    style={{ ...inputStyle, resize: "vertical", fontFamily: "monospace", fontSize: 12 }}
-                  />
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+                    <label style={{ fontSize: 12, fontWeight: 600, color: "var(--text-secondary)" }}>Line Items</label>
+                    <span style={{ fontSize: 11, color: "var(--text-tertiary)" }}>{poItems.length} {poItems.length === 1 ? "item" : "items"}</span>
+                  </div>
+
+                  <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 12 }}>
+                    {/* Header Row */}
+                    <div style={{ display: "grid", gridTemplateColumns: "3.5fr 1fr 1.5fr 1fr auto", gap: 8, padding: "0 4px", fontSize: 11, fontWeight: 600, color: "var(--text-tertiary)" }}>
+                      <div>Item Description *</div>
+                      <div style={{ textAlign: "center" }}>Qty *</div>
+                      <div>Unit Price (₹) *</div>
+                      <div style={{ textAlign: "right" }}>Total (₹)</div>
+                      <div style={{ width: 28 }}></div>
+                    </div>
+
+                    {/* Item Rows */}
+                    {poItems.map((item, idx) => {
+                      const itemTotal = (item.quantity || 0) * (item.unitPrice || 0);
+                      return (
+                        <div key={idx} style={{ display: "grid", gridTemplateColumns: "3.5fr 1fr 1.5fr 1fr auto", gap: 8, alignItems: "center" }}>
+                          <input
+                            required
+                            placeholder="e.g. Dell Latitude 5540"
+                            value={item.description}
+                            onChange={e => {
+                              const newItems = [...poItems];
+                              newItems[idx].description = e.target.value;
+                              setPoItems(newItems);
+                            }}
+                            style={inputStyle}
+                          />
+                          <input
+                            required
+                            type="number"
+                            min="1"
+                            placeholder="Qty"
+                            value={item.quantity}
+                            onChange={e => {
+                              const newItems = [...poItems];
+                              newItems[idx].quantity = Math.max(1, parseInt(e.target.value) || 0);
+                              setPoItems(newItems);
+                            }}
+                            style={{ ...inputStyle, textAlign: "center" }}
+                          />
+                          <input
+                            required
+                            type="number"
+                            min="0"
+                            placeholder="Price"
+                            value={item.unitPrice || ""}
+                            onChange={e => {
+                              const newItems = [...poItems];
+                              newItems[idx].unitPrice = Math.max(0, parseFloat(e.target.value) || 0);
+                              setPoItems(newItems);
+                            }}
+                            style={inputStyle}
+                          />
+                          <div style={{ textAlign: "right", fontSize: 13, fontWeight: 600, color: "var(--text-primary)", paddingRight: 4 }}>
+                            ₹{itemTotal.toLocaleString("en-IN")}
+                          </div>
+                          <button
+                            type="button"
+                            disabled={poItems.length === 1}
+                            onClick={() => {
+                              if (poItems.length > 1) {
+                                setPoItems(poItems.filter((_, i) => i !== idx));
+                              }
+                            }}
+                            style={{
+                              background: "rgba(239,68,68,0.1)",
+                              border: "none",
+                              color: "#ef4444",
+                              borderRadius: 8,
+                              width: 32,
+                              height: 32,
+                              display: "flex",
+                              alignItems: "center",
+                              justifyContent: "center",
+                              cursor: poItems.length === 1 ? "not-allowed" : "pointer",
+                              opacity: poItems.length === 1 ? 0.4 : 1,
+                              transition: "all 0.15s ease",
+                            }}
+                            onMouseEnter={e => {
+                              if (poItems.length > 1) e.currentTarget.style.background = "rgba(239,68,68,0.2)";
+                            }}
+                            onMouseLeave={e => {
+                              if (poItems.length > 1) e.currentTarget.style.background = "rgba(239,68,68,0.1)";
+                            }}
+                          >
+                            <Trash2 size={14} />
+                          </button>
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  {/* Actions & Summary Footer */}
+                  <div style={{
+                    display: "flex",
+                    justifyContent: "space-between",
+                    alignItems: "center",
+                    padding: "12px",
+                    background: "rgba(255, 255, 255, 0.02)",
+                    border: "1px dashed var(--border-primary)",
+                    borderRadius: 10,
+                    marginTop: 12
+                  }}>
+                    <button
+                      type="button"
+                      onClick={() => setPoItems([...poItems, { description: "", quantity: 1, unitPrice: 0 }])}
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: 6,
+                        background: "rgba(34, 211, 238, 0.08)",
+                        border: "1px solid rgba(34, 211, 238, 0.2)",
+                        color: "#22d3ee",
+                        padding: "6px 12px",
+                        borderRadius: 8,
+                        fontSize: 12,
+                        fontWeight: 600,
+                        cursor: "pointer",
+                        transition: "all 0.15s ease",
+                      }}
+                      onMouseEnter={e => {
+                        e.currentTarget.style.background = "rgba(34, 211, 238, 0.15)";
+                        e.currentTarget.style.borderColor = "rgba(34, 211, 238, 0.4)";
+                      }}
+                      onMouseLeave={e => {
+                        e.currentTarget.style.background = "rgba(34, 211, 238, 0.08)";
+                        e.currentTarget.style.borderColor = "rgba(34, 211, 238, 0.2)";
+                      }}
+                    >
+                      <Plus size={14} /> Add Line Item
+                    </button>
+
+                    <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                      <span style={{ fontSize: 12, color: "var(--text-tertiary)" }}>Total Amount:</span>
+                      <span style={{ fontSize: 16, fontWeight: 700, color: "var(--brand-400)" }}>
+                        ₹{poItems.reduce((acc, item) => acc + (item.quantity || 0) * (item.unitPrice || 0), 0).toLocaleString("en-IN")}
+                      </span>
+                    </div>
+                  </div>
                 </div>
+
                 <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 8 }}>
                   <button type="button" className="btn btn-secondary" onClick={closeModal}>Cancel</button>
                   <button type="submit" className="btn btn-primary" disabled={saving}>{saving ? "Creating..." : "Create PO"}</button>

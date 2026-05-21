@@ -241,25 +241,35 @@ export default function SettingsPage() {
 
                           return (
                             <div key={module.key} style={{
-                              padding: 16,
-                              borderRadius: 12,
+                              padding: 18,
+                              borderRadius: 14,
                               background: isUnlocked 
-                                ? "var(--bg-elevated)" 
-                                : "rgba(15, 23, 42, 0.15)",
-                              border: `1px solid ${isActive ? "rgba(6,182,212,0.2)" : "var(--border-primary)"}`,
-                              opacity: isUnlocked ? 1 : 0.65,
+                                ? "linear-gradient(135deg, var(--bg-card) 0%, rgba(30, 37, 64, 0.4) 100%)" 
+                                : "rgba(10, 14, 26, 0.3)",
+                              border: `1px solid ${isActive ? "var(--brand-500)" : "var(--border-primary)"}`,
+                              boxShadow: isActive ? "0 0 16px rgba(6, 182, 212, 0.08), inset 0 0 12px rgba(6, 182, 212, 0.04)" : "none",
+                              opacity: isUnlocked ? 1 : 0.6,
                               display: "flex",
                               justifyContent: "space-between",
                               gap: 16,
-                              transition: "all 0.2s ease",
+                              transition: "all 0.25s cubic-bezier(0.4, 0, 0.2, 1)",
                             }}>
                               <div style={{ flex: 1 }}>
-                                <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
+                                <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
                                   <span style={{
-                                    fontSize: 13,
+                                    fontSize: 13.5,
                                     fontWeight: 700,
-                                    color: isActive ? "var(--text-primary)" : "var(--text-secondary)"
+                                    color: isActive ? "var(--text-primary)" : "var(--text-secondary)",
+                                    transition: "color 0.2s"
                                   }}>{module.name}</span>
+
+                                  {isActive && (
+                                    <span style={{
+                                      width: 6, height: 6, borderRadius: "50%", background: "#10b981",
+                                      boxShadow: "0 0 8px #10b981", display: "inline-block",
+                                      animation: "pulseGlow 2s infinite"
+                                    }} />
+                                  )}
                                   
                                   {module.tier && !isUnlocked && (
                                     <span style={{
@@ -267,16 +277,17 @@ export default function SettingsPage() {
                                       fontWeight: 800,
                                       textTransform: "uppercase",
                                       color: module.tier === "Enterprise" ? "#8b5cf6" : "#06b6d4",
-                                      background: module.tier === "Enterprise" ? "rgba(139,92,246,0.1)" : "rgba(6,182,212,0.1)",
+                                      background: module.tier === "Enterprise" ? "rgba(139,92,246,0.12)" : "rgba(6,182,212,0.12)",
                                       padding: "2px 6px",
                                       borderRadius: 4,
-                                      letterSpacing: "0.04em"
+                                      letterSpacing: "0.04em",
+                                      border: `1px solid ${module.tier === "Enterprise" ? "rgba(139,92,246,0.2)" : "rgba(6,182,212,0.2)"}`
                                     }}>
                                       {module.tier} Plan
                                     </span>
                                   )}
                                 </div>
-                                <p style={{ fontSize: 11, color: "var(--text-tertiary)", lineHeight: 1.4 }}>{module.desc}</p>
+                                <p style={{ fontSize: 11.5, color: "var(--text-tertiary)", lineHeight: 1.5 }}>{module.desc}</p>
                               </div>
 
                               <div style={{ display: "flex", alignItems: "center", alignSelf: "center" }}>
@@ -287,19 +298,40 @@ export default function SettingsPage() {
                                       background: "none",
                                       border: "none",
                                       cursor: "pointer",
-                                      color: isActive ? "#10b981" : "var(--text-tertiary)",
                                       padding: 0,
-                                      transition: "color 0.2s",
+                                      display: "flex",
+                                      alignItems: "center",
+                                      transition: "all 0.2s",
                                     }}
                                   >
-                                    {isActive ? <ToggleRight size={28} /> : <ToggleLeft size={28} />}
+                                    <div style={{
+                                      width: 44,
+                                      height: 22,
+                                      borderRadius: 11,
+                                      background: isActive ? "rgba(6, 182, 212, 0.25)" : "rgba(100, 116, 139, 0.08)",
+                                      border: `1px solid ${isActive ? "var(--brand-500)" : "var(--border-secondary)"}`,
+                                      position: "relative",
+                                      transition: "all 0.25s cubic-bezier(0.4, 0, 0.2, 1)",
+                                    }}>
+                                      <div style={{
+                                        width: 14,
+                                        height: 14,
+                                        borderRadius: "50%",
+                                        background: isActive ? "var(--brand-400)" : "var(--text-secondary)",
+                                        boxShadow: isActive ? "0 0 8px var(--brand-400)" : "none",
+                                        position: "absolute",
+                                        top: 3,
+                                        left: isActive ? 24 : 4,
+                                        transition: "all 0.25s cubic-bezier(0.4, 0, 0.2, 1)",
+                                      }} />
+                                    </div>
                                   </button>
                                 ) : (
                                   <button
                                     onClick={() => setActiveSection("billing")}
                                     style={{
-                                      background: "var(--bg-card)",
-                                      border: "1px solid rgba(255,255,255,0.05)",
+                                      background: "var(--bg-elevated)",
+                                      border: "1px solid var(--border-secondary)",
                                       borderRadius: 8,
                                       padding: "6px 12px",
                                       color: "var(--brand-400)",
@@ -309,7 +341,10 @@ export default function SettingsPage() {
                                       display: "flex",
                                       alignItems: "center",
                                       gap: 4,
+                                      transition: "all 0.2s",
                                     }}
+                                    onMouseEnter={(e) => { e.currentTarget.style.borderColor = "var(--brand-400)"; e.currentTarget.style.boxShadow = "var(--shadow-glow)"; }}
+                                    onMouseLeave={(e) => { e.currentTarget.style.borderColor = "var(--border-secondary)"; e.currentTarget.style.boxShadow = "none"; }}
                                   >
                                     <Lock size={10} /> Upgrade
                                   </button>

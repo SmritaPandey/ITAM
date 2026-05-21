@@ -121,6 +121,22 @@ export class DiscoveryController {
     );
   }
 
+  @Post('devices/:id/merge')
+  @Roles('Tenant Admin', 'IT Admin')
+  @ApiOperation({ summary: 'Merge discovered device specs into existing asset' })
+  async mergeDevice(
+    @Request() req: any,
+    @Param('id') id: string,
+    @Body() body: { assetId: string },
+  ) {
+    return this.discoveryService.mergeDevice(
+      id,
+      req.user.tenantId,
+      req.user.sub,
+      body,
+    );
+  }
+
   @Post('devices/bulk-approve')
   @Roles('Tenant Admin', 'IT Admin')
   @ApiOperation({ summary: 'Bulk approve multiple discovered devices' })

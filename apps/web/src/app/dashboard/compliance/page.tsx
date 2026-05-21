@@ -1,9 +1,10 @@
 "use client";
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, Fragment } from "react";
 import {
   Shield, AlertTriangle, CheckCircle2, XCircle, Clock, Eye, RefreshCw,
   Plus, Loader2, ChevronDown, Filter, Activity, Cpu, HardDrive,
-  Wifi, Usb, Package, Lock, Trash2, Power, Scan, Server
+  Wifi, Usb, Package, Lock, Trash2, Power, Scan, Server,
+  UserX, AlertOctagon, Skull, Terminal, FileText, Check, X, ShieldAlert, Key
 } from "lucide-react";
 import { apiFetch } from "@/lib/api";
 import { PageHelp } from "@/components/HelpSystem";
@@ -20,13 +21,19 @@ const STATUS_COLORS: Record<string, { bg: string; text: string; badge: string }>
   REJECTED: { bg: "rgba(239,68,68,0.08)", text: "#ef4444", badge: "red" },
   AUTO_ALLOWED: { bg: "rgba(100,116,139,0.08)", text: "#64748b", badge: "gray" },
   VIOLATION: { bg: "rgba(239,68,68,0.12)", text: "#ef4444", badge: "red" },
+  RESOLVED: { bg: "rgba(16,185,129,0.08)", text: "#10b981", badge: "green" },
 };
 
 const CATEGORY_ICONS: Record<string, any> = {
-  RAM_CHANGE: <Cpu size={14} />, DISK_CHANGE: <HardDrive size={14} />,
-  HARDWARE_CHANGE: <Activity size={14} />, NETWORK_CHANGE: <Wifi size={14} />,
-  USB_DEVICE: <Usb size={14} />, SOFTWARE_INSTALL: <Package size={14} />,
-  SOFTWARE_REMOVE: <Trash2 size={14} />, PROCESS_BLOCKED: <Lock size={14} />,
+  RAM_CHANGE: <Cpu size={14} />,
+  DISK_CHANGE: <HardDrive size={14} />,
+  HARDWARE_CHANGE: <Activity size={14} />,
+  NETWORK_CHANGE: <Wifi size={14} />,
+  USB_DEVICE: <Usb size={14} />,
+  SOFTWARE_INSTALL: <Package size={14} />,
+  SOFTWARE_REMOVE: <Trash2 size={14} />,
+  PROCESS_BLOCKED: <Skull size={14} style={{ color: "#ef4444" }} />,
+  UNAUTHORIZED_ACCESS: <AlertOctagon size={14} style={{ color: "#f59e0b" }} />,
 };
 
 const ACTION_LABELS: Record<string, string> = {
@@ -45,6 +52,7 @@ export default function CompliancePage() {
   const [newPolicy, setNewPolicy] = useState({ name: "", description: "", category: "RAM_CHANGE", severity: "WARNING", action: "ALERT_ONLY" });
   const [reviewModal, setReviewModal] = useState<any>(null);
   const [reviewNote, setReviewNote] = useState("");
+  const [expandedChangeId, setExpandedChangeId] = useState<string | null>(null);
   const [scanTarget, setScanTarget] = useState("");
   const [scanUser, setScanUser] = useState("");
   const [scanPass, setScanPass] = useState("");
@@ -99,6 +107,16 @@ export default function CompliancePage() {
   async function rejectChange(id: string) {
     await apiFetch(`/compliance/changes/${id}/reject`, { method: "PATCH", body: JSON.stringify({ note: reviewNote }) });
     setReviewModal(null); setReviewNote(""); refresh();
+  }
+
+  async function instantApprove(id: string, note: string = "Approved from threat board") {
+    await apiFetch(`/compliance/changes/${id}/approve`, { method: "PATCH", body: JSON.stringify({ note }) });
+    refresh();
+  }
+
+  async function instantReject(id: string, note: string = "Rejected & blocked process") {
+    await apiFetch(`/compliance/changes/${id}/reject`, { method: "PATCH", body: JSON.stringify({ note }) });
+    refresh();
   }
 
   if (loading) return (
@@ -264,37 +282,384 @@ export default function CompliancePage() {
             ))}
           </div>
 
-          <div className="card" style={{ padding: 0, overflow: "hidden" }}>
-            <table className="data-table">
-              <thead><tr><th>Change</th><th>Host</th><th>IP</th><th>Severity</th><th>Policy</th><th>Status</th><th>Time</th><th>Actions</th></tr></thead>
-              <tbody>
-                {changes.data?.length === 0 ? (
-                  <tr><td colSpan={8} style={{ textAlign: "center", padding: 40, color: "var(--text-tertiary)" }}>No changes found</td></tr>
-                ) : changes.data?.map((c: any) => (
-                  <tr key={c.id}>
-                    <td><span style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12 }}>{CATEGORY_ICONS[c.category]}{c.summary}</span></td>
-                    <td style={{ fontWeight: 500, fontSize: 12 }}>{c.hostname || "—"}</td>
-                    <td><code style={{ fontSize: 11, color: "var(--brand-400)" }}>{c.ipAddress || "—"}</code></td>
-                    <td><span className={`badge ${SEVERITY_COLORS[c.severity]?.badge}`}>{c.severity}</span></td>
-                    <td style={{ fontSize: 11, color: "var(--text-secondary)" }}>{c.policy?.name || "—"}</td>
-                    <td><span className={`badge ${STATUS_COLORS[c.status]?.badge}`}>{c.status.replace(/_/g, " ")}</span></td>
-                    <td style={{ fontSize: 11, color: "var(--text-tertiary)", whiteSpace: "nowrap" }}>{new Date(c.createdAt).toLocaleString()}</td>
-                    <td>
-                      {c.status === "PENDING_REVIEW" && (
-                        <div style={{ display: "flex", gap: 4 }}>
-                          <button className="btn btn-secondary" style={{ padding: "3px 8px", fontSize: 10, color: "#10b981" }}
-                            onClick={() => { setReviewModal(c); setReviewNote(""); }}>
-                            <CheckCircle2 size={10} /> Approve
-                          </button>
-                          <button className="btn btn-secondary" style={{ padding: "3px 8px", fontSize: 10, color: "#ef4444" }}
-                            onClick={() => { setReviewModal({ ...c, _reject: true }); setReviewNote(""); }}>
-                            <XCircle size={10} /> Reject
-                          </button>
+          {/* Pending threat hub */}
+          {changes.data?.filter((c: any) => c.status === "PENDING_REVIEW").length > 0 && (
+            <div style={{ marginBottom: 24, padding: "16px 20px", background: "rgba(26, 31, 53, 0.4)", backdropFilter: "blur(20px)", borderRadius: 16, border: "1px solid rgba(6, 182, 212, 0.15)", boxShadow: "0 8px 32px 0 rgba(0, 0, 0, 0.25)" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 16 }}>
+                <ShieldAlert size={18} style={{ color: "#fbbf24" }} />
+                <div>
+                  <h3 style={{ fontSize: 14, fontWeight: 700, color: "var(--text-primary)" }}>Active Manual Gates & Access Requests</h3>
+                  <p style={{ fontSize: 11, color: "var(--text-secondary)", marginTop: 2 }}>The following endpoints are currently enforcing active blocks. Review and approve or reject their access.</p>
+                </div>
+                <span className="badge amber" style={{ marginLeft: "auto", fontSize: 10, padding: "3px 8px" }}>
+                  {changes.data?.filter((c: any) => c.status === "PENDING_REVIEW").length} Pending Gate{changes.data?.filter((c: any) => c.status === "PENDING_REVIEW").length > 1 ? "s" : ""}
+                </span>
+              </div>
+
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(360px, 1fr))", gap: 16 }}>
+                {changes.data?.filter((c: any) => c.status === "PENDING_REVIEW").map((c: any) => {
+                  const isBlockedProc = c.category === "PROCESS_BLOCKED";
+                  const isUnauth = c.category === "UNAUTHORIZED_ACCESS";
+                  const val = c.newValue || {};
+
+                  return (
+                    <div key={c.id} style={{
+                      background: "rgba(10, 14, 26, 0.6)",
+                      border: isBlockedProc ? "1px solid rgba(239, 68, 68, 0.3)" : "1px solid rgba(245, 158, 11, 0.3)",
+                      borderRadius: 12,
+                      padding: 16,
+                      boxShadow: "inset 0 0 12px rgba(255, 255, 255, 0.02)",
+                      display: "flex",
+                      flexDirection: "column",
+                      justifyContent: "space-between",
+                      transition: "all 0.2s",
+                      position: "relative"
+                    }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 12 }}>
+                        <div>
+                          <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em", color: isBlockedProc ? "#f87171" : "#fbbf24" }}>
+                            {isBlockedProc ? <Skull size={12} /> : <UserX size={12} />}
+                            {isBlockedProc ? "Suspicious Process Blocked" : "Unauthorized Access Request"}
+                          </div>
+                          <h4 style={{ fontSize: 14, fontWeight: 700, color: "var(--text-primary)", marginTop: 4 }}>
+                            {c.summary}
+                          </h4>
+                        </div>
+                        <span className={`badge ${isBlockedProc ? "red" : "amber"}`} style={{ fontSize: 9 }}>
+                          {isBlockedProc ? `PID ${val.pid || 'N/A'}` : val.username ? "OS User" : val.port ? "Port" : "Access"}
+                        </span>
+                      </div>
+
+                      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 12, fontSize: 11, background: "rgba(255,255,255,0.03)", padding: 10, borderRadius: 8, border: "1px solid var(--border-primary)" }}>
+                        <div>
+                          <span style={{ color: "var(--text-tertiary)", display: "block" }}>Host / Agent</span>
+                          <span style={{ fontWeight: 600, color: "var(--text-secondary)" }}>{c.hostname}</span>
+                        </div>
+                        <div>
+                          <span style={{ color: "var(--text-tertiary)", display: "block" }}>OS / Platform</span>
+                          <span style={{ fontWeight: 600, color: "var(--text-secondary)", textTransform: "capitalize" }}>{c.platform}</span>
+                        </div>
+
+                        {isBlockedProc && (
+                          <>
+                            {val.user && (
+                              <div>
+                                <span style={{ color: "var(--text-tertiary)", display: "block" }}>Executed By</span>
+                                <span style={{ fontWeight: 600, color: "var(--text-secondary)" }}>{val.user}</span>
+                              </div>
+                            )}
+                            {val.matchedKeyword && (
+                              <div>
+                                <span style={{ color: "var(--text-tertiary)", display: "block" }}>Rule Match</span>
+                                <span style={{ fontWeight: 600, color: "#f87171" }}>"{val.matchedKeyword}" signature</span>
+                              </div>
+                            )}
+                          </>
+                        )}
+
+                        {isUnauth && val.username && (
+                          <div style={{ gridColumn: "span 2" }}>
+                            <span style={{ color: "var(--text-tertiary)", display: "block" }}>OS User Name</span>
+                            <span style={{ fontWeight: 700, color: "var(--warning)" }}>"{val.username}"</span>
+                          </div>
+                        )}
+
+                        {isUnauth && val.failedLoginsCount !== undefined && (
+                          <div style={{ gridColumn: "span 2" }}>
+                            <span style={{ color: "var(--text-tertiary)", display: "block" }}>Failed SSH/RDP Probes</span>
+                            <span style={{ fontWeight: 700, color: "#f87171" }}>{val.failedLoginsCount} failed attempts</span>
+                          </div>
+                        )}
+
+                        {isUnauth && val.port !== undefined && (
+                          <>
+                            <div>
+                              <span style={{ color: "var(--text-tertiary)", display: "block" }}>Listening Port</span>
+                              <span style={{ fontWeight: 700, color: "var(--brand-400)" }}>{val.port}</span>
+                            </div>
+                            {val.process && (
+                              <div>
+                                <span style={{ color: "var(--text-tertiary)", display: "block" }}>Binding Process</span>
+                                <span style={{ fontWeight: 600, color: "var(--text-secondary)" }}>{val.process}</span>
+                              </div>
+                            )}
+                          </>
+                        )}
+                      </div>
+
+                      {isBlockedProc && val.command && (
+                        <div style={{ marginBottom: 12 }}>
+                          <span style={{ fontSize: 10, color: "var(--text-tertiary)", display: "block", marginBottom: 4 }}>Command Line Execution String</span>
+                          <code style={{ fontSize: 10, display: "block", background: "#090d16", padding: "6px 10px", borderRadius: 6, color: "var(--brand-300)", overflowX: "auto", border: "1px solid var(--border-primary)", maxHeight: 60, whiteSpace: "pre-wrap" }}>
+                            {val.command}
+                          </code>
                         </div>
                       )}
-                    </td>
-                  </tr>
-                ))}
+
+                      <div style={{ marginTop: "auto", borderTop: "1px solid var(--border-primary)", paddingTop: 12 }}>
+                        <div style={{ display: "flex", gap: 6, marginBottom: 8 }}>
+                          <input
+                            type="text"
+                            placeholder="Add administrative review note (optional)..."
+                            id={`note-${c.id}`}
+                            style={{
+                              flex: 1,
+                              padding: "6px 10px",
+                              fontSize: 11,
+                              background: "rgba(0,0,0,0.3)",
+                              border: "1px solid var(--border-primary)",
+                              borderRadius: 6,
+                              color: "var(--text-primary)",
+                            }}
+                          />
+                        </div>
+                        <div style={{ display: "flex", gap: 6 }}>
+                          <button
+                            className="btn"
+                            style={{
+                              flex: 1,
+                              padding: "6px 8px",
+                              fontSize: 11,
+                              fontWeight: 600,
+                              color: "#34d399",
+                              borderColor: "rgba(16,185,129,0.3)",
+                              background: "rgba(16,185,129,0.06)",
+                              border: "1px solid rgba(16,185,129,0.3)",
+                              justifyContent: "center"
+                            }}
+                            onClick={async () => {
+                              const input = document.getElementById(`note-${c.id}`) as HTMLInputElement;
+                              await instantApprove(c.id, input?.value || "Manually approved from threat review hub");
+                            }}
+                          >
+                            <CheckCircle2 size={12} /> Approve Access
+                          </button>
+                          <button
+                            className="btn"
+                            style={{
+                              flex: 1,
+                              padding: "6px 8px",
+                              fontSize: 11,
+                              fontWeight: 600,
+                              color: "#f87171",
+                              borderColor: "rgba(239,68,68,0.3)",
+                              background: "rgba(239,68,68,0.06)",
+                              border: "1px solid rgba(239,68,68,0.3)",
+                              justifyContent: "center"
+                            }}
+                            onClick={async () => {
+                              const input = document.getElementById(`note-${c.id}`) as HTMLInputElement;
+                              await instantReject(c.id, input?.value || "Denied. Block active & process killed");
+                            }}
+                          >
+                            <XCircle size={12} /> Deny & Keep Block
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          <div className="card" style={{ padding: 0, overflow: "hidden" }}>
+            <table className="data-table">
+              <thead>
+                <tr>
+                  <th style={{ width: 30 }}></th>
+                  <th>Change</th>
+                  <th>Host</th>
+                  <th>IP</th>
+                  <th>Severity</th>
+                  <th>Policy</th>
+                  <th>Status</th>
+                  <th>Time</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {changes.data?.length === 0 ? (
+                  <tr><td colSpan={9} style={{ textAlign: "center", padding: 40, color: "var(--text-tertiary)" }}>No changes found</td></tr>
+                ) : changes.data?.map((c: any) => {
+                  const isExpanded = expandedChangeId === c.id;
+                  const isBlockedProc = c.category === "PROCESS_BLOCKED";
+                  const isUnauth = c.category === "UNAUTHORIZED_ACCESS";
+                  const val = c.newValue || {};
+
+                  return (
+                    <Fragment key={c.id}>
+                      <tr style={{ cursor: "pointer" }} onClick={() => setExpandedChangeId(isExpanded ? null : c.id)}>
+                        <td style={{ width: 30 }}>
+                          <ChevronDown size={14} style={{ transform: isExpanded ? "rotate(0deg)" : "rotate(-90deg)", transition: "transform 0.15s ease", color: "var(--text-tertiary)" }} />
+                        </td>
+                        <td><span style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12 }}>{CATEGORY_ICONS[c.category] || <Activity size={14} />}{c.summary}</span></td>
+                        <td style={{ fontWeight: 500, fontSize: 12 }}>{c.hostname || "—"}</td>
+                        <td><code style={{ fontSize: 11, color: "var(--brand-400)" }}>{c.ipAddress || "—"}</code></td>
+                        <td><span className={`badge ${SEVERITY_COLORS[c.severity]?.badge}`}>{c.severity}</span></td>
+                        <td style={{ fontSize: 11, color: "var(--text-secondary)" }}>{c.policy?.name || "—"}</td>
+                        <td><span className={`badge ${STATUS_COLORS[c.status]?.badge}`}>{c.status.replace(/_/g, " ")}</span></td>
+                        <td style={{ fontSize: 11, color: "var(--text-tertiary)", whiteSpace: "nowrap" }}>{new Date(c.createdAt).toLocaleString()}</td>
+                        <td onClick={e => e.stopPropagation()}>
+                          {c.status === "PENDING_REVIEW" ? (
+                            <div style={{ display: "flex", gap: 4 }}>
+                              <button className="btn btn-secondary" style={{ padding: "3px 8px", fontSize: 10, color: "#10b981" }}
+                                onClick={() => { setReviewModal(c); setReviewNote(""); }}>
+                                <CheckCircle2 size={10} /> Approve
+                              </button>
+                              <button className="btn btn-secondary" style={{ padding: "3px 8px", fontSize: 10, color: "#ef4444" }}
+                                onClick={() => { setReviewModal({ ...c, _reject: true }); setReviewNote(""); }}>
+                                <XCircle size={10} /> Reject
+                              </button>
+                            </div>
+                          ) : (
+                            <button className="btn btn-secondary" style={{ padding: "3px 8px", fontSize: 10 }} onClick={() => setExpandedChangeId(isExpanded ? null : c.id)}>
+                              <Eye size={10} /> Inspect
+                            </button>
+                          )}
+                        </td>
+                      </tr>
+                      
+                      {isExpanded && (
+                        <tr style={{ background: "rgba(26, 31, 53, 0.15)" }}>
+                          <td colSpan={9} style={{ padding: "16px 20px", borderBottom: "1px solid var(--border-primary)" }}>
+                            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 20, background: "rgba(0,0,0,0.15)", padding: 16, borderRadius: 12, border: "1px solid var(--border-primary)" }}>
+                              
+                              {/* Left column: Change Telemetry Details */}
+                              <div>
+                                <h4 style={{ fontSize: 12, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em", color: "var(--brand-400)", marginBottom: 10, display: "flex", alignItems: "center", gap: 4 }}>
+                                  <FileText size={14} /> Telemetry Payload & Value Diff
+                                </h4>
+                                
+                                {isBlockedProc && c.newValue && (
+                                  <div style={{ display: "grid", gap: 8, fontSize: 12 }}>
+                                    <div><strong style={{ color: "var(--text-secondary)" }}>Process Name:</strong> <code style={{ color: "#ef4444" }}>{val.name}</code></div>
+                                    {val.pid && <div><strong style={{ color: "var(--text-secondary)" }}>PID:</strong> <code>{val.pid}</code></div>}
+                                    {val.user && <div><strong style={{ color: "var(--text-secondary)" }}>Executed By Account:</strong> <code>{val.user}</code></div>}
+                                    {val.matchedKeyword && <div><strong style={{ color: "var(--text-secondary)" }}>Rule Matched:</strong> <span className="badge red" style={{ fontSize: 10 }}>{val.matchedKeyword}</span></div>}
+                                    {val.command && (
+                                      <div style={{ marginTop: 4 }}>
+                                        <strong style={{ color: "var(--text-secondary)", display: "block", marginBottom: 2 }}>Full Command Line:</strong>
+                                        <code style={{ fontSize: 10, display: "block", background: "#090d16", padding: 8, borderRadius: 6, color: "var(--brand-300)", overflowX: "auto", border: "1px solid var(--border-primary)", whiteSpace: "pre-wrap" }}>
+                                          {val.command}
+                                        </code>
+                                      </div>
+                                    )}
+                                  </div>
+                                )}
+
+                                {isUnauth && c.newValue && (
+                                  <div style={{ display: "grid", gap: 8, fontSize: 12 }}>
+                                    {val.username && <div><strong style={{ color: "var(--text-secondary)" }}>New/Active OS Username:</strong> <code style={{ color: "var(--warning)" }}>{val.username}</code></div>}
+                                    {val.failedLoginsCount !== undefined && <div><strong style={{ color: "var(--text-secondary)" }}>Failed Logins Level:</strong> <span className="badge red">{val.failedLoginsCount} failed attempts</span></div>}
+                                    {val.port !== undefined && (
+                                      <>
+                                        <div><strong style={{ color: "var(--text-secondary)" }}>Listening Port:</strong> <code>{val.port}</code></div>
+                                        {val.process && <div><strong style={{ color: "var(--text-secondary)" }}>Binding Application:</strong> <code>{val.process}</code></div>}
+                                      </>
+                                    )}
+                                  </div>
+                                )}
+
+                                {/* Fallback for standard changes */}
+                                {!isBlockedProc && !isUnauth && (
+                                  <div style={{ fontSize: 12 }}>
+                                    <div style={{ marginBottom: 6 }}><strong style={{ color: "var(--text-secondary)" }}>Detected Change:</strong> {c.summary}</div>
+                                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+                                      {c.previousValue && (
+                                        <div>
+                                          <span style={{ fontSize: 10, color: "var(--text-tertiary)", display: "block" }}>Previous Baseline</span>
+                                          <pre style={{ fontSize: 10, background: "#090d16", padding: 8, borderRadius: 6, color: "var(--text-secondary)", overflowX: "auto", border: "1px solid var(--border-primary)", maxHeight: 120 }}>
+                                            {JSON.stringify(c.previousValue, null, 2)}
+                                          </pre>
+                                        </div>
+                                      )}
+                                      {c.newValue && (
+                                        <div>
+                                          <span style={{ fontSize: 10, color: "var(--text-tertiary)", display: "block" }}>Detected New Value</span>
+                                          <pre style={{ fontSize: 10, background: "#090d16", padding: 8, borderRadius: 6, color: "var(--brand-300)", overflowX: "auto", border: "1px solid var(--border-primary)", maxHeight: 120 }}>
+                                            {JSON.stringify(c.newValue, null, 2)}
+                                          </pre>
+                                        </div>
+                                      )}
+                                    </div>
+                                  </div>
+                                )}
+                              </div>
+
+                              {/* Right column: Audit Status & Compliance Summary */}
+                              <div style={{ display: "flex", flexDirection: "column", justifyContent: "space-between" }}>
+                                <div>
+                                  <h4 style={{ fontSize: 12, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em", color: "var(--brand-400)", marginBottom: 10, display: "flex", alignItems: "center", gap: 4 }}>
+                                    <Shield size={14} /> Enforcement & Policy Auditing
+                                  </h4>
+                                  <div style={{ display: "grid", gap: 6, fontSize: 12, color: "var(--text-secondary)" }}>
+                                    <div><strong style={{ color: "var(--text-primary)" }}>Platform:</strong> <span style={{ textTransform: "capitalize" }}>{c.platform}</span></div>
+                                    <div><strong style={{ color: "var(--text-primary)" }}>Assigned Policy:</strong> {c.policy?.name || "No matching custom policy (System default applied)"}</div>
+                                    <div><strong style={{ color: "var(--text-primary)" }}>Policy Enforcement Action:</strong> <span className="badge cyan">{c.policy?.action ? ACTION_LABELS[c.policy.action] || c.policy.action : "Alert Only"}</span></div>
+                                    <div><strong style={{ color: "var(--text-primary)" }}>Mitigation Status:</strong> <span className={`badge ${STATUS_COLORS[c.status]?.badge}`}>{c.status.replace(/_/g, " ")}</span></div>
+                                    {c.reviewNote && (
+                                      <div style={{ marginTop: 6, background: "rgba(255,255,255,0.02)", padding: 8, borderRadius: 6, border: "1px solid var(--border-primary)" }}>
+                                        <span style={{ fontSize: 10, color: "var(--text-tertiary)", display: "block" }}>Administrative Action Notes</span>
+                                        <span style={{ fontStyle: "italic", fontSize: 11 }}>"{c.reviewNote}"</span>
+                                      </div>
+                                    )}
+                                  </div>
+                                </div>
+
+                                {/* Quick-action gate review directly inside row if pending */}
+                                {c.status === "PENDING_REVIEW" && (
+                                  <div style={{ marginTop: 14, borderTop: "1px solid var(--border-primary)", paddingTop: 12 }}>
+                                    <span style={{ fontSize: 10, color: "var(--text-tertiary)", display: "block", marginBottom: 6 }}>Manual Approval Gate Quick Action</span>
+                                    <div style={{ display: "flex", gap: 6 }} onClick={e => e.stopPropagation()}>
+                                      <input
+                                        type="text"
+                                        placeholder="Review note (optional)..."
+                                        id={`note-row-${c.id}`}
+                                        style={{
+                                          flex: 1,
+                                          padding: "4px 8px",
+                                          fontSize: 11,
+                                          background: "rgba(0,0,0,0.3)",
+                                          border: "1px solid var(--border-primary)",
+                                          borderRadius: 6,
+                                          color: "var(--text-primary)",
+                                        }}
+                                      />
+                                      <button
+                                        className="btn btn-secondary"
+                                        style={{ padding: "4px 10px", fontSize: 11, color: "#34d399", borderColor: "rgba(16,185,129,0.3)", background: "rgba(16,185,129,0.06)" }}
+                                        onClick={async (e) => {
+                                          e.stopPropagation();
+                                          const input = document.getElementById(`note-row-${c.id}`) as HTMLInputElement;
+                                          await instantApprove(c.id, input?.value || "Approved from compliance review");
+                                        }}
+                                      >
+                                        <CheckCircle2 size={12} /> Approve
+                                      </button>
+                                      <button
+                                        className="btn btn-secondary"
+                                        style={{ padding: "4px 10px", fontSize: 11, color: "#f87171", borderColor: "rgba(239,68,68,0.3)", background: "rgba(239,68,68,0.06)" }}
+                                        onClick={async (e) => {
+                                          e.stopPropagation();
+                                          const input = document.getElementById(`note-row-${c.id}`) as HTMLInputElement;
+                                          await instantReject(c.id, input?.value || "Blocked & force terminated");
+                                        }}
+                                      >
+                                        <XCircle size={12} /> Block
+                                      </button>
+                                    </div>
+                                  </div>
+                                )}
+                              </div>
+
+                            </div>
+                          </td>
+                        </tr>
+                      )}
+                    </Fragment>
+                  );
+                })}
               </tbody>
             </table>
           </div>

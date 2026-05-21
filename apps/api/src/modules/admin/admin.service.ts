@@ -445,4 +445,21 @@ export class AdminService {
       environment: process.env.NODE_ENV,
     };
   }
+
+  // ─── Dynamic Pricing Config ──────────────────────────────────
+  async getPricingConfig() {
+    const config = await this.prisma.systemConfig.findUnique({
+      where: { key: 'pricing_settings' }
+    });
+    return config?.value || null;
+  }
+
+  async updatePricingConfig(data: any) {
+    const config = await this.prisma.systemConfig.upsert({
+      where: { key: 'pricing_settings' },
+      update: { value: data },
+      create: { key: 'pricing_settings', value: data },
+    });
+    return config.value;
+  }
 }

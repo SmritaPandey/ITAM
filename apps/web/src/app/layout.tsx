@@ -76,8 +76,7 @@ export const metadata: Metadata = {
     },
   },
   verification: {
-    // Add your Google Search Console verification code here
-    // google: "your-google-verification-code",
+    google: process.env.NEXT_PUBLIC_GOOGLE_SITE_VERIFICATION || "google-site-verification-id-placeholder",
   },
   category: "technology",
 };

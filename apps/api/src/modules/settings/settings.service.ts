@@ -73,6 +73,18 @@ export class SettingsService {
     ENTERPRISE: { assets: -1, users: -1, modules: 12, price: 14999 },
   };
 
+  async getPricingSettings() {
+    const config = await this.prisma.systemConfig.findUnique({
+      where: { key: 'pricing_settings' }
+    });
+    return (config?.value as any) || {
+      starter: { priceUSD: 0, priceINR: 0, discountPercent: 0, features: ["IT Asset Tracking", "4 Users", "Basic Reports", "Email Support", "Community Access"] },
+      professional: { priceUSD: 199, priceINR: 16999, discountPercent: 50, features: ["All 12 Modules", "Unlimited Users", "Vulnerability Scanning", "ITSM + SLA Engine", "Priority Support", "API Access"] },
+      enterprise: { priceUSD: 499, priceINR: 39999, discountPercent: 50, features: ["Everything in Pro", "On-Premise Deploy", "SSO / SAML / LDAP", "Dedicated CSM", "Custom SLA", "White-Label Option"] },
+      custom: { priceUSD: -1, priceINR: -1, discountPercent: 0, features: ["Everything in Enterprise", "Custom asset limits", "Negotiated pricing", "Dedicated account manager", "Custom SLA", "White-label option", "Priority onboarding"] }
+    };
+  }
+
   async getAccount(tenantId: string) {
     const [tenant, userCount, assetCount, siteCount, departmentCount] = await Promise.all([
       this.prisma.tenant.findUnique({
@@ -86,7 +98,15 @@ export class SettingsService {
     ]);
     if (!tenant) throw new NotFoundException('Tenant not found');
 
-    const limits = this.PLAN_LIMITS[tenant.plan] || this.PLAN_LIMITS.STARTER;
+    const pricing = await this.getPricingSettings();
+    const planKey = tenant.plan.toLowerCase();
+    const basePrice = pricing[planKey]?.priceINR !== undefined ? pricing[planKey].priceINR : (this.PLAN_LIMITS[tenant.plan]?.price || 0);
+
+    const limits = {
+      ...(this.PLAN_LIMITS[tenant.plan] || this.PLAN_LIMITS.STARTER),
+      price: basePrice,
+    };
+
     return {
       ...tenant,
       usage: {
@@ -111,11 +131,51 @@ export class SettingsService {
       orderBy: { startDate: 'desc' },
     });
 
-    const limits = this.PLAN_LIMITS[tenant.plan] || this.PLAN_LIMITS.STARTER;
+    const pricing = await this.getPricingSettings();
+
+    const getBasePrice = (plan: string) => {
+      const p = plan.toLowerCase();
+      return pricing[p]?.priceINR !== undefined ? pricing[p].priceINR : 0;
+    };
+
     const discountPct = subscription?.discountPercent ? Number(subscription.discountPercent) : 0;
+    const basePrice = getBasePrice(tenant.plan);
     const effectivePrice = subscription?.customPrice
       ? Number(subscription.customPrice)
-      : limits.price * (1 - discountPct / 100);
+      : basePrice * (1 - discountPct / 100);
+
+    const limits = {
+      ...(this.PLAN_LIMITS[tenant.plan] || this.PLAN_LIMITS.STARTER),
+      price: basePrice,
+    };
+
+    const getPlanObject = (name: string, displayName: string, data: any, popular = false, contactSales = false) => {
+      const disc = data.discountPercent || 0;
+      const discountedUSD = data.priceUSD > 0 ? Math.round(data.priceUSD * (1 - disc / 100)) : 0;
+      const discountedINR = data.priceINR > 0 ? Math.round(data.priceINR * (1 - disc / 100)) : 0;
+
+      return {
+        name,
+        displayName,
+        priceUSD: data.priceUSD,
+        priceINR: data.priceINR,
+        discountedUSD,
+        discountedINR,
+        discountPercent: disc,
+        billingLabelUSD: data.priceUSD === 0 ? 'Free forever' : data.priceUSD < 0 ? 'Contact Sales' : `$${data.priceUSD}/mo`,
+        billingLabelINR: data.priceINR === 0 ? 'Free forever' : data.priceINR < 0 ? 'Contact Sales' : `₹${data.priceINR.toLocaleString('en-IN')}/mo`,
+        features: data.features || [],
+        popular,
+        contactSales,
+      };
+    };
+
+    const plans = [
+      getPlanObject('STARTER', 'Starter', pricing.starter),
+      getPlanObject('PROFESSIONAL', 'Professional', pricing.professional, true),
+      getPlanObject('ENTERPRISE', 'Enterprise', pricing.enterprise),
+      getPlanObject('CUSTOM', 'Custom', pricing.custom, false, true),
+    ];
 
     return {
       currentPlan: tenant.plan,
@@ -135,7 +195,7 @@ export class SettingsService {
         startDate: tenant.createdAt,
         endDate: null,
         billingCycle: tenant.plan === 'STARTER' ? 'FREE' : 'MONTHLY',
-        mrr: limits.price,
+        mrr: basePrice,
         discountPercent: 0,
         discountNote: null,
         customPrice: null,
@@ -147,43 +207,11 @@ export class SettingsService {
         { value: 'ANNUAL', label: 'Annual', discount: 20 },
         { value: 'CUSTOM', label: 'Custom (Contact Sales)', discount: 0 },
       ],
-      plans: [
-        {
-          name: 'STARTER', displayName: 'Starter',
-          priceUSD: 0, priceINR: 0,
-          discountedUSD: 0, discountedINR: 0,
-          billingLabelUSD: 'Free forever', billingLabelINR: 'Free forever',
-          features: ['Up to 5 assets', '4 users', '4 core modules', 'Community support', 'Basic reports'],
-        },
-        {
-          name: 'PROFESSIONAL', displayName: 'Professional',
-          priceUSD: 199, priceINR: 16999,
-          discountedUSD: 99, discountedINR: 7999,
-          billingLabelUSD: '$199/mo', billingLabelINR: '₹16,999/mo',
-          features: ['Unlimited assets', '50 users', 'All 12 modules', 'Priority support', 'Advanced reports', 'API access', 'Custom integrations'],
-          popular: true,
-        },
-        {
-          name: 'ENTERPRISE', displayName: 'Enterprise',
-          priceUSD: 499, priceINR: 39999,
-          discountedUSD: 249, discountedINR: 19999,
-          billingLabelUSD: '$499/mo', billingLabelINR: '₹39,999/mo',
-          features: ['Unlimited everything', 'Unlimited users', 'All 12 modules', 'Dedicated support', 'On-premise option', 'SLA guarantee', 'Custom development', 'SSO & SAML'],
-        },
-        {
-          name: 'CUSTOM', displayName: 'Custom',
-          priceUSD: -1, priceINR: -1,
-          discountedUSD: -1, discountedINR: -1,
-          billingLabelUSD: 'Contact Sales', billingLabelINR: 'Contact Sales',
-          features: ['Everything in Enterprise', 'Custom asset limits', 'Negotiated pricing', 'Dedicated account manager', 'Custom SLA', 'White-label option', 'Priority onboarding'],
-          contactSales: true,
-        },
-      ],
+      plans,
     };
   }
 
   async getInvoices(tenantId: string) {
-    // Payments are linked via subscription, not directly to tenant
     const subscription = await this.prisma.subscription.findFirst({
       where: { tenantId },
     });
@@ -204,19 +232,22 @@ export class SettingsService {
     const cycleDiscounts: Record<string, number> = { MONTHLY: 0, QUARTERLY: 10, ANNUAL: 20, CUSTOM: 0 };
     const cycleDiscount = cycleDiscounts[cycle] || 0;
 
-    // Update the tenant plan
     await this.prisma.tenant.update({
       where: { id: tenantId },
       data: { plan: plan as any },
     });
 
-    // Calculate effective MRR with billing cycle discount and dynamic currency selection
+    const pricing = await this.getPricingSettings();
     const isUSD = (currency || 'INR').toUpperCase() === 'USD';
-    const usdPrices: Record<string, number> = { STARTER: 0, PROFESSIONAL: 99, ENTERPRISE: 249 };
-    const inrPrices: Record<string, number> = { STARTER: 0, PROFESSIONAL: 7999, ENTERPRISE: 19999 };
 
-    const baseMrr = isUSD ? usdPrices[plan] : inrPrices[plan];
-    const effectiveMrr = baseMrr * (1 - cycleDiscount / 100);
+    const getPlanPrice = (pName: string) => {
+      const p = pName.toLowerCase();
+      const disc = pricing[p]?.discountPercent || 0;
+      const base = isUSD ? (pricing[p]?.priceUSD || 0) : (pricing[p]?.priceINR || 0);
+      return Math.round(base * (1 - disc / 100));
+    };
+
+    const effectiveMrr = getPlanPrice(plan) * (1 - cycleDiscount / 100);
     const existing = await this.prisma.subscription.findFirst({ where: { tenantId } });
 
     if (existing) {

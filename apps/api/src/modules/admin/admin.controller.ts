@@ -140,4 +140,17 @@ export class AdminController {
   getSystemHealth() {
     return this.service.getSystemHealth();
   }
+
+  // ─── Dynamic Pricing Config ──────────────────────────────────
+  @Get('pricing')
+  @ApiOperation({ summary: 'Get the active system-wide pricing configuration' })
+  getPricingConfig() {
+    return this.service.getPricingConfig();
+  }
+
+  @Patch('pricing')
+  @ApiOperation({ summary: 'Update the system-wide pricing configuration' })
+  updatePricingConfig(@Body() body: any) {
+    return this.service.updatePricingConfig(body);
+  }
 }

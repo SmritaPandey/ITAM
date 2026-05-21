@@ -1653,3 +1653,13 @@ model UserTelemetry {
   @@index([tenantId])
   @@map("user_telemetry")
 }
+
+model SystemConfig {
+  key       String   @id
+  value     Json
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("system_configs")
+}
+

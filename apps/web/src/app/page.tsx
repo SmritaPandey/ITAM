@@ -41,6 +41,47 @@ const COMPARE = [
   { feature: "Multi-Tenant RBAC", us: true, ivanti: true, manage: true },
 ];
 
+interface PlanConfig {
+  priceUSD: number;
+  priceINR: number;
+  discountPercent: number;
+  features: string[];
+}
+
+interface PricingConfig {
+  starter: PlanConfig;
+  professional: PlanConfig;
+  enterprise: PlanConfig;
+  custom: PlanConfig;
+}
+
+const FALLBACK_PRICING: PricingConfig = {
+  starter: {
+    priceUSD: 0,
+    priceINR: 0,
+    discountPercent: 0,
+    features: ["IT Asset Tracking", "4 Users", "Basic Reports", "Email Support", "Community Access"]
+  },
+  professional: {
+    priceUSD: 199,
+    priceINR: 16999,
+    discountPercent: 50,
+    features: ["All 12 Modules", "Unlimited Users", "Vulnerability Scanning", "ITSM + SLA Engine", "Priority Support", "API Access"]
+  },
+  enterprise: {
+    priceUSD: 499,
+    priceINR: 39999,
+    discountPercent: 50,
+    features: ["Everything in Pro", "On-Premise Deploy", "SSO / SAML / LDAP", "Dedicated CSM", "Custom SLA", "White-Label Option"]
+  },
+  custom: {
+    priceUSD: -1,
+    priceINR: -1,
+    discountPercent: 0,
+    features: ["Everything in Enterprise", "Custom asset limits", "Negotiated pricing", "Dedicated account manager", "Custom SLA", "White-label option", "Priority onboarding"]
+  }
+};
+
 export default function LandingPage() {
   const router = useRouter();
   const [theme, setTheme] = useState<"dark" | "light">("light");
@@ -53,11 +94,30 @@ export default function LandingPage() {
   const txt = L ? "#0f172a" : "#f3f4f6";
   const hudBg = L ? "rgba(255, 255, 255, 0.85)" : "rgba(3, 3, 6, 0.85)";
 
+  const [pricingData, setPricingData] = useState<PricingConfig>(FALLBACK_PRICING);
+  const [currency, setCurrency] = useState<"USD" | "INR">("INR");
+  const [applyPromo, setApplyPromo] = useState(true);
+
   useEffect(() => {
     const s = localStorage.getItem("theme") as "dark" | "light" | null;
     const t = s || "light";
     setTheme(t);
     document.documentElement.setAttribute("data-theme", t);
+
+    const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4100/api/v1";
+    fetch(`${API_BASE}/settings/pricing`)
+      .then(res => {
+        if (!res.ok) throw new Error("API error status: " + res.status);
+        return res.json();
+      })
+      .then(data => {
+        if (data && typeof data === "object" && data.starter) {
+          setPricingData(data);
+        }
+      })
+      .catch(err => {
+        console.warn("Pricing dynamic sync deferred, using local high-fidelity seeds:", err);
+      });
   }, []);
 
   function toggle() {
@@ -958,57 +1018,270 @@ export default function LandingPage() {
       </section>
 
       {/* ─── PRICING ─── */}
-      <section id="pricing" style={{ padding: "100px 6%", maxWidth: 1040, margin: "0 auto", textAlign: "center" }}>
+      <section id="pricing" style={{ padding: "100px 6%", maxWidth: 1240, margin: "0 auto", textAlign: "center" }}>
         <h2 style={{ fontSize: 40, fontWeight: 900, letterSpacing: "-0.04em", marginBottom: 12 }}>Simple, Transparent Pricing</h2>
-        <p style={{ fontSize: 15, color: muted, marginBottom: 44 }}>Unified flat-fee subscriptions. No mandatory service lock-ins.</p>
-        
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 20, alignItems: "start" }}>
-          {[
-            { name: "Starter", price: 0, annual: 0, desc: "Up to 5 assets", features: ["IT Asset Tracking", "4 Users", "Basic Reports", "Email Support", "Community Access"], popular: false, cta: "Start Free" },
-            { name: "Professional", price: 4999, annual: 3999, desc: "Unlimited assets", features: ["All 12 Modules", "Unlimited Users", "Vulnerability Scanning", "ITSM + SLA Engine", "Priority Support", "API Access"], popular: true, cta: "Start 14-Day Trial" },
-            { name: "Enterprise", price: -1, annual: -1, desc: "On-premise + SaaS", features: ["Everything in Pro", "On-Premise Deploy", "SSO / SAML / LDAP", "Dedicated CSM", "Custom SLA", "White-Label Option"], popular: false, cta: "Talk to Sales" },
-          ].map(p => (
-            <div key={p.name} style={{
-              borderRadius: 18,
-              padding: p.popular ? "2px" : 0,
-              background: p.popular ? "linear-gradient(135deg, #06b6d4, #8b5cf6)" : "transparent",
-              boxShadow: L
-                ? (p.popular ? "0 25px 50px -12px rgba(6, 182, 212, 0.15)" : "0 15px 35px -10px rgba(15, 23, 42, 0.05)")
-                : "none"
+        <p style={{ fontSize: 15, color: muted, marginBottom: 30 }}>Unified flat-fee subscriptions. No mandatory service lock-ins.</p>
+
+        {/* Cybernetic Pill Toggles and Controls Container */}
+        <div style={{
+          display: "flex",
+          justifyContent: "center",
+          alignItems: "center",
+          flexWrap: "wrap",
+          gap: 20,
+          marginBottom: 48,
+        }}>
+          {/* Currency Pill Selector */}
+          <div style={{
+            display: "inline-flex",
+            position: "relative",
+            padding: 4,
+            borderRadius: 30,
+            background: L ? "rgba(15, 23, 42, 0.04)" : "rgba(255, 255, 255, 0.03)",
+            border: `1.5px solid ${border}`,
+            backdropFilter: "blur(10px)",
+            gap: 4,
+            userSelect: "none"
+          }}>
+            {/* Active Highlight Slider */}
+            <div style={{
+              position: "absolute",
+              top: 3,
+              left: currency === "USD" ? 3 : 59,
+              width: 56,
+              height: 28,
+              borderRadius: 24,
+              background: "linear-gradient(135deg, #06b6d4, #8b5cf6)",
+              transition: "all 0.3s cubic-bezier(0.4, 0, 0.2, 1)",
+              zIndex: 0,
+              boxShadow: "0 2px 8px rgba(6, 182, 212, 0.25)"
+            }} />
+            
+            <button 
+              onClick={() => setCurrency("USD")}
+              style={{
+                width: 56,
+                height: 28,
+                borderRadius: 24,
+                border: "none",
+                background: "transparent",
+                color: currency === "USD" ? "white" : (L ? "#475569" : "#94a3b8"),
+                fontSize: 11,
+                fontWeight: 800,
+                cursor: "pointer",
+                position: "relative",
+                zIndex: 1,
+                transition: "color 0.2s"
+              }}
+            >
+              USD
+            </button>
+            
+            <button 
+              onClick={() => setCurrency("INR")}
+              style={{
+                width: 56,
+                height: 28,
+                borderRadius: 24,
+                border: "none",
+                background: "transparent",
+                color: currency === "INR" ? "white" : (L ? "#475569" : "#94a3b8"),
+                fontSize: 11,
+                fontWeight: 800,
+                cursor: "pointer",
+                position: "relative",
+                zIndex: 1,
+                transition: "color 0.2s"
+              }}
+            >
+              INR
+            </button>
+          </div>
+
+          {/* Founder's Promo Toggle Switch */}
+          <div style={{
+            display: "inline-flex",
+            alignItems: "center",
+            gap: 10,
+            padding: "5px 16px",
+            borderRadius: 30,
+            background: applyPromo 
+              ? (L ? "rgba(16, 185, 129, 0.08)" : "rgba(16, 185, 129, 0.06)") 
+              : (L ? "rgba(15, 23, 42, 0.03)" : "rgba(255, 255, 255, 0.02)"),
+            border: `1.5px solid ${applyPromo ? "rgba(16, 185, 129, 0.25)" : border}`,
+            cursor: "pointer",
+            transition: "all 0.3s cubic-bezier(0.4, 0, 0.2, 1)",
+            userSelect: "none"
+          }} onClick={() => setApplyPromo(!applyPromo)}>
+            <div style={{
+              position: "relative",
+              width: 34,
+              height: 18,
+              borderRadius: 9,
+              background: applyPromo ? "#10b981" : (L ? "rgba(15, 23, 42, 0.15)" : "rgba(255,255,255,0.1)"),
+              transition: "background 0.2s",
             }}>
-              <div style={{ padding: "34px 24px", borderRadius: p.popular ? 16 : 18, background: card, border: p.popular ? "none" : `1.5px solid ${border}`, position: "relative", textAlign: "left" }}>
-                {p.popular && <div style={{ position: "absolute", top: -1, left: "50%", transform: "translateX(-50%)", padding: "4px 16px", borderRadius: "0 0 8px 8px", background: "linear-gradient(135deg, #06b6d4, #8b5cf6)", color: "white", fontSize: 9, fontWeight: 900, textTransform: "uppercase", letterSpacing: "0.08em" }}>⚡ POPULAR</div>}
-                
-                <h3 style={{ fontSize: 18, fontWeight: 800, marginBottom: 12, marginTop: p.popular ? 8 : 4, color: txt }}>{p.name}</h3>
-                
-                {p.price === 0 ? (
-                  <div style={{ fontSize: 32, fontWeight: 900, marginBottom: 4, color: txt }}>Free</div>
-                ) : p.price < 0 ? (
-                  <div><div style={{ fontSize: 26, fontWeight: 900, color: txt }}>Custom</div><div style={{ fontSize: 11, color: muted }}>Tailored SLA models</div></div>
-                ) : (
+              <div style={{
+                position: "absolute",
+                top: 2,
+                left: applyPromo ? 18 : 2,
+                width: 14,
+                height: 14,
+                borderRadius: "50%",
+                background: "white",
+                transition: "all 0.2s cubic-bezier(0.4, 0, 0.2, 1)",
+                boxShadow: "0 1px 3px rgba(0,0,0,0.2)"
+              }} />
+            </div>
+            
+            <span style={{ fontSize: 13, fontWeight: 800, color: txt, display: "flex", alignItems: "center", gap: 6 }}>
+              Founder's Promo
+              {applyPromo && (
+                <span className="pulse" style={{ 
+                  fontSize: 9, 
+                  fontWeight: 900, 
+                  background: "linear-gradient(135deg, #10b981, #059669)", 
+                  color: "white", 
+                  padding: "1.5px 5px", 
+                  borderRadius: 5,
+                  boxShadow: "0 2px 6px rgba(16,185,129,0.2)",
+                }}>
+                  50% OFF
+                </span>
+              )}
+            </span>
+          </div>
+        </div>
+
+        {/* Pricing Cards Grid */}
+        <div id="pricing-grid" style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 20, alignItems: "stretch", maxWidth: 1200, margin: "0 auto" }}>
+          {[
+            {
+              id: "starter" as const,
+              name: "Starter",
+              config: pricingData.starter,
+              desc: "Up to 5 assets",
+              popular: false,
+              cta: "Start Free"
+            },
+            {
+              id: "professional" as const,
+              name: "Professional",
+              config: pricingData.professional,
+              desc: "Unlimited assets",
+              popular: true,
+              cta: "Start 14-Day Trial"
+            },
+            {
+              id: "enterprise" as const,
+              name: "Enterprise",
+              config: pricingData.enterprise,
+              desc: "On-premise + SaaS",
+              popular: false,
+              cta: "Start Scaling"
+            },
+            {
+              id: "custom" as const,
+              name: "Custom",
+              config: pricingData.custom,
+              desc: "Tailored SLA models",
+              popular: false,
+              cta: "Talk to Sales"
+            }
+          ].map(p => {
+            const renderPrice = () => {
+              const isFree = p.id === "starter" || p.config.priceUSD === 0;
+              const isCustom = p.id === "custom" || p.config.priceUSD < 0;
+
+              if (isFree) {
+                return <div style={{ fontSize: 32, fontWeight: 900, color: txt }}>Free</div>;
+              }
+              if (isCustom) {
+                return (
                   <div>
-                    <div style={{ display: "flex", alignItems: "baseline", gap: 4 }}>
-                      <span style={{ fontSize: 34, fontWeight: 900, color: txt }}>₹{p.annual.toLocaleString("en-IN")}</span>
-                      <span style={{ fontSize: 12, color: muted }}>/mo</span>
+                    <div style={{ fontSize: 26, fontWeight: 900, color: txt }}>Custom</div>
+                    <div style={{ fontSize: 11, color: muted }}>Tailored SLA models</div>
+                  </div>
+                );
+              }
+
+              const basePrice = currency === "USD" ? p.config.priceUSD : p.config.priceINR;
+              const discount = (applyPromo && p.config.discountPercent > 0) ? p.config.discountPercent : 0;
+              const finalPrice = basePrice * (1 - discount / 100);
+              const symbol = currency === "USD" ? "$" : "₹";
+              const locale = currency === "USD" ? "en-US" : "en-IN";
+
+              return (
+                <div style={{ display: "flex", flexDirection: "column" }}>
+                  <div style={{ display: "flex", alignItems: "baseline", gap: 6 }}>
+                    <span style={{ fontSize: 34, fontWeight: 900, color: txt }}>
+                      {symbol}{Math.round(finalPrice).toLocaleString(locale)}
+                    </span>
+                    <span style={{ fontSize: 12, color: muted }}>/mo</span>
+                  </div>
+                  {discount > 0 && (
+                    <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 4 }}>
+                      <span style={{ fontSize: 14, color: muted, textDecoration: "line-through", fontWeight: 500 }}>
+                        {symbol}{basePrice.toLocaleString(locale)}
+                      </span>
+                      <span style={{ fontSize: 11, color: "#10b981", fontWeight: 800 }}>
+                        ({discount}% OFF)
+                      </span>
+                    </div>
+                  )}
+                </div>
+              );
+            };
+
+            return (
+              <div key={p.name} style={{
+                borderRadius: 18,
+                padding: p.popular ? "2px" : 0,
+                background: p.popular ? "linear-gradient(135deg, #06b6d4, #8b5cf6)" : "transparent",
+                boxShadow: L
+                  ? (p.popular ? "0 25px 50px -12px rgba(6, 182, 212, 0.15)" : "0 15px 35px -10px rgba(15, 23, 42, 0.05)")
+                  : "none",
+                display: "flex"
+              }}>
+                <div style={{ 
+                  padding: "34px 24px", 
+                  borderRadius: p.popular ? 16 : 18, 
+                  background: card, 
+                  border: p.popular ? "none" : `1.5px solid ${border}`, 
+                  position: "relative", 
+                  textAlign: "left",
+                  display: "flex",
+                  flexDirection: "column",
+                  justifyContent: "space-between",
+                  width: "100%"
+                }}>
+                  <div>
+                    {p.popular && <div style={{ position: "absolute", top: -1, left: "50%", transform: "translateX(-50%)", padding: "4px 16px", borderRadius: "0 0 8px 8px", background: "linear-gradient(135deg, #06b6d4, #8b5cf6)", color: "white", fontSize: 9, fontWeight: 900, textTransform: "uppercase", letterSpacing: "0.08em" }}>⚡ POPULAR</div>}
+                    
+                    <h3 style={{ fontSize: 18, fontWeight: 800, marginBottom: 12, marginTop: p.popular ? 8 : 4, color: txt }}>{p.name}</h3>
+                    
+                    <div style={{ marginBottom: 16 }}>
+                      {renderPrice()}
+                    </div>
+                    
+                    <p style={{ fontSize: 12, color: muted, marginBottom: 24, marginTop: 6 }}>{p.desc}</p>
+                    
+                    <div style={{ display: "grid", gap: 10, marginBottom: 24 }}>
+                      {p.config.features.map(f => (
+                        <div key={f} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, color: txt, fontWeight: 600 }}>
+                          <CheckCircle2 size={14} color="#10b981" /> {f}
+                        </div>
+                      ))}
                     </div>
                   </div>
-                )}
-                <p style={{ fontSize: 12, color: muted, marginBottom: 24, marginTop: 6 }}>{p.desc}</p>
-                
-                <div style={{ display: "grid", gap: 10 }}>
-                  {p.features.map(f => (
-                    <div key={f} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, color: txt, fontWeight: 600 }}>
-                      <CheckCircle2 size={14} color="#10b981" /> {f}
-                    </div>
-                  ))}
-                </div>
 
-                <button onClick={() => router.push(p.price < 0 ? "/contact" : "/register")} style={{ width: "100%", marginTop: 28, padding: "12px 0", borderRadius: 10, border: p.popular ? "none" : `1.5px solid ${border}`, background: p.popular ? "linear-gradient(135deg, #06b6d4, #0891b2)" : "transparent", color: p.popular ? "white" : txt, fontSize: 14, fontWeight: 800, cursor: "pointer" }}>
-                  {p.cta}
-                </button>
+                  <button onClick={() => router.push(p.id === "custom" || p.config.priceUSD < 0 ? "/contact" : "/register")} style={{ width: "100%", padding: "12px 0", borderRadius: 10, border: p.popular ? "none" : `1.5px solid ${border}`, background: p.popular ? "linear-gradient(135deg, #06b6d4, #0891b2)" : "transparent", color: p.popular ? "white" : txt, fontSize: 14, fontWeight: 800, cursor: "pointer" }}>
+                    {p.cta}
+                  </button>
+                </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       </section>
 
@@ -1085,8 +1358,8 @@ export default function LandingPage() {
         @media (max-width: 768px) {
           section > div[style*="gridTemplateColumns"] { grid-template-columns: 1fr !important; gap: 32px !important; }
           .kpi-flip-grid { grid-template-columns: 1fr !important; }
-          #pricing > div { grid-template-columns: 1fr !important; max-width: 400px !important; margin: 0 auto !important; }
-          #pricing > div > div { width: 100% !important; }
+          #pricing-grid { grid-template-columns: 1fr !important; max-width: 400px !important; margin: 0 auto !important; }
+          #pricing-grid > div { width: 100% !important; }
           footer > div { grid-template-columns: 1fr !important; }
         }
         @media (max-width: 600px) {

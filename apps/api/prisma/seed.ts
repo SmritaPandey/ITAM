@@ -58,6 +58,7 @@ async function main() {
   await prisma.scheduledReport.deleteMany();
   await prisma.scriptLibrary.deleteMany();
   await prisma.networkConfig.deleteMany();
+  await prisma.systemConfig.deleteMany();
 
   // Financials and contracts ordering (children first)
   await prisma.purchaseOrderItem.deleteMany();
@@ -734,6 +735,41 @@ async function main() {
     }
     console.log('  ✅ Fleet Telematics: Trips and telemetry points successfully seeded');
   }
+
+  // ─── Dynamic Pricing & System Config ───────────────────────────────
+  console.log('  🌱 Seeding system-wide pricing settings...');
+  await prisma.systemConfig.create({
+    data: {
+      key: 'pricing_settings',
+      value: {
+        starter: {
+          priceUSD: 0,
+          priceINR: 0,
+          discountPercent: 0,
+          features: ["IT Asset Tracking", "4 Users", "Basic Reports", "Email Support", "Community Access"]
+        },
+        professional: {
+          priceUSD: 199,
+          priceINR: 16999,
+          discountPercent: 50,
+          features: ["All 12 Modules", "Unlimited Users", "Vulnerability Scanning", "ITSM + SLA Engine", "Priority Support", "API Access"]
+        },
+        enterprise: {
+          priceUSD: 499,
+          priceINR: 39999,
+          discountPercent: 50,
+          features: ["Everything in Pro", "On-Premise Deploy", "SSO / SAML / LDAP", "Dedicated CSM", "Custom SLA", "White-Label Option"]
+        },
+        custom: {
+          priceUSD: -1,
+          priceINR: -1,
+          discountPercent: 0,
+          features: ["Everything in Enterprise", "Custom asset limits", "Negotiated pricing", "Dedicated account manager", "Custom SLA", "White-label option", "Priority onboarding"]
+        }
+      }
+    }
+  });
+  console.log('  ✅ System Config: Pricing configurations successfully seeded');
 
   console.log('\n🎉 Seed complete!');
   console.log('   Login: admin@acme.com / Admin@123');

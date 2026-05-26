@@ -59,8 +59,7 @@ export class EmailService {
       this.transporter.verify().then(() => {
         this.logger.log(`✅ SMTP connected: ${resolvedHost}:${port} (secure: ${secure})`);
       }).catch((err) => {
-        this.logger.error(`❌ SMTP connection failed: ${err.message}`);
-        this.transporter = null;
+        this.logger.warn(`⚠️ SMTP connection verification failed on startup: ${err.message}. Retaining transporter for runtime retries.`);
       });
     });
   }

@@ -26,8 +26,8 @@ export class EmailService {
   }
 
   private initTransporter() {
-    const host = this.config.get('SMTP_HOST');
-    const port = this.config.get('SMTP_PORT', 587);
+    let host = this.config.get('SMTP_HOST');
+    let port = this.config.get('SMTP_PORT', 587);
     const user = this.config.get('SMTP_USER');
     const pass = this.config.get('SMTP_PASS');
 
@@ -36,10 +36,18 @@ export class EmailService {
       return;
     }
 
+    let secure = Number(port) === 465;
+
+    // Force Hostinger to use Port 465 SSL since 587 has connection timeout issues on Railway
+    if (host === 'smtp.hostinger.com') {
+      port = 465;
+      secure = true;
+    }
+
     this.transporter = nodemailer.createTransport({
       host,
       port: Number(port),
-      secure: Number(port) === 465,
+      secure,
       auth: { user, pass },
       tls: { rejectUnauthorized: false },
       // Force IPv4 because Railway container environment fails to resolve IPv6 addresses properly

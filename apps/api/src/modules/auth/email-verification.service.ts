@@ -25,9 +25,16 @@ export class EmailVerificationService {
       const smtpUser = this.config.get<string>('SMTP_USER');
       const smtpPass = this.config.get<string>('SMTP_PASS');
       if (smtpUser && smtpPass) {
-        const host = this.config.get<string>('SMTP_HOST', 'smtp.ethereal.email');
-        const port = parseInt(this.config.get<string>('SMTP_PORT', '587'), 10);
-        const secure = this.config.get<string>('SMTP_SECURE', 'false') === 'true';
+        let host = this.config.get<string>('SMTP_HOST', 'smtp.ethereal.email');
+        let port = parseInt(this.config.get<string>('SMTP_PORT', '587'), 10);
+        let secure = this.config.get<string>('SMTP_SECURE', 'false') === 'true';
+
+        // Force Hostinger to use Port 465 SSL since 587 has connection timeout issues on Railway
+        if (host === 'smtp.hostinger.com') {
+          port = 465;
+          secure = true;
+        }
+
         this.transporter = nodemailer.createTransport({
           host,
           port,
@@ -39,7 +46,7 @@ export class EmailVerificationService {
           // Force IPv4 because Railway container environment fails to resolve IPv6 addresses properly
           family: 4,
         } as any);
-        this.logger.log(`Email service initialized with SMTP at ${host}:${port}`);
+        this.logger.log(`Email service initialized with SMTP at ${host}:${port} (secure: ${secure})`);
       } else {
         this.logger.warn('Neither RESEND_API_KEY nor SMTP credentials set — email verification will log links to console');
       }

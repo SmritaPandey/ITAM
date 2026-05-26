@@ -36,7 +36,9 @@ export class EmailVerificationService {
             user: smtpUser,
             pass: smtpPass,
           },
-        });
+          // Force IPv4 because Railway container environment fails to resolve IPv6 addresses properly
+          family: 4,
+        } as any);
         this.logger.log(`Email service initialized with SMTP at ${host}:${port}`);
       } else {
         this.logger.warn('Neither RESEND_API_KEY nor SMTP credentials set — email verification will log links to console');

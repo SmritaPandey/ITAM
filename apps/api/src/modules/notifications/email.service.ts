@@ -42,7 +42,9 @@ export class EmailService {
       secure: Number(port) === 465,
       auth: { user, pass },
       tls: { rejectUnauthorized: false },
-    });
+      // Force IPv4 because Railway container environment fails to resolve IPv6 addresses properly
+      family: 4,
+    } as any);
 
     this.transporter.verify().then(() => {
       this.logger.log(`✅ SMTP connected: ${host}:${port}`);

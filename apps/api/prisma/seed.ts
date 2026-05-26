@@ -187,7 +187,7 @@ async function main() {
       tenantId: tenant.id, email: 'admin@acme.com', passwordHash,
       firstName: 'Admin', lastName: 'User', roleId: adminRole.id,
       departmentId: itDept.id, siteId: hq.id, status: 'ACTIVE',
-      isSuperAdmin: false,
+      isSuperAdmin: false, emailVerified: true,
     },
   });
 
@@ -202,7 +202,7 @@ async function main() {
     data: {
       tenantId: platformTenant.id, email: 'smrita@neurqai.com', passwordHash,
       firstName: 'Smrita', lastName: 'Pandey', roleId: ownerRole.id,
-      status: 'ACTIVE', isSuperAdmin: true,
+      status: 'ACTIVE', isSuperAdmin: true, emailVerified: true,
     },
   });
   console.log(`  ✅ Platform Owner: owner@qsasset.com`);
@@ -211,6 +211,7 @@ async function main() {
       tenantId: tenant.id, email: 'itadmin@acme.com', passwordHash,
       firstName: 'Raj', lastName: 'Sharma', roleId: itAdminRole.id,
       departmentId: itDept.id, siteId: hq.id, status: 'ACTIVE',
+      emailVerified: true,
     },
   });
   const employee1 = await prisma.user.create({
@@ -218,6 +219,7 @@ async function main() {
       tenantId: tenant.id, email: 'priya@acme.com', passwordHash,
       firstName: 'Priya', lastName: 'Patel', roleId: employeeRole.id,
       departmentId: hrDept.id, siteId: hq.id, status: 'ACTIVE',
+      emailVerified: true,
     },
   });
   const employee2 = await prisma.user.create({
@@ -225,6 +227,7 @@ async function main() {
       tenantId: tenant.id, email: 'amit@acme.com', passwordHash,
       firstName: 'Amit', lastName: 'Kumar', roleId: employeeRole.id,
       departmentId: opsDept.id, siteId: branch.id, status: 'ACTIVE',
+      emailVerified: true,
     },
   });
   console.log(`  ✅ Users: admin, itadmin, priya, amit (password: Admin@123)`);
@@ -635,6 +638,26 @@ async function main() {
     { tenantId: tenant.id, authorId: admin.id, title: 'Password Reset Policy', content: '## Password Requirements\n\n- Minimum 12 characters\n- At least 1 uppercase, 1 lowercase, 1 number, 1 special character\n- Cannot reuse last 12 passwords\n- Must change every 90 days\n- Account locks after 5 failed attempts (15-minute lockout)\n\n## How to Reset\n1. Go to https://sso.acme.com/reset\n2. Enter your email\n3. Check your inbox for the reset link\n4. Set a new password meeting the requirements above\n\n> Contact IT if you need an admin reset.', category: 'Security', tags: ['password', 'security', 'account'], viewCount: 256, helpfulCount: 67 },
     { tenantId: tenant.id, authorId: admin.id, title: 'Printer Setup Guide', content: '## Adding a Network Printer\n\n### Windows\n1. Open **Settings > Printers & Scanners**\n2. Click **Add Printer**\n3. Select from the discovered printers or enter the IP address\n4. Install the driver when prompted\n\n### macOS\n1. Open **System Settings > Printers & Scanners**\n2. Click **+** to add printer\n3. Select the printer from the list or enter IP\n\n### Floor Printer IPs\n| Floor | Printer | IP |\n|-------|---------|----|\n| 1F | HP LaserJet Pro | 10.0.10.50 |\n| 2F | Canon imageCLASS | 10.0.10.51 |\n| 3F | HP Color LaserJet | 10.0.10.52 |', category: 'IT Support', tags: ['printer', 'setup', 'hardware'], viewCount: 67, helpfulCount: 15 },
     { tenantId: tenant.id, authorId: admin.id, title: 'Asset Check-in/Check-out Procedure', content: '## Shared Asset Management\n\nShared assets (conference room laptops, projectors, cameras) must be properly checked in/out.\n\n### Check-Out\n1. Go to **My Assets** in the employee portal\n2. Click **Request Shared Asset**\n3. Select the asset and desired timeframe\n4. Get manager approval if > 24 hours\n\n### Check-In\n1. Return the asset to the designated location\n2. Go to **My Assets** and click **Return Asset**\n3. Report any damage or issues\n\n> **Note:** Unreturned assets after 48 hours will trigger an automated reminder.', category: 'General', tags: ['asset', 'checkin', 'checkout', 'shared'], viewCount: 34, helpfulCount: 8 },
+    {
+      tenantId: tenant.id,
+      authorId: admin.id,
+      title: 'Guide to Network Discovery Scans',
+      content: '## Network Discovery Scanning Overview\n\nNetwork discovery scanning identifies active physical, virtual, and network devices within your environment. By scanning IP subnets, you can audit your IT perimeter and dynamically update the Asset Management CMDB.\n\n### Discovery Scanning Methods\n\n1. **ICMP Ping Sweep**\n   - Standard protocol to sweep subnets quickly.\n   - **How it works:** Pings consecutive hosts inside the subnet.\n   - **Limitation:** Cloud-isolated networks or firewalls blocking ICMP (Ping) requests may report 0 hosts.\n\n2. **TCP Socket Probing Fallback**\n   - Automatically triggered if ICMP sweeps return 0 devices.\n   - **How it works:** Probes common infrastructure ports (e.g. 22 SSH, 80 HTTP, 135 RPC, 443 HTTPS, 445 SMB) in parallel.\n   - **Advantage:** Discovers hosts that are active but configured to ignore standard ICMP pings.\n\n3. **SNMP Deep Discovery**\n   - Queries routers, switches, and network printers.\n   - Retrieves structural hardware details (e.g. sysDescr, ports list, MAC addresses, and vendor descriptions) to automatically classify network device types and operating systems.\n\n### Configuration & Workflow\n\n- **Target Subnet:** Define the sweep scope (e.g., `192.168.1.0/24` or `10.0.0.0/24`).\n- **Credentials Vault:** Set SSH keys, WMI domain credentials, or SNMP community strings in the Vault to authorize deep operating system and inventory fingerprinting.\n- **Review and Approval Flow:** Discovered devices do not auto-pollute your active inventory. They are held in **Pending Review** status.\n  - **Merge:** If the IP or hostname matches an existing device, it merges updates.\n  - **Approve:** Converts a discovered device into a managed asset tag.\n  - **Ignore/Archive:** Dismisses rogue or non-essential assets.',
+      category: 'Network & Discovery',
+      tags: ['network', 'scanning', 'discovery', 'admin'],
+      viewCount: 120,
+      helpfulCount: 45
+    },
+    {
+      tenantId: tenant.id,
+      authorId: admin.id,
+      title: 'Deploying and Pairing LAN Discovery Agents',
+      content: '## Deploying On-Premise LAN Discovery Agents\n\nIf your main application server is hosted in an isolated cloud environment (such as Railway or Vercel), it cannot directly communicate with or sweep your local office subnet. Introducing the **LAN Discovery Agent** solves this isolation gap by serving as an on-premise proxy.\n\n### How Agent-Delegated Scanning Works\n\n1. **Agent Heartbeat:** When you run the agent on an office machine, it checks in with the primary server every 60 seconds (or custom interval).\n2. **Discovery Delegation:** If a network scan is scheduled or manually triggered, the server flags it as `PENDING`. Upon the next agent heartbeat check-in, the server delegates the `RUN_SCAN` instruction containing the subnet scope and scan preferences to the agent.\n3. **LAN Scan Sweep:** The agent executes the active ping/TCP sweep and port classification locally within the office network.\n4. **Secure Result Upload:** Once complete, the agent uploads the discovered hosts list via HTTP/HTTPS back to the server\'s scan result portal, where details are evaluated for asset deduplication and security risk scoring.\n\n### Step-by-Step Installation\n\n#### 1. Download the Paired Package\n- Navigate to the **Discovery** module inside the dashboard.\n- Click **Download Agent CLI** to fetch a pre-packaged ZIP tailored for your active tenant workspace.\n\n#### 2. Running on Linux / macOS\nExtract the zip package and execute the startup script:\n```bash\ntar -xvf agent-package.tar.gz\ncd agent\n# Run the pairing and execution command\nnode reconapm-agent.js --server https://your-server.com --user your-email@corp.com --pass YourPassword@123\n```\n\n#### 3. Running on Windows\nExtract the folder and run the command in PowerShell or Command Prompt:\n```powershell\nnode reconapm-agent.js --server https://your-server.com --user your-email@corp.com --pass YourPassword@123\n```\n\n### Troubleshooting\n\n- **Node Runtime Sandboxing:** The agent has zero physical dependencies (no `npm install` required). Ensure Node.js (v16+) is installed on the host machine.\n- **Heartbeat Errors (401/403):** Verify that the user credentials specified have the `Tenant Admin` or `IT Admin` role assigned.\n- **0 Devices Found:** Ensure the network interfaces configured on the host machine have access to the targeted subnet. If local OS firewalls block outbound pings, the agent automatically falls back to parallel TCP probes.',
+      category: 'Network & Discovery',
+      tags: ['agent', 'deployment', 'setup', 'troubleshooting'],
+      viewCount: 145,
+      helpfulCount: 52
+    }
   ];
   for (const a of articles) { await prisma.knowledgeArticle.create({ data: a }); }
   console.log(`  ✅ Knowledge Base: ${articles.length} articles created`);

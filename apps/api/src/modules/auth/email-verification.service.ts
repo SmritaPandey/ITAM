@@ -3,6 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import { Resend } from 'resend';
 import { v4 as uuidv4 } from 'uuid';
 import * as nodemailer from 'nodemailer';
+import * as dns from 'dns';
 import { PrismaService } from '../../common/database/prisma.service';
 
 @Injectable()
@@ -35,18 +36,24 @@ export class EmailVerificationService {
           secure = true;
         }
 
-        this.transporter = nodemailer.createTransport({
-          host,
-          port,
-          secure,
-          auth: {
-            user: smtpUser,
-            pass: smtpPass,
-          },
-          // Force IPv4 because Railway container environment fails to resolve IPv6 addresses properly
-          family: 4,
-        } as any);
-        this.logger.log(`Email service initialized with SMTP at ${host}:${port} (secure: ${secure})`);
+        // Dynamically resolve hostname to IPv4 to prevent ENETUNREACH IPv6 issues in container
+        dns.lookup(host, { family: 4 }, (err, ipAddress) => {
+          const resolvedHost = err ? host : ipAddress;
+          this.transporter = nodemailer.createTransport({
+            host: resolvedHost,
+            port,
+            secure,
+            auth: {
+              user: smtpUser,
+              pass: smtpPass,
+            },
+            tls: {
+              servername: host,
+              rejectUnauthorized: false,
+            },
+          } as any);
+          this.logger.log(`Email service initialized with SMTP at ${resolvedHost}:${port} (secure: ${secure})`);
+        });
       } else {
         this.logger.warn('Neither RESEND_API_KEY nor SMTP credentials set — email verification will log links to console');
       }

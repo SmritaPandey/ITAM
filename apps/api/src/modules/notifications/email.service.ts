@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import * as nodemailer from 'nodemailer';
+import * as dns from 'dns';
 import { PrismaService } from '../../common/database/prisma.service';
 
 interface EmailOptions {
@@ -44,21 +45,23 @@ export class EmailService {
       secure = true;
     }
 
-    this.transporter = nodemailer.createTransport({
-      host,
-      port: Number(port),
-      secure,
-      auth: { user, pass },
-      tls: { rejectUnauthorized: false },
-      // Force IPv4 because Railway container environment fails to resolve IPv6 addresses properly
-      family: 4,
-    } as any);
+    // Dynamically resolve hostname to IPv4 to prevent ENETUNREACH IPv6 issues in container
+    dns.lookup(host, { family: 4 }, (err, ipAddress) => {
+      const resolvedHost = err ? host : ipAddress;
+      this.transporter = nodemailer.createTransport({
+        host: resolvedHost,
+        port: Number(port),
+        secure,
+        auth: { user, pass },
+        tls: { servername: host, rejectUnauthorized: false },
+      } as any);
 
-    this.transporter.verify().then(() => {
-      this.logger.log(`✅ SMTP connected: ${host}:${port}`);
-    }).catch((err) => {
-      this.logger.error(`❌ SMTP connection failed: ${err.message}`);
-      this.transporter = null;
+      this.transporter.verify().then(() => {
+        this.logger.log(`✅ SMTP connected: ${resolvedHost}:${port} (secure: ${secure})`);
+      }).catch((err) => {
+        this.logger.error(`❌ SMTP connection failed: ${err.message}`);
+        this.transporter = null;
+      });
     });
   }
 

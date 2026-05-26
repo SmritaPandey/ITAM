@@ -540,4 +540,69 @@ export class AuthService {
     const tokens = await this.login(freshUser!);
     return { ...tokens, isNewUser: true };
   }
+
+  async forgotPassword(email: string): Promise<{ message: string }> {
+    const normalizedEmail = email.toLowerCase().trim();
+    const user = await this.prisma.user.findFirst({
+      where: { email: normalizedEmail, deletedAt: null },
+    });
+
+    // To prevent user enumeration, we return success even if user isn't found
+    if (!user) {
+      return { message: 'If this email is registered in our directory, a recovery link will be sent shortly.' };
+    }
+
+    const token = uuidv4();
+    const expiry = new Date(Date.now() + 60 * 60 * 1000); // 1 hour
+
+    await this.prisma.user.update({
+      where: { id: user.id },
+      data: {
+        passwordResetToken: token,
+        passwordResetExpiry: expiry,
+      },
+    });
+
+    // Trigger branded email (non-blocking)
+    try {
+      await this.emailVerification.sendResetPasswordEmail(
+        user.id,
+        user.email,
+        user.firstName,
+        token,
+      );
+    } catch (err: any) {
+      // Just log, don't throw
+    }
+
+    return { message: 'If this email is registered in our directory, a recovery link will be sent shortly.' };
+  }
+
+  async resetPassword(dto: { token: string; password: string }): Promise<{ message: string }> {
+    const user = await this.prisma.user.findFirst({
+      where: {
+        passwordResetToken: dto.token,
+        passwordResetExpiry: { gte: new Date() },
+        deletedAt: null,
+      },
+    });
+
+    if (!user) {
+      throw new ForbiddenException('Invalid or expired password reset link.');
+    }
+
+    const passwordHash = await bcrypt.hash(dto.password, 12);
+
+    await this.prisma.user.update({
+      where: { id: user.id },
+      data: {
+        passwordHash,
+        passwordResetToken: null,
+        passwordResetExpiry: null,
+        emailVerified: true, // Verification is implicit upon clicking the unique token link sent to their mailbox
+      },
+    });
+
+    return { message: 'Password has been reset successfully. You can now log in.' };
+  }
 }

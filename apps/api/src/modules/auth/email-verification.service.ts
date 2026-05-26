@@ -151,4 +151,57 @@ export class EmailVerificationService {
     </body>
     </html>`;
   }
+
+  async sendResetPasswordEmail(userId: string, email: string, firstName: string, token: string): Promise<void> {
+    const resetUrl = `${this.appUrl}/reset-password?token=${token}`;
+
+    if (this.resend) {
+      try {
+        await this.resend.emails.send({
+          from: this.fromEmail,
+          to: email,
+          subject: 'Reset your QS Asset Management password',
+          html: this.buildResetPasswordHtml(firstName, resetUrl),
+        });
+        this.logger.log(`Password reset email sent to ${email}`);
+      } catch (err: any) {
+        this.logger.error(`Failed to send password reset email: ${err.message}`);
+      }
+    } else {
+      this.logger.warn(`No email provider configured — reset link: ${resetUrl}`);
+    }
+  }
+
+  private buildResetPasswordHtml(name: string, resetUrl: string): string {
+    return `
+    <!DOCTYPE html>
+    <html>
+    <head><meta charset="utf-8"></head>
+    <body style="font-family: 'Inter', -apple-system, sans-serif; background: #0d1117; color: #e6edf3; padding: 40px 20px;">
+      <div style="max-width: 520px; margin: 0 auto; background: #161b22; border-radius: 12px; border: 1px solid #30363d; padding: 40px;">
+        <div style="text-align: center; margin-bottom: 32px;">
+          <div style="display: inline-block; width: 48px; height: 48px; border-radius: 12px; background: linear-gradient(135deg, #06b6d4, #8b5cf6); line-height: 48px; text-align: center; color: white; font-weight: 800; font-size: 18px;">QS</div>
+          <h1 style="margin: 12px 0 0; font-size: 22px; color: #f0f6fc;">QS Asset Management</h1>
+        </div>
+        <h2 style="font-size: 18px; color: #f0f6fc; margin-bottom: 12px;">Hello, ${name}!</h2>
+        <p style="font-size: 14px; color: #8b949e; line-height: 1.6; margin-bottom: 24px;">
+          We received a request to reset your password for your QS Asset Management account. Click the button below to choose a new password:
+        </p>
+        <div style="text-align: center; margin-bottom: 24px;">
+          <a href="${resetUrl}" style="display: inline-block; padding: 12px 32px; background: linear-gradient(135deg, #06b6d4, #8b5cf6); color: white; font-weight: 700; font-size: 14px; text-decoration: none; border-radius: 8px;">
+            Reset Password
+          </a>
+        </div>
+        <p style="font-size: 12px; color: #484f58; line-height: 1.5;">
+          This link will expire in 1 hour. If you didn't request a password reset, you can safely ignore this email — your password will remain unchanged.
+        </p>
+        <hr style="border: none; border-top: 1px solid #30363d; margin: 24px 0;">
+        <p style="font-size: 11px; color: #484f58; text-align: center;">
+          QS Asset Management — Enterprise IT Asset & Security Platform<br>
+          <a href="${this.appUrl}" style="color: #06b6d4; text-decoration: none;">${this.appUrl}</a>
+        </p>
+      </div>
+    </body>
+    </html>`;
+  }
 }

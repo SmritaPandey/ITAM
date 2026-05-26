@@ -154,6 +154,8 @@ model User {
   emailVerified Boolean   @default(false) @map("email_verified")
   emailVerifyToken String? @map("email_verify_token")
   emailVerifyExpiry DateTime? @map("email_verify_expiry")
+  passwordResetToken String? @map("password_reset_token")
+  passwordResetExpiry DateTime? @map("password_reset_expiry")
   mfaEnabled   Boolean    @default(false) @map("mfa_enabled")
   mfaSecret    String?    @map("mfa_secret")
   // OAuth

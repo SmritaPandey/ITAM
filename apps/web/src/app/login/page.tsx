@@ -4,7 +4,8 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense } from "react";
 import Link from "next/link";
 import { LogoIcon } from "@/components/Logo";
-import { Eye, EyeOff, Loader2, ArrowRight, Sun, Moon, Shield, Lock, Fingerprint, Globe2, Zap, BarChart3 } from "lucide-react";
+import { Eye, EyeOff, Loader2, ArrowRight, Sun, Moon, Shield, Lock, Fingerprint, Globe2, Zap, BarChart3, Mail, CheckCircle } from "lucide-react";
+import { useTheme } from "@/components/ThemeProvider";
 
 function decodeJwt(token: string) {
   try { return JSON.parse(atob(token.split(".")[1])); } catch { return null; }
@@ -19,29 +20,42 @@ function LoginContent() {
   const [showPw, setShowPw] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-  const [theme, setTheme] = useState<"dark" | "light">("dark");
+  const { theme, toggleTheme } = useTheme();
   const [focused, setFocused] = useState<string | null>(null);
   const [oauthProviders] = useState<{ google: boolean; microsoft: boolean }>({ google: true, microsoft: true });
   const [showForgotNotice, setShowForgotNotice] = useState(false);
+  const [forgotEmail, setForgotEmail] = useState("");
+  const [forgotLoading, setForgotLoading] = useState(false);
+  const [forgotSuccess, setForgotSuccess] = useState(false);
+  const [forgotError, setForgotError] = useState("");
+
+  async function handleForgotPassword(e: React.FormEvent) {
+    e.preventDefault();
+    setForgotLoading(true);
+    setForgotError("");
+    try {
+      const res = await fetch(`${API}/auth/forgot-password`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: forgotEmail }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message || "Failed to trigger recovery link");
+      setForgotSuccess(true);
+    } catch (err: any) {
+      setForgotError(err.message || "Something went wrong.");
+    } finally {
+      setForgotLoading(false);
+    }
+  }
+
   const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4100/api/v1";
 
   useEffect(() => {
-    const saved = localStorage.getItem("theme") as "dark" | "light" | null;
-    const t = saved || "dark";
-    setTheme(t);
-    document.documentElement.setAttribute("data-theme", t);
-
     // Check for OAuth error in URL
     const urlError = searchParams.get("error");
     if (urlError) setError(decodeURIComponent(urlError));
-  }, []);  // eslint-disable-line react-hooks/exhaustive-deps
-
-  function toggleTheme() {
-    const next = theme === "dark" ? "light" : "dark";
-    setTheme(next);
-    localStorage.setItem("theme", next);
-    document.documentElement.setAttribute("data-theme", next);
-  }
+  }, [searchParams]);  // eslint-disable-line react-hooks/exhaustive-deps
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -394,7 +408,7 @@ function LoginContent() {
       </div>
 
       {showForgotNotice && (
-        <div onClick={() => setShowForgotNotice(false)} style={{
+        <div style={{
           position: "fixed", inset: 0,
           background: "rgba(9, 9, 11, 0.8)",
           backdropFilter: "blur(8px)",
@@ -413,62 +427,182 @@ function LoginContent() {
             textAlign: "center",
             display: "flex", flexDirection: "column", alignItems: "center"
           }}>
-            {/* Icon Header */}
-            <div style={{
-              width: 56, height: 56, borderRadius: "50%",
-              background: "linear-gradient(135deg, #06b6d4, #8b5cf6)",
-              display: "flex", alignItems: "center", justifyContent: "center",
-              color: "white", marginBottom: 20,
-              boxShadow: "0 8px 24px rgba(6,182,212,0.3)"
-            }}>
-              <Shield size={24} />
-            </div>
+            {forgotSuccess ? (
+              <>
+                {/* Success Icon */}
+                <div style={{
+                  width: 56, height: 56, borderRadius: "50%",
+                  background: "rgba(16, 185, 129, 0.1)",
+                  border: "1px solid rgba(16, 185, 129, 0.2)",
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                  color: "#10b981", marginBottom: 20,
+                  boxShadow: "0 8px 24px rgba(16, 185, 129, 0.15)"
+                }}>
+                  <CheckCircle size={24} />
+                </div>
 
-            {/* Title */}
-            <h3 style={{
-              fontSize: 20, fontWeight: 800,
-              color: dk ? "#f8fafc" : "#0f172a",
-              marginBottom: 12,
-              letterSpacing: "-0.02em"
-            }}>
-              Password Recovery Restricted
-            </h3>
+                {/* Title */}
+                <h3 style={{
+                  fontSize: 20, fontWeight: 800,
+                  color: dk ? "#f8fafc" : "#0f172a",
+                  marginBottom: 12,
+                  letterSpacing: "-0.02em"
+                }}>
+                  Check Your Inbox
+                </h3>
 
-            {/* Message */}
-            <p style={{
-              fontSize: 14, lineHeight: 1.6,
-              color: dk ? "#a1a1aa" : "#4b5563",
-              marginBottom: 20,
-              textAlign: "center"
-            }}>
-              To maintain the strict security posture of your organization's workspace, password resets are restricted to <strong style={{ color: "#06b6d4" }}>Tenant Administrators</strong>.
-            </p>
+                {/* Message */}
+                <p style={{
+                  fontSize: 14, lineHeight: 1.6,
+                  color: dk ? "#a1a1aa" : "#4b5563",
+                  marginBottom: 24,
+                  textAlign: "center"
+                }}>
+                  If <strong style={{ color: "#06b6d4" }}>{forgotEmail}</strong> is registered in our directory, a secure recovery link will be sent shortly. Please check your inbox and spam folder.
+                </p>
 
-            <div style={{
-              padding: "12px 16px",
-              borderRadius: 10,
-              background: dk ? "rgba(255,255,255,0.02)" : "rgba(0,0,0,0.02)",
-              border: `1px solid ${dk ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.06)"}`,
-              fontSize: 12,
-              lineHeight: 1.5,
-              color: dk ? "#94a3b8" : "#4b5563",
-              marginBottom: 24,
-              textAlign: "left"
-            }}>
-              💡 <strong style={{ color: dk ? "#f8fafc" : "#0f172a" }}>Evaluating QS Asset?</strong> You can bypass this screen by selecting the pre-configured <strong style={{ color: "#06b6d4" }}>Demo Credentials</strong> at the bottom of the sign-in form for immediate platform access.
-            </div>
+                {/* Got it button */}
+                <button type="button" onClick={() => {
+                  setShowForgotNotice(false);
+                  setForgotSuccess(false);
+                  setForgotEmail("");
+                  setForgotError("");
+                }} style={{
+                  width: "100%", padding: "12px 20px", borderRadius: 10,
+                  border: "none", cursor: "pointer",
+                  background: "linear-gradient(135deg, #10b981 0%, #059669 100%)",
+                  color: "white", fontSize: 14, fontWeight: 700, fontFamily: "inherit",
+                  boxShadow: "0 4px 16px rgba(16,185,129,0.25)",
+                  transition: "all 0.2s ease"
+                }}>
+                  Got it, thanks!
+                </button>
+              </>
+            ) : (
+              <>
+                {/* Recovery Icon */}
+                <div style={{
+                  width: 56, height: 56, borderRadius: "50%",
+                  background: "linear-gradient(135deg, #06b6d4, #8b5cf6)",
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                  color: "white", marginBottom: 20,
+                  boxShadow: "0 8px 24px rgba(6,182,212,0.3)"
+                }}>
+                  <Lock size={24} />
+                </div>
 
-            {/* Button */}
-            <button type="button" onClick={() => setShowForgotNotice(false)} style={{
-              width: "100%", padding: "12px 20px", borderRadius: 10,
-              border: "none", cursor: "pointer",
-              background: "linear-gradient(135deg, #06b6d4 0%, #0891b2 100%)",
-              color: "white", fontSize: 14, fontWeight: 700, fontFamily: "inherit",
-              boxShadow: "0 4px 16px rgba(6,182,212,0.25)",
-              transition: "all 0.2s ease"
-            }}>
-              Got it, thanks!
-            </button>
+                {/* Title */}
+                <h3 style={{
+                  fontSize: 20, fontWeight: 800,
+                  color: dk ? "#f8fafc" : "#0f172a",
+                  marginBottom: 12,
+                  letterSpacing: "-0.02em"
+                }}>
+                  Password Recovery
+                </h3>
+
+                {/* Message */}
+                <p style={{
+                  fontSize: 14, lineHeight: 1.6,
+                  color: dk ? "#a1a1aa" : "#4b5563",
+                  marginBottom: 20,
+                  textAlign: "center"
+                }}>
+                  Enter the email associated with your directory account and we will dispatch a secure recovery link.
+                </p>
+
+                {forgotError && (
+                  <div style={{
+                    width: "100%",
+                    padding: "10px 12px",
+                    borderRadius: 8,
+                    background: "rgba(239, 68, 68, 0.1)",
+                    border: "1px solid rgba(239, 68, 68, 0.2)",
+                    color: "#f87171",
+                    fontSize: 12,
+                    marginBottom: 16,
+                    textAlign: "center"
+                  }}>
+                    ⚠️ {forgotError}
+                  </div>
+                )}
+
+                {/* Form */}
+                <form onSubmit={handleForgotPassword} style={{ width: "100%", display: "flex", flexDirection: "column", gap: 16 }}>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 6, textAlign: "left" }}>
+                    <label style={{ fontSize: 11, fontWeight: 700, color: dk ? "#94a3b8" : "#4b5563" }}>Email Address</label>
+                    <input
+                      required
+                      type="email"
+                      placeholder="e.g. admin@acme.com"
+                      value={forgotEmail}
+                      onChange={e => setForgotEmail(e.target.value)}
+                      style={{
+                        padding: "10px 14px",
+                        borderRadius: 10,
+                        background: dk ? "rgba(255,255,255,0.03)" : "rgba(0,0,0,0.02)",
+                        border: `1px solid ${dk ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.1)"}`,
+                        color: dk ? "#f8fafc" : "#0f172a",
+                        fontSize: 13,
+                        outline: "none",
+                        fontFamily: "inherit"
+                      }}
+                      className="focus-glow"
+                    />
+                  </div>
+
+                  <button
+                    type="submit"
+                    disabled={forgotLoading}
+                    style={{
+                      width: "100%",
+                      padding: "12px 20px",
+                      borderRadius: 10,
+                      border: "none",
+                      cursor: "pointer",
+                      background: "linear-gradient(135deg, #06b6d4 0%, #8b5cf6 100%)",
+                      color: "white",
+                      fontSize: 14,
+                      fontWeight: 700,
+                      fontFamily: "inherit",
+                      boxShadow: "0 4px 16px rgba(6,182,212,0.25)",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      gap: 8,
+                      opacity: forgotLoading ? 0.7 : 1
+                    }}
+                  >
+                    {forgotLoading ? (
+                      <Loader2 size={16} style={{ animation: "spin 1s linear infinite" }} />
+                    ) : (
+                      "Send Recovery Link"
+                    )}
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowForgotNotice(false);
+                      setForgotError("");
+                      setForgotEmail("");
+                    }}
+                    style={{
+                      background: "none",
+                      border: "none",
+                      color: dk ? "#94a3b8" : "#4b5563",
+                      fontSize: 12,
+                      cursor: "pointer",
+                      fontWeight: 500,
+                      marginTop: 4,
+                      fontFamily: "inherit"
+                    }}
+                  >
+                    Back to Sign In
+                  </button>
+                </form>
+              </>
+            )}
           </div>
         </div>
       )}

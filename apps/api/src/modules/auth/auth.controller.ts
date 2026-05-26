@@ -92,6 +92,22 @@ export class AuthController {
     return this.emailVerification.resendVerification(body.email);
   }
 
+  @Post('forgot-password')
+  @Throttle({ default: { limit: 3, ttl: 60000 } })
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Initiate password reset (public)' })
+  async forgotPassword(@Body() body: { email: string }) {
+    return this.authService.forgotPassword(body.email);
+  }
+
+  @Post('reset-password')
+  @Throttle({ default: { limit: 5, ttl: 60000 } })
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Complete password reset (public)' })
+  async resetPassword(@Body() body: { token: string; password: string }) {
+    return this.authService.resetPassword(body);
+  }
+
   // ─── OAuth Providers Status ────────────────────────────────────
 
   @Get('providers')

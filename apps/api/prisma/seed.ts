@@ -263,74 +263,7 @@ async function main() {
   console.log(`  ✅ Asset Types: Hardware, Laptop, Server, Printer, Network, Facility, Vehicle`);
 
   // 7. Create sample assets
-  const assets = [
-    {
-      tenantId: tenant.id, assetTypeId: laptopType.id, name: 'Dell Latitude 5540', assetTag: 'LAP-001',
-      serialNumber: 'DL5540-2024-001', manufacturer: 'Dell', model: 'Latitude 5540',
-      status: 'ACTIVE' as const, siteId: hq.id, departmentId: itDept.id, assignedToId: employee1.id,
-      ipAddress: '10.0.1.101', macAddress: 'AA:BB:CC:DD:EE:01', hostname: 'PRIYA-LAPTOP',
-      purchasePrice: 85000, procurementDate: new Date('2024-01-15'), warrantyExpiry: new Date('2027-01-15'),
-      discoverySource: 'AGENT' as const, tags: ['laptop', 'dell', 'employee'],
-    },
-    {
-      tenantId: tenant.id, assetTypeId: laptopType.id, name: 'Lenovo ThinkPad T14', assetTag: 'LAP-002',
-      serialNumber: 'LTP14-2024-002', manufacturer: 'Lenovo', model: 'ThinkPad T14 Gen 4',
-      status: 'ACTIVE' as const, siteId: branch.id, departmentId: opsDept.id, assignedToId: employee2.id,
-      ipAddress: '10.0.2.105', macAddress: 'AA:BB:CC:DD:EE:02', hostname: 'AMIT-LAPTOP',
-      purchasePrice: 92000, procurementDate: new Date('2024-03-10'), warrantyExpiry: new Date('2027-03-10'),
-      discoverySource: 'AGENT' as const, tags: ['laptop', 'lenovo', 'employee'],
-    },
-    {
-      tenantId: tenant.id, assetTypeId: serverType.id, name: 'HPE ProLiant DL380', assetTag: 'SRV-001',
-      serialNumber: 'HPE380-2023-001', manufacturer: 'HPE', model: 'ProLiant DL380 Gen10 Plus',
-      status: 'ACTIVE' as const, siteId: hq.id, departmentId: itDept.id, managedById: itAdmin.id,
-      ipAddress: '10.0.0.10', macAddress: 'AA:BB:CC:DD:EE:10', hostname: 'SRV-DC-01',
-      purchasePrice: 450000, procurementDate: new Date('2023-06-01'), warrantyExpiry: new Date('2026-06-01'),
-      discoverySource: 'WMI' as const, room: 'Server Room', rack: 'R1', position: 'U1-U4',
-      tags: ['server', 'hpe', 'domain-controller'],
-    },
-    {
-      tenantId: tenant.id, assetTypeId: printerType.id, name: 'HP LaserJet Pro', assetTag: 'PRT-001',
-      serialNumber: 'HPLJ-2024-001', manufacturer: 'HP', model: 'LaserJet Pro MFP M428fdw',
-      status: 'ACTIVE' as const, siteId: hq.id, departmentId: hrDept.id,
-      ipAddress: '10.0.1.200', macAddress: 'AA:BB:CC:DD:EE:20', hostname: 'PRT-HR-01',
-      purchasePrice: 35000, procurementDate: new Date('2024-02-20'),
-      discoverySource: 'SNMP' as const, floor: '2', room: 'HR Office',
-      tags: ['printer', 'hp', 'shared'],
-    },
-    {
-      tenantId: tenant.id, assetTypeId: switchType.id, name: 'Cisco Catalyst 9200', assetTag: 'SW-001',
-      serialNumber: 'CSC9200-2023-001', manufacturer: 'Cisco', model: 'Catalyst 9200-48P',
-      status: 'ACTIVE' as const, siteId: hq.id, departmentId: itDept.id, managedById: itAdmin.id,
-      ipAddress: '10.0.0.1', macAddress: 'AA:BB:CC:DD:EE:30', hostname: 'SW-CORE-01',
-      purchasePrice: 180000, procurementDate: new Date('2023-04-15'),
-      discoverySource: 'SNMP' as const, room: 'Server Room', rack: 'R2', position: 'U1',
-      tags: ['switch', 'cisco', 'core'],
-    },
-    {
-      tenantId: tenant.id, assetTypeId: furnitureType.id, name: 'Standing Desk - Ergonomic', assetTag: 'FRN-001',
-      manufacturer: 'FlexiSpot', model: 'E7 Pro',
-      status: 'ACTIVE' as const, siteId: hq.id, departmentId: hrDept.id, assignedToId: employee1.id,
-      purchasePrice: 28000, procurementDate: new Date('2024-05-01'),
-      discoverySource: 'MANUAL' as const, floor: '2', room: 'HR Office',
-      tags: ['furniture', 'desk', 'ergonomic'],
-    },
-    {
-      tenantId: tenant.id, assetTypeId: vehicleType.id, name: 'Toyota Innova Crysta', assetTag: 'VEH-001',
-      serialNumber: 'TIC-MH02-001', manufacturer: 'Toyota', model: 'Innova Crysta 2.4 GX',
-      status: 'ACTIVE' as const, siteId: hq.id, departmentId: opsDept.id,
-      latitude: 19.1136, longitude: 72.8697,
-      purchasePrice: 2100000, procurementDate: new Date('2023-11-01'),
-      discoverySource: 'MANUAL' as const,
-      customFields: { registrationNumber: 'MH-02-AB-1234', fuelType: 'Diesel', seatingCapacity: 7 },
-      tags: ['vehicle', 'toyota', 'fleet'],
-    },
-  ];
-
-  for (const assetData of assets) {
-    await prisma.asset.create({ data: assetData as any });
-  }
-  console.log(`  ✅ Assets: ${assets.length} sample assets created`);
+  // Asset seeding has been completely removed to provide a clean slate for new users.
 
   // 8. Create sample tickets
   const tickets = [
@@ -546,41 +479,7 @@ async function main() {
   for (const r of rules) { await prisma.automationRule.create({ data: r }); }
   console.log(`  ✅ Automation Rules: ${rules.length} enterprise templates created`);
 
-  // ─── Monitoring: Cameras ───────────────────────────────────────
-  const cameras = [
-    { tenantId: tenant.id, type: 'CAMERA' as const, name: 'Main Entrance - Cam 01', location: 'Building A, Ground Floor', ipAddress: '10.0.10.1', status: 'ONLINE', config: { cameraType: 'PTZ', resolution: '4K', recording: true }, metrics: { storage: 87, health: 98 }, lastSeen: new Date() },
-    { tenantId: tenant.id, type: 'CAMERA' as const, name: 'Server Room - Cam 02', location: 'Building A, 1st Floor', ipAddress: '10.0.10.2', status: 'ONLINE', config: { cameraType: 'Fixed', resolution: '1080p', recording: true }, metrics: { storage: 72, health: 100 }, lastSeen: new Date() },
-    { tenantId: tenant.id, type: 'CAMERA' as const, name: 'Parking Lot - Cam 03', location: 'Outdoor, North Side', ipAddress: '10.0.10.3', status: 'ONLINE', config: { cameraType: 'PTZ', resolution: '4K', recording: true }, metrics: { storage: 91, health: 95 }, lastSeen: new Date() },
-    { tenantId: tenant.id, type: 'CAMERA' as const, name: 'Lobby - Cam 04', location: 'Building A, Ground Floor', ipAddress: '10.0.10.4', status: 'ONLINE', config: { cameraType: 'Dome', resolution: '1080p', recording: true }, metrics: { storage: 65, health: 99 }, lastSeen: new Date() },
-    { tenantId: tenant.id, type: 'CAMERA' as const, name: 'Loading Dock - Cam 05', location: 'Building B, Ground Floor', ipAddress: '10.0.10.5', status: 'OFFLINE', config: { cameraType: 'Bullet', resolution: '720p', recording: false }, metrics: { storage: 0, health: 0 }, lastSeen: null },
-    { tenantId: tenant.id, type: 'CAMERA' as const, name: 'Warehouse - Cam 06', location: 'Building C', ipAddress: '10.0.10.6', status: 'ONLINE', config: { cameraType: 'PTZ', resolution: '4K', recording: true }, metrics: { storage: 45, health: 97 }, lastSeen: new Date() },
-  ];
-  for (const c of cameras) { await prisma.monitoredDevice.create({ data: c }); }
-  console.log(`  ✅ CCTV Cameras: ${cameras.length} cameras created`);
-
-  // ─── Monitoring: Network Devices ───────────────────────────────
-  const netDevices = [
-    { tenantId: tenant.id, type: 'NETWORK_DEVICE' as const, name: 'SW-CORE-01', location: 'DC Rack A1', ipAddress: '10.0.0.1', status: 'ONLINE', config: { deviceType: 'Switch', ports: '48/48' }, metrics: { latency: 1.2, throughput: 780, uptime: '45d 12h', alerts: 0 }, lastSeen: new Date() },
-    { tenantId: tenant.id, type: 'NETWORK_DEVICE' as const, name: 'FW-EDGE-01', location: 'DC Rack A2', ipAddress: '10.0.0.2', status: 'ONLINE', config: { deviceType: 'Firewall', ports: '12/12' }, metrics: { latency: 0.8, throughput: 950, uptime: '120d 5h', alerts: 0 }, lastSeen: new Date() },
-    { tenantId: tenant.id, type: 'NETWORK_DEVICE' as const, name: 'AP-FLOOR2-01', location: '2nd Floor', ipAddress: '10.0.1.50', status: 'ONLINE', config: { deviceType: 'Access Point', ports: '—' }, metrics: { latency: 3.1, throughput: 320, uptime: '30d 8h', alerts: 1 }, lastSeen: new Date() },
-    { tenantId: tenant.id, type: 'NETWORK_DEVICE' as const, name: 'RTR-BRANCH-01', location: 'Branch', ipAddress: '10.0.2.1', status: 'ONLINE', config: { deviceType: 'Router', ports: '8/8' }, metrics: { latency: 2.5, throughput: 560, uptime: '90d 2h', alerts: 0 }, lastSeen: new Date() },
-    { tenantId: tenant.id, type: 'NETWORK_DEVICE' as const, name: 'SW-DIST-02', location: 'DC Rack B1', ipAddress: '10.0.1.2', status: 'WARNING', config: { deviceType: 'Switch', ports: '24/24' }, metrics: { latency: 5.8, throughput: 420, uptime: '15d 1h', alerts: 2 }, lastSeen: new Date() },
-    { tenantId: tenant.id, type: 'NETWORK_DEVICE' as const, name: 'AP-FLOOR3-01', location: '3rd Floor', ipAddress: '10.0.1.51', status: 'OFFLINE', config: { deviceType: 'Access Point', ports: '—' }, metrics: { latency: 0, throughput: 0, uptime: '—', alerts: 3 }, lastSeen: null },
-  ];
-  for (const d of netDevices) { await prisma.monitoredDevice.create({ data: d }); }
-  console.log(`  ✅ NMS Devices: ${netDevices.length} network devices created`);
-
-  // ─── Monitoring: Virtual Machines ──────────────────────────────
-  const vms = [
-    { tenantId: tenant.id, type: 'VIRTUAL_MACHINE' as const, name: 'VM-DC-01', location: 'ESXi-01', ipAddress: '10.0.5.1', status: 'ONLINE', config: { os: 'Windows Server 2022', purpose: 'Domain Controller', host: 'ESXi-01' }, metrics: { cpu: 35, ram: 62, disk: 45, uptime: '120d 5h' } },
-    { tenantId: tenant.id, type: 'VIRTUAL_MACHINE' as const, name: 'VM-APP-01', location: 'ESXi-01', ipAddress: '10.0.5.2', status: 'ONLINE', config: { os: 'Ubuntu 22.04 LTS', purpose: 'Application Server', host: 'ESXi-01' }, metrics: { cpu: 72, ram: 85, disk: 68, uptime: '45d 12h' } },
-    { tenantId: tenant.id, type: 'VIRTUAL_MACHINE' as const, name: 'VM-DB-01', location: 'ESXi-02', ipAddress: '10.0.5.3', status: 'ONLINE', config: { os: 'Ubuntu 22.04 LTS', purpose: 'Database Server', host: 'ESXi-02' }, metrics: { cpu: 48, ram: 78, disk: 82, uptime: '90d 2h' } },
-    { tenantId: tenant.id, type: 'VIRTUAL_MACHINE' as const, name: 'VDI-HR-01', location: 'ESXi-02', ipAddress: '10.0.5.10', status: 'ONLINE', config: { os: 'Windows 11 Pro', purpose: 'HR Desktop', host: 'ESXi-02', user: 'Priya Patel' }, metrics: { cpu: 22, ram: 45, disk: 30, uptime: '8d 3h' } },
-    { tenantId: tenant.id, type: 'VIRTUAL_MACHINE' as const, name: 'VDI-DEV-01', location: 'ESXi-01', ipAddress: '10.0.5.11', status: 'STOPPED', config: { os: 'Windows 11 Pro', purpose: 'Dev Desktop', host: 'ESXi-01', user: 'Amit Kumar' }, metrics: { cpu: 0, ram: 0, disk: 25, uptime: '—' } },
-    { tenantId: tenant.id, type: 'VIRTUAL_MACHINE' as const, name: 'VM-BACKUP-01', location: 'ESXi-02', ipAddress: '10.0.5.4', status: 'ONLINE', config: { os: 'CentOS 9 Stream', purpose: 'Backup Server', host: 'ESXi-02' }, metrics: { cpu: 12, ram: 35, disk: 91, uptime: '180d 1h' } },
-  ];
-  for (const v of vms) { await prisma.monitoredDevice.create({ data: v }); }
-  console.log(`  ✅ Virtual Machines: ${vms.length} VMs created`);
+  // Seeding of mock monitored devices (cameras, network switches, and virtual machines) has been completely removed to ensure all network topology nodes and discovery scans represent 100% real infrastructure.
 
   // ─── Patches ──────────────────────────────────────────────────
   const patches = [

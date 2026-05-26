@@ -2,12 +2,14 @@ import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Resend } from 'resend';
 import { v4 as uuidv4 } from 'uuid';
+import * as nodemailer from 'nodemailer';
 import { PrismaService } from '../../common/database/prisma.service';
 
 @Injectable()
 export class EmailVerificationService {
   private readonly logger = new Logger(EmailVerificationService.name);
   private resend: Resend | null = null;
+  private transporter: nodemailer.Transporter | null = null;
   private readonly fromEmail: string;
   private readonly appUrl: string;
 
@@ -20,7 +22,25 @@ export class EmailVerificationService {
       this.resend = new Resend(apiKey);
       this.logger.log('Email service initialized with Resend');
     } else {
-      this.logger.warn('RESEND_API_KEY not set — email verification will be skipped');
+      const smtpUser = this.config.get<string>('SMTP_USER');
+      const smtpPass = this.config.get<string>('SMTP_PASS');
+      if (smtpUser && smtpPass) {
+        const host = this.config.get<string>('SMTP_HOST', 'smtp.ethereal.email');
+        const port = parseInt(this.config.get<string>('SMTP_PORT', '587'), 10);
+        const secure = this.config.get<string>('SMTP_SECURE', 'false') === 'true';
+        this.transporter = nodemailer.createTransport({
+          host,
+          port,
+          secure,
+          auth: {
+            user: smtpUser,
+            pass: smtpPass,
+          },
+        });
+        this.logger.log(`Email service initialized with SMTP at ${host}:${port}`);
+      } else {
+        this.logger.warn('Neither RESEND_API_KEY nor SMTP credentials set — email verification will log links to console');
+      }
     }
     this.fromEmail = this.config.get<string>('FROM_EMAIL', 'QS Asset <noreply@qsasset.com>');
     this.appUrl = this.config.get<string>('APP_URL', 'https://qsasset.vercel.app');
@@ -58,6 +78,18 @@ export class EmailVerificationService {
       } catch (err: any) {
         this.logger.error(`Failed to send verification email: ${err.message}`);
         // Don't block registration — log and continue
+      }
+    } else if (this.transporter) {
+      try {
+        await this.transporter.sendMail({
+          from: this.fromEmail,
+          to: email,
+          subject: 'Verify your QS Asset Management account',
+          html: this.buildVerificationHtml(firstName, verifyUrl),
+        });
+        this.logger.log(`Verification email sent (SMTP) to ${email}`);
+      } catch (err: any) {
+        this.logger.error(`Failed to send verification email (SMTP): ${err.message}`);
       }
     } else {
       this.logger.warn(`No email provider configured — verification link: ${verifyUrl}`);
@@ -166,6 +198,18 @@ export class EmailVerificationService {
         this.logger.log(`Password reset email sent to ${email}`);
       } catch (err: any) {
         this.logger.error(`Failed to send password reset email: ${err.message}`);
+      }
+    } else if (this.transporter) {
+      try {
+        await this.transporter.sendMail({
+          from: this.fromEmail,
+          to: email,
+          subject: 'Reset your QS Asset Management password',
+          html: this.buildResetPasswordHtml(firstName, resetUrl),
+        });
+        this.logger.log(`Password reset email sent (SMTP) to ${email}`);
+      } catch (err: any) {
+        this.logger.error(`Failed to send password reset email (SMTP): ${err.message}`);
       }
     } else {
       this.logger.warn(`No email provider configured — reset link: ${resetUrl}`);

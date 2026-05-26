@@ -176,7 +176,16 @@ export default function UsersPage() {
                 style={{ padding: "10px 14px", borderRadius: 10, background: "var(--bg-input)", border: "1px solid var(--border-primary)", color: "var(--text-primary)", fontSize: 13, outline: "none", fontFamily: "inherit" }}
                 className="focus-glow">
                 <option value="">Select Security Role...</option>
-                {roles.map((r: any) => <option key={r.id} value={r.id}>{r.name}</option>)}
+                {roles
+                  .filter((r: any) => {
+                    const name = r.name.toLowerCase();
+                    return name === "staff" || name === "employee" || name === "admin" || name === "tenant admin";
+                  })
+                  .map((r: any) => (
+                    <option key={r.id} value={r.id}>
+                      {r.name}
+                    </option>
+                  ))}
               </select>
             </div>
             <div style={{ gridColumn: "1 / -1", display: "flex", gap: 10, justifyContent: "flex-end", marginTop: 8 }}>

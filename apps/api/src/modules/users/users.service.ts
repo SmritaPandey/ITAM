@@ -51,6 +51,16 @@ export class UsersService {
       }
     }
 
+    const role = await this.prisma.role.findUnique({ where: { id: data.roleId } });
+    if (!role || role.tenantId !== tenantId) {
+      throw new BadRequestException('Invalid role specified');
+    }
+    const roleName = role.name.toLowerCase();
+    const isAllowed = roleName === 'staff' || roleName === 'employee' || roleName === 'tenant admin' || roleName === 'admin';
+    if (!isAllowed) {
+      throw new BadRequestException('You can only invite users with Staff, Employee, or Admin roles');
+    }
+
     const passwordHash = await bcrypt.hash(data.password, 12);
     return this.prisma.user.create({
       data: {

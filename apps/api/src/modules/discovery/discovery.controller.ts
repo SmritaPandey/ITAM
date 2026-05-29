@@ -92,6 +92,13 @@ export class DiscoveryController {
     return this.discoveryService.findScanById(id, req.user.tenantId);
   }
 
+  @Post('scans/:id/stop')
+  @Roles('Tenant Admin', 'IT Admin')
+  @ApiOperation({ summary: 'Stop a running scan job' })
+  async stopScan(@Request() req: any, @Param('id') id: string) {
+    return this.discoveryService.stopScan(id, req.user.tenantId);
+  }
+
   @Post('scans/:id/results')
   @Roles('Tenant Admin', 'IT Admin')
   @ApiOperation({ summary: 'Submit scan results from discovery agent' })

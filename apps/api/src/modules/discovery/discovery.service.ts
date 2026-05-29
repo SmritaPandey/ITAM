@@ -1,4 +1,4 @@
-import { Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../../common/database/prisma.service';
 import { EventBusService } from '../../common/events/event-bus.service';
 import { ComplianceService } from '../compliance/compliance.service';
@@ -505,6 +505,16 @@ export class DiscoveryService {
       const aliveHosts: { ip: string; hostname?: string; latency?: string; openPorts?: any[]; classification?: any; snmpResult?: any }[] = [];
 
       for (let i = 0; i < ips.length; i += batchSize) {
+        // Check if scan was stopped/cancelled by user
+        const checkJob = await this.prisma.scanJob.findUnique({
+          where: { id: scanJobId },
+          select: { status: true },
+        });
+        if (!checkJob || checkJob.status === 'CANCELLED') {
+          this.logger.log(`Scan job ${scanJobId} was cancelled mid-sweep.`);
+          return;
+        }
+
         const batch = ips.slice(i, i + batchSize);
         const results = await Promise.allSettled(
           batch.map(async (ip) => {
@@ -531,6 +541,16 @@ export class DiscoveryService {
       if (aliveHosts.length === 0) {
         this.logger.log(`Ping sweep found 0 hosts. Running TCP-based discovery sweep on common ports...`);
         for (let i = 0; i < ips.length; i += batchSize) {
+          // Check if scan was stopped/cancelled by user
+          const checkJob = await this.prisma.scanJob.findUnique({
+            where: { id: scanJobId },
+            select: { status: true },
+          });
+          if (!checkJob || checkJob.status === 'CANCELLED') {
+            this.logger.log(`Scan job ${scanJobId} was cancelled during fallback sweep.`);
+            return;
+          }
+
           const batch = ips.slice(i, i + batchSize);
           const results = await Promise.allSettled(
             batch.map(async (ip) => {
@@ -579,6 +599,16 @@ export class DiscoveryService {
         this.logger.log(`Running port scan on ${aliveHosts.length} hosts...`);
         const portBatchSize = 10;
         for (let i = 0; i < aliveHosts.length; i += portBatchSize) {
+          // Check if scan was stopped/cancelled by user
+          const checkJob = await this.prisma.scanJob.findUnique({
+            where: { id: scanJobId },
+            select: { status: true },
+          });
+          if (!checkJob || checkJob.status === 'CANCELLED') {
+            this.logger.log(`Scan job ${scanJobId} was cancelled before port scanning.`);
+            return;
+          }
+
           const batch = aliveHosts.slice(i, i + portBatchSize);
           await Promise.all(
             batch.map(async (host) => {
@@ -596,6 +626,16 @@ export class DiscoveryService {
         const communities = await this.getSnmpCommunities(tenantId);
         
         for (const host of aliveHosts) {
+          // Check if scan was stopped/cancelled by user
+          const checkJob = await this.prisma.scanJob.findUnique({
+            where: { id: scanJobId },
+            select: { status: true },
+          });
+          if (!checkJob || checkJob.status === 'CANCELLED') {
+            this.logger.log(`Scan job ${scanJobId} was cancelled before SNMP scanning.`);
+            return;
+          }
+
           const snmpPoll = await this.pollSnmpForHost(host.ip, communities);
           if (snmpPoll) {
             const { result: snmpResult } = snmpPoll;
@@ -770,6 +810,30 @@ export class DiscoveryService {
     });
     if (!scan) throw new NotFoundException('Scan not found');
     return scan;
+  }
+
+  async stopScan(id: string, tenantId: string) {
+    const scanJob = await this.prisma.scanJob.findFirst({
+      where: { id, tenantId },
+    });
+    if (!scanJob) {
+      throw new NotFoundException('Scan job not found');
+    }
+    if (scanJob.status !== 'RUNNING' && scanJob.status !== 'PENDING') {
+      throw new BadRequestException(`Cannot stop a scan that is already ${scanJob.status.toLowerCase()}`);
+    }
+
+    const updated = await this.prisma.scanJob.update({
+      where: { id },
+      data: {
+        status: 'CANCELLED',
+        completedAt: new Date(),
+        errorMessage: 'Scan was stopped by administrator.',
+      },
+    });
+
+    this.logger.log(`Scan job ${id} was stopped by administrator.`);
+    return updated;
   }
 
   async findPendingDevices(tenantId: string) {
@@ -1181,6 +1245,9 @@ export class DiscoveryService {
     });
     if (!scanJob) {
       throw new NotFoundException('Scan job not found');
+    }
+    if (scanJob.status === 'CANCELLED') {
+      throw new BadRequestException('This scan job was cancelled/stopped by the administrator.');
     }
 
     try {

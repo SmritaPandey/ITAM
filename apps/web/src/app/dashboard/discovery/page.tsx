@@ -29,6 +29,7 @@ const STATUS_COLORS: Record<string, { bg: string; text: string }> = {
   RUNNING: { bg: "rgba(6,182,212,0.1)", text: "#06b6d4" },
   COMPLETED: { bg: "rgba(16,185,129,0.1)", text: "#10b981" },
   FAILED: { bg: "rgba(239,68,68,0.1)", text: "#ef4444" },
+  CANCELLED: { bg: "rgba(107,114,128,0.15)", text: "#9ca3af" },
 };
 
 export default function DiscoveryPage() {
@@ -157,6 +158,16 @@ export default function DiscoveryPage() {
   async function viewScanDetails(scanId: string) {
     const data = await apiFetch(`/discovery/scans/${scanId}`);
     setSelectedScan(data);
+  }
+
+  async function stopScanJob(scanId: string) {
+    if (!confirm('Are you sure you want to stop this scan job?')) return;
+    try {
+      await apiFetch(`/discovery/scans/${scanId}/stop`, { method: 'POST', body: JSON.stringify({}) });
+      await refresh();
+    } catch (err: any) {
+      alert(`Failed to stop scan: ${err.message || err}`);
+    }
   }
 
   async function approveDevice(deviceId: string) {
@@ -523,11 +534,17 @@ export default function DiscoveryPage() {
                         {s.newDevices === 0 && "—"}
                       </td>
                       <td style={{ fontSize: 11, color: "var(--text-tertiary)" }}>{duration}</td>
-                      <td>
-                        <button className="btn btn-secondary" style={{ padding: "3px 8px", fontSize: 10 }}
+                      <td style={{ display: "flex", gap: 6 }}>
+                        <button className="btn btn-secondary" style={{ padding: "3px 8px", fontSize: 10, display: "flex", alignItems: "center", gap: 4 }}
                           onClick={() => viewScanDetails(s.id)}>
                           <Eye size={10} /> Details
                         </button>
+                        {(s.status === "RUNNING" || s.status === "PENDING") && (
+                          <button className="btn btn-secondary" style={{ padding: "3px 8px", fontSize: 10, color: "#ef4444", borderColor: "rgba(239,68,68,0.2)", display: "flex", alignItems: "center", gap: 4 }}
+                            onClick={() => stopScanJob(s.id)}>
+                            <XCircle size={10} /> Stop
+                          </button>
+                        )}
                       </td>
                     </tr>
                   );

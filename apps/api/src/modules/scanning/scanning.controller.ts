@@ -48,6 +48,13 @@ export class ScanningController {
     return this.service.getScanHistory(req.user.tenantId);
   }
 
+  @Get('detected')
+  @Roles('Tenant Admin', 'IT Admin')
+  @ApiOperation({ summary: 'Get unified list of detected security risks and vulnerabilities' })
+  async detected(@Request() req: any) {
+    return this.service.getDetectedFindings(req.user.tenantId);
+  }
+
   @Get('results/:id')
   @Roles('Tenant Admin', 'IT Admin')
   @ApiOperation({ summary: 'Get detailed scan result' })

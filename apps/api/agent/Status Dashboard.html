@@ -968,10 +968,19 @@
           <!-- Quick Actions -->
           <div class="actions-panel">
             <div class="actions-panel-title">
-              <h4>Manual Subnet discovery</h4>
+              <h4>Manual Subnet Discovery</h4>
               <p>Trigger an active sweep of your local physical subnet immediately.</p>
             </div>
             <button class="btn-manual-scan" id="btnManualScan" onclick="triggerManualScan()">Trigger Subnet Scan</button>
+          </div>
+
+          <!-- Persistent Background Service Actions -->
+          <div class="actions-panel" style="margin-top: 1rem;">
+            <div class="actions-panel-title">
+              <h4>Continuous Firewall-Like Protection</h4>
+              <p>Register the agent as a persistent background system task that starts on boot and runs continuously without any terminal or command prompt windows remaining open.</p>
+            </div>
+            <button class="btn-manual-scan" id="btnInstallService" style="background: linear-gradient(135deg, #06b6d4 0%, #3b82f6 100%);" onclick="installBackgroundService()">Enable Start on Boot</button>
           </div>
         </div>
 
@@ -1216,6 +1225,35 @@
         btn.disabled = false;
         btn.innerText = 'Trigger Subnet Scan';
       }, 5000);
+    }
+
+    async function installBackgroundService() {
+      const btn = document.getElementById('btnInstallService');
+      btn.disabled = true;
+      btn.innerText = 'Activating Service...';
+      
+      appendLog('Control', 'Registering agent as a silent continuous background service...', 'info');
+      try {
+        const res = await fetch(`${API_URL}/control`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'INSTALL_SERVICE' }),
+          mode: 'cors'
+        });
+        if (res.ok) {
+          appendLog('Control', 'Background service registered successfully! It will now auto-start on boot.', 'success');
+          btn.innerText = 'Service Registered';
+          btn.style.background = 'linear-gradient(135deg, #10b981 0%, #059669 100%)';
+        } else {
+          appendLog('Control', 'Failed to register service task.', 'error');
+          btn.disabled = false;
+          btn.innerText = 'Enable Start on Boot';
+        }
+      } catch (err) {
+        appendLog('Control', 'Failed to communicate with service script: ' + err.message, 'error');
+        btn.disabled = false;
+        btn.innerText = 'Enable Start on Boot';
+      }
     }
 
     function setProgressBarColor(bar, val) {

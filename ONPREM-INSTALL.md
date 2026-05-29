@@ -237,3 +237,84 @@ Once your Docker containers or bare-metal PM2 daemons are running:
 3. Complete the form (Organization Name, Admin Credentials, Timezone, and Industry).
 4. Click **Initialize QS Asset**. The wizard will instantly configure your isolated tenant space, setup security access roles, configure SLAs, initialize default IT Asset types, and create core ITIL automation rules!
 5. Log in and begin scanning your network!
+
+---
+
+## 🔄 Continuous Agent Persistence & Mass LAN Deployment
+
+For continuous 24/7 endpoint compliance and inventory monitoring, agents can be registered as system daemons (background services) that run continuously and survive system reboots.
+
+### 1. Persistent System Services (Daemons)
+
+The pre-configured agent zip includes installation helper scripts to register daemons on Linux, macOS, and Windows.
+
+#### Linux (systemd)
+```bash
+# 1. Unzip the package
+unzip qs-discovery-agent.zip -d /opt/qs-discovery-agent
+cd /opt/qs-discovery-agent
+
+# 2. Run the service installer (registers /etc/systemd/system/qs-discovery-agent.service)
+sudo ./install-service.sh
+
+# 3. Verify execution status
+sudo systemctl status qs-discovery-agent
+```
+
+#### macOS (launchd)
+```bash
+# 1. Extract files
+unzip qs-discovery-agent.zip -d /opt/qs-discovery-agent
+cd /opt/qs-discovery-agent
+
+# 2. Register launchd daemon (registers /Library/LaunchDaemons/com.qsasset.discovery.agent.plist)
+sudo ./install-service.sh
+
+# 3. Check loaded daemon state
+sudo launchctl list | grep qsasset
+```
+
+#### Windows (Service)
+```cmd
+:: 1. Extract files to C:\Program Files\QS-Discovery-Agent
+:: 2. Open Command Prompt as Administrator and run the Windows service installer
+install-service.bat
+
+:: 3. Verify service registration
+sc query QSDiscoveryAgent
+```
+
+---
+
+### 2. Network-Wide Mass Deployment Strategies
+
+To orchestrate agent registration across thousands of devices in your local subnet or Active Directory forest without manual user intervention, you can use these methods:
+
+#### Method A: SSH Remote Push Deployer (Visual Web Console)
+Directly within the **Agents** tab, click **Remote SSH Push**. The web dashboard contains a visual deployment terminal where administrators can:
+1. Input target IP addresses.
+2. Select target system credentials from the secure Vault.
+3. Click **Deploy** to watch a real-time, step-by-step SSH connection stream. The backend automatically packs the agent bundle, transmits it via SFTP, performs prerequisite checks, and registers the system service in seconds.
+
+#### Method B: SSH Remote Push Script (Linux/macOS automation loops)
+Administrators can run automated sweeps across IP ranges from their management console:
+```bash
+#!/bin/bash
+# Push agent to target IP ranges using SSH
+SUBNET_IPS=$(seq 2 254)
+for i in $SUBNET_IPS; do
+  TARGET_IP="192.168.1.$i"
+  echo "📡 Staging agent on $TARGET_IP..."
+  scp -o ConnectTimeout=2 qs-discovery-agent.zip root@$TARGET_IP:/tmp/
+  ssh root@$TARGET_IP "unzip -o /tmp/qs-discovery-agent.zip -d /opt/qs-agent && cd /opt/qs-agent && chmod +x install-service.sh && ./install-service.sh"
+done
+```
+
+#### Method C: Microsoft Active Directory Group Policy (GPO)
+For enterprise Windows estates, deploy the pre-configured zip via a Startup Script:
+1. Copy the `run-agent.bat`, `qs-discovery-agent.js`, and `config.json` files to the Active Directory domain controller's SysVol directory: `\\yourdomain.com\sysvol\yourdomain.com\scripts\qs-agent\`.
+2. Open **Group Policy Management Console (GPMC)** and create a new GPO: **"QS-Asset-Agent-AutoDeploy"**.
+3. Navigate to **Computer Configuration → Policies → Windows Settings → Scripts (Startup/Shutdown) → Startup**.
+4. Click **Add**, point to `\\yourdomain.com\sysvol\yourdomain.com\scripts\qs-agent\run-agent.bat`, and click OK.
+5. Link the GPO to your target Organization Units (OUs). All client workstations will silently boot up, initialize Node, run the telemetry scan, and report compliance status back to the admin server.
+

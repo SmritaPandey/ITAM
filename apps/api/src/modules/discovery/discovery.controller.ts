@@ -323,6 +323,16 @@ export class DiscoveryController {
     return this.discoveryService.registerAgent(req.user.tenantId, body);
   }
 
+  @Post('agents/deploy-remote')
+  @Roles('Tenant Admin')
+  @ApiOperation({ summary: 'Remotely push and install discovery agent on target LAN host' })
+  async deployRemoteAgent(
+    @Request() req: any,
+    @Body() body: { targetIp: string; credentialId: string },
+  ) {
+    return this.discoveryService.deployRemoteAgent(req.user.tenantId, req.user.sub, body.targetIp, body.credentialId);
+  }
+
   @Post('agents/:id/heartbeat')
   @Roles('Tenant Admin', 'IT Admin')
   @ApiOperation({ summary: 'Agent heartbeat — confirm alive + push data' })

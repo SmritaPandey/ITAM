@@ -926,7 +926,13 @@ async function sendHeartbeat() {
       }
     } else if (res.status === 401) {
       log('info', '🔑 Token expired, re-authenticating...');
-      if (await login()) await sendHeartbeat();
+      const oldToken = accessToken;
+      const loggedIn = await login();
+      if (loggedIn && accessToken !== oldToken) {
+        await sendHeartbeat();
+      } else {
+        log('error', '❌ Re-authentication failed: Pairing token is invalid or expired. Please re-pair your agent via the UI.');
+      }
     } else {
       log('info', `Heartbeat response status: ${res.status}`);
     }
@@ -1025,6 +1031,20 @@ function startStatusServer() {
             triggerLocalLANScan();
             res.writeHead(200, { 'Content-Type': 'application/json' });
             res.end(JSON.stringify({ success: true, message: 'Scan triggered' }));
+          } else if (data.action === 'INSTALL_SERVICE') {
+            const script = os.platform() === 'win32' ? 'install-service.bat' : './install-service.sh';
+            log('info', `Registering background service via ${script}...`);
+            exec(script, { cwd: __dirname }, (error, stdout, stderr) => {
+              if (error) {
+                log('error', `Failed to install background daemon service: ${error.message}`);
+                res.writeHead(500, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ success: false, error: error.message }));
+              } else {
+                log('success', `Continuous background service registered successfully!`);
+                res.writeHead(200, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ success: true, message: 'Continuous background service registered' }));
+              }
+            });
           } else {
             res.writeHead(400, { 'Content-Type': 'application/json' });
             res.end(JSON.stringify({ success: false, error: 'Unknown action' }));
@@ -1269,10 +1289,21 @@ async function runLANScan(scanJobId, subnet, scanType, portRange) {
   
   // Phase 1: Check alive hosts via ping (or fast TCP fallback)
   const aliveHosts = [];
-  const batchSize = 35;
-  const pingCmd = os.platform() === 'win32' ? 'ping -n 1 -w 800' : 'ping -c 1 -W 1';
+  const batchSize = 25;
+  const pingCmd = os.platform() === 'win32' ? 'ping -n 1 -w 800' : (os.platform() === 'darwin' ? 'ping -c 1 -W 1000' : 'ping -c 1 -W 1');
   
   for (let i = 0; i < ips.length; i += batchSize) {
+    // Check if the scan job has been cancelled on the server
+    try {
+      const checkRes = await request('GET', `/discovery/scans/${scanJobId}`);
+      if (checkRes && checkRes.status === 200 && checkRes.data && checkRes.data.status === 'CANCELLED') {
+        log('warn', `🛑 Scan job ${scanJobId} was cancelled by administrator. Aborting sweep...`);
+        return;
+      }
+    } catch (err) {
+      log('debug', `Checking scan status failed: ${err.message}`);
+    }
+
     const batch = ips.slice(i, i + batchSize);
     await Promise.all(batch.map(async (ip) => {
       let isAlive = false;
@@ -1280,7 +1311,12 @@ async function runLANScan(scanJobId, subnet, scanType, portRange) {
       
       // Try Ping sweep
       try {
-        const out = execSync(`${pingCmd} ${ip}`, { timeout: 1500, encoding: 'utf8' });
+        const out = await new Promise((resolve, reject) => {
+          exec(`${pingCmd} ${ip}`, { timeout: 1500, encoding: 'utf8' }, (error, stdout) => {
+            if (error) reject(error);
+            else resolve(stdout);
+          });
+        });
         isAlive = true;
         const match = out.match(/time[=<]([\d.]+)/);
         if (match) latency = match[1];

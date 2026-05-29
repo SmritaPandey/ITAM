@@ -11,6 +11,11 @@ echo ""
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
+# 🍏 macOS Gatekeeper Auto-Bypass: Strip quarantine flags recursively so non-technical users can launch without alerts
+if [ "$(uname -s)" = "Darwin" ]; then
+  xattr -dr com.apple.quarantine "$SCRIPT_DIR" 2>/dev/null || true
+fi
+
 # Function to ensure Node.js is present (system-wide or portable local)
 ensure_node() {
   if command -v node &>/dev/null; then

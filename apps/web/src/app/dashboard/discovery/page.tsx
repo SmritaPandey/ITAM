@@ -4,7 +4,8 @@ import {
   Radar, Play, Clock, CheckCircle2, XCircle, Wifi, Monitor,
   Server, Printer, HelpCircle, Loader2, RefreshCw, Plus, Search,
   ArrowRight, Eye, EyeOff, Network, Shield, Key, Calendar, Bot, Trash2,
-  AlertTriangle, Zap, Check, ChevronDown, ChevronRight as ChevronRightIcon
+  AlertTriangle, Zap, Check, ChevronDown, ChevronRight as ChevronRightIcon,
+  Terminal
 } from "lucide-react";
 import { apiFetch, getToken, getApiBase } from "@/lib/api";
 import { PageHelp, Tip } from "@/components/HelpSystem";
@@ -52,10 +53,16 @@ export default function DiscoveryPage() {
   const [downloading, setDownloading] = useState(false);
   const [copied, setCopied] = useState(false);
   const [expandedAgent, setExpandedAgent] = useState<string | null>(null);
-  const [setupMethod, setSetupMethod] = useState<"download" | "bash" | "docker">("download");
+  const [setupMethod, setSetupMethod] = useState<"download" | "bash" | "docker" | "remote-push">("download");
   const [wizardStep, setWizardStep] = useState<1 | 2 | 3>(1);
   const [osDetected, setOsDetected] = useState<"macos" | "windows" | "linux">("macos");
   const [pairedAgent, setPairedAgent] = useState<any>(null);
+
+  // SSH remote push deployment states
+  const [remoteIp, setRemoteIp] = useState("");
+  const [remoteCredId, setRemoteCredId] = useState("");
+  const [deployingAgent, setDeployingAgent] = useState(false);
+  const [remoteLogs, setRemoteLogs] = useState<string[]>([]);
 
   // Merge and side-by-side comparison drawer states
   const [reviewDevice, setReviewDevice] = useState<any>(null);
@@ -209,6 +216,41 @@ export default function DiscoveryPage() {
       await refresh();
       setExpandedDevice(deviceId);
     } catch {} finally { setEnriching(null); }
+  }
+
+  async function triggerRemoteDeploy() {
+    if (!remoteIp) {
+      alert("Please enter a target IP address.");
+      return;
+    }
+    setDeployingAgent(true);
+    setRemoteLogs([`[${new Date().toLocaleTimeString()}] 🚀 Initiating secure remote push deployment...`]);
+
+    try {
+      const response = await apiFetch("/discovery/agents/deploy-remote", {
+        method: "POST",
+        body: JSON.stringify({ targetIp: remoteIp, credentialId: remoteCredId || undefined }),
+      });
+
+      if (response && response.success) {
+        const serverLogs = response.logs || [];
+        let currentLogs = [`[${new Date().toLocaleTimeString()}] 🚀 Initiating secure remote push deployment...`];
+        setRemoteLogs(currentLogs);
+
+        for (let i = 0; i < serverLogs.length; i++) {
+          await new Promise(resolve => setTimeout(resolve, 450));
+          currentLogs = [...currentLogs, serverLogs[i]];
+          setRemoteLogs(currentLogs);
+        }
+        await refresh();
+      } else {
+        setRemoteLogs(prev => [...prev, `[${new Date().toLocaleTimeString()}] ❌ Remote push execution failed: Server returned unsuccessful status.`]);
+      }
+    } catch (err: any) {
+      setRemoteLogs(prev => [...prev, `[${new Date().toLocaleTimeString()}] ❌ API Network Error: ${err.message || err}`]);
+    } finally {
+      setDeployingAgent(false);
+    }
   }
 
   const openReviewDrawer = useCallback(async (device: any) => {
@@ -667,6 +709,14 @@ export default function DiscoveryPage() {
                                   onClick={() => enrichDevice(d.id)} disabled={enriching === d.id}>
                                   {enriching === d.id ? <Loader2 size={10} style={{ animation: "spin 1s linear infinite" }} /> : <Zap size={10} />} Enrich
                                 </button>
+                                <button className="btn btn-secondary" style={{ padding: "3px 8px", fontSize: 10, display: "flex", alignItems: "center", gap: 4, color: "var(--brand-400)", borderColor: "rgba(6,182,212,0.3)" }}
+                                  onClick={() => {
+                                    setRemoteIp(d.ipAddress);
+                                    setSetupMethod("remote-push");
+                                    setTab("agents");
+                                  }}>
+                                  <Server size={10} /> Push Agent
+                                </button>
                                 <button className="btn btn-secondary" style={{ padding: "3px 8px", fontSize: 10 }}
                                   onClick={() => ignoreDevice(d.id)}>
                                   <EyeOff size={10} />
@@ -894,6 +944,15 @@ export default function DiscoveryPage() {
                   Interactive Wizard
                 </button>
                 <button
+                  className={`btn ${setupMethod === "remote-push" ? "btn-primary" : "btn-secondary"}`}
+                  onClick={() => {
+                    setSetupMethod("remote-push");
+                  }}
+                  style={{ fontSize: 11, padding: "6px 12px" }}
+                >
+                  📡 Remote SSH Push
+                </button>
+                <button
                   className={`btn ${setupMethod === "bash" ? "btn-primary" : "btn-secondary"}`}
                   onClick={() => {
                     setSetupMethod("bash");
@@ -901,12 +960,14 @@ export default function DiscoveryPage() {
                   }}
                   style={{ fontSize: 11, padding: "6px 12px" }}
                 >
-                  Alternative Launch Commands
+                  Platform Guides
                 </button>
               </div>
             </div>
 
-            {/* Steps Progress Header */}
+            {setupMethod !== "remote-push" ? (
+              <>
+                {/* Steps Progress Header */}
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 32, maxWidth: 600, margin: "0 auto 40px" }}>
               <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 8, flex: 1 }}>
                 <div style={{
@@ -1177,12 +1238,64 @@ export default function DiscoveryPage() {
                           </div>
                           {osDetected === "macos" && (
                             <div style={{ borderTop: "1px solid rgba(6,182,212,0.15)", paddingTop: 6, marginTop: 4 }}>
-                              <strong>Gatekeeper Warning Bypass:</strong> If macOS displays an unsigned warning prompt, simply Right-click <code>QS-Discovery-Agent.app</code> and select <strong>Open</strong>, then click <strong>Open</strong> to authorize. Alternatively, clear it in Terminal: <code style={{ fontSize: 9.5, color: "var(--brand-300)", background: "rgba(0,0,0,0.2)", padding: "2px 4px", borderRadius: 4 }}>xattr -d com.apple.quarantine QS-Discovery-Agent.app</code>
+                              <strong>macOS Gatekeeper Warning?</strong> Since the agent is built in-house, macOS might show a warning. To bypass this instantly without terminal commands: <strong>Right-click (Control-click)</strong> the agent file and select <strong>Open</strong> from the menu, then click the <strong>Open</strong> button on the popup window. This permanently registers the app on your Mac! (Note: Running the launcher script <code>run-agent.sh</code> also clears all warnings automatically).
                             </div>
                           )}
                         </div>
                       </div>
                     </div>
+                  </div>
+
+                  {/* Persistent Background Service Instructions */}
+                  <div style={{
+                    background: "rgba(255,255,255,0.02)",
+                    border: "1px solid var(--border-primary)",
+                    borderRadius: 12,
+                    padding: 20,
+                    marginTop: 8
+                  }}>
+                    <h5 style={{ fontSize: 13, fontWeight: 700, display: "flex", alignItems: "center", gap: 8, color: "var(--text-primary)" }}>
+                      <Shield size={14} style={{ color: "var(--brand-400)" }} />
+                      Run Agent Continuously in the Background (Recommended)
+                    </h5>
+                    <p style={{ fontSize: 11.5, color: "var(--text-tertiary)", marginTop: 6, lineHeight: 1.5 }}>
+                      For continuous 24/7 security monitoring, asset discovery, and compliance auditing, configure the agent to run as a persistent system daemon.
+                    </p>
+
+                    {osDetected === "linux" && (
+                      <div style={{ marginTop: 12, display: "flex", flexDirection: "column", gap: 8 }}>
+                        <div style={{ fontSize: 11, fontWeight: 600, color: "var(--text-secondary)" }}>Linux systemd Configuration:</div>
+                        <div style={{ background: "rgba(0,0,0,0.3)", padding: 12, borderRadius: 6, fontFamily: "monospace", fontSize: 10, color: "var(--brand-300)" }}>
+                          # 1. Install and start continuous background service daemon<br/>
+                          sudo ./install-service.sh<br/>
+                          # 2. Check daemon status and logs<br/>
+                          sudo systemctl status qs-discovery-agent
+                        </div>
+                      </div>
+                    )}
+
+                    {osDetected === "macos" && (
+                      <div style={{ marginTop: 12, display: "flex", flexDirection: "column", gap: 8 }}>
+                        <div style={{ fontSize: 11, fontWeight: 600, color: "var(--text-secondary)" }}>macOS launchd Daemon Configuration:</div>
+                        <div style={{ background: "rgba(0,0,0,0.3)", padding: 12, borderRadius: 6, fontFamily: "monospace", fontSize: 10, color: "var(--brand-300)" }}>
+                          # 1. Install and load launchd agent service (survives system reboots)<br/>
+                          sudo ./install-service.sh<br/>
+                          # 2. Check service status and active background execution<br/>
+                          sudo launchctl list | grep qsasset
+                        </div>
+                      </div>
+                    )}
+
+                    {osDetected === "windows" && (
+                      <div style={{ marginTop: 12, display: "flex", flexDirection: "column", gap: 8 }}>
+                        <div style={{ fontSize: 11, fontWeight: 600, color: "var(--text-secondary)" }}>Windows Service Manager (NSSM) Configuration:</div>
+                        <div style={{ background: "rgba(0,0,0,0.3)", padding: 12, borderRadius: 6, fontFamily: "monospace", fontSize: 10, color: "var(--brand-300)" }}>
+                          :: 1. Right-click install-service.bat and run as Administrator<br/>
+                          :: 2. Verify background service is registered and running in services.msc<br/>
+                          sc query QSDiscoveryAgent
+                        </div>
+                      </div>
+                    )}
                   </div>
 
                   <div style={{ display: "flex", gap: 16, marginTop: 12 }}>
@@ -1400,6 +1513,171 @@ export default function DiscoveryPage() {
                 </div>
               )}
             </div>
+              </>
+            ) : (
+              <div style={{ background: "rgba(0,0,0,0.15)", borderRadius: 8, padding: 24, border: "1px solid var(--border-primary)" }}>
+                <div style={{ textAlign: "center", marginBottom: 24 }}>
+                  <h4 style={{ fontSize: 16, fontWeight: 700, color: "var(--text-primary)", display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}>
+                    <Server size={18} style={{ color: "var(--brand-400)" }} />
+                    Secure Remote SSH Push Agent Deployer
+                  </h4>
+                  <p style={{ fontSize: 12, color: "var(--text-secondary)", marginTop: 6, maxWidth: 500, margin: "6px auto 0" }}>
+                    Deploy the discovery agent remotely onto any target host in your network. The system will securely connect over SSH, stage files, verify the Node.js runtime, and register a persistent background daemon.
+                  </p>
+                </div>
+
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1.5fr", gap: 24, alignItems: "start" }}>
+                  {/* Form fields */}
+                  <div style={{ display: "flex", flexDirection: "column", gap: 16, background: "rgba(0,0,0,0.1)", padding: 20, borderRadius: 12, border: "1px solid var(--border-primary)" }}>
+                    <div>
+                      <label style={{ display: "block", fontSize: 11, fontWeight: 700, textTransform: "uppercase", color: "var(--text-secondary)", marginBottom: 8 }}>
+                        Target Host IP Address / Domain
+                      </label>
+                      <input
+                        type="text"
+                        placeholder="e.g. 192.168.1.15"
+                        value={remoteIp}
+                        onChange={e => setRemoteIp(e.target.value)}
+                        disabled={deployingAgent}
+                        style={{
+                          width: "100%",
+                          padding: "10px 12px",
+                          background: "rgba(0,0,0,0.2)",
+                          border: "1px solid var(--border-primary)",
+                          borderRadius: 8,
+                          fontSize: 12,
+                          color: "#fff",
+                          outline: "none"
+                        }}
+                      />
+                    </div>
+
+                    <div>
+                      <label style={{ display: "block", fontSize: 11, fontWeight: 700, textTransform: "uppercase", color: "var(--text-secondary)", marginBottom: 8 }}>
+                        SSH Access Credentials (from Vault)
+                      </label>
+                      <select
+                        value={remoteCredId}
+                        onChange={e => setRemoteCredId(e.target.value)}
+                        disabled={deployingAgent}
+                        style={{
+                          width: "100%",
+                          padding: "10px 12px",
+                          background: "rgba(0,0,0,0.2)",
+                          border: "1px solid var(--border-primary)",
+                          borderRadius: 8,
+                          fontSize: 12,
+                          color: "#fff",
+                          outline: "none"
+                        }}
+                      >
+                        <option value="">-- Use default SSH Keys / Public Auth --</option>
+                        {credentials
+                          .filter((c: any) => c.type && (c.type.startsWith("SSH") || c.type.includes("KEY")))
+                          .map((c: any) => (
+                            <option key={c.id} value={c.id}>
+                              {c.name} ({c.type})
+                            </option>
+                          ))}
+                      </select>
+                      <span style={{ fontSize: 10, color: "var(--text-tertiary)", marginTop: 6, display: "block" }}>
+                        Credentials must be pre-registered in the <strong>Credential Vault</strong> tab to be loaded here.
+                      </span>
+                    </div>
+
+                    <button
+                      className="btn btn-primary"
+                      onClick={triggerRemoteDeploy}
+                      disabled={deployingAgent || !remoteIp}
+                      style={{
+                        padding: "12px",
+                        fontSize: 12,
+                        fontWeight: 700,
+                        borderRadius: 8,
+                        background: "linear-gradient(135deg, var(--brand-500) 0%, #06b6d4 100%)",
+                        border: "none",
+                        boxShadow: "0 4px 12px rgba(6,182,212,0.2)",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        gap: 8,
+                        cursor: "pointer",
+                        marginTop: 8
+                      }}
+                    >
+                      {deployingAgent ? (
+                        <>
+                          <Loader2 size={14} style={{ animation: "spin 1s linear infinite" }} />
+                          Pushing Discovery Agent...
+                        </>
+                      ) : (
+                        <>
+                          <Zap size={14} />
+                          Trigger SSH Remote Push Deploy
+                        </>
+                      )}
+                    </button>
+                  </div>
+
+                  {/* Terminal Log Streamer */}
+                  <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                      <span style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", color: "var(--text-secondary)", display: "flex", alignItems: "center", gap: 6 }}>
+                        <Terminal size={14} />
+                        Real-time Remote Deploy Terminal Logs
+                      </span>
+                      {deployingAgent && (
+                        <span className="badge cyan" style={{ fontSize: 9, display: "flex", alignItems: "center", gap: 4 }}>
+                          <Loader2 size={8} style={{ animation: "spin 1s linear infinite" }} />
+                          ACTIVE CONNECTION
+                        </span>
+                      )}
+                    </div>
+
+                    <div style={{
+                      background: "rgba(10, 11, 18, 0.95)",
+                      border: "1px solid var(--border-primary)",
+                      borderRadius: 12,
+                      padding: 16,
+                      fontFamily: "monospace",
+                      fontSize: 11.5,
+                      lineHeight: 1.6,
+                      color: "var(--text-secondary)",
+                      height: 280,
+                      overflowY: "auto",
+                      boxShadow: "inset 0 2px 10px rgba(0,0,0,0.5)",
+                      display: "flex",
+                      flexDirection: "column",
+                      gap: 4
+                    }}>
+                      {remoteLogs.length === 0 ? (
+                        <div style={{ color: "var(--text-tertiary)", textAlign: "center", padding: "100px 0", fontSize: 11 }}>
+                          Ready to deploy. Input target IP and click Deploy above to initiate SSH secure push.
+                        </div>
+                      ) : (
+                        remoteLogs.map((line, idx) => {
+                          let color = "var(--text-secondary)";
+                          if (line.includes("Success") || line.includes("successfully") || line.includes("complete") || line.includes("🎉") || line.includes("🟢")) {
+                            color = "#10b981"; // green
+                          } else if (line.includes("⚠️") || line.includes("Warning") || line.includes("No scan credential")) {
+                            color = "#f59e0b"; // amber
+                          } else if (line.includes("❌") || line.includes("Failed") || line.includes("failed") || line.includes("Error")) {
+                            color = "#ef4444"; // red
+                          } else if (line.includes("🚀") || line.includes("📡") || line.includes(" Establishing ") || line.includes(" Attempting ")) {
+                            color = "var(--brand-300)"; // cyan
+                          }
+                          return (
+                            <div key={idx} style={{ color, whiteSpace: "pre-wrap" }}>
+                              {line}
+                            </div>
+                          );
+                        })
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Active Fleet List */}

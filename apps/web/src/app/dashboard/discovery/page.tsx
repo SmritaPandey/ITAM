@@ -1154,8 +1154,15 @@ export default function DiscoveryPage() {
 
                       <div style={{ display: "flex", alignItems: "flex-start", gap: 8, background: "rgba(6,182,212,0.03)", border: "1px solid rgba(6,182,212,0.1)", padding: "10px 12px", borderRadius: 8 }}>
                         <Zap size={14} style={{ color: "var(--brand-400)", marginTop: 2, flexShrink: 0 }} />
-                        <div style={{ fontSize: 11, color: "var(--text-secondary)", lineHeight: 1.4 }}>
-                          <strong>Missing Node.js?</strong> No worries! The launcher script will automatically download a sandboxed portable runtime for you.
+                        <div style={{ display: "flex", flexDirection: "column", gap: 6, fontSize: 11, color: "var(--text-secondary)", lineHeight: 1.4 }}>
+                          <div>
+                            <strong>Missing Node.js?</strong> No worries! The launcher script will automatically download a sandboxed portable runtime for you.
+                          </div>
+                          {osDetected === "macos" && (
+                            <div style={{ borderTop: "1px solid rgba(6,182,212,0.15)", paddingTop: 6, marginTop: 4 }}>
+                              <strong>Gatekeeper Warning Bypass:</strong> If macOS displays an unsigned warning prompt, simply Right-click <code>QS-Discovery-Agent.app</code> and select <strong>Open</strong>, then click <strong>Open</strong> to authorize. Alternatively, clear it in Terminal: <code style={{ fontSize: 9.5, color: "var(--brand-300)", background: "rgba(0,0,0,0.2)", padding: "2px 4px", borderRadius: 4 }}>xattr -d com.apple.quarantine QS-Discovery-Agent.app</code>
+                            </div>
+                          )}
                         </div>
                       </div>
                     </div>

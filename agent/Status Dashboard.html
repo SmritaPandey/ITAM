@@ -841,12 +841,12 @@
           </div>
           <ul class="steps">
             <li>Unzip your downloaded paired package</li>
-            <li>Double-click the premium native app:
-              <code>mac/QS-Discovery-Agent.app</code>
+            <li><strong>Gatekeeper Note:</strong> Right-click <code>QS-Discovery-Agent.app</code> and select <strong>Open</strong>, then click <strong>Open Anyway</strong> to authorize.</li>
+            <li>Alternatively, run in terminal:
+              <code>xattr -d com.apple.quarantine QS-Discovery-Agent.app</code>
             </li>
-            <li>It will launch silently as a background service</li>
           </ul>
-          <a class="action-btn" href="#" onclick="alert('Open mac/QS-Discovery-Agent.app in Finder to launch.'); return false;">Open App Folder</a>
+          <a class="action-btn" href="#" onclick="alert('Right-click the app in Finder and choose Open to launch, or run the xattr command in your Terminal.'); return false;">How to Launch</a>
         </div>
 
         <!-- Windows -->

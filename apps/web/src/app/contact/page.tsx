@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import { Mail, MessageSquare, MapPin, Phone, Send, CheckCircle2, Loader2, Sparkles, Clock, Globe } from "lucide-react";
+import { useTheme } from "@/components/ThemeProvider";
 
 export default function ContactPage() {
   const router = useRouter();
@@ -11,19 +12,7 @@ export default function ContactPage() {
   const [loading, setLoading] = useState(false);
   const [sent, setSent] = useState(false);
 
-  const [theme, setTheme] = useState<"dark" | "light">("light");
-  useEffect(() => {
-    const s = localStorage.getItem("theme") as "dark" | "light" | null;
-    const t = s || "light";
-    setTheme(t);
-    document.documentElement.setAttribute("data-theme", t);
-  }, []);
-  function toggleTheme() {
-    const n = theme === "dark" ? "light" : "dark";
-    setTheme(n);
-    localStorage.setItem("theme", n);
-    document.documentElement.setAttribute("data-theme", n);
-  }
+  const { theme, toggleTheme } = useTheme();
   const L = theme === "light";
   const bg = L ? "#f9fafb" : "#020205";
   const txt = L ? "#0f172a" : "#f3f4f6";

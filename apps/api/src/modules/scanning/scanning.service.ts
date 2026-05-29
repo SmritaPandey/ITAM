@@ -2,6 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../../common/database/prisma.service';
 import { EventBusService } from '../../common/events/event-bus.service';
 import { ScanEngine } from '../../common/scanners/scan-engine';
+import { CredentialVaultService } from '../discovery/credential-vault.service';
 
 @Injectable()
 export class ScanningService {
@@ -10,6 +11,7 @@ export class ScanningService {
   constructor(
     private prisma: PrismaService,
     private eventBus: EventBusService,
+    private credentialVault: CredentialVaultService,
   ) {}
 
   async getCapabilities() {
@@ -43,11 +45,9 @@ export class ScanningService {
 
     // If SSH scan needs credentials from vault
     if (body.type === 'SSH' && body.options?.credentialId) {
-      const cred = await this.prisma.scanCredential.findFirst({
-        where: { id: body.options.credentialId, tenantId },
-      });
-      if (cred) {
-        const credData = cred.encryptedData ? JSON.parse(cred.encryptedData as string) : {} as any;
+      const credData = await this.credentialVault.getDecrypted(body.options.credentialId, tenantId);
+      if (credData) {
+        body.options = body.options || {};
         body.options.username = credData.username;
         body.options.password = credData.password;
         body.options.privateKeyPath = credData.privateKeyPath;

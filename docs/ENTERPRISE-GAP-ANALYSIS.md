@@ -1,4 +1,4 @@
-# ReconAPM Gap Analysis & QA Report
+# QS Asset Gap Analysis & QA Report
 
 ## Audit Summary — May 2, 2026
 
@@ -14,7 +14,7 @@
 
 | Category | Pages | Issues Found |
 |----------|-------|-------------|
-| Landing | 1 | ✅ Clean — ReconAPM branding |
+| Landing | 1 | ✅ Clean — QS Asset branding |
 | Login | 1 | ✅ Clean — auth flow working |
 | Dashboard | 1 | ✅ Clean — charts and stats loading |
 | Assets (All/IT/Non-IT/CMDB) | 4 | ✅ Clean |
@@ -53,13 +53,13 @@
    - Change #CHG-00001: "Upgrade firewall firmwUpgrade firewall firmwareare" → "Upgrade firewall firmware"
    - Problem #PRB-00001: "Recurring VPN disconnectionsRecurring VPN disconnections" → "Recurring VPN disconnections"
 
-4. **Favicon** — Removed old `favicon.ico` that was overriding the ReconAPM `icon.png`
+4. **Favicon** — Removed old `favicon.ico` that was overriding the QS Asset `icon.png`
 
 ### Deployment Status
 
 | Component | URL | Status |
 |-----------|-----|--------|
-| **Frontend** | https://reconapm.com | ✅ Live (Vercel) |
+| **Frontend** | https://qsasset.com | ✅ Live (Vercel) |
 | **Backend API** | https://api-production-fe27.up.railway.app | ✅ Live (Railway) |
 | **Database** | Railway Postgres (linked) | ✅ Healthy |
 | **NEXT_PUBLIC_API_URL** | Set to Railway URL | ✅ Configured |

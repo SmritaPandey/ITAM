@@ -232,52 +232,7 @@ export class TopologyService {
       }
     }
 
-    // Strategy 3: Subnet fallback to connect remaining unlinked items (for beautiful visualization)
-    const linkedDevices = new Set<string>();
-    for (const link of links) {
-      linkedDevices.add(link.source);
-      linkedDevices.add(link.target);
-    }
 
-    for (let i = 0; i < nodes.length; i++) {
-      for (let j = i + 1; j < nodes.length; j++) {
-        if (linkedDevices.has(nodes[i].id) && linkedDevices.has(nodes[j].id)) continue;
-        const ipA = nodes[i].ip;
-        const ipB = nodes[j].ip;
-        if (ipA && ipB) {
-          const subA = ipA.split('.').slice(0, 3).join('.');
-          const subB = ipB.split('.').slice(0, 3).join('.');
-          if (subA === subB) {
-            const linkId = [nodes[i].id, nodes[j].id].sort().join('-');
-            if (!linkSet.has(linkId)) {
-              linkSet.add(linkId);
-              links.push({
-                source: nodes[i].id,
-                target: nodes[j].id,
-                bandwidth: '1Gbps',
-                utilization: 12,
-                localPort: 'Port A',
-                remotePort: 'Port B',
-                discoverySource: 'subnet',
-              });
-            }
-          }
-        }
-      }
-    }
-
-    // Edge Fallback: Ensure at least one connection for rendering even if isolated
-    if (links.length === 0 && nodes.length >= 2) {
-      links.push({
-        source: nodes[0].id,
-        target: nodes[1].id,
-        bandwidth: '10Gbps',
-        utilization: 35,
-        localPort: 'GigabitEthernet0/1',
-        remotePort: 'GigabitEthernet0/12',
-        discoverySource: 'fallback',
-      });
-    }
 
     return {
       nodes,

@@ -13,6 +13,7 @@ import {
 import { apiFetch, safeFetch, getToken } from "@/lib/api";
 import { WalkthroughProvider } from "@/components/HelpSystem";
 import { LogoIcon } from "@/components/Logo";
+import { useTheme } from "@/components/ThemeProvider";
 
 const nameToModuleKeyMap: Record<string, string> = {
   "Dashboard": "DASHBOARD",
@@ -355,7 +356,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const [unreadCount, setUnreadCount] = useState(0);
   const notifRef = useRef<HTMLDivElement>(null);
   const profileRef = useRef<HTMLDivElement>(null);
-  const [theme, setTheme] = useState<"dark" | "light">("dark");
+  const { theme, toggleTheme } = useTheme();
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const [allowedModules, setAllowedModules] = useState<string[] | null>(null);
   const [activeModules, setActiveModules] = useState<string[] | null>(null);
@@ -385,20 +386,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     };
   }, [pathname]);
 
-  // Hydrate theme from localStorage
-  useEffect(() => {
-    const saved = localStorage.getItem("theme") as "dark" | "light" | null;
-    const t = saved || "dark";
-    setTheme(t);
-    document.documentElement.setAttribute("data-theme", t);
-  }, []);
 
-  function toggleTheme() {
-    const next = theme === "dark" ? "light" : "dark";
-    setTheme(next);
-    localStorage.setItem("theme", next);
-    document.documentElement.setAttribute("data-theme", next);
-  }
 
   useEffect(() => {
     const token = localStorage.getItem("accessToken");
@@ -409,6 +397,26 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       if (payload.role === "Employee") { router.push("/portal"); return; }
       setUser(payload);
     } catch { router.push("/login"); }
+
+    // Fetch live user profile dynamically to sync roles/status/permissions immediately
+    safeFetch("/users/me").then(realUser => {
+      if (realUser) {
+        const normalizedUser = {
+          sub: realUser.id,
+          email: realUser.email,
+          tenantId: realUser.tenantId,
+          role: realUser.role?.name || "employee",
+          permissions: realUser.role?.permissions || [],
+          isSuperAdmin: realUser.isSuperAdmin || false,
+        };
+        setUser(normalizedUser);
+        if (normalizedUser.role.toLowerCase() === "employee") {
+          router.push("/portal");
+        }
+      }
+    }).catch(err => {
+      console.error("Failed to fetch live user profile:", err);
+    });
 
     // Fetch ticket count for badge
     safeFetch("/tickets?limit=1").then(d => setTicketCount(d?.total || 0));

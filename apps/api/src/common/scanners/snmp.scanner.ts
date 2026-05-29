@@ -419,8 +419,10 @@ export class SnmpScanner {
    */
   private async fallbackPoll(ip: string): Promise<SnmpDeviceInfo> {
     const result: SnmpDeviceInfo = { ip };
+    const isWindows = process.platform === 'win32';
+    const pingCmd = isWindows ? `ping -n 1 -w 2000 ${ip}` : `ping -c 1 -W 2 ${ip}`;
     try {
-      const { stdout } = await execAsync(`ping -c 1 -W 2 ${ip}`, { timeout: 5000 });
+      const { stdout } = await execAsync(pingCmd, { timeout: 5000 });
       const match = stdout.match(/time[=<]([\d.]+)/);
       if (match) {
         result.sysName = ip;

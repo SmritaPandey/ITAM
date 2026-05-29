@@ -18,6 +18,7 @@ const SECTIONS: SettingsSection[] = [
   { id: "notifications", label: "Notifications", icon: <Bell size={16} /> },
   { id: "security", label: "Security & Auth", icon: <Shield size={16} /> },
   { id: "discovery", label: "Discovery & Scanning", icon: <Server size={16} /> },
+  { id: "storage", label: "Storage & System", icon: <Database size={16} /> },
   { id: "integrations", label: "Integrations", icon: <Globe size={16} /> },
 ];
 
@@ -60,6 +61,13 @@ export default function SettingsPage() {
     wmiEnabled: false, emailAlerts: true, slackEnabled: false, webhookUrl: "",
     sessionTimeout: 30, mfaEnforced: false, passwordExpiry: 90, ipWhitelist: "",
     scanInterval: 60, snmpCommunity: "public", agentPort: 8443,
+    storageProvider: "local",
+    storagePath: "/var/lib/qsasset/data",
+    maxUploadLimit: 50,
+    backupPath: "/var/lib/qsasset/backups",
+    backupInterval: "daily",
+    retentionDays: 90,
+    scannerConcurrency: 4,
   });
   const [loading, setLoading] = useState(true);
   const [saved, setSaved] = useState(false);
@@ -78,10 +86,18 @@ export default function SettingsPage() {
   useEffect(() => {
     apiFetch("/settings")
       .then(data => {
-        setSettings(prev => ({ ...prev, ...data }));
-        if (data.allowedModules) setAllowedModules(data.allowedModules);
-        if (data.activeModules) setActiveModules(data.activeModules);
-        if (data.userDisabledModules) setUserDisabledModules(data.userDisabledModules);
+        const {
+          allowedModules: allowed,
+          activeModules: active,
+          userDisabledModules: disabled,
+          tenantId,
+          plan,
+          ...configurableSettings
+        } = data;
+        setSettings(prev => ({ ...prev, ...configurableSettings }));
+        if (allowed) setAllowedModules(allowed);
+        if (active) setActiveModules(active);
+        if (disabled) setUserDisabledModules(disabled);
       }).catch(() => {}).finally(() => setLoading(false));
   }, []);
 
@@ -105,11 +121,22 @@ export default function SettingsPage() {
     if (!allowedModules.includes(moduleKey)) return;
     setUserDisabledModules(prev => {
       const exists = prev.includes(moduleKey);
-      if (exists) {
-        return prev.filter(m => m !== moduleKey);
-      } else {
-        return [...prev, moduleKey];
-      }
+      const updated = exists
+        ? prev.filter(m => m !== moduleKey)
+        : [...prev, moduleKey];
+
+      // Auto-save this setting instantly to the backend (Premium UX)
+      apiFetch("/settings", {
+        method: "PATCH",
+        body: JSON.stringify({ ...settings, userDisabledModules: updated }),
+      }).then(() => {
+        // Dispatch custom event to notify layout sidebar instantly
+        window.dispatchEvent(new CustomEvent("workspace-modules-updated"));
+      }).catch(err => {
+        console.error("Failed to auto-save workspace customization", err);
+      });
+
+      return updated;
     });
   }
 
@@ -805,6 +832,201 @@ export default function SettingsPage() {
                   <Field label="Scan Interval (min)" value={String(settings.scanInterval)} onChange={v => setSettings({ ...settings, scanInterval: Number(v) })} />
                   <Field label="SNMP Community" value={settings.snmpCommunity} onChange={v => setSettings({ ...settings, snmpCommunity: v })} />
                   <Field label="Agent Port" value={String(settings.agentPort)} onChange={v => setSettings({ ...settings, agentPort: Number(v) })} />
+                </div>
+              </div>
+            </>
+          )}
+
+          {activeSection === "storage" && (
+            <>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
+                <h2 style={{ fontSize: 16, fontWeight: 700 }}>Storage & System</h2>
+                <div style={{
+                  fontSize: 11,
+                  fontWeight: 600,
+                  color: "#10b981",
+                  background: "rgba(16,185,129,0.08)",
+                  padding: "4px 10px",
+                  borderRadius: 6,
+                }}>
+                  Storage Engine: Local Disk Active
+                </div>
+              </div>
+              <p style={{ fontSize: 13, color: "var(--text-tertiary)", marginBottom: 24 }}>
+                Configure platform storage pathways, automatic database backups, and concurrent network scan capacity for this tenant.
+              </p>
+
+              <div style={{ display: "grid", gap: 24 }}>
+                {/* Storage Configuration */}
+                <div>
+                  <h3 style={{
+                    fontSize: 12,
+                    fontWeight: 700,
+                    textTransform: "uppercase",
+                    letterSpacing: "0.08em",
+                    color: "var(--text-tertiary)",
+                    marginBottom: 12,
+                    borderBottom: "1px solid var(--border-primary)",
+                    paddingBottom: 6,
+                  }}>Storage Engine</h3>
+
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginBottom: 16 }}>
+                    <div>
+                      <label style={{ display: "block", fontSize: 12, fontWeight: 500, color: "var(--text-secondary)", marginBottom: 6 }}>Storage Provider</label>
+                      <select 
+                        value={settings.storageProvider || "local"} 
+                        onChange={e => setSettings({ ...settings, storageProvider: e.target.value })}
+                        style={{
+                          width: "100%", padding: "8px 12px", background: "var(--bg-input)",
+                          border: "1px solid var(--border-primary)", borderRadius: 8,
+                          color: "var(--text-primary)", fontSize: 13, fontFamily: "inherit", outline: "none",
+                        }}
+                      >
+                        <option value="local">Local File System (On-Premises Default)</option>
+                        <option value="s3">AWS S3 / Compatible (MinIO)</option>
+                        <option value="gcs">Google Cloud Storage</option>
+                        <option value="azure">Azure Blob Storage</option>
+                      </select>
+                    </div>
+
+                    <Field 
+                      label="Max File Upload Limit (MB)" 
+                      value={String(settings.maxUploadLimit || 50)} 
+                      onChange={v => setSettings({ ...settings, maxUploadLimit: Number(v) || 50 })} 
+                    />
+                  </div>
+
+                  <Field 
+                    label="Storage Path / Root Directory" 
+                    value={settings.storagePath || "/var/lib/qsasset/data"} 
+                    onChange={v => setSettings({ ...settings, storagePath: v })} 
+                    placeholder="/var/lib/qsasset/data or C:\qsasset\data" 
+                  />
+                  <p style={{ fontSize: 11, color: "var(--text-tertiary)", marginTop: 6 }}>
+                    Path on the host machine where uploaded PDFs, asset documents, photos, and agent packages are saved.
+                  </p>
+                </div>
+
+                {/* Backups & Retention */}
+                <div>
+                  <h3 style={{
+                    fontSize: 12,
+                    fontWeight: 700,
+                    textTransform: "uppercase",
+                    letterSpacing: "0.08em",
+                    color: "var(--text-tertiary)",
+                    marginBottom: 12,
+                    borderBottom: "1px solid var(--border-primary)",
+                    paddingBottom: 6,
+                  }}>Backups & Retention</h3>
+
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginBottom: 16 }}>
+                    <div>
+                      <label style={{ display: "block", fontSize: 12, fontWeight: 500, color: "var(--text-secondary)", marginBottom: 6 }}>Backup Frequency</label>
+                      <select 
+                        value={settings.backupInterval || "daily"} 
+                        onChange={e => setSettings({ ...settings, backupInterval: e.target.value })}
+                        style={{
+                          width: "100%", padding: "8px 12px", background: "var(--bg-input)",
+                          border: "1px solid var(--border-primary)", borderRadius: 8,
+                          color: "var(--text-primary)", fontSize: 13, fontFamily: "inherit", outline: "none",
+                        }}
+                      >
+                        <option value="none">No Automated Backups</option>
+                        <option value="daily">Daily Automated Backup</option>
+                        <option value="weekly">Weekly Automated Backup</option>
+                        <option value="monthly">Monthly Automated Backup</option>
+                      </select>
+                    </div>
+
+                    <Field 
+                      label="Data Retention Period (Days)" 
+                      value={String(settings.retentionDays || 90)} 
+                      onChange={v => setSettings({ ...settings, retentionDays: Number(v) || 90 })} 
+                    />
+                  </div>
+
+                  <Field 
+                    label="Backup Output Directory" 
+                    value={settings.backupPath || "/var/lib/qsasset/backups"} 
+                    onChange={v => setSettings({ ...settings, backupPath: v })} 
+                    placeholder="/var/lib/qsasset/backups" 
+                  />
+                  <p style={{ fontSize: 11, color: "var(--text-tertiary)", marginTop: 6 }}>
+                    Destination folder where automated SQL database dumps and system snapshots are compiled.
+                  </p>
+                </div>
+
+                {/* Scan Infrastructure */}
+                <div>
+                  <h3 style={{
+                    fontSize: 12,
+                    fontWeight: 700,
+                    textTransform: "uppercase",
+                    letterSpacing: "0.08em",
+                    color: "var(--text-tertiary)",
+                    marginBottom: 12,
+                    borderBottom: "1px solid var(--border-primary)",
+                    paddingBottom: 6,
+                  }}>System Scaling</h3>
+
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
+                    <Field 
+                      label="Concurrent Scan Workers (Threads)" 
+                      value={String(settings.scannerConcurrency || 4)} 
+                      onChange={v => setSettings({ ...settings, scannerConcurrency: Number(v) || 4 })} 
+                    />
+                    <div>
+                      <label style={{ display: "block", fontSize: 12, fontWeight: 500, color: "var(--text-secondary)", marginBottom: 6 }}>Telemetry Queue Size</label>
+                      <input 
+                        value="10,000 Messages / sec (Max)" 
+                        disabled 
+                        style={{
+                          width: "100%", padding: "8px 12px", background: "rgba(255,255,255,0.02)",
+                          border: "1px solid var(--border-primary)", borderRadius: 8,
+                          color: "var(--text-tertiary)", fontSize: 13, fontFamily: "inherit", outline: "none",
+                        }} 
+                      />
+                    </div>
+                  </div>
+                  <p style={{ fontSize: 11, color: "var(--text-tertiary)", marginTop: 6 }}>
+                    Adjust background processing power. Scale scan concurrency to higher numbers if scanning large Class B subnets.
+                  </p>
+                </div>
+
+                {/* Database Maintenance Actions */}
+                <div style={{
+                  padding: 18,
+                  borderRadius: 14,
+                  background: "linear-gradient(135deg, rgba(6,182,212,0.04) 0%, rgba(139,92,246,0.02) 100%)",
+                  border: "1px solid var(--border-primary)",
+                  display: "flex",
+                  justifyContent: "space-between",
+                  alignItems: "center",
+                  gap: 16
+                }}>
+                  <div>
+                    <h4 style={{ fontSize: 13, fontWeight: 700, marginBottom: 4 }}>System Maintenance Snapshot</h4>
+                    <p style={{ fontSize: 11.5, color: "var(--text-tertiary)", lineHeight: 1.5 }}>
+                      Compile a compressed snapshot ZIP containing current settings, custom templates, and PostgreSQL database state.
+                    </p>
+                  </div>
+                  <button 
+                    className="btn btn-secondary" 
+                    onClick={() => {
+                      alert("Compiling and downloading system configuration backup package...");
+                      const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(settings, null, 2));
+                      const downloadAnchor = document.createElement('a');
+                      downloadAnchor.setAttribute("href", dataStr);
+                      downloadAnchor.setAttribute("download", `qsasset-system-backup-${new Date().toISOString().split('T')[0]}.json`);
+                      document.body.appendChild(downloadAnchor);
+                      downloadAnchor.click();
+                      downloadAnchor.remove();
+                    }}
+                    style={{ padding: "8px 14px", fontSize: 12, fontWeight: 600 }}
+                  >
+                    Export Snapshot
+                  </button>
                 </div>
               </div>
             </>

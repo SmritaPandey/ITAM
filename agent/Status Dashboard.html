@@ -1,0 +1,1266 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>QS Discovery Agent — Status Dashboard</title>
+  <!-- Modern Premium Typography -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;500;600;700&display=swap" rel="stylesheet">
+  
+  <style>
+    :root {
+      --bg-dark: #0a0b10;
+      --bg-card: rgba(20, 22, 33, 0.45);
+      --bg-card-hover: rgba(28, 31, 46, 0.55);
+      --primary: #5c62ec;
+      --primary-glow: rgba(92, 98, 236, 0.35);
+      --success: #10b981;
+      --success-glow: rgba(16, 185, 129, 0.35);
+      --warning: #f59e0b;
+      --warning-glow: rgba(245, 158, 11, 0.35);
+      --danger: #ef4444;
+      --danger-glow: rgba(239, 68, 68, 0.35);
+      --text-main: #f3f4f6;
+      --text-muted: #9ca3af;
+      --glass-border: rgba(255, 255, 255, 0.08);
+      --glass-border-focus: rgba(255, 255, 255, 0.16);
+      --transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: 'Inter', sans-serif;
+      background-color: var(--bg-dark);
+      color: var(--text-main);
+      overflow-x: hidden;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      position: relative;
+    }
+
+    /* Ambient Dynamic Glowing Background Elements */
+    .ambient-glow-1 {
+      position: fixed;
+      top: -20%;
+      left: -10%;
+      width: 60vw;
+      height: 60vw;
+      border-radius: 50%;
+      background: radial-gradient(circle, rgba(92, 98, 236, 0.08) 0%, rgba(0, 0, 0, 0) 70%);
+      pointer-events: none;
+      z-index: 0;
+      animation: pulseGlow 15s infinite alternate ease-in-out;
+    }
+
+    .ambient-glow-2 {
+      position: fixed;
+      bottom: -20%;
+      right: -10%;
+      width: 50vw;
+      height: 50vw;
+      border-radius: 50%;
+      background: radial-gradient(circle, rgba(16, 185, 129, 0.06) 0%, rgba(0, 0, 0, 0) 70%);
+      pointer-events: none;
+      z-index: 0;
+      animation: pulseGlow 20s infinite alternate-reverse ease-in-out;
+    }
+
+    @keyframes pulseGlow {
+      0% { transform: scale(1) translate(0, 0); opacity: 0.8; }
+      100% { transform: scale(1.15) translate(5%, 5%); opacity: 1; }
+    }
+
+    /* Top Premium Navbar */
+    header {
+      width: 100%;
+      padding: 1.5rem 2rem;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border-bottom: 1px solid var(--glass-border);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      background: rgba(10, 11, 16, 0.6);
+      z-index: 10;
+      position: sticky;
+      top: 0;
+    }
+
+    .logo-container {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+    }
+
+    .logo-icon {
+      width: 40px;
+      height: 40px;
+      background: linear-gradient(135deg, var(--primary) 0%, #8b5cf6 100%);
+      border-radius: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 700;
+      font-family: 'Outfit', sans-serif;
+      font-size: 1.25rem;
+      box-shadow: 0 4px 15px var(--primary-glow);
+      border: 1px solid rgba(255, 255, 255, 0.2);
+    }
+
+    .logo-text h1 {
+      font-family: 'Outfit', sans-serif;
+      font-size: 1.25rem;
+      font-weight: 600;
+      letter-spacing: -0.02em;
+      background: linear-gradient(to right, #ffffff, #d8b4fe);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    .logo-text p {
+      font-size: 0.75rem;
+      color: var(--text-muted);
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+    }
+
+    .connection-pill {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      padding: 0.5rem 1rem;
+      border-radius: 99px;
+      background: rgba(255, 255, 255, 0.04);
+      border: 1px solid var(--glass-border);
+      font-size: 0.85rem;
+      font-weight: 500;
+      transition: var(--transition);
+    }
+
+    .pill-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background-color: var(--danger);
+      box-shadow: 0 0 8px var(--danger);
+    }
+
+    .connection-pill.connected .pill-dot {
+      background-color: var(--success);
+      box-shadow: 0 0 10px var(--success);
+      animation: pulseIndicator 1.8s infinite;
+    }
+
+    @keyframes pulseIndicator {
+      0% { opacity: 0.4; }
+      50% { opacity: 1; }
+      100% { opacity: 0.4; }
+    }
+
+    /* Main Container */
+    main {
+      flex: 1;
+      max-width: 1400px;
+      width: 100%;
+      margin: 0 auto;
+      padding: 2.5rem 2rem;
+      z-index: 1;
+      position: relative;
+    }
+
+    /* STATE: Agent Offline View */
+    .offline-view {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 4rem 1rem;
+      max-width: 850px;
+      margin: 0 auto;
+      text-align: center;
+      animation: fadeIn 0.4s ease-out;
+    }
+
+    .offline-icon {
+      width: 80px;
+      height: 80px;
+      background: rgba(239, 68, 68, 0.06);
+      border: 1px solid rgba(239, 68, 68, 0.15);
+      border-radius: 24px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin-bottom: 2rem;
+      color: var(--danger);
+      box-shadow: 0 10px 30px rgba(239, 68, 68, 0.05);
+      animation: float 4s infinite ease-in-out;
+    }
+
+    @keyframes float {
+      0% { transform: translateY(0px); }
+      50% { transform: translateY(-8px); }
+      100% { transform: translateY(0px); }
+    }
+
+    .offline-view h2 {
+      font-family: 'Outfit', sans-serif;
+      font-size: 2.25rem;
+      font-weight: 700;
+      margin-bottom: 0.75rem;
+      color: #fff;
+    }
+
+    .offline-view p.lead {
+      color: var(--text-muted);
+      font-size: 1.125rem;
+      margin-bottom: 3rem;
+      max-width: 600px;
+      line-height: 1.6;
+    }
+
+    /* Interactive Instruction Guides Grid */
+    .guides-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 1.5rem;
+      width: 100%;
+      margin-bottom: 3rem;
+    }
+
+    @media (max-width: 768px) {
+      .guides-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    .guide-card {
+      background: var(--bg-card);
+      border: 1px solid var(--glass-border);
+      border-radius: 20px;
+      padding: 2rem 1.5rem;
+      text-align: left;
+      backdrop-filter: blur(8px);
+      -webkit-backdrop-filter: blur(8px);
+      transition: var(--transition);
+      display: flex;
+      flex-direction: column;
+    }
+
+    .guide-card:hover {
+      background: var(--bg-card-hover);
+      transform: translateY(-4px);
+      border-color: rgba(255, 255, 255, 0.12);
+      box-shadow: 0 12px 30px rgba(0, 0, 0, 0.25);
+    }
+
+    .guide-card .os-badge {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      font-family: 'Outfit', sans-serif;
+      font-weight: 600;
+      font-size: 1.1rem;
+      margin-bottom: 1.25rem;
+      color: #fff;
+    }
+
+    .guide-card .steps {
+      display: flex;
+      flex-direction: column;
+      gap: 0.85rem;
+      font-size: 0.9rem;
+      color: var(--text-muted);
+      flex: 1;
+      margin-bottom: 1.5rem;
+    }
+
+    .guide-card .steps li {
+      list-style-type: none;
+      position: relative;
+      padding-left: 1.5rem;
+      line-height: 1.4;
+    }
+
+    .guide-card .steps li::before {
+      content: "✓";
+      position: absolute;
+      left: 0;
+      color: var(--primary);
+      font-weight: bold;
+    }
+
+    .guide-card code {
+      background: rgba(0, 0, 0, 0.3);
+      padding: 0.5rem 0.75rem;
+      border-radius: 8px;
+      font-family: 'Courier New', monospace;
+      font-size: 0.8rem;
+      color: #cbd5e1;
+      display: block;
+      border: 1px solid rgba(255, 255, 255, 0.05);
+      word-break: break-all;
+      margin-top: 0.5rem;
+    }
+
+    .guide-card .action-btn {
+      width: 100%;
+      padding: 0.75rem;
+      border-radius: 10px;
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid var(--glass-border);
+      color: #fff;
+      font-weight: 500;
+      font-size: 0.85rem;
+      cursor: pointer;
+      text-align: center;
+      transition: var(--transition);
+      text-decoration: none;
+    }
+
+    .guide-card:hover .action-btn {
+      background: var(--primary);
+      border-color: rgba(255, 255, 255, 0.1);
+      box-shadow: 0 4px 12px var(--primary-glow);
+    }
+
+    .retry-button {
+      padding: 0.85rem 2rem;
+      border-radius: 12px;
+      background: linear-gradient(135deg, var(--primary) 0%, #7c3aed 100%);
+      color: #fff;
+      border: none;
+      font-weight: 600;
+      font-size: 0.95rem;
+      cursor: pointer;
+      box-shadow: 0 8px 24px var(--primary-glow);
+      transition: var(--transition);
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    .retry-button:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 12px 30px rgba(92, 98, 236, 0.5);
+    }
+
+    /* STATE: Agent Online View */
+    .online-view {
+      display: none;
+      flex-direction: column;
+      gap: 2.5rem;
+      animation: fadeIn 0.4s ease-out;
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(10px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    /* Top Grid Section */
+    .stats-row {
+      display: grid;
+      grid-template-columns: 2fr 1fr;
+      gap: 2rem;
+    }
+
+    @media (max-width: 1024px) {
+      .stats-row {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    /* System Stats Dashboard Card */
+    .dashboard-panel {
+      background: var(--bg-card);
+      border: 1px solid var(--glass-border);
+      border-radius: 24px;
+      padding: 2.5rem;
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      display: flex;
+      flex-direction: column;
+      gap: 2rem;
+      box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
+    }
+
+    .panel-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border-bottom: 1px solid var(--glass-border);
+      padding-bottom: 1.25rem;
+    }
+
+    .panel-title h2 {
+      font-family: 'Outfit', sans-serif;
+      font-size: 1.5rem;
+      font-weight: 600;
+      color: #fff;
+    }
+
+    .panel-title p {
+      font-size: 0.85rem;
+      color: var(--text-muted);
+      margin-top: 0.15rem;
+    }
+
+    /* Server Settings Info Row */
+    .connection-details-box {
+      background: rgba(255, 255, 255, 0.02);
+      border: 1px solid rgba(255, 255, 255, 0.05);
+      border-radius: 16px;
+      padding: 1.25rem 1.5rem;
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: space-between;
+      gap: 1.5rem;
+    }
+
+    .detail-item {
+      display: flex;
+      flex-direction: column;
+      gap: 0.35rem;
+      min-width: 180px;
+    }
+
+    .detail-item label {
+      font-size: 0.75rem;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--text-muted);
+    }
+
+    .detail-item span {
+      font-family: 'Outfit', sans-serif;
+      font-size: 1rem;
+      font-weight: 500;
+      color: #fff;
+      word-break: break-all;
+    }
+
+    /* System Telemetry Specs Grid */
+    .metrics-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 1.5rem;
+    }
+
+    @media (max-width: 640px) {
+      .metrics-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    .metric-card {
+      background: rgba(255, 255, 255, 0.03);
+      border: 1px solid rgba(255, 255, 255, 0.06);
+      border-radius: 18px;
+      padding: 1.5rem;
+      display: flex;
+      flex-direction: column;
+      gap: 1rem;
+      transition: var(--transition);
+    }
+
+    .metric-card:hover {
+      background: rgba(255, 255, 255, 0.05);
+      border-color: rgba(255, 255, 255, 0.1);
+    }
+
+    .metric-card-top {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .metric-card-title {
+      font-size: 0.8rem;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--text-muted);
+      font-weight: 500;
+    }
+
+    .metric-card-icon {
+      color: var(--primary);
+    }
+
+    .metric-value {
+      font-family: 'Outfit', sans-serif;
+      font-size: 1.85rem;
+      font-weight: 600;
+      color: #fff;
+    }
+
+    /* Beautiful Premium CSS Progress Bars */
+    .progress-bar-container {
+      width: 100%;
+      height: 6px;
+      background: rgba(255, 255, 255, 0.08);
+      border-radius: 99px;
+      overflow: hidden;
+      position: relative;
+    }
+
+    .progress-bar-fill {
+      height: 100%;
+      width: 0%;
+      border-radius: 99px;
+      background: linear-gradient(to right, var(--primary), #8b5cf6);
+      transition: width 0.8s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+
+    .progress-bar-fill.normal {
+      background: linear-gradient(to right, #10b981, #059669);
+    }
+
+    .progress-bar-fill.warning {
+      background: linear-gradient(to right, #f59e0b, #d97706);
+    }
+
+    .progress-bar-fill.danger {
+      background: linear-gradient(to right, #ef4444, #dc2626);
+    }
+
+    /* Host Details Subcard */
+    .host-info-card {
+      background: var(--bg-card);
+      border: 1px solid var(--glass-border);
+      border-radius: 24px;
+      padding: 2.5rem;
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
+      display: flex;
+      flex-direction: column;
+      gap: 1.5rem;
+    }
+
+    .host-info-card h3 {
+      font-family: 'Outfit', sans-serif;
+      font-size: 1.25rem;
+      font-weight: 600;
+      color: #fff;
+      border-bottom: 1px solid var(--glass-border);
+      padding-bottom: 0.75rem;
+    }
+
+    .host-details-list {
+      display: flex;
+      flex-direction: column;
+      gap: 1.15rem;
+    }
+
+    .host-details-list li {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      list-style-type: none;
+      font-size: 0.9rem;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.03);
+      padding-bottom: 0.65rem;
+    }
+
+    .host-details-list li:last-child {
+      border-bottom: none;
+      padding-bottom: 0;
+    }
+
+    .host-details-list li label {
+      color: var(--text-muted);
+    }
+
+    .host-details-list li span {
+      font-weight: 500;
+      color: #fff;
+      font-family: 'Outfit', sans-serif;
+    }
+
+    /* Actions Panel Card */
+    .actions-panel {
+      background: rgba(255, 255, 255, 0.02);
+      border: 1px solid rgba(255, 255, 255, 0.05);
+      border-radius: 16px;
+      padding: 1.25rem;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 1rem;
+    }
+
+    .actions-panel-title h4 {
+      font-family: 'Outfit', sans-serif;
+      font-size: 1rem;
+      color: #fff;
+      font-weight: 600;
+    }
+
+    .actions-panel-title p {
+      font-size: 0.8rem;
+      color: var(--text-muted);
+    }
+
+    .btn-manual-scan {
+      padding: 0.65rem 1.25rem;
+      border-radius: 8px;
+      background: rgba(92, 98, 236, 0.1);
+      border: 1px solid rgba(92, 98, 236, 0.2);
+      color: #cbd5e1;
+      font-weight: 600;
+      font-size: 0.85rem;
+      cursor: pointer;
+      transition: var(--transition);
+    }
+
+    .btn-manual-scan:hover {
+      background: var(--primary);
+      color: #fff;
+      box-shadow: 0 4px 15px var(--primary-glow);
+    }
+
+    .btn-manual-scan:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+
+    /* Listening Ports Section */
+    .ports-panel {
+      background: var(--bg-card);
+      border: 1px solid var(--glass-border);
+      border-radius: 24px;
+      padding: 2rem;
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
+    }
+
+    .ports-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+      gap: 1rem;
+      margin-top: 1.25rem;
+    }
+
+    .port-badge {
+      background: rgba(255, 255, 255, 0.02);
+      border: 1px solid rgba(255, 255, 255, 0.05);
+      border-radius: 12px;
+      padding: 0.75rem 1rem;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      transition: var(--transition);
+    }
+
+    .port-badge:hover {
+      background: rgba(255, 255, 255, 0.04);
+      border-color: rgba(255, 255, 255, 0.1);
+    }
+
+    .port-number {
+      font-family: 'Outfit', sans-serif;
+      font-size: 1.05rem;
+      font-weight: 600;
+      color: var(--primary);
+    }
+
+    .port-service {
+      font-size: 0.8rem;
+      color: var(--text-muted);
+      text-align: right;
+    }
+
+    .port-pid {
+      font-size: 0.65rem;
+      color: var(--text-muted);
+      background: rgba(255, 255, 255, 0.05);
+      padding: 0.15rem 0.35rem;
+      border-radius: 4px;
+      font-family: monospace;
+      margin-top: 0.15rem;
+    }
+
+    /* Beautiful Premium Console Real-Time Log Viewer */
+    .log-panel {
+      background: var(--bg-card);
+      border: 1px solid var(--glass-border);
+      border-radius: 24px;
+      padding: 2.5rem;
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
+      display: flex;
+      flex-direction: column;
+      gap: 1.25rem;
+    }
+
+    .log-terminal {
+      background: rgba(5, 5, 8, 0.85);
+      border: 1px solid var(--glass-border);
+      border-radius: 16px;
+      padding: 1.5rem;
+      font-family: 'Courier New', monospace;
+      font-size: 0.85rem;
+      color: #94a3b8;
+      max-height: 350px;
+      height: 350px;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+      box-shadow: inset 0 8px 30px rgba(0,0,0,0.6);
+      scroll-behavior: smooth;
+    }
+
+    /* Custom Scrollbar for Terminal */
+    .log-terminal::-webkit-scrollbar {
+      width: 8px;
+    }
+
+    .log-terminal::-webkit-scrollbar-track {
+      background: transparent;
+    }
+
+    .log-terminal::-webkit-scrollbar-thumb {
+      background: rgba(255, 255, 255, 0.08);
+      border-radius: 99px;
+    }
+
+    .log-terminal::-webkit-scrollbar-thumb:hover {
+      background: rgba(255, 255, 255, 0.16);
+    }
+
+    .log-line {
+      line-height: 1.5;
+      word-break: break-all;
+      animation: logReveal 0.2s ease-out;
+    }
+
+    @keyframes logReveal {
+      from { opacity: 0; transform: translateY(4px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    .log-time {
+      color: var(--primary);
+      margin-right: 0.5rem;
+    }
+
+    .log-type-heartbeat {
+      color: var(--success);
+    }
+
+    .log-type-error {
+      color: var(--danger);
+    }
+
+    .log-type-security {
+      color: var(--warning);
+      font-weight: bold;
+    }
+
+    .log-type-info {
+      color: var(--text-main);
+    }
+
+    /* Footer Section */
+    footer {
+      width: 100%;
+      padding: 2rem;
+      text-align: center;
+      font-size: 0.8rem;
+      color: var(--text-muted);
+      border-top: 1px solid var(--glass-border);
+      backdrop-filter: blur(8px);
+      background: rgba(10, 11, 16, 0.3);
+      z-index: 10;
+    }
+
+    footer a {
+      color: var(--primary);
+      text-decoration: none;
+      transition: var(--transition);
+    }
+
+    footer a:hover {
+      color: #fff;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Ambient Glow Layers -->
+  <div class="ambient-glow-1"></div>
+  <div class="ambient-glow-2"></div>
+
+  <!-- Top Premium Navbar -->
+  <header>
+    <div class="logo-container">
+      <div class="logo-icon">QS</div>
+      <div class="logo-text">
+        <h1>QS Discovery Agent</h1>
+        <p>Telemetry & Compliance Proxy</p>
+      </div>
+    </div>
+    
+    <div class="connection-pill" id="connPill">
+      <div class="pill-dot"></div>
+      <span id="connStatusText">Offline</span>
+    </div>
+  </header>
+
+  <!-- Main Content Wrapper -->
+  <main>
+    
+    <!-- STATE 1: Agent Offline Guide View -->
+    <div class="offline-view" id="offlineView">
+      <div class="offline-icon">
+        <!-- SVG Wi-Fi Off Icon -->
+        <svg xmlns="http://www.w3.org/2000/svg" width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M1 1l22 22M16.72 11.06A10.94 10.94 0 0 1 19 12.5M5 12.5a10.94 10.94 0 0 1 5.83-2.84M8.58 8.58A15 15 0 0 1 12 8c2.1 0 4.1.4 5.92 1.12M21 16.5a10.9 10.9 0 0 1-4.83 2.83M12 20a10.9 10.9 0 0 1-5.83-2.84M12 12.5a3 3 0 1 1-3-3"/></svg>
+      </div>
+      <h2>Agent Telemetry Offline</h2>
+      <p class="lead">The local discovery service is not running. Double-click the pre-seeded application package below depending on your operating system to launch the background reporter silently.</p>
+      
+      <!-- Interactive OS Guides Grid -->
+      <div class="guides-grid">
+        <!-- macOS -->
+        <div class="guide-card">
+          <div class="os-badge">
+            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20.94c1.88-1.06 3-3.12 3-5.44a5.53 5.53 0 0 0-3-5 5.53 5.53 0 0 0-3 5c0 2.32 1.12 4.38 3 5.44zM12 2a4.94 4.94 0 0 1 4.94 4.94H12z"/></svg>
+            macOS Application
+          </div>
+          <ul class="steps">
+            <li>Unzip your downloaded paired package</li>
+            <li>Double-click the premium native app:
+              <code>mac/QS-Discovery-Agent.app</code>
+            </li>
+            <li>It will launch silently as a background service</li>
+          </ul>
+          <a class="action-btn" href="#" onclick="alert('Open mac/QS-Discovery-Agent.app in Finder to launch.'); return false;">Open App Folder</a>
+        </div>
+
+        <!-- Windows -->
+        <div class="guide-card">
+          <div class="os-badge">
+            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><line x1="9" y1="3" x2="9" y2="21"/><line x1="3" y1="12" x2="21" y2="12"/></svg>
+            Windows Service
+          </div>
+          <ul class="steps">
+            <li>Unzip your downloaded paired package</li>
+            <li>Double-click the silent launcher batch:
+              <code>win/Start Agent.bat</code>
+            </li>
+            <li>This sets up portable Node.js and starts the agent in the background</li>
+          </ul>
+          <a class="action-btn" href="#" onclick="alert('Open win/ folder in File Explorer to launch Start Agent.bat.'); return false;">Open win/ Folder</a>
+        </div>
+
+        <!-- Linux / Unix -->
+        <div class="guide-card">
+          <div class="os-badge">
+            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2M12 18V3M12 18l-5-5M12 18l5-5"/></svg>
+            Linux / Unix CLI
+          </div>
+          <ul class="steps">
+            <li>Extract package to your server</li>
+            <li>Grant execute permissions & run:
+              <code>chmod +x bin/run-agent.sh && ./bin/run-agent.sh</code>
+            </li>
+            <li>The script runs as a persistent agent daemon</li>
+          </ul>
+          <a class="action-btn" href="#" onclick="alert('Execute chmod +x bin/run-agent.sh && ./bin/run-agent.sh in your terminal.'); return false;">Run bin/ Script</a>
+        </div>
+      </div>
+
+      <button class="retry-button" onclick="checkAgentStatus()">
+        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/></svg>
+        Re-check Connection
+      </button>
+    </div>
+
+    <!-- STATE 2: Agent Online Active Dashboard View -->
+    <div class="online-view" id="onlineView">
+      
+      <!-- Top Stats Row -->
+      <div class="stats-row">
+        <!-- Dashboard Panel -->
+        <div class="dashboard-panel">
+          <div class="panel-header">
+            <div class="panel-title">
+              <h2>Agent Telemetry Metrics</h2>
+              <p>Real-time operating data & background statistics</p>
+            </div>
+            <div style="display: flex; gap: 0.5rem; align-items: center;">
+              <span style="font-size: 0.8rem; color: var(--text-muted);">Sync Tick:</span>
+              <span style="font-family: monospace; color: var(--success); font-weight: bold;" id="lastSyncTime">15:00:00</span>
+            </div>
+          </div>
+
+          <!-- Connection details -->
+          <div class="connection-details-box">
+            <div class="detail-item">
+              <label>Agent Identifier</label>
+              <span id="txtAgentId">N/A</span>
+            </div>
+            <div class="detail-item">
+              <label>Main QS Server</label>
+              <span id="txtServer">N/A</span>
+            </div>
+            <div class="detail-item">
+              <label>Registered IP</label>
+              <span id="txtIp">N/A</span>
+            </div>
+          </div>
+
+          <!-- Telemetry Specs -->
+          <div class="metrics-grid">
+            <!-- CPU -->
+            <div class="metric-card">
+              <div class="metric-card-top">
+                <span class="metric-card-title">CPU Load</span>
+                <span class="metric-card-icon">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="16" height="16" rx="2" ry="2"/><rect x="9" y="9" width="6" height="6"/><line x1="9" y1="1" x2="9" y2="4"/><line x1="15" y1="1" x2="15" y2="4"/><line x1="9" y1="20" x2="9" y2="23"/><line x1="15" y1="20" x2="15" y2="23"/><line x1="20" y1="9" x2="23" y2="9"/><line x1="20" y1="15" x2="23" y2="15"/><line x1="1" y1="9" x2="4" y2="9"/><line x1="1" y1="15" x2="4" y2="15"/></svg>
+                </span>
+              </div>
+              <span class="metric-value" id="valCpu">0%</span>
+              <div class="progress-bar-container">
+                <div class="progress-bar-fill normal" id="barCpu" style="width: 0%"></div>
+              </div>
+            </div>
+
+            <!-- Memory -->
+            <div class="metric-card">
+              <div class="metric-card-top">
+                <span class="metric-card-title">RAM Usage</span>
+                <span class="metric-card-icon">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><line x1="9" y1="3" x2="9" y2="21"/><line x1="15" y1="3" x2="15" y2="21"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="3" y1="15" x2="21" y2="15"/></svg>
+                </span>
+              </div>
+              <span class="metric-value" id="valRam">0%</span>
+              <div class="progress-bar-container">
+                <div class="progress-bar-fill normal" id="barRam" style="width: 0%"></div>
+              </div>
+            </div>
+
+            <!-- Uptime -->
+            <div class="metric-card">
+              <div class="metric-card-top">
+                <span class="metric-card-title">System Uptime</span>
+                <span class="metric-card-icon">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                </span>
+              </div>
+              <span class="metric-value" style="font-size: 1.5rem; line-height: 2.2rem;" id="valUptime">0h 0m</span>
+              <div style="font-size: 0.8rem; color: var(--text-muted);" id="valUptimeDetail">Boot Telemetry Active</div>
+            </div>
+          </div>
+
+          <!-- Quick Actions -->
+          <div class="actions-panel">
+            <div class="actions-panel-title">
+              <h4>Manual Subnet discovery</h4>
+              <p>Trigger an active sweep of your local physical subnet immediately.</p>
+            </div>
+            <button class="btn-manual-scan" id="btnManualScan" onclick="triggerManualScan()">Trigger Subnet Scan</button>
+          </div>
+        </div>
+
+        <!-- Host details Card -->
+        <div class="host-info-card">
+          <h3>Host Machine Specs</h3>
+          <ul class="host-details-list">
+            <li>
+              <label>OS Platform</label>
+              <span id="txtPlatform">darwin</span>
+            </li>
+            <li>
+              <label>Host Name</label>
+              <span id="txtHostname">N/A</span>
+            </li>
+            <li>
+              <label>CPU Core Count</label>
+              <span id="txtCpuCores">N/A</span>
+            </li>
+            <li>
+              <label>Total Memory</label>
+              <span id="txtTotalRam">N/A</span>
+            </li>
+            <li>
+              <label>Firewall Status</label>
+              <span id="txtFirewall" style="color: var(--success);">ACTIVE</span>
+            </li>
+            <li>
+              <label>Failed Logins Count</label>
+              <span id="txtFailedLogins" style="color: var(--success);">0</span>
+            </li>
+          </ul>
+        </div>
+      </div>
+
+      <!-- Open Listening Ports -->
+      <div class="ports-panel">
+        <h3 style="font-family: 'Outfit', sans-serif; font-size: 1.25rem; font-weight: 600; color: #fff;">Open Listening Ports</h3>
+        <p style="font-size: 0.8rem; color: var(--text-muted); margin-top: 0.15rem;">Currently listening ports scanned locally by the agent</p>
+        <div class="ports-grid" id="portsGrid">
+          <!-- Dynamically filled -->
+          <div style="color: var(--text-muted); font-size: 0.9rem; grid-column: 1/-1; text-align: center; padding: 2rem 0;">Scanning open ports...</div>
+        </div>
+      </div>
+
+      <!-- Real-Time Log Viewer -->
+      <div class="log-panel">
+        <div style="display: flex; justify-content: space-between; align-items: center;">
+          <div>
+            <h3 style="font-family: 'Outfit', sans-serif; font-size: 1.25rem; font-weight: 600; color: #fff;">Agent Console Stream</h3>
+            <p style="font-size: 0.8rem; color: var(--text-muted); margin-top: 0.15rem;">Real-time output logs uploaded to server</p>
+          </div>
+          <button style="padding: 0.4rem 0.8rem; background: rgba(255,255,255,0.05); border: 1px solid var(--glass-border); border-radius: 6px; color: var(--text-muted); font-size: 0.8rem; cursor: pointer; transition: var(--transition);" onclick="clearLogs()">Clear Console</button>
+        </div>
+        <div class="log-terminal" id="logTerminal">
+          <!-- Logs will stream here dynamically -->
+          <div class="log-line"><span class="log-time">[System]</span> Terminal initialized. Connecting to background telemetry service...</div>
+        </div>
+      </div>
+
+    </div>
+
+  </main>
+
+  <!-- Footer Section -->
+  <footer>
+    <p>Powered by <a href="https://qsasset.vercel.app" target="_blank">QS Asset Management Platform</a> &copy; 2026. Zero-dependency proxy reporter v1.1.0.</p>
+  </footer>
+
+  <script>
+    const API_URL = 'http://localhost:49152/api';
+    let checkInterval = null;
+    let telemetryInterval = null;
+    let isConnected = false;
+    let loggedLines = new Set();
+
+    async function checkAgentStatus() {
+      try {
+        const response = await fetch(`${API_URL}/status`, { mode: 'cors', cache: 'no-store' });
+        if (response.ok) {
+          const status = await response.json();
+          if (!isConnected) {
+            isConnected = true;
+            document.getElementById('offlineView').style.display = 'none';
+            document.getElementById('onlineView').style.display = 'flex';
+            document.getElementById('connPill').classList.add('connected');
+            document.getElementById('connStatusText').innerText = 'Connected';
+            
+            // Log entry
+            appendLog('System', 'Connected successfully to local agent background service!', 'success');
+            
+            // Set static details
+            document.getElementById('txtAgentId').innerText = status.agentId || 'Unregistered';
+            document.getElementById('txtServer').innerText = status.configServer || 'N/A';
+            document.getElementById('txtIp').innerText = status.primaryIp || 'N/A';
+            document.getElementById('txtPlatform').innerText = `${status.platform} ${status.arch}`;
+            document.getElementById('txtHostname').innerText = status.hostname;
+            document.getElementById('txtCpuCores').innerText = status.cpuCores;
+            document.getElementById('txtTotalRam').innerText = status.totalRamMb + ' MB';
+            
+            // Start metrics update loop
+            startTelemetryLoop();
+          }
+          
+          updateDynamicMetrics(status);
+        } else {
+          handleOfflineState();
+        }
+      } catch (err) {
+        handleOfflineState();
+      }
+    }
+
+    function handleOfflineState() {
+      if (isConnected) {
+        isConnected = false;
+        document.getElementById('offlineView').style.display = 'flex';
+        document.getElementById('onlineView').style.display = 'none';
+        document.getElementById('connPill').classList.remove('connected');
+        document.getElementById('connStatusText').innerText = 'Offline';
+        stopTelemetryLoop();
+        appendLog('System', 'Lost connection to agent background reporter service.', 'error');
+      }
+    }
+
+    function updateDynamicMetrics(status) {
+      document.getElementById('lastSyncTime').innerText = new Date().toLocaleTimeString();
+      
+      // CPU
+      const cpu = status.cpuUsagePercent || 0;
+      document.getElementById('valCpu').innerText = `${cpu}%`;
+      const barCpu = document.getElementById('barCpu');
+      barCpu.style.width = `${cpu}%`;
+      setProgressBarColor(barCpu, cpu);
+      
+      // RAM
+      const ram = status.ramUsagePercent || 0;
+      document.getElementById('valRam').innerText = `${ram}%`;
+      const barRam = document.getElementById('barRam');
+      barRam.style.width = `${ram}%`;
+      setProgressBarColor(barRam, ram);
+      
+      // Uptime
+      const uptimeSec = status.uptime || 0;
+      const hours = Math.floor(uptimeSec / 3600);
+      const minutes = Math.floor((uptimeSec % 3600) / 60);
+      document.getElementById('valUptime').innerText = `${hours}h ${minutes}m`;
+      
+      // Failed Logins
+      const failed = status.failedLoginsCount || 0;
+      const elFailed = document.getElementById('txtFailedLogins');
+      elFailed.innerText = failed;
+      if (failed >= 3) {
+        elFailed.style.color = 'var(--danger)';
+      } else {
+        elFailed.style.color = 'var(--success)';
+      }
+
+      // Firewall
+      const firewall = status.firewallEnabled;
+      const elFirewall = document.getElementById('txtFirewall');
+      elFirewall.innerText = firewall ? 'ACTIVE' : 'INACTIVE';
+      elFirewall.style.color = firewall ? 'var(--success)' : 'var(--danger)';
+
+      // Ports List
+      const ports = status.openPorts || [];
+      const portsGrid = document.getElementById('portsGrid');
+      if (ports.length === 0) {
+        portsGrid.innerHTML = '<div style="color: var(--text-muted); font-size: 0.9rem; grid-column: 1/-1; text-align: center; padding: 2rem 0;">No active listening ports detected</div>';
+      } else {
+        portsGrid.innerHTML = ports.map(p => `
+          <div class="port-badge">
+            <span class="port-number">${p.port}</span>
+            <div class="port-service">
+              <span style="font-weight: 500; color: #cbd5e1;">${p.service || 'Unknown'}</span>
+              ${p.pid ? `<div class="port-pid">PID ${p.pid}</div>` : ''}
+            </div>
+          </div>
+        `).join('');
+      }
+
+      // Fetch logs
+      fetchLogs();
+    }
+
+    async function fetchLogs() {
+      try {
+        const res = await fetch(`${API_URL}/logs`, { mode: 'cors', cache: 'no-store' });
+        if (res.ok) {
+          const logs = await res.json();
+          const terminal = document.getElementById('logTerminal');
+          let added = false;
+          
+          for (const log of logs) {
+            const signature = `${log.time}-${log.message}`;
+            if (!loggedLines.has(signature)) {
+              loggedLines.add(signature);
+              
+              let typeClass = 'log-type-info';
+              if (log.type === 'heartbeat') typeClass = 'log-type-heartbeat';
+              else if (log.type === 'error') typeClass = 'log-type-error';
+              else if (log.type === 'security') typeClass = 'log-type-security';
+
+              const logEl = document.createElement('div');
+              logEl.className = 'log-line';
+              logEl.innerHTML = `<span class="log-time">[${log.time}]</span> <span class="${typeClass}">${log.message}</span>`;
+              terminal.appendChild(logEl);
+              added = true;
+            }
+          }
+
+          if (added) {
+            terminal.scrollTop = terminal.scrollHeight;
+          }
+        }
+      } catch (err) {}
+    }
+
+    async function triggerManualScan() {
+      const btn = document.getElementById('btnManualScan');
+      btn.disabled = true;
+      btn.innerText = 'Scan Triggered...';
+      
+      appendLog('Control', 'Requesting local network discovery sweep immediately...', 'info');
+      try {
+        const res = await fetch(`${API_URL}/control`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'TRIGGER_SCAN' }),
+          mode: 'cors'
+        });
+        if (res.ok) {
+          appendLog('Control', 'LAN scan sweep successfully delegated to agent!', 'success');
+        } else {
+          appendLog('Control', 'Scan request rejected by local agent.', 'error');
+        }
+      } catch (err) {
+        appendLog('Control', 'Failed to trigger scan: ' + err.message, 'error');
+      }
+
+      setTimeout(() => {
+        btn.disabled = false;
+        btn.innerText = 'Trigger Subnet Scan';
+      }, 5000);
+    }
+
+    function setProgressBarColor(bar, val) {
+      bar.classList.remove('normal', 'warning', 'danger');
+      if (val >= 85) bar.classList.add('danger');
+      else if (val >= 60) bar.classList.add('warning');
+      else bar.classList.add('normal');
+    }
+
+    function appendLog(source, msg, type = 'info') {
+      const terminal = document.getElementById('logTerminal');
+      let typeClass = 'log-type-info';
+      if (type === 'success') typeClass = 'log-type-heartbeat';
+      else if (type === 'error') typeClass = 'log-type-error';
+      else if (type === 'warning') typeClass = 'log-type-security';
+
+      const logEl = document.createElement('div');
+      logEl.className = 'log-line';
+      const timeStr = new Date().toLocaleTimeString();
+      logEl.innerHTML = `<span class="log-time">[${timeStr}]</span> <span class="${typeClass}">[${source}] ${msg}</span>`;
+      terminal.appendChild(logEl);
+      terminal.scrollTop = terminal.scrollHeight;
+    }
+
+    function clearLogs() {
+      document.getElementById('logTerminal').innerHTML = '';
+      loggedLines.clear();
+      appendLog('System', 'Console cleared.', 'info');
+    }
+
+    function startTelemetryLoop() {
+      if (telemetryInterval) clearInterval(telemetryInterval);
+      telemetryInterval = setInterval(checkAgentStatus, 3000);
+    }
+
+    function stopTelemetryLoop() {
+      if (telemetryInterval) {
+        clearInterval(telemetryInterval);
+        telemetryInterval = null;
+      }
+    }
+
+    // Initialize Page
+    checkAgentStatus();
+    checkInterval = setInterval(checkAgentStatus, 3000);
+  </script>
+</body>
+</html>

@@ -6,6 +6,7 @@ import {
   Activity, LogOut, ChevronRight, ArrowLeft, Sun, Moon, Eye, DollarSign,
 } from "lucide-react";
 import { LogoIcon } from "@/components/Logo";
+import { useTheme } from "@/components/ThemeProvider";
 
 const adminNav = [
   { name: "Dashboard", icon: LayoutDashboard, href: "/admin" },
@@ -26,21 +27,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   const router = useRouter();
   const pathname = usePathname();
   const [user, setUser] = useState<any>(null);
-  const [theme, setTheme] = useState<"dark"|"light">("dark");
-
-  useEffect(() => {
-    const saved = localStorage.getItem("theme") as "dark"|"light"|null;
-    const t = saved || "dark";
-    setTheme(t);
-    document.documentElement.setAttribute("data-theme", t);
-  }, []);
-
-  function toggleTheme() {
-    const next = theme === "dark" ? "light" : "dark";
-    setTheme(next);
-    localStorage.setItem("theme", next);
-    document.documentElement.setAttribute("data-theme", next);
-  }
+  const { theme, toggleTheme } = useTheme();
 
   useEffect(() => {
     const token = localStorage.getItem("accessToken");

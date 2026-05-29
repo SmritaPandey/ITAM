@@ -42,8 +42,8 @@ export class DiscoveryController {
   @Get('subnets')
   @Roles('Tenant Admin', 'IT Admin')
   @ApiOperation({ summary: 'Detect local network subnets' })
-  getSubnets() {
-    return this.discoveryService.getLocalSubnets();
+  getSubnets(@Request() req: any) {
+    return this.discoveryService.getLocalSubnets(req.user.tenantId);
   }
 
   // ─── Scan Jobs ────────────────────────────────────────────────
@@ -90,6 +90,32 @@ export class DiscoveryController {
   @ApiOperation({ summary: 'Get scan results with discovered devices' })
   async findScan(@Request() req: any, @Param('id') id: string) {
     return this.discoveryService.findScanById(id, req.user.tenantId);
+  }
+
+  @Post('scans/:id/results')
+  @Roles('Tenant Admin', 'IT Admin')
+  @ApiOperation({ summary: 'Submit scan results from discovery agent' })
+  async submitScanResults(
+    @Request() req: any,
+    @Param('id') id: string,
+    @Body()
+    body: {
+      devices: Array<{
+        ip: string;
+        mac?: string;
+        hostname?: string;
+        openPorts?: Array<{ port: number; service: string }>;
+        deviceType?: string;
+        manufacturer?: string;
+        osInfo?: string;
+      }>;
+    },
+  ) {
+    return this.discoveryService.processAgentScanResults(
+      id,
+      req.user.tenantId,
+      body.devices,
+    );
   }
 
   // ─── Discovered Devices ───────────────────────────────────────
@@ -259,7 +285,7 @@ export class DiscoveryController {
     );
     res.set({
       'Content-Type': 'application/zip',
-      'Content-Disposition': 'attachment; filename=reconapm-agent.zip',
+      'Content-Disposition': 'attachment; filename=qs-discovery-agent.zip',
       'Content-Length': buffer.length,
     });
     res.end(buffer);

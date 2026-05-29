@@ -1,0 +1,64 @@
+# Dependencies
+node_modules/
+**/node_modules/
+.pnp
+.pnp.js
+
+# Build
+dist/
+.next/
+out/
+build/
+
+# Environment
+.env
+.env.local
+.env.*.local
+.env.production
+.env.development
+.env.production.local
+.env.development.local
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Turbo
+.turbo/
+
+# Testing
+coverage/
+
+# Prisma
+apps/api/prisma/*.db
+apps/api/prisma/*.db-journal
+
+# Docker
+docker-data/
+docker-compose*.yml
+docker-compose.prod.yml
+Dockerfile
+
+# Scripts and deploy configurations
+deploy.sh
+railway.json
+audit-capabilities.sh
+deploy.sh
+
+# Exclude backend API from frontend deployment
+apps/api/
+apps/api/dist/
+apps/api/node_modules/
+infra/
+spec/
+scripts/
+agent/
+docker-data/
+.git/
+.turbo/

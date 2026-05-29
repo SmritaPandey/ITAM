@@ -2,6 +2,7 @@
 import { useState, useEffect } from "react";
 import { apiFetch } from "@/lib/api";
 import { DollarSign, Save, RefreshCw, Plus, Trash2, ArrowUpRight, HelpCircle, Check, Percent } from "lucide-react";
+import { useTheme } from "@/components/ThemeProvider";
 
 interface PlanConfig {
   priceUSD: number;
@@ -131,7 +132,8 @@ export default function PricingManagerPage() {
     return Math.round(finalPrice);
   };
 
-  const isLight = typeof document !== "undefined" && document.documentElement.getAttribute("data-theme") === "light";
+  const { theme } = useTheme();
+  const isLight = theme === "light";
 
   return (
     <div style={{ maxWidth: 1200, margin: "0 auto", paddingBottom: 60 }}>

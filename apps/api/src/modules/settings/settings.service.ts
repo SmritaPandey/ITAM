@@ -18,13 +18,13 @@ export class SettingsService {
     const activeModules = getActiveModules(tenant.plan, tenant.settings);
 
     return {
+      ...settingsObj,
       tenantId: tenant.id,
       orgName: tenant.name,
       domain: tenant.domain,
       plan: tenant.plan,
       allowedModules,
       activeModules,
-      ...settingsObj,
     };
   }
 
@@ -47,13 +47,13 @@ export class SettingsService {
     const activeModules = getActiveModules(result.plan, result.settings);
 
     return {
+      ...settingsObj,
       tenantId: result.id,
       orgName: result.name,
       domain: result.domain,
       plan: result.plan,
       allowedModules,
       activeModules,
-      ...settingsObj,
     };
   }
 

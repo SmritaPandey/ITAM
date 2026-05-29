@@ -1,7 +1,7 @@
 "use client";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { LogoIcon } from "@/components/Logo";
+import { Logo } from "@/components/Logo";
 
 interface FooterProps {
   theme: "dark" | "light";
@@ -61,9 +61,8 @@ export default function Footer({ theme }: FooterProps) {
       <div className="footer-grid" style={{ display: "grid", gridTemplateColumns: "2fr 1fr 1fr 1fr", gap: 48, marginBottom: 40 }}>
         {/* Brand Column */}
         <div>
-          <Link href="/" style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 16, textDecoration: "none", color: "inherit" }}>
-            <LogoIcon size={24} glow={!L} />
-            <span style={{ fontSize: 15, fontWeight: 900, letterSpacing: "-0.03em" }}>QS Asset</span>
+          <Link href="/" style={{ display: "flex", alignItems: "center", marginBottom: 16, textDecoration: "none", color: "inherit" }}>
+            <Logo size={24} glow={!L} theme={theme} />
           </Link>
           <p style={{ fontSize: 12.5, color: muted, lineHeight: 1.7, maxWidth: 300, marginBottom: 20 }}>
             Autonomous IT asset lifecycle management, real-time SNMP topology, and security mitigation engine. Crafted by NeurQ AI Labs.

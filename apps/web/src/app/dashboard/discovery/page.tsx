@@ -354,7 +354,7 @@ export default function DiscoveryPage() {
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = "reconapm-agent.zip";
+      a.download = "qs-discovery-agent.zip";
       document.body.appendChild(a);
       a.click();
       a.remove();
@@ -936,120 +936,131 @@ export default function DiscoveryPage() {
               {wizardStep === 1 && (
                 <div style={{ display: "flex", flexDirection: "column", gap: 24, maxWidth: 650, margin: "0 auto" }}>
                   <div style={{ textAlign: "center", marginBottom: 8 }}>
-                    <h4 style={{ fontSize: 16, fontWeight: 700, color: "var(--text-primary)" }}>Download Pre-Configured Agent</h4>
-                    <p style={{ fontSize: 12, color: "var(--text-secondary)", marginTop: 6 }}>
-                      Select your platform. The package contains a paired configuration pre-injected with your secure tenant credentials.
+                    <h4 style={{ fontSize: 18, fontWeight: 800, color: "var(--text-primary)", letterSpacing: "-0.02em" }}>Download Paired LAN Discovery Agent</h4>
+                    <p style={{ fontSize: 13, color: "var(--text-tertiary)", marginTop: 6 }}>
+                      Get the pre-configured telemetry agent for your local network sweep, pre-authorized with your secure tenant pairing token.
                     </p>
                   </div>
 
-                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 16 }}>
-                    {/* macOS Card */}
-                    <div
-                      onClick={() => setOsDetected("macos")}
-                      style={{
-                        padding: "20px 16px",
-                        borderRadius: 12,
-                        background: osDetected === "macos" ? "rgba(6,182,212,0.08)" : "rgba(255,255,255,0.02)",
-                        border: osDetected === "macos" ? "2px solid var(--brand-400)" : "1px solid var(--border-primary)",
-                        cursor: "pointer",
-                        textAlign: "center",
-                        position: "relative",
-                        transition: "all 0.2s ease"
-                      }}
-                    >
-                      {osDetected === "macos" && (
-                        <CheckCircle2 size={16} style={{ position: "absolute", top: 8, right: 8, color: "var(--brand-400)" }} />
-                      )}
-                      <Monitor size={24} style={{ color: osDetected === "macos" ? "var(--brand-400)" : "var(--text-secondary)", margin: "0 auto 10px" }} />
-                      <div style={{ fontSize: 13, fontWeight: 600, color: "var(--text-primary)" }}>macOS</div>
-                      <span style={{ fontSize: 10, color: "var(--text-tertiary)", marginTop: 4, display: "block" }}>
-                        {typeof window !== "undefined" && window.navigator?.userAgent?.toLowerCase()?.includes("mac") ? "Detected System" : "Apple M1/M2/Intel"}
-                      </span>
-                    </div>
-
-                    {/* Windows Card */}
-                    <div
-                      onClick={() => setOsDetected("windows")}
-                      style={{
-                        padding: "20px 16px",
-                        borderRadius: 12,
-                        background: osDetected === "windows" ? "rgba(6,182,212,0.08)" : "rgba(255,255,255,0.02)",
-                        border: osDetected === "windows" ? "2px solid var(--brand-400)" : "1px solid var(--border-primary)",
-                        cursor: "pointer",
-                        textAlign: "center",
-                        position: "relative",
-                        transition: "all 0.2s ease"
-                      }}
-                    >
-                      {osDetected === "windows" && (
-                        <CheckCircle2 size={16} style={{ position: "absolute", top: 8, right: 8, color: "var(--brand-400)" }} />
-                      )}
-                      <Monitor size={24} style={{ color: osDetected === "windows" ? "var(--brand-400)" : "var(--text-secondary)", margin: "0 auto 10px" }} />
-                      <div style={{ fontSize: 13, fontWeight: 600, color: "var(--text-primary)" }}>Windows</div>
-                      <span style={{ fontSize: 10, color: "var(--text-tertiary)", marginTop: 4, display: "block" }}>
-                        {typeof window !== "undefined" && window.navigator?.userAgent?.toLowerCase()?.includes("win") ? "Detected System" : "Windows 10/11/Server"}
-                      </span>
-                    </div>
-
-                    {/* Linux Card */}
-                    <div
-                      onClick={() => setOsDetected("linux")}
-                      style={{
-                        padding: "20px 16px",
-                        borderRadius: 12,
-                        background: osDetected === "linux" ? "rgba(6,182,212,0.08)" : "rgba(255,255,255,0.02)",
-                        border: osDetected === "linux" ? "2px solid var(--brand-400)" : "1px solid var(--border-primary)",
-                        cursor: "pointer",
-                        textAlign: "center",
-                        position: "relative",
-                        transition: "all 0.2s ease"
-                      }}
-                    >
-                      {osDetected === "linux" && (
-                        <CheckCircle2 size={16} style={{ position: "absolute", top: 8, right: 8, color: "var(--brand-400)" }} />
-                      )}
-                      <Server size={24} style={{ color: osDetected === "linux" ? "var(--brand-400)" : "var(--text-secondary)", margin: "0 auto 10px" }} />
-                      <div style={{ fontSize: 13, fontWeight: 600, color: "var(--text-primary)" }}>Linux</div>
-                      <span style={{ fontSize: 10, color: "var(--text-tertiary)", marginTop: 4, display: "block" }}>
-                        {typeof window !== "undefined" && window.navigator?.userAgent?.toLowerCase()?.includes("linux") ? "Detected System" : "Ubuntu/Debian/RHEL"}
-                      </span>
-                    </div>
-                  </div>
-
-                  <button
-                    className="btn btn-primary"
-                    onClick={async () => {
-                      await downloadAgentZip();
-                      setWizardStep(2);
-                    }}
-                    disabled={downloading}
-                    style={{
-                      padding: "14px 28px",
-                      fontSize: 13,
-                      fontWeight: 700,
-                      borderRadius: 8,
-                      background: "linear-gradient(135deg, var(--brand-500) 0%, #06b6d4 100%)",
-                      border: "none",
-                      boxShadow: "0 4px 15px rgba(6,182,212,0.25)",
+                  {/* Huge Premium Primary Download Button for Detected OS */}
+                  <div style={{
+                    display: "flex",
+                    flexDirection: "column",
+                    alignItems: "center",
+                    gap: 12,
+                    padding: 28,
+                    borderRadius: 16,
+                    background: "linear-gradient(135deg, rgba(6,182,212,0.06) 0%, rgba(139,92,246,0.04) 100%)",
+                    border: "1px solid rgba(6,182,212,0.15)",
+                    textAlign: "center"
+                  }}>
+                    {/* OS Icon Indicator */}
+                    <div style={{
+                      width: 56,
+                      height: 56,
+                      borderRadius: 28,
+                      background: "rgba(6,182,212,0.08)",
+                      border: "1px solid rgba(6,182,212,0.2)",
                       display: "flex",
                       alignItems: "center",
                       justifyContent: "center",
-                      gap: 8,
-                      cursor: "pointer"
-                    }}
-                  >
-                    {downloading ? (
-                      <>
-                        <Loader2 size={14} style={{ animation: "spin 1s linear infinite" }} />
-                        Creating Paired Package...
-                      </>
-                    ) : (
-                      <>
-                        Download Paired Agent Package (.zip)
-                        <ArrowRight size={16} />
-                      </>
-                    )}
-                  </button>
+                      color: "var(--brand-400)",
+                      marginBottom: 8,
+                      boxShadow: "0 0 16px rgba(6,182,212,0.1)"
+                    }}>
+                      {osDetected === "macos" && <Monitor size={28} />}
+                      {osDetected === "windows" && <Monitor size={28} />}
+                      {osDetected === "linux" && <Server size={28} />}
+                    </div>
+
+                    <button
+                      className="btn btn-primary"
+                      onClick={async () => {
+                        await downloadAgentZip();
+                        setWizardStep(2);
+                      }}
+                      disabled={downloading}
+                      style={{
+                        padding: "16px 36px",
+                        fontSize: 14,
+                        fontWeight: 700,
+                        borderRadius: 10,
+                        background: "linear-gradient(135deg, var(--brand-500) 0%, #06b6d4 100%)",
+                        border: "none",
+                        boxShadow: "0 6px 20px rgba(6,182,212,0.3)",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        gap: 10,
+                        cursor: "pointer",
+                        width: "100%",
+                        maxWidth: 400
+                      }}
+                    >
+                      {downloading ? (
+                        <>
+                          <Loader2 size={16} style={{ animation: "spin 1s linear infinite" }} />
+                          Packaging Telemetry Core...
+                        </>
+                      ) : (
+                        <>
+                          Download for {osDetected === "macos" ? "macOS" : osDetected === "windows" ? "Windows" : "Linux"} (Detected)
+                          <ArrowRight size={16} />
+                        </>
+                      )}
+                    </button>
+                    
+                    <span style={{ fontSize: 11.5, color: "var(--text-tertiary)", marginTop: 4 }}>
+                      File size: ~2.4 MB • Zero external dependencies • Portable mode
+                    </span>
+                  </div>
+
+                  {/* Alternative Platforms Segmented Selector */}
+                  <div style={{ textAlign: "center" }}>
+                    <div style={{ fontSize: 12, fontWeight: 600, color: "var(--text-tertiary)", marginBottom: 12 }}>
+                      Looking for another operating system?
+                    </div>
+                    <div style={{ display: "flex", justifyContent: "center", gap: 12 }}>
+                      {["macos", "windows", "linux"].map(platform => {
+                        if (platform === osDetected) return null;
+                        return (
+                          <button
+                            key={platform}
+                            onClick={async () => {
+                              setOsDetected(platform as any);
+                              // Short timeout so visual state updates, then trigger download
+                              setTimeout(async () => {
+                                await downloadAgentZip();
+                                setWizardStep(2);
+                              }, 80);
+                            }}
+                            style={{
+                              background: "rgba(255,255,255,0.02)",
+                              border: "1px solid var(--border-primary)",
+                              borderRadius: 8,
+                              padding: "8px 16px",
+                              color: "var(--text-secondary)",
+                              fontSize: 12,
+                              fontWeight: 600,
+                              cursor: "pointer",
+                              display: "flex",
+                              alignItems: "center",
+                              gap: 6,
+                              transition: "all 0.15s ease"
+                            }}
+                            onMouseEnter={e => { e.currentTarget.style.borderColor = "var(--brand-400)"; e.currentTarget.style.background = "rgba(6,182,212,0.04)"; }}
+                            onMouseLeave={e => { e.currentTarget.style.borderColor = "var(--border-primary)"; e.currentTarget.style.background = "rgba(255,255,255,0.02)"; }}
+                          >
+                            {platform === "macos" && <Monitor size={12} />}
+                            {platform === "windows" && <Monitor size={12} />}
+                            {platform === "linux" && <Server size={12} />}
+                            Download for {platform === "macos" ? "macOS" : platform === "windows" ? "Windows" : "Linux"}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+
                   <div style={{ display: "flex", gap: 24, justifyContent: "center", marginTop: 8 }}>
                     <span style={{ fontSize: 11, color: "var(--text-tertiary)", display: "flex", alignItems: "center", gap: 4 }}>
                       <Shield size={12} style={{ color: "var(--brand-400)" }} />
@@ -1084,11 +1095,11 @@ export default function DiscoveryPage() {
                       fontSize: 12
                     }}>
                       <div style={{ display: "flex", alignItems: "center", gap: 6, color: "var(--brand-300)", fontWeight: 700, marginBottom: 12 }}>
-                        📦 reconapm-agent.zip (Extracted)
+                        📦 qs-discovery-agent.zip (Extracted)
                       </div>
                       <div style={{ paddingLeft: 12, display: "flex", flexDirection: "column", gap: 8 }}>
                         <div style={{ color: "var(--text-primary)", display: "flex", alignItems: "center", gap: 6 }}>
-                          📄 reconapm-agent.js <span style={{ fontSize: 10, color: "var(--text-tertiary)" }}>(Core probe)</span>
+                          📄 qs-discovery-agent.js <span style={{ fontSize: 10, color: "var(--text-tertiary)" }}>(Core probe)</span>
                         </div>
                         <div style={{ color: "var(--brand-400)", fontWeight: 700, display: "flex", alignItems: "center", gap: 6 }}>
                           ⚙️ config.json <span style={{ fontSize: 10, color: "rgba(6,182,212,0.6)" }}>(Pre-authenticated Token)</span>

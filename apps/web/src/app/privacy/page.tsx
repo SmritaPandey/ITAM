@@ -3,6 +3,7 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
+import { useTheme } from "@/components/ThemeProvider";
 import { Shield, CheckCircle2, Lock, Eye, AlertTriangle } from "lucide-react";
 
 const SECTIONS = [
@@ -20,19 +21,7 @@ export default function PrivacyPage() {
   const router = useRouter();
   const [activeSection, setActiveSection] = useState("section-1");
 
-  const [theme, setTheme] = useState<"dark" | "light">("light");
-  useEffect(() => {
-    const s = localStorage.getItem("theme") as "dark" | "light" | null;
-    const t = s || "light";
-    setTheme(t);
-    document.documentElement.setAttribute("data-theme", t);
-  }, []);
-  function toggleTheme() {
-    const n = theme === "dark" ? "light" : "dark";
-    setTheme(n);
-    localStorage.setItem("theme", n);
-    document.documentElement.setAttribute("data-theme", n);
-  }
+  const { theme, toggleTheme } = useTheme();
   const L = theme === "light";
   const bg = L ? "#f9fafb" : "#020205";
   const txt = L ? "#0f172a" : "#f3f4f6";
@@ -40,6 +29,9 @@ export default function PrivacyPage() {
   const border = L ? "rgba(15, 23, 42, 0.08)" : "rgba(255, 255, 255, 0.06)";
   const card = L ? "rgba(255,255,255,0.7)" : "rgba(16, 22, 42, 0.65)";
   const cyanGlow = "rgba(6, 182, 212, 0.15)";
+  const pTxt = L ? "#334155" : "#cbd5e1";
+  const codeColor = L ? "#0891b2" : "#22d3ee";
+  const boxBg = L ? "rgba(15, 23, 42, 0.02)" : "rgba(255, 255, 255, 0.02)";
 
   useEffect(() => {
     const observerOptions = {
@@ -100,7 +92,7 @@ export default function PrivacyPage() {
 
         <div className="legal-container">
           {/* Sticky Left Table of Contents */}
-          <div className="legal-toc">
+          <div className="legal-toc" style={{ background: L ? "rgba(255, 255, 255, 0.7)" : "rgba(16, 22, 42, 0.45)", border: `1px solid ${border}` }}>
             <div style={{ fontSize: 11, fontWeight: 800, color: "#06b6d4", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 14, paddingLeft: 12 }}>
               Outline Index
             </div>
@@ -117,161 +109,161 @@ export default function PrivacyPage() {
 
           {/* Right Scrolling Content Area */}
           <div className="legal-content">
-            <div style={{ background: card, backdropFilter: "blur(12px)", WebkitBackdropFilter: "blur(12px)", border: `1px solid ${border}`, borderRadius: 20, padding: "40px 48px", display: "flex", flexDirection: "column", gap: 36 }}>
+            <div style={{ background: card, backdropFilter: "blur(12px)", WebkitBackdropFilter: "blur(12px)", border: `1px solid ${border}`, borderRadius: 20, padding: "40px 48px", display: "flex", flexDirection: "column", gap: 36, color: pTxt }}>
               
               <section id="section-1">
-                <h2 style={{ fontSize: 20, fontWeight: 800, color: "#f1f5f9", marginBottom: 14, letterSpacing: "-0.02em", display: "flex", alignItems: "center", gap: 8 }}>
+                <h2 style={{ fontSize: 20, fontWeight: 800, color: txt, marginBottom: 14, letterSpacing: "-0.02em", display: "flex", alignItems: "center", gap: 8 }}>
                   1. Introduction & Regulatory Stand
                 </h2>
-                <p style={{ margin: 0, color: "#cbd5e1", fontSize: 14, lineHeight: 1.8 }}>
+                <p style={{ margin: 0, color: pTxt, fontSize: 14, lineHeight: 1.8 }}>
                   NeurQ AI Labs Private Limited (&quot;we&quot;, &quot;us&quot;, &quot;our&quot;) operates the <strong>QS Asset APM Platform</strong>. We are unconditionally committed to protecting the privacy, digital assets, and sensitive telemetry data of our enterprise organizations and individual administrators. 
                 </p>
-                <p style={{ marginTop: 12, marginBottom: 0, color: "#cbd5e1", fontSize: 14, lineHeight: 1.8 }}>
+                <p style={{ marginTop: 12, marginBottom: 0, color: pTxt, fontSize: 14, lineHeight: 1.8 }}>
                   This Privacy Policy delineates our rigorous methodologies for data collection, processing, transit security, and absolute isolation. This platform operates in strict compliance with the **Digital Personal Data Protection Act, 2023 (DPDP Act)** of India, the **General Data Protection Regulation (GDPR)** for EU citizens, and relevant regional regulatory frameworks.
                 </p>
               </section>
 
               <section id="section-2">
-                <h2 style={{ fontSize: 20, fontWeight: 800, color: "#f1f5f9", marginBottom: 14, letterSpacing: "-0.02em" }}>
+                <h2 style={{ fontSize: 20, fontWeight: 800, color: txt, marginBottom: 14, letterSpacing: "-0.02em" }}>
                   2. Data We Collect & Lawful Bases
                 </h2>
-                <p style={{ margin: 0, color: "#cbd5e1", fontSize: 14, lineHeight: 1.8 }}>
+                <p style={{ margin: 0, color: pTxt, fontSize: 14, lineHeight: 1.8 }}>
                   We strictly process data based on your explicit consent, which is requested at the time of account creation. We gather the following categories of telemetry and parameters:
                 </p>
-                <ul style={{ margin: "14px 0 0", paddingLeft: 20, color: "#cbd5e1", fontSize: 14, lineHeight: 1.8, display: "flex", flexDirection: "column", gap: 10 }}>
+                <ul style={{ margin: "14px 0 0", paddingLeft: 20, color: pTxt, fontSize: 14, lineHeight: 1.8, display: "flex", flexDirection: "column", gap: 10 }}>
                   <li>
-                    <strong style={{ color: "#f1f5f9" }}>Administrative Account Details:</strong> Name, work email address, phone number, corporate entity parameters, and credentials (securely transformed utilizing salt-workload factor 12 <code style={{ background: "rgba(6,182,212,0.08)", border: "1px solid rgba(6,182,212,0.15)", padding: "1px 6px", borderRadius: 4, color: "#22d3ee" }}>bcrypt</code> hashes).
+                    <strong style={{ color: txt }}>Administrative Account Details:</strong> Name, work email address, phone number, corporate entity parameters, and credentials (securely transformed utilizing salt-workload factor 12 <code style={{ background: "rgba(6,182,212,0.08)", border: "1px solid rgba(6,182,212,0.15)", padding: "1px 6px", borderRadius: 4, color: codeColor }}>bcrypt</code> hashes).
                   </li>
                   <li>
-                    <strong style={{ color: "#f1f5f9" }}>Discovery Scanning Data:</strong> Hostnames, local IP allocations, MAC coordinates, responding service interfaces, operating system signatures, network switch configurations, SNMP-enabled equipment metrics, ONVIF CCTV capabilities, and physical vehicle GPS coordinate values discovered through active system scans.
+                    <strong style={{ color: txt }}>Discovery Scanning Data:</strong> Hostnames, local IP allocations, MAC coordinates, responding service interfaces, operating system signatures, network switch configurations, SNMP-enabled equipment metrics, ONVIF CCTV capabilities, and physical vehicle GPS coordinate values discovered through active system scans.
                   </li>
                   <li>
-                    <strong style={{ color: "#f1f5f9" }}>Host Agent System Telemetry:</strong> CPU cores, memory utilization arrays, disk volume limits, running daemon instances, active user sessions, and comprehensive software manifests gathered by the QS Asset Management Agent.
+                    <strong style={{ color: txt }}>Host Agent System Telemetry:</strong> CPU cores, memory utilization arrays, disk volume limits, running daemon instances, active user sessions, and comprehensive software manifests gathered by the QS Asset Management Agent.
                   </li>
                 </ul>
               </section>
 
               <section id="section-3">
-                <h2 style={{ fontSize: 20, fontWeight: 800, color: "#f1f5f9", marginBottom: 14, letterSpacing: "-0.02em" }}>
+                <h2 style={{ fontSize: 20, fontWeight: 800, color: txt, marginBottom: 14, letterSpacing: "-0.02em" }}>
                   3. Purpose Bound Processing Specifications
                 </h2>
-                <p style={{ margin: 0, color: "#cbd5e1", fontSize: 14, lineHeight: 1.8 }}>
+                <p style={{ margin: 0, color: pTxt, fontSize: 14, lineHeight: 1.8 }}>
                   We process the collected telemetry strictly for bounded purposes:
                 </p>
                 <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginTop: 16 }}>
-                  <div style={{ padding: 16, borderRadius: 12, background: "rgba(255,255,255,0.02)", border: `1px solid ${border}` }}>
+                  <div style={{ padding: 16, borderRadius: 12, background: boxBg, border: `1px solid ${border}` }}>
                     <div style={{ fontSize: 13, fontWeight: 700, color: "#06b6d4", marginBottom: 4 }}>OPERATIONAL DELIVERY</div>
                     <p style={{ fontSize: 12, color: muted, margin: 0, lineHeight: 1.6 }}>Populating real-time infrastructure topology, issuing priority alert dispatches, and managing helpdesk service requests.</p>
                   </div>
-                  <div style={{ padding: 16, borderRadius: 12, background: "rgba(255,255,255,0.02)", border: `1px solid ${border}` }}>
+                  <div style={{ padding: 16, borderRadius: 12, background: boxBg, border: `1px solid ${border}` }}>
                     <div style={{ fontSize: 13, fontWeight: 700, color: "#8b5cf6", marginBottom: 4 }}>VULNERABILITY MITIGATION</div>
                     <p style={{ fontSize: 12, color: muted, margin: 0, lineHeight: 1.6 }}>Correlating operating systems and daemon variations against globally verified Common Vulnerabilities and Exposures (CVE) repositories.</p>
                   </div>
                 </div>
-                <div style={{ marginTop: 16, padding: "14px 18px", borderRadius: 12, background: "rgba(6,182,212,0.03)", border: "1px solid rgba(6,182,212,0.12)", display: "flex", gap: 12, alignItems: "start" }}>
+                <div style={{ marginTop: 16, padding: "14px 18px", borderRadius: 12, background: L ? "rgba(6,182,212,0.05)" : "rgba(6,182,212,0.03)", border: "1px solid rgba(6,182,212,0.12)", display: "flex", gap: 12, alignItems: "start" }}>
                   <CheckCircle2 size={16} style={{ color: "#06b6d4", flexShrink: 0, marginTop: 2 }} />
-                  <p style={{ margin: 0, fontSize: 13, color: "#cbd5e1", lineHeight: 1.6 }}>
-                    <strong style={{ color: "#f8fafc" }}>Zero External Monetization Commitments:</strong> We strictly declare that your data is never sold, leased, shared, or compiled for targeted consumer profiling or external advertising under any circumstances.
+                  <p style={{ margin: 0, fontSize: 13, color: pTxt, lineHeight: 1.6 }}>
+                    <strong style={{ color: txt }}>Zero External Monetization Commitments:</strong> We strictly declare that your data is never sold, leased, shared, or compiled for targeted consumer profiling or external advertising under any circumstances.
                   </p>
                 </div>
               </section>
 
               <section id="section-4">
-                <h2 style={{ fontSize: 20, fontWeight: 800, color: "#f1f5f9", marginBottom: 14, letterSpacing: "-0.02em", display: "flex", alignItems: "center", gap: 8 }}>
+                <h2 style={{ fontSize: 20, fontWeight: 800, color: txt, marginBottom: 14, letterSpacing: "-0.02em", display: "flex", alignItems: "center", gap: 8 }}>
                   4. Data Storage & SOC 2 Security Protocols
                 </h2>
-                <p style={{ margin: 0, color: "#cbd5e1", fontSize: 14, lineHeight: 1.8 }}>
+                <p style={{ margin: 0, color: pTxt, fontSize: 14, lineHeight: 1.8 }}>
                   We mandate state-of-the-art technical protections across our infrastructure to preserve the integrity of your telemetry data:
                 </p>
-                <ul style={{ margin: "14px 0 0", paddingLeft: 20, color: "#cbd5e1", fontSize: 14, lineHeight: 1.8, display: "flex", flexDirection: "column", gap: 10 }}>
+                <ul style={{ margin: "14px 0 0", paddingLeft: 20, color: pTxt, fontSize: 14, lineHeight: 1.8, display: "flex", flexDirection: "column", gap: 10 }}>
                   <li>
-                    <strong style={{ color: "#f1f5f9" }}>Encryption-in-Transit:</strong> All interface interaction, API transport, and remote agent telemetry are encapsulated within TLS 1.3 packets with mandatory HSTS (HTTP Strict Transport Security) active.
+                    <strong style={{ color: txt }}>Encryption-in-Transit:</strong> All interface interaction, API transport, and remote agent telemetry are encapsulated within TLS 1.3 packets with mandatory HSTS (HTTP Strict Transport Security) active.
                   </li>
                   <li>
-                    <strong style={{ color: "#f1f5f9" }}>Encryption-at-Rest:</strong> Physical storage uses AES-256 block-level disk encryption. Highly sensitive variables (like ticketing credentials or network community keys) are individually salted and encrypted within PostgreSQL columns.
+                    <strong style={{ color: txt }}>Encryption-at-Rest:</strong> Physical storage uses AES-256 block-level disk encryption. Highly sensitive variables (like ticketing credentials or network community keys) are individually salted and encrypted within PostgreSQL columns.
                   </li>
                   <li>
-                    <strong style={{ color: "#f1f5f9" }}>Multi-Tenant Isolation:</strong> Virtual environments are segmented using foreign-key organization schemas. Direct cross-tenant data requests are programmatically intercepted and neutralized at the middleware layer.
+                    <strong style={{ color: txt }}>Multi-Tenant Isolation:</strong> Virtual environments are segmented using foreign-key organization schemas. Direct cross-tenant data requests are programmatically intercepted and neutralized at the middleware layer.
                   </li>
                   <li>
-                    <strong style={{ color: "#f1f5f9" }}>Tamper-Proof Audit Logging:</strong> System audit logs utilize sequential cryptographically-linked SHA-256 hash chains. Any unauthorized alteration instantly invalidates the subsequent validation checks, alerting security command centers immediately.
+                    <strong style={{ color: txt }}>Tamper-Proof Audit Logging:</strong> System audit logs utilize sequential cryptographically-linked SHA-256 hash chains. Any unauthorized alteration instantly invalidates the subsequent validation checks, alerting security command centers immediately.
                   </li>
                 </ul>
               </section>
 
               <section id="section-5">
-                <h2 style={{ fontSize: 20, fontWeight: 800, color: "#f1f5f9", marginBottom: 14, letterSpacing: "-0.02em" }}>
+                <h2 style={{ fontSize: 20, fontWeight: 800, color: txt, marginBottom: 14, letterSpacing: "-0.02em" }}>
                   5. Data Retention Limits & Disposal
                 </h2>
-                <p style={{ margin: 0, color: "#cbd5e1", fontSize: 14, lineHeight: 1.8 }}>
+                <p style={{ margin: 0, color: pTxt, fontSize: 14, lineHeight: 1.8 }}>
                   To guarantee compliance with data minimization directives, telemetry is automatically pruned based on strict lifecycle boundaries:
                 </p>
                 <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 14, marginTop: 16 }}>
-                  <div style={{ padding: "16px 20px", borderRadius: 12, background: "rgba(255,255,255,0.02)", border: `1px solid ${border}`, textAlign: "center" }}>
+                  <div style={{ padding: "16px 20px", borderRadius: 12, background: boxBg, border: `1px solid ${border}`, textAlign: "center" }}>
                     <div style={{ fontSize: 24, fontWeight: 900, color: "#06b6d4" }}>90 Days</div>
                     <div style={{ fontSize: 11, color: muted, fontWeight: 700, textTransform: "uppercase", marginTop: 4 }}>Agent Telemetry</div>
                   </div>
-                  <div style={{ padding: "16px 20px", borderRadius: 12, background: "rgba(255,255,255,0.02)", border: `1px solid ${border}`, textAlign: "center" }}>
+                  <div style={{ padding: "16px 20px", borderRadius: 12, background: boxBg, border: `1px solid ${border}`, textAlign: "center" }}>
                     <div style={{ fontSize: 24, fontWeight: 900, color: "#3b82f6" }}>180 Days</div>
                     <div style={{ fontSize: 11, color: muted, fontWeight: 700, textTransform: "uppercase", marginTop: 4 }}>Discovery Scans</div>
                   </div>
-                  <div style={{ padding: "16px 20px", borderRadius: 12, background: "rgba(255,255,255,0.02)", border: `1px solid ${border}`, textAlign: "center" }}>
+                  <div style={{ padding: "16px 20px", borderRadius: 12, background: boxBg, border: `1px solid ${border}`, textAlign: "center" }}>
                     <div style={{ fontSize: 24, fontWeight: 900, color: "#8b5cf6" }}>365 Days</div>
                     <div style={{ fontSize: 11, color: muted, fontWeight: 700, textTransform: "uppercase", marginTop: 4 }}>Audit Event Logs</div>
                   </div>
                 </div>
-                <p style={{ marginTop: 16, marginBottom: 0, color: "#cbd5e1", fontSize: 14, lineHeight: 1.8 }}>
+                <p style={{ marginTop: 16, marginBottom: 0, color: pTxt, fontSize: 14, lineHeight: 1.8 }}>
                   Following user account termination, user parameters are flagged for deletion. Complete zero-residual sanitization across database engines is completed automatically within <strong>30 days</strong>.
                 </p>
               </section>
 
               <section id="section-6">
-                <h2 style={{ fontSize: 20, fontWeight: 800, color: "#f1f5f9", marginBottom: 14, letterSpacing: "-0.02em", display: "flex", alignItems: "center", gap: 8 }}>
+                <h2 style={{ fontSize: 20, fontWeight: 800, color: txt, marginBottom: 14, letterSpacing: "-0.02em", display: "flex", alignItems: "center", gap: 8 }}>
                   6. User Rights & Consent Management (DPDP Act 2023)
                 </h2>
-                <p style={{ margin: 0, color: "#cbd5e1", fontSize: 14, lineHeight: 1.8 }}>
+                <p style={{ margin: 0, color: pTxt, fontSize: 14, lineHeight: 1.8 }}>
                   In accordance with the India DPDP Act 2023, you retain absolute authority over your digital personal data. You are entitled to exercise these rights at any time:
                 </p>
-                <ul style={{ margin: "14px 0 0", paddingLeft: 20, color: "#cbd5e1", fontSize: 14, lineHeight: 1.8, display: "flex", flexDirection: "column", gap: 10 }}>
+                <ul style={{ margin: "14px 0 0", paddingLeft: 20, color: pTxt, fontSize: 14, lineHeight: 1.8, display: "flex", flexDirection: "column", gap: 10 }}>
                   <li>
-                    <strong style={{ color: "#f1f5f9" }}>Right to Access & Summary:</strong> Request a comprehensive, structured output of all personal datasets and logs related to your identity held by NeurQ AI Labs.
+                    <strong style={{ color: txt }}>Right to Access & Summary:</strong> Request a comprehensive, structured output of all personal datasets and logs related to your identity held by NeurQ AI Labs.
                   </li>
                   <li>
-                    <strong style={{ color: "#f1f5f9" }}>Right to Correction & Erasure:</strong> Rectify inaccurate, obsolete, or incomplete coordinates immediately. You may request physical erasure of all records if they are no longer required for lawful, bounded purposes.
+                    <strong style={{ color: txt }}>Right to Correction & Erasure:</strong> Rectify inaccurate, obsolete, or incomplete coordinates immediately. You may request physical erasure of all records if they are no longer required for lawful, bounded purposes.
                   </li>
                   <li>
-                    <strong style={{ color: "#f1f5f9" }}>Right to Consent Withdrawal:</strong> Revoke authorization for future data processing at your convenience. Note that withdrawing authentication permissions may limit our ability to deliver platform functionalities.
+                    <strong style={{ color: txt }}>Right to Consent Withdrawal:</strong> Revoke authorization for future data processing at your convenience. Note that withdrawing authentication permissions may limit our ability to deliver platform functionalities.
                   </li>
                   <li>
-                    <strong style={{ color: "#f1f5f9" }}>Right to Data Portability:</strong> Export all system parameters in a standard, machine-readable JSON structure for transfer to other monitoring services.
+                    <strong style={{ color: txt }}>Right to Data Portability:</strong> Export all system parameters in a standard, machine-readable JSON structure for transfer to other monitoring services.
                   </li>
                 </ul>
               </section>
 
               <section id="section-7">
-                <h2 style={{ fontSize: 20, fontWeight: 800, color: "#f1f5f9", marginBottom: 14, letterSpacing: "-0.02em" }}>
+                <h2 style={{ fontSize: 20, fontWeight: 800, color: txt, marginBottom: 14, letterSpacing: "-0.02em" }}>
                   7. First-Party Storage Mechanisms
                 </h2>
-                <p style={{ margin: 0, color: "#cbd5e1", fontSize: 14, lineHeight: 1.8 }}>
+                <p style={{ margin: 0, color: pTxt, fontSize: 14, lineHeight: 1.8 }}>
                   We enforce a strict <strong>Zero Third-Party Cookie Policy</strong>. No advertising pixels, tracking tags, or external behavioral marketing blocks are integrated into our pages. 
                 </p>
-                <p style={{ marginTop: 12, marginBottom: 0, color: "#cbd5e1", fontSize: 14, lineHeight: 1.8 }}>
-                  We utilize first-party browser <code style={{ background: "rgba(6,182,212,0.08)", border: "1px solid rgba(6,182,212,0.15)", padding: "1px 6px", borderRadius: 4, color: "#22d3ee" }}>localStorage</code> parameters to support essential platform controls: active JWT session storage, visual layout theme configuration, and cookie banner consent values. Please refer to our complete <a href="/cookies" style={{ color: "#06b6d4", textDecoration: "none", fontWeight: 600 }}>Cookie Policy</a> for detailed schemas.
+                <p style={{ marginTop: 12, marginBottom: 0, color: pTxt, fontSize: 14, lineHeight: 1.8 }}>
+                  We utilize first-party browser <code style={{ background: "rgba(6,182,212,0.08)", border: "1px solid rgba(6,182,212,0.15)", padding: "1px 6px", borderRadius: 4, color: codeColor }}>localStorage</code> parameters to support essential platform controls: active JWT session storage, visual layout theme configuration, and cookie banner consent values. Please refer to our complete <a href="/cookies" style={{ color: "#06b6d4", textDecoration: "none", fontWeight: 600 }}>Cookie Policy</a> for detailed schemas.
                 </p>
               </section>
 
               <section id="section-8">
-                <h2 style={{ fontSize: 20, fontWeight: 800, color: "#f1f5f9", marginBottom: 14, letterSpacing: "-0.02em", display: "flex", alignItems: "center", gap: 8 }}>
+                <h2 style={{ fontSize: 20, fontWeight: 800, color: txt, marginBottom: 14, letterSpacing: "-0.02em", display: "flex", alignItems: "center", gap: 8 }}>
                   8. Grievance Redressal & Contact Coordinates
                 </h2>
-                <p style={{ margin: 0, color: "#cbd5e1", fontSize: 14, lineHeight: 1.8 }}>
+                <p style={{ margin: 0, color: pTxt, fontSize: 14, lineHeight: 1.8 }}>
                   For inquiries concerning privacy regulations, data access requests, or to register a formal concern, you may contact our appointed Data Protection Officer directly:
                 </p>
-                <div style={{ marginTop: 20, padding: 24, borderRadius: 16, background: "rgba(255,255,255,0.01)", border: `1px solid ${border}` }}>
-                  <div style={{ fontWeight: 800, color: "#f1f5f9", fontSize: 15, marginBottom: 4 }}>Grievance Redressal Cell</div>
+                <div style={{ marginTop: 20, padding: 24, borderRadius: 16, background: L ? "rgba(255, 255, 255, 0.4)" : "rgba(255,255,255,0.01)", border: `1px solid ${border}` }}>
+                  <div style={{ fontWeight: 800, color: txt, fontSize: 15, marginBottom: 4 }}>Grievance Redressal Cell</div>
                   <div style={{ color: muted, fontSize: 13, marginBottom: 10 }}>NeurQ AI Labs Private Limited</div>
                   
-                  <div style={{ display: "flex", flexDirection: "column", gap: 8, fontSize: 13, color: "#cbd5e1" }}>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 8, fontSize: 13, color: pTxt }}>
                     <div>📍 <span style={{ color: muted }}>Address:</span> Incubation Cell, IIIT Lucknow, Chak Ganjaria, Lucknow - 226002, India</div>
                     <div>✉️ <span style={{ color: muted }}>Direct Desk:</span> privacy@neurqai.com</div>
                     <div>📞 <span style={{ color: muted }}>Emergency Line:</span> +91 (522) 430-1020</div>
@@ -298,8 +290,6 @@ export default function PrivacyPage() {
           display: flex;
           flex-direction: column;
           gap: 8px;
-          background: rgba(16, 22, 42, 0.45);
-          border: 1px solid rgba(42, 49, 80, 0.4);
           border-radius: 16px;
           padding: 20px;
           backdrop-filter: blur(12px);

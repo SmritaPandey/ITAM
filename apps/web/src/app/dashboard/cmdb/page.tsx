@@ -4,7 +4,7 @@ import { useRouter } from "next/navigation";
 import { 
   Search, ZoomIn, ZoomOut, Maximize2, Activity, Package, Server, Monitor, 
   Printer, Wifi, Shield, Ticket, Database, ExternalLink, RefreshCw, Layers,
-  Cpu, HardDrive, AlertTriangle, CheckCircle2, Info, Network
+  Cpu, HardDrive, AlertTriangle, CheckCircle2, Info, Network, ArrowRight
 } from "lucide-react";
 import { apiFetch } from "@/lib/api";
 
@@ -88,35 +88,6 @@ export default function CMDBPage() {
   const animRef = useRef<number>(0);
   const nodesRef = useRef<Node[]>([]);
 
-  // High-fidelity fallback topology dataset (used when API response is empty)
-  const getFallbackData = useCallback(() => {
-    const cx = 400, cy = 300;
-    const fallbackNodes: Node[] = [
-      { id: "core-sw-01", name: "core-sw-01", type: "Core Switch", ip: "10.0.1.5", status: "ACTIVE", cpu: 12, memory: 41, interfaces: 24, sysName: "Cisco Nexus 9000", x: cx, y: cy, vx: 0, vy: 0 },
-      { id: "edge-fw-01", name: "edge-fw-01", type: "Firewall", ip: "10.0.1.1", status: "ACTIVE", cpu: 22, memory: 35, interfaces: 8, sysName: "FortiGate 100F", x: cx - 120, y: cy - 120, vx: 0, vy: 0 },
-      { id: "router-wan-01", name: "router-wan-01", type: "Router", ip: "172.16.0.1", status: "ACTIVE", cpu: 15, memory: 28, interfaces: 4, sysName: "Cisco ISR 4451", x: cx - 240, y: cy - 180, vx: 0, vy: 0 },
-      { id: "web-server-01", name: "web-server-01", type: "Virtual Server", ip: "10.0.1.25", status: "ACTIVE", cpu: 55, memory: 72, interfaces: 1, sysName: "Nginx Ubuntu 22.04", x: cx + 180, y: cy - 100, vx: 0, vy: 0 },
-      { id: "web-server-02", name: "web-server-02", type: "Virtual Server", ip: "10.0.1.26", status: "ACTIVE", cpu: 40, memory: 65, interfaces: 1, sysName: "Node.js VM", x: cx + 180, y: cy + 100, vx: 0, vy: 0 },
-      { id: "prod-db-01", name: "prod-db-01", type: "Database Server", ip: "10.0.1.18", status: "ACTIVE", cpu: 28, memory: 88, interfaces: 2, sysName: "PostgreSQL HA Cluster", x: cx + 80, y: cy + 180, vx: 0, vy: 0 },
-      { id: "backup-srv-01", name: "backup-srv-01", type: "NAS Storage", ip: "10.0.1.99", status: "ACTIVE", cpu: 8, memory: 15, interfaces: 4, sysName: "Synology RackStation", x: cx - 100, y: cy + 160, vx: 0, vy: 0 },
-      { id: "corp-printer-01", name: "corp-printer-01", type: "Printer", ip: "10.0.1.240", status: "INACTIVE", cpu: 0, memory: 0, interfaces: 1, sysName: "HP LaserJet Pro", x: cx - 220, y: cy + 80, vx: 0, vy: 0 },
-    ];
-
-    const fallbackLinks: Link[] = [
-      { source: "router-wan-01", target: "edge-fw-01", bandwidth: "10Gbps", utilization: 45, localPort: "Gig1/0/1", remotePort: "port1", discoverySource: "lldp" },
-      { source: "edge-fw-01", target: "core-sw-01", bandwidth: "10Gbps", utilization: 32, localPort: "port2", remotePort: "Eth1/1", discoverySource: "lldp" },
-      { source: "core-sw-01", target: "web-server-01", bandwidth: "1Gbps", utilization: 68, localPort: "Eth1/10", remotePort: "eth0", discoverySource: "lldp" },
-      { source: "core-sw-01", target: "web-server-02", bandwidth: "1Gbps", utilization: 50, localPort: "Eth1/11", remotePort: "eth0", discoverySource: "lldp" },
-      { source: "core-sw-01", target: "prod-db-01", bandwidth: "10Gbps", utilization: 82, localPort: "Eth1/2", remotePort: "eth0", discoverySource: "cdp" },
-      { source: "core-sw-01", target: "backup-srv-01", bandwidth: "10Gbps", utilization: 12, localPort: "Eth1/3", remotePort: "eth0", discoverySource: "lldp" },
-      { source: "core-sw-01", target: "corp-printer-01", bandwidth: "100Mbps", utilization: 0, localPort: "Eth1/20", remotePort: "lan1", discoverySource: "subnet" },
-      { source: "web-server-01", target: "prod-db-01", bandwidth: "1Gbps", utilization: 55, localPort: "eth0", remotePort: "eth0", discoverySource: "subnet" },
-      { source: "web-server-02", target: "prod-db-01", bandwidth: "1Gbps", utilization: 48, localPort: "eth0", remotePort: "eth0", discoverySource: "subnet" },
-    ];
-
-    return { nodes: fallbackNodes, links: fallbackLinks };
-  }, []);
-
   // Fetch from real NestJS SNMP autodiscovery API
   const fetchTopology = useCallback(async (isManual = false) => {
     if (isManual) setIsRefreshing(true);
@@ -148,23 +119,20 @@ export default function CMDBPage() {
         nodesRef.current = resolvedNodes;
         setLinks(data.links || []);
       } else {
-        // Empty response fallback
-        const fb = getFallbackData();
-        setNodes(fb.nodes);
-        nodesRef.current = fb.nodes;
-        setLinks(fb.links);
+        setNodes([]);
+        nodesRef.current = [];
+        setLinks([]);
       }
     } catch (err) {
-      console.warn("Could not fetch real topology, initializing visual fallbacks: ", err);
-      const fb = getFallbackData();
-      setNodes(fb.nodes);
-      nodesRef.current = fb.nodes;
-      setLinks(fb.links);
+      console.warn("Could not fetch real topology: ", err);
+      setNodes([]);
+      nodesRef.current = [];
+      setLinks([]);
     } finally {
       setLoading(false);
       setIsRefreshing(false);
     }
-  }, [getFallbackData]);
+  }, []);
 
   useEffect(() => {
     fetchTopology();
@@ -597,6 +565,61 @@ export default function CMDBPage() {
             <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", flex: 1, color: "var(--text-tertiary)", gap: 10 }}>
               <Activity size={28} className="spin" style={{ color: "#06b6d4", animation: "spin 1.5s linear infinite" }} />
               <div style={{ fontSize: 12.5, fontWeight: 600 }}>Loading continuous SNMP MIB walks...</div>
+            </div>
+          ) : nodes.length === 0 ? (
+            <div style={{
+              position: "absolute",
+              inset: 0,
+              display: "flex",
+              flexDirection: "column",
+              alignItems: "center",
+              justifyContent: "center",
+              background: "radial-gradient(circle at center, #0b0f19 0%, #02040a 100%)",
+              padding: 32,
+              textAlign: "center",
+              zIndex: 20
+            }}>
+              <div style={{
+                width: 64,
+                height: 64,
+                borderRadius: "50%",
+                background: "rgba(6, 182, 212, 0.08)",
+                border: "1px solid rgba(6, 182, 212, 0.3)",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                color: "var(--brand-400)",
+                marginBottom: 20,
+                boxShadow: "0 0 20px rgba(6, 182, 212, 0.15)"
+              }}>
+                <Network size={32} />
+              </div>
+              <h3 style={{ fontSize: 18, fontWeight: 800, color: "var(--text-primary)", marginBottom: 8, letterSpacing: "-0.01em" }}>
+                No Autodiscovered Topology Nodes Found
+              </h3>
+              <p style={{ fontSize: 13, color: "var(--text-secondary)", maxWidth: 440, lineHeight: 1.6, marginBottom: 24 }}>
+                Your IT infrastructure map is currently empty. Run an SNMP discovery subnet scan under Network Discovery to dynamically populate your CMDB map with active switches, firewalls, and servers.
+              </p>
+              <button
+                onClick={() => router.push("/dashboard/discovery")}
+                className="btn btn-primary"
+                style={{
+                  padding: "10px 20px",
+                  fontSize: 12.5,
+                  fontWeight: 700,
+                  borderRadius: 8,
+                  background: "linear-gradient(135deg, var(--brand-500) 0%, #06b6d4 100%)",
+                  border: "none",
+                  boxShadow: "0 4px 15px rgba(6,182,212,0.3)",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 8,
+                  cursor: "pointer"
+                }}
+              >
+                Go to Network Discovery
+                <ArrowRight size={14} />
+              </button>
             </div>
           ) : (
             <>

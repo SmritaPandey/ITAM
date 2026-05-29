@@ -34,12 +34,7 @@ export class TenantMeteringService {
     const limits = this.getPlanLimits(tenant.plan);
     const settings = (tenant.settings as any) || {};
 
-    // Enterprise can have custom overrides
-    const effectiveLimits = {
-      maxAssets: settings.maxAssets || limits.maxAssets,
-      maxUsers: settings.maxUsers || limits.maxUsers,
-      maxScansPerMonth: settings.maxScansPerMonth || limits.maxScansPerMonth,
-    };
+    const effectiveLimits = this.getEffectiveLimits(tenant);
 
     return {
       plan: tenant.plan,
@@ -117,9 +112,9 @@ export class TenantMeteringService {
     const base = this.getPlanLimits(tenant.plan);
     const settings = (tenant.settings as any) || {};
     return {
-      maxAssets: settings.maxAssets || base.maxAssets,
-      maxUsers: settings.maxUsers || base.maxUsers,
-      maxScansPerMonth: settings.maxScansPerMonth || base.maxScansPerMonth,
+      maxAssets: Math.max(settings.maxAssets || 0, base.maxAssets),
+      maxUsers: Math.max(settings.maxUsers || 0, base.maxUsers),
+      maxScansPerMonth: Math.max(settings.maxScansPerMonth || 0, base.maxScansPerMonth),
     };
   }
 

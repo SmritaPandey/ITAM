@@ -3,23 +3,10 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
+import { useTheme } from "@/components/ThemeProvider";
 
 export default function NotFoundPage() {
-  const [theme, setTheme] = useState<"dark" | "light">("light");
-
-  useEffect(() => {
-    const s = localStorage.getItem("theme") as "dark" | "light" | null;
-    const t = s || "light";
-    setTheme(t);
-    document.documentElement.setAttribute("data-theme", t);
-  }, []);
-
-  function toggleTheme() {
-    const n = theme === "dark" ? "light" : "dark";
-    setTheme(n);
-    localStorage.setItem("theme", n);
-    document.documentElement.setAttribute("data-theme", n);
-  }
+  const { theme, toggleTheme } = useTheme();
 
   const L = theme === "light";
   const bg = L ? "#f9fafb" : "#020205";

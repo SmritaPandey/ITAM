@@ -2,7 +2,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useRouter, usePathname } from "next/navigation";
-import { LogoIcon } from "@/components/Logo";
+import { Logo } from "@/components/Logo";
 import { Sun, Moon, ArrowRight, Menu, X } from "lucide-react";
 
 interface HeaderProps {
@@ -59,9 +59,8 @@ export default function Header({ theme, onToggleTheme }: HeaderProps) {
         boxShadow: L ? "0 4px 30px rgba(15, 23, 42, 0.03)" : "none",
         transition: "background 0.3s"
       }}>
-        <Link href="/" style={{ display: "flex", alignItems: "center", gap: 10, textDecoration: "none", color: "inherit" }}>
-          <LogoIcon size={32} glow={!L} />
-          <span style={{ fontSize: 16, fontWeight: 900, letterSpacing: "-0.04em" }}>QS Asset</span>
+        <Link href="/" style={{ display: "flex", alignItems: "center", textDecoration: "none", color: "inherit" }}>
+          <Logo size={28} glow={!L} theme={theme} />
         </Link>
 
         {/* Desktop Navigation */}

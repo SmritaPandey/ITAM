@@ -2,6 +2,10 @@ import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../common/database/prisma.service';
 import { EventBusService } from '../../common/events/event-bus.service';
 import { SshScanner } from '../../common/scanners/ssh.scanner';
+import * as crypto from 'crypto';
+
+const VAULT_KEY = process.env.VAULT_ENCRYPTION_KEY || 'assetcommand-default-vault-key-32!'; // 32 chars for AES-256
+const ALGORITHM = 'aes-256-cbc';
 
 interface ChangeDetection {
   category: string;
@@ -200,8 +204,40 @@ export class ComplianceService {
     // 11. New Listening Ports (UNAUTHORIZED_ACCESS)
     const prevPorts = (prev?.security?.openPorts || []).map((p: any) => p.port);
     const currPorts = curr?.security?.openPorts || [];
+    const IGNORED_PORT_PROCESSES = [
+      'antigravity',
+      'antigravi',
+      'vscode',
+      'node',
+      'npm',
+      'yarn',
+      'pnpm',
+      'language_',
+      'tsserver',
+      'typescript',
+      'next',
+      'vite',
+      'webpack',
+      'docker',
+      'postgres',
+      'mysql',
+      'redis',
+      'mongod',
+      'python',
+      'ruby',
+      'java',
+      'go',
+      'rust',
+      'dotnet',
+    ];
     for (const p of currPorts) {
       if (!prevPorts.includes(p.port)) {
+        // Safe process whitelist check to prevent blocking development tools
+        const procName = (p.process || '').toLowerCase();
+        if (IGNORED_PORT_PROCESSES.some(ip => procName.includes(ip))) {
+          continue;
+        }
+
         changes.push({
           category: 'UNAUTHORIZED_ACCESS',
           changeType: 'ADDED',
@@ -228,12 +264,65 @@ export class ComplianceService {
         blockedKeywords.push(...pattern.blockedKeywords);
       }
     }
-    const uniqueBlockedKeywords = Array.from(new Set(blockedKeywords.map(k => k.toLowerCase())));
+
+    // Filter out empty, whitespace, or non-string keywords to prevent broad matching
+    const uniqueBlockedKeywords = Array.from(
+      new Set(
+        blockedKeywords
+          .filter(k => typeof k === 'string' && k.trim().length > 0)
+          .map(k => k.toLowerCase())
+      )
+    );
+
+    // Whitelist of critical system and user development tools that should NEVER be blocked
+    const SYSTEM_PROTECTED_PROCESSES = [
+      'antigravity',
+      'antigravi',
+      'vscode',
+      'node',
+      'npm',
+      'yarn',
+      'pnpm',
+      'language_',
+      'tsserver',
+      'typescript',
+      'chrome',
+      'safari',
+      'firefox',
+      'terminal',
+      'bash',
+      'zsh',
+      'sh',
+      'cmd',
+      'powershell',
+      'explorer.exe',
+      'systemidle',
+      'taskmgr',
+      'svchost',
+      'launchd',
+    ];
 
     for (const proc of currProcs) {
       const procName = (proc.name || '').toLowerCase();
       const procCmd = (proc.command || '').toLowerCase();
-      const matchedKeyword = uniqueBlockedKeywords.find(k => procName.includes(k) || procCmd.includes(k));
+
+      // Skip evaluation for protected system processes and developer tools
+      const isProtected = SYSTEM_PROTECTED_PROCESSES.some(sp => 
+        procName.includes(sp) || procCmd.includes(sp)
+      );
+      if (isProtected) {
+        continue;
+      }
+
+      const matchedKeyword = uniqueBlockedKeywords.find(k => {
+        // For short keywords (like 'nc' or other length <= 2), use exact word boundary regex
+        if (k.length <= 2) {
+          const escaped = k.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+          const regex = new RegExp(`\\b${escaped}\\b`, 'i');
+          return regex.test(procName) || regex.test(procCmd);
+        }
+        return procName.includes(k) || procCmd.includes(k);
+      });
 
       if (matchedKeyword) {
         changes.push({
@@ -816,6 +905,16 @@ export class ComplianceService {
     };
   }
 
+  private decrypt(encryptedText: string): string {
+    const [ivHex, encrypted] = encryptedText.split(':');
+    const key = crypto.scryptSync(VAULT_KEY, 'salt', 32);
+    const iv = Buffer.from(ivHex, 'hex');
+    const decipher = crypto.createDecipheriv(ALGORITHM, key, iv);
+    let decrypted = decipher.update(encrypted, 'hex', 'utf8');
+    decrypted += decipher.final('utf8');
+    return decrypted;
+  }
+
   /**
    * Run an agentless compliance scan on a target IP via SSH.
    * Creates a virtual agent record if one doesn't exist.
@@ -837,7 +936,7 @@ export class ComplianceService {
         where: { id: data.credentialId, tenantId },
       });
       if (stored) {
-        const c = JSON.parse(stored.encryptedData) as any;
+        const c = JSON.parse(this.decrypt(stored.encryptedData)) as any;
         creds = { username: c.username || data.username, password: c.password, privateKeyPath: c.privateKeyPath };
       }
     }

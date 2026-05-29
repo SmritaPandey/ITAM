@@ -27,6 +27,11 @@ export class RolesGuard implements CanActivate {
       throw new ForbiddenException('Access denied: no role assigned');
     }
 
+    // Platform Owners and Super Admins bypass all role guards
+    if (user.isSuperAdmin || user.role.toLowerCase() === 'platform owner') {
+      return true;
+    }
+
     const hasRole = requiredRoles.some(role =>
       user.role.toLowerCase() === role.toLowerCase(),
     );

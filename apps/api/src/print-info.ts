@@ -15,10 +15,22 @@ function getNetworkInterfaces() {
     if (!addrs) continue;
     for (const addr of addrs) {
       if (addr.family === 'IPv4' && !addr.internal) {
-        result.push({ name, ip: addr.address, mac: addr.mac, netmask: addr.netmask });
+        const lowerName = name.toLowerCase();
+        let score = 100;
+
+        if (lowerName.includes('docker') || lowerName.includes('veth') || lowerName.includes('br-') || lowerName.includes('virbr')) score -= 80;
+        if (lowerName.includes('vboxnet') || lowerName.includes('vbox') || lowerName.includes('virtualbox')) score -= 70;
+        if (lowerName.includes('vmnet') || lowerName.includes('vmware') || lowerName.includes('virtual')) score -= 60;
+        if (lowerName.includes('vpn') || lowerName.includes('tun') || lowerName.includes('tap') || lowerName.includes('ppp')) score -= 50;
+
+        if (lowerName.startsWith('en') || lowerName.startsWith('eth') || lowerName.startsWith('wlan') || lowerName.startsWith('wlp')) score += 20;
+        if (lowerName.includes('ethernet') || lowerName.includes('wi-fi') || lowerName.includes('wifi')) score += 25;
+
+        result.push({ name, ip: addr.address, mac: addr.mac, netmask: addr.netmask, score });
       }
     }
   }
+  result.sort((a, b) => b.score - a.score);
   return result;
 }
 

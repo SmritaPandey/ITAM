@@ -5,6 +5,7 @@ import Link from "next/link";
 import { LogoIcon } from "@/components/Logo";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
+import { useTheme } from "@/components/ThemeProvider";
 import {
   Shield, Monitor, Ticket, Network, Package, BarChart3, Lock, Zap, ChevronRight,
   ArrowRight, CheckCircle2, Globe, Server, Cpu, Sun, Moon, Camera, Car, Laptop,
@@ -86,7 +87,7 @@ const FALLBACK_PRICING: PricingConfig = {
 
 export default function LandingPage() {
   const router = useRouter();
-  const [theme, setTheme] = useState<"dark" | "light">("light");
+  const { theme, toggleTheme } = useTheme();
 
   const L = theme === "light";
   const bg = L ? "#f9fafb" : "#020205";
@@ -101,11 +102,6 @@ export default function LandingPage() {
   const [applyPromo, setApplyPromo] = useState(true);
 
   useEffect(() => {
-    const s = localStorage.getItem("theme") as "dark" | "light" | null;
-    const t = s || "light";
-    setTheme(t);
-    document.documentElement.setAttribute("data-theme", t);
-
     const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4100/api/v1";
     fetch(`${API_BASE}/settings/pricing`)
       .then(res => {
@@ -121,13 +117,6 @@ export default function LandingPage() {
         console.warn("Pricing dynamic sync deferred, using local high-fidelity seeds:", err);
       });
   }, []);
-
-  function toggle() {
-    const n = theme === "dark" ? "light" : "dark";
-    setTheme(n);
-    localStorage.setItem("theme", n);
-    document.documentElement.setAttribute("data-theme", n);
-  }
 
   // ─── CHAPTER 1: CMDB TOPOLOGY REROUTING STATE ───
   const [cmdbFailureSimulated, setCmdbFailureSimulated] = useState(false);
@@ -238,7 +227,7 @@ export default function LandingPage() {
       }} />
 
       {/* ─── SHARED NAVIGATION BAR ─── */}
-      <Header theme={theme} onToggleTheme={toggle} />
+      <Header theme={theme} onToggleTheme={toggleTheme} />
 
       {/* ─── HERO CHAPTER: THE GENESIS (APPLE DRAMATIC STYLE) ─── */}
       <section style={{ paddingTop: 180, paddingBottom: 110, textAlign: "center", position: "relative", zIndex: 1 }}>

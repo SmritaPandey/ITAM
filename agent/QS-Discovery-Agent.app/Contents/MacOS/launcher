@@ -1,0 +1,4 @@
+#!/bin/bash
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+cd "${SCRIPT_DIR}"
+./run-agent.sh > ../Resources/agent-service.log 2> ../Resources/agent-service-error.log &

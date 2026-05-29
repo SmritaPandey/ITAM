@@ -219,23 +219,103 @@ export class DiscoveryService {
     return { deviceType, manufacturer, model, osGuess };
   }
 
-  /**
-   * Detect the local machine's subnet(s) for scanning
-   */
-  getLocalSubnets(): { ip: string; subnet: string; interface: string }[] {
+  async getLocalSubnets(tenantId: string): Promise<{ ip: string; subnet: string; interface: string; source: string }[]> {
+    const subnets: { ip: string; subnet: string; interface: string; source: string }[] = [];
+
+    // 1. Get subnets from active online agents in the tenant (last heartbeat in last 5 minutes)
+    try {
+      const onlineAgents = await this.prisma.agent.findMany({
+        where: {
+          tenantId,
+          status: 'ONLINE',
+          lastHeartbeat: { gte: new Date(Date.now() - 5 * 60 * 1000) },
+        },
+      });
+
+      for (const agent of onlineAgents) {
+        const systemInfo = agent.systemInfo as any;
+        const interfaces = systemInfo?.network?.interfaces;
+        if (Array.isArray(interfaces)) {
+          for (const iface of interfaces) {
+            if (iface.ip && iface.name) {
+              const parts = iface.ip.split('.');
+              if (parts.length === 4) {
+                const subnet = `${parts[0]}.${parts[1]}.${parts[2]}.0/24`;
+                // Deduplicate
+                if (!subnets.some(s => s.subnet === subnet)) {
+                  subnets.push({
+                    ip: iface.ip,
+                    subnet,
+                    interface: `${iface.name} (${agent.hostname})`,
+                    source: 'Agent',
+                  });
+                }
+              }
+            }
+          }
+        }
+      }
+    } catch (err: any) {
+      this.logger.warn(`Failed to retrieve subnets from active agents: ${err.message}`);
+    }
+
+    // 2. Fallback to server's own interfaces (useful for local development/on-premise servers)
+    // Heuristic name-priority scoring to prioritize physical active interfaces over virtual/mock adapters
     const interfaces = os.networkInterfaces();
-    const subnets: { ip: string; subnet: string; interface: string }[] = [];
+    const serverIfaces: { name: string; ip: string; subnet: string; score: number }[] = [];
 
     for (const [name, addrs] of Object.entries(interfaces)) {
       if (!addrs) continue;
       for (const addr of addrs) {
         if (addr.family === 'IPv4' && !addr.internal) {
           const parts = addr.address.split('.');
-          const subnet = `${parts[0]}.${parts[1]}.${parts[2]}.0/24`;
-          subnets.push({ ip: addr.address, subnet, interface: name });
+          if (parts.length === 4) {
+            const subnet = `${parts[0]}.${parts[1]}.${parts[2]}.0/24`;
+            const lowerName = name.toLowerCase();
+            let score = 100;
+
+            // Heavily deprioritize loopback and virtual/mock interfaces
+            if (lowerName.includes('docker') || lowerName.includes('veth') || lowerName.includes('br-') || lowerName.includes('virbr')) {
+              score -= 80;
+            }
+            if (lowerName.includes('vboxnet') || lowerName.includes('vbox') || lowerName.includes('virtualbox')) {
+              score -= 70;
+            }
+            if (lowerName.includes('vmnet') || lowerName.includes('vmware') || lowerName.includes('virtual')) {
+              score -= 60;
+            }
+            if (lowerName.includes('vpn') || lowerName.includes('tun') || lowerName.includes('tap') || lowerName.includes('ppp')) {
+              score -= 50;
+            }
+
+            // Prioritize standard interfaces (en0, eth0, wlan0, Ethernet, Wi-Fi)
+            if (lowerName.startsWith('en') || lowerName.startsWith('eth') || lowerName.startsWith('wlan') || lowerName.startsWith('wlp')) {
+              score += 20;
+            }
+            if (lowerName.includes('ethernet') || lowerName.includes('wi-fi') || lowerName.includes('wifi')) {
+              score += 25;
+            }
+
+            serverIfaces.push({ name, ip: addr.address, subnet, score });
+          }
         }
       }
     }
+
+    // Sort server interfaces descending by score
+    serverIfaces.sort((a, b) => b.score - a.score);
+
+    for (const sIface of serverIfaces) {
+      if (!subnets.some(s => s.subnet === sIface.subnet)) {
+        subnets.push({
+          ip: sIface.ip,
+          subnet: sIface.subnet,
+          interface: sIface.name,
+          source: 'Server',
+        });
+      }
+    }
+
     return subnets;
   }
 
@@ -258,10 +338,23 @@ export class DiscoveryService {
       },
     });
 
-    // Run scan asynchronously
-    this.runScan(scanJob.id, tenantId, data.subnet, scanTypeNormalized).catch(err =>
-      this.logger.error(`Scan ${scanJob.id} failed: ${err.message}`),
-    );
+    // Check if there are any ONLINE agents in this tenant (last heartbeat in last 5 minutes)
+    const onlineAgents = await this.prisma.agent.findMany({
+      where: {
+        tenantId,
+        status: 'ONLINE',
+        lastHeartbeat: { gte: new Date(Date.now() - 5 * 60 * 1000) },
+      },
+    });
+
+    if (onlineAgents.length > 0) {
+      this.logger.log(`Scan job ${scanJob.id} created and queued for agent-delegated execution (online agents: ${onlineAgents.length})`);
+    } else {
+      // Run scan asynchronously locally on the server
+      this.runScan(scanJob.id, tenantId, data.subnet, scanTypeNormalized).catch(err =>
+        this.logger.error(`Scan ${scanJob.id} failed: ${err.message}`),
+      );
+    }
 
     return scanJob;
   }
@@ -346,13 +439,61 @@ export class DiscoveryService {
    * Execute the actual network scan — supports multiple scan types
    */
   private async runScan(scanJobId: string, tenantId: string, subnet: string, scanType: string) {
+    let targetSubnet = subnet;
+    const interfaces = os.networkInterfaces();
+    let localSubnet = '';
+    const sortedIfaces: { subnet: string; score: number }[] = [];
+
+    for (const [name, addrs] of Object.entries(interfaces)) {
+      if (!addrs) continue;
+      for (const addr of addrs) {
+        if (addr.family === 'IPv4' && !addr.internal) {
+          const parts = addr.address.split('.');
+          if (parts.length === 4) {
+            const subnetStr = `${parts[0]}.${parts[1]}.${parts[2]}.0/24`;
+            const lowerName = name.toLowerCase();
+            let score = 100;
+
+            // Heavily deprioritize loopback and virtual/mock interfaces
+            if (lowerName.includes('docker') || lowerName.includes('veth') || lowerName.includes('br-') || lowerName.includes('virbr')) score -= 80;
+            if (lowerName.includes('vboxnet') || lowerName.includes('vbox') || lowerName.includes('virtualbox')) score -= 70;
+            if (lowerName.includes('vmnet') || lowerName.includes('vmware') || lowerName.includes('virtual')) score -= 60;
+            if (lowerName.includes('vpn') || lowerName.includes('tun') || lowerName.includes('tap') || lowerName.includes('ppp')) score -= 50;
+
+            // Prioritize standard interfaces (en0, eth0, wlan0, Ethernet, Wi-Fi)
+            if (lowerName.startsWith('en') || lowerName.startsWith('eth') || lowerName.startsWith('wlan') || lowerName.startsWith('wlp')) score += 20;
+            if (lowerName.includes('ethernet') || lowerName.includes('wi-fi') || lowerName.includes('wifi')) score += 25;
+
+            sortedIfaces.push({ subnet: subnetStr, score });
+          }
+        }
+      }
+    }
+
+    if (sortedIfaces.length > 0) {
+      sortedIfaces.sort((a, b) => b.score - a.score);
+      localSubnet = sortedIfaces[0].subnet;
+    }
+
+    if (!targetSubnet || targetSubnet.includes('192.168.1.0') || targetSubnet.includes('10.0.0.0')) {
+      if (localSubnet) {
+        this.logger.log(`Autodetected correct local interface subnet: ${localSubnet} (replacing mock ${targetSubnet || 'empty'})`);
+        targetSubnet = localSubnet;
+      }
+    }
+
     await this.prisma.scanJob.update({
       where: { id: scanJobId },
-      data: { status: 'RUNNING', startedAt: new Date() },
+      data: {
+        status: 'RUNNING',
+        startedAt: new Date(),
+        subnet: targetSubnet,
+        name: `Scan ${targetSubnet}`,
+      },
     });
 
     try {
-      const baseIp = subnet.replace(/\/\d+$/, '').replace(/\.\d+$/, '');
+      const baseIp = targetSubnet.replace(/\/\d+$/, '').replace(/\.\d+$/, '');
       const ips = Array.from({ length: 254 }, (_, i) => `${baseIp}.${i + 1}`);
 
       // Phase 1: Ping sweep (always first)
@@ -383,6 +524,40 @@ export class DiscoveryService {
             aliveHosts.push(result.value);
           }
         }
+      }
+
+      // Fallback 1: If no hosts found by ping (possibly due to cloud container isolation, blocked ICMP, or permission error),
+      // try to probe a few highly common ports (e.g. 22, 80, 135, 443, 445) to discover active hosts.
+      if (aliveHosts.length === 0) {
+        this.logger.log(`Ping sweep found 0 hosts. Running TCP-based discovery sweep on common ports...`);
+        for (let i = 0; i < ips.length; i += batchSize) {
+          const batch = ips.slice(i, i + batchSize);
+          const results = await Promise.allSettled(
+            batch.map(async (ip) => {
+              const commonPorts = [22, 80, 135, 443, 445];
+              for (const port of commonPorts) {
+                const open = await this.probePort(ip, port, 800); // Fast timeout for sweep
+                if (open) {
+                  let hostname: string | undefined;
+                  try { const [name] = await dns.promises.reverse(ip); hostname = name; } catch {}
+                  return { ip, hostname, latency: '1' };
+                }
+              }
+              return null;
+            }),
+          );
+
+          for (const result of results) {
+            if (result.status === 'fulfilled' && result.value) {
+              aliveHosts.push(result.value);
+            }
+          }
+        }
+      }
+
+      // Fallback 2: If we still have 0 hosts, log that no active devices were detected
+      if (aliveHosts.length === 0) {
+        this.logger.log(`No active hosts found on subnet ${subnet} during discovery scan.`);
       }
 
       // Get ARP table for MAC addresses
@@ -931,15 +1106,15 @@ export class DiscoveryService {
       }
     }
 
-    // Query active compliance changes requiring mitigation (PENDING_REVIEW, VIOLATION, REJECTED)
+    // Query active compliance changes requiring mitigation (only automatic blocks or admin-rejected items)
     const activeThreats = await this.prisma.endpointChange.findMany({
       where: {
         agentId: id,
-        status: { in: ['PENDING_REVIEW', 'VIOLATION', 'REJECTED'] },
+        status: { in: ['VIOLATION', 'REJECTED'] }, // PENDING_REVIEW should NOT trigger active mitigation until reviewed!
       },
     });
 
-    const actions = activeThreats.map((threat: any) => {
+    const actions: any[] = activeThreats.map((threat: any) => {
       const val = threat.newValue as any;
       if (threat.category === 'PROCESS_BLOCKED') {
         return {
@@ -965,10 +1140,131 @@ export class DiscoveryService {
       }
     });
 
+    // Queue any pending network scans for this tenant to the agent
+    const pendingScan = await this.prisma.scanJob.findFirst({
+      where: { tenantId, status: 'PENDING' },
+      orderBy: { createdAt: 'asc' },
+    });
+
+    if (pendingScan) {
+      actions.push({
+        type: 'RUN_SCAN',
+        scanJobId: pendingScan.id,
+        subnet: pendingScan.subnet,
+        scanType: pendingScan.scanType,
+        portRange: pendingScan.portRange,
+      });
+
+      // Mark the scan job as RUNNING so it is not picked up by other heartbeats
+      await this.prisma.scanJob.update({
+        where: { id: pendingScan.id },
+        data: { status: 'RUNNING', startedAt: new Date() },
+      });
+
+      this.logger.log(`Delegated scan job ${pendingScan.id} to agent ${agent.hostname}`);
+    }
+
     return {
       ...updated,
       actions,
     };
+  }
+
+  /**
+   * Process scan results uploaded by an on-premise agent
+   */
+  async processAgentScanResults(scanJobId: string, tenantId: string, devices: any[]) {
+    this.logger.log(`Processing scan results for scan job ${scanJobId} from agent. Devices found: ${devices.length}`);
+
+    const scanJob = await this.prisma.scanJob.findFirst({
+      where: { id: scanJobId, tenantId },
+    });
+    if (!scanJob) {
+      throw new NotFoundException('Scan job not found');
+    }
+
+    try {
+      // Check which IPs already exist as managed assets (for auto-merge)
+      const existingAssets = await this.prisma.asset.findMany({
+        where: { tenantId, deletedAt: null, ipAddress: { in: devices.map(d => d.ip) } },
+        select: { id: true, ipAddress: true },
+      });
+      const assetByIp = new Map(existingAssets.map(a => [a.ipAddress, a.id]));
+
+      let newCount = 0;
+      for (const host of devices) {
+        const mac = host.mac || null;
+        const existingAssetId = assetByIp.get(host.ip);
+        const openPorts = host.openPorts || [];
+        const deviceType = host.deviceType || 'Unknown';
+        const riskScore = calculateRiskScore(openPorts, host.hostname, deviceType);
+
+        const deviceData = {
+          scanJobId: scanJobId,
+          macAddress: mac || null,
+          hostname: host.hostname || null,
+          manufacturer: host.manufacturer || null,
+          deviceType: deviceType,
+          osInfo: host.osInfo || null,
+          openPorts: openPorts.length > 0 ? JSON.stringify(openPorts) : null,
+          services: openPorts.length > 0 ? JSON.stringify(openPorts.map((p: any) => p.service)) : null,
+          riskScore,
+          lastSeenAt: new Date(),
+          enrichmentStatus: 'BASIC',
+        };
+
+        const result = await this.prisma.discoveredDevice.upsert({
+          where: { tenantId_ipAddress: { tenantId, ipAddress: host.ip } },
+          create: {
+            tenantId,
+            ipAddress: host.ip,
+            ...deviceData,
+            status: existingAssetId ? 'MERGED' : 'PENDING_REVIEW',
+            approvedAssetId: existingAssetId || null,
+            firstSeenAt: new Date(),
+            seenCount: 1,
+          },
+          update: {
+            ...deviceData,
+            seenCount: { increment: 1 },
+            ...(existingAssetId ? { status: 'MERGED', approvedAssetId: existingAssetId } : {}),
+          },
+        });
+
+        if (result.seenCount === 1 && result.status === 'PENDING_REVIEW') {
+          newCount++;
+          this.eventBus.emitDiscoveryEvent(tenantId, 'new_device', {
+            ipAddress: host.ip, deviceType: deviceType,
+            hostname: host.hostname, mac, scanJobId,
+          });
+        }
+      }
+
+      // Update scan job
+      await this.prisma.scanJob.update({
+        where: { id: scanJobId },
+        data: {
+          status: 'COMPLETED',
+          completedAt: new Date(),
+          devicesFound: devices.length,
+          newDevices: newCount,
+        },
+      });
+
+      // Emit scan completed event
+      this.eventBus.emitDiscoveryEvent(tenantId, 'scan_completed', {
+        scanJobId, devicesFound: devices.length, newDevices: newCount, scanType: scanJob.scanType,
+      });
+
+      this.logger.log(`Scan job ${scanJobId} completed via agent upload: ${devices.length} devices, ${newCount} new`);
+      return { success: true, devicesFound: devices.length, newDevices: newCount };
+    } catch (error: any) {
+      await this.prisma.scanJob.update({
+        where: { id: scanJobId },
+        data: { status: 'FAILED', completedAt: new Date(), errorMessage: error.message },
+      });
+      throw error;
+    }
   }
 
   // ─── Scheduled Scans ──────────────────────────────────────────
@@ -1273,41 +1569,77 @@ export class DiscoveryService {
   }
 
   /**
-   * Package all agent collector files into an in-memory ZIP buffer.
+   * Package all agent collector files into an in-memory ZIP buffer with OS-specific hierarchy.
    */
   getAgentZipPackage(serverUrl?: string, token?: string): Buffer {
     const zip = new AdmZip();
     
-    // Support running from build directory vs source development root
-    let agentDir = path.resolve(process.cwd(), 'agent');
-    if (!fs.existsSync(agentDir)) {
-      agentDir = path.resolve(process.cwd(), '../../agent');
+    // Resolve agent directory
+    const possiblePaths = [
+      path.resolve(process.cwd(), 'agent'),
+      path.resolve(process.cwd(), 'apps/api/agent'),
+      path.resolve(process.cwd(), '../../agent'),
+      path.resolve(__dirname, '../../../../agent'),
+      path.resolve(__dirname, '../../../../../agent'),
+      path.resolve(__dirname, '../../../../apps/api/agent'),
+    ];
+
+    let agentDir = '';
+    for (const p of possiblePaths) {
+      if (fs.existsSync(p) && fs.statSync(p).isDirectory()) {
+        agentDir = p;
+        break;
+      }
     }
     
-    if (!fs.existsSync(agentDir)) {
-      this.logger.error(`Discovery agent directory not found at: ${agentDir}`);
+    if (!agentDir) {
+      this.logger.error(`Discovery agent directory not found.`);
       throw new NotFoundException('Discovery Agent template files not found on the server.');
     }
 
-    const files = ['reconapm-agent.js', 'run-agent.sh', 'run-agent.bat', 'README.md'];
-    for (const file of files) {
+    // 1. Structure: /bin (Unix), /win (Windows), /mac (macOS .app), /core (clean background core), and root (premium native quick-launchers)
+    
+    // Unix Helpers
+    const unixFiles = ['install-service.sh', 'run-agent.sh', 'qs-discovery-agent.js', 'README.md', 'Status Dashboard.html'];
+    for (const file of unixFiles) {
+      const filePath = path.join(agentDir, file);
+      if (fs.existsSync(filePath)) zip.addLocalFile(filePath, 'bin');
+    }
+
+    // Windows Helpers (Legacy and neat core folder)
+    const winFiles = ['Start Agent.bat', 'install-service.bat', 'run-agent.bat', 'qs-discovery-agent.js', 'launch-silent.vbs', 'Status Dashboard.html'];
+    for (const file of winFiles) {
       const filePath = path.join(agentDir, file);
       if (fs.existsSync(filePath)) {
-        zip.addLocalFile(filePath);
-      } else {
-        this.logger.warn(`Agent packager: missing file: ${file}`);
+        const destName = file === 'install-service.bat' ? 'Install Service.bat' : file;
+        zip.addLocalFile(filePath, 'win', destName);
+        zip.addLocalFile(filePath, 'core', destName);
       }
     }
 
-    // Dynamic configuration generation & injection
+    // Root-level items for easy double-clicking
+    const rootFiles = ['Status Dashboard.html', 'README.md', 'Start Agent.bat'];
+    for (const file of rootFiles) {
+      const filePath = path.join(agentDir, file);
+      if (fs.existsSync(filePath)) zip.addLocalFile(filePath, '');
+    }
+
+    // macOS Application Bundle (Legacy and root-level launcher)
+    const appBundlePath = path.join(agentDir, 'QS-Discovery-Agent.app');
+    if (fs.existsSync(appBundlePath) && fs.statSync(appBundlePath).isDirectory()) {
+      zip.addLocalFolder(appBundlePath, 'mac/QS-Discovery-Agent.app');
+      zip.addLocalFolder(appBundlePath, 'QS-Discovery-Agent.app');
+    }
+
+    // 2. Inject config.json into all functional locations
     if (serverUrl && token) {
       try {
-        const configJson = {
-          server: serverUrl,
-          token: token,
-        };
-        zip.addFile('config.json', Buffer.from(JSON.stringify(configJson, null, 2), 'utf-8'));
-        this.logger.log(`Agent packager: dynamically injected paired config.json (server: ${serverUrl})`);
+        const configBuffer = Buffer.from(JSON.stringify({ server: serverUrl, token }, null, 2), 'utf-8');
+        zip.addFile('bin/config.json', configBuffer);
+        zip.addFile('win/config.json', configBuffer);
+        zip.addFile('core/config.json', configBuffer);
+        zip.addFile('mac/QS-Discovery-Agent.app/Contents/MacOS/config.json', configBuffer);
+        zip.addFile('QS-Discovery-Agent.app/Contents/MacOS/config.json', configBuffer);
       } catch (err: any) {
         this.logger.error(`Failed to inject config.json: ${err.message}`);
       }
@@ -1316,4 +1648,3 @@ export class DiscoveryService {
     return zip.toBuffer();
   }
 }
-

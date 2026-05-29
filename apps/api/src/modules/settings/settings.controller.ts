@@ -13,7 +13,6 @@ export class SettingsController {
   constructor(private service: SettingsService) {}
 
   @Get()
-  @Roles('Tenant Admin')
   @ApiOperation({ summary: 'Get tenant settings' })
   async getSettings(@Request() req: any) {
     return this.service.getSettings(req.user.tenantId);

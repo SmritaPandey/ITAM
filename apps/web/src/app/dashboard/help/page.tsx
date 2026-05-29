@@ -18,6 +18,33 @@ const DASHBOARD_TOUR: WalkthroughStep[] = [
   { target: ".charts-grid", title: "Analytics Charts", content: "Interactive charts show asset distribution by type and status. Click chart segments to filter the assets view.", position: "bottom" },
 ];
 
+const SAAS_TOUR: WalkthroughStep[] = [
+  {
+    target: ".sidebar-brand",
+    title: "Organization Branding",
+    content: "Customize your tenant workspace name, industry, and logo. This styles the environment for all operators and team members under your organization's domain.",
+    position: "right"
+  },
+  {
+    target: "a[href='/dashboard/settings']",
+    title: "Billing & Plans",
+    content: "Track your active device counts against your subscription tier limits (e.g. Standard Trial limit of 50 assets). Easily scale your quotas via secure Stripe portal checkout.",
+    position: "right"
+  },
+  {
+    target: "a[href='/dashboard/users']",
+    title: "Team Provisioning (RBAC)",
+    content: "Invite IT colleagues and provision role-based access rules (Tenant Admin, IT Admin, Helpdesk, Staff) to control feature accessibility dynamically.",
+    position: "right"
+  },
+  {
+    target: "a[href='/dashboard/settings']",
+    title: "Dynamic Catalog Schemas",
+    content: "Configure custom categories, specific SLA priority metrics, and multi-site locations inside the Settings panel to align with your organization's workflows.",
+    position: "right"
+  }
+];
+
 /* ── FAQ data ─────────────────────────────────────────────── */
 const FAQ = [
   { q: "How do I run my first network scan?", a: "Navigate to Discovery in the sidebar. Click 'New Scan', enter your subnet (e.g. 192.168.1.0/24), select the scan type (Ping Sweep, Port Scan, or Full Scan), and click Start. Results appear in real-time." },
@@ -99,7 +126,7 @@ const MODULES = [
 
 export default function HelpPage() {
   const router = useRouter();
-  const [activeTab, setActiveTab] = useState<"guide" | "modules" | "faq" | "shortcuts">("guide");
+  const [activeTab, setActiveTab] = useState<"guide" | "modules" | "faq" | "shortcuts" | "saas">("guide");
   const [expandedFaq, setExpandedFaq] = useState<number | null>(null);
   const [expandedModule, setExpandedModule] = useState<number | null>(null);
   const [searchQ, setSearchQ] = useState("");
@@ -111,6 +138,7 @@ export default function HelpPage() {
     { id: "modules" as const, label: "Module Guide", icon: <BookOpen size={14} /> },
     { id: "faq" as const, label: "FAQ", icon: <HelpCircle size={14} /> },
     { id: "shortcuts" as const, label: "Shortcuts", icon: <Keyboard size={14} /> },
+    { id: "saas" as const, label: "SaaS & Multi-Tenancy", icon: <Building2 size={14} /> },
   ];
 
   const filteredModules = searchQ
@@ -509,6 +537,204 @@ export default function HelpPage() {
                 }}>{s.keys}</kbd>
               </div>
             ))}
+          </div>
+        </div>
+      )}
+
+      {/* ── SAAS & MULTI-TENANCY TAB ── */}
+      {activeTab === "saas" && (
+        <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr", gap: 20, alignItems: "start" }}>
+          {/* Main Content */}
+          <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
+            {/* Spotlight Tour Trigger Card */}
+            <div className="card" style={{
+              background: "linear-gradient(135deg, rgba(6, 182, 212, 0.08) 0%, rgba(139, 92, 246, 0.08) 100%)",
+              border: "1px solid rgba(6, 182, 212, 0.25)",
+              boxShadow: "0 8px 32px rgba(6, 182, 212, 0.08)",
+              padding: 24,
+              borderRadius: 14,
+              position: "relative",
+              overflow: "hidden"
+            }}>
+              <div style={{
+                position: "absolute", top: -20, right: -20, width: 120, height: 120,
+                background: "radial-gradient(circle, rgba(6, 182, 212, 0.15) 0%, transparent 70%)",
+                pointerEvents: "none"
+              }} />
+              <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 12 }}>
+                <Sparkles size={20} style={{ color: "#22d3ee" }} />
+                <span style={{ fontSize: 13, fontWeight: 800, color: "#22d3ee", textTransform: "uppercase", letterSpacing: "0.05em" }}>Interactive Assistant</span>
+              </div>
+              <h3 style={{ fontSize: 18, fontWeight: 800, color: "var(--text-primary)", marginBottom: 8, letterSpacing: "-0.02em" }}>SaaS Organization Setup Tour</h3>
+              <p style={{ fontSize: 13, color: "var(--text-secondary)", lineHeight: 1.6, marginBottom: 20, maxWidth: 520 }}>
+                Let our interactive coordinator walk you through your isolated branding setups, active Stripe quotas, role-based provisioning (RBAC), and mapping your custom data sheet catalogs.
+              </p>
+              {walkthrough && (
+                <button
+                  onClick={() => walkthrough!.startWalkthrough(SAAS_TOUR, "saas")}
+                  className="btn btn-primary"
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: 8,
+                    padding: "10px 20px",
+                    fontSize: "13px",
+                    fontWeight: 700,
+                    borderRadius: 8,
+                    background: "linear-gradient(135deg, #22d3ee, #3b82f6)",
+                    boxShadow: "0 4px 14px rgba(34, 211, 238, 0.3)",
+                    border: "none",
+                    color: "#fff",
+                    cursor: "pointer",
+                    transition: "all 0.2s ease"
+                  }}
+                >
+                  <Play size={14} fill="#fff" /> Start Admin Setup Walkthrough
+                </button>
+              )}
+            </div>
+
+            {/* Tenant Isolation Section */}
+            <div className="card" style={{
+              background: "rgba(255, 255, 255, 0.02)",
+              border: "1px solid var(--border-primary)",
+              padding: 24,
+              borderRadius: 12
+            }}>
+              <h3 style={{ fontSize: 16, fontWeight: 800, color: "var(--text-primary)", marginBottom: 14, display: "flex", alignItems: "center", gap: 8 }}>
+                <ShieldCheck size={18} style={{ color: "#10b981" }} /> Strictly Isolated Tenant Architecture
+              </h3>
+              <p style={{ fontSize: 13, color: "var(--text-secondary)", lineHeight: 1.7, marginBottom: 16 }}>
+                Every workspace operating on the QS Asset SaaS network runs on a strictly partitioned database schema. Under our scoped multi-tenancy model, all CRUD statements automatically append the verified organization token extracted from your secure JWT session payload.
+              </p>
+              <div style={{
+                background: "rgba(255, 255, 255, 0.01)",
+                border: "1px solid rgba(255, 255, 255, 0.03)",
+                padding: "12px 16px",
+                borderRadius: 8,
+                fontSize: 12,
+                color: "var(--text-secondary)",
+                lineHeight: 1.6
+              }}>
+                🔑 <strong style={{ color: "var(--text-primary)" }}>Zero Leak Guarantee:</strong> Scanning credentials, subnet CIDRs, local vault keys, and system integration passwords are encrypted at rest with AES-256-GCM. Decryption happens safely inside runtime processes with zero persistent exposure.
+              </div>
+            </div>
+
+            {/* Custom Schema Card */}
+            <div className="card" style={{
+              background: "rgba(255, 255, 255, 0.02)",
+              border: "1px solid var(--border-primary)",
+              padding: 24,
+              borderRadius: 12
+            }}>
+              <h3 style={{ fontSize: 16, fontWeight: 800, color: "var(--text-primary)", marginBottom: 10, display: "flex", alignItems: "center", gap: 8 }}>
+                <Server size={18} style={{ color: "#a855f7" }} /> Custom Dynamic Catalog Schemas
+              </h3>
+              <p style={{ fontSize: 13, color: "var(--text-secondary)", lineHeight: 1.7, marginBottom: 14 }}>
+                SaaS Professional and Enterprise tiers enable modeling complex custom categories dynamically. Create custom fields (text, numbers, selections, dates) tailored to your industry workflows:
+              </p>
+              <div style={{ position: "relative" }}>
+                <pre style={{
+                  margin: 0,
+                  padding: "16px",
+                  borderRadius: 8,
+                  background: "#0b0f19",
+                  border: "1px solid rgba(255, 255, 255, 0.05)",
+                  fontSize: 12,
+                  fontFamily: "monospace",
+                  color: "#cbd5e1",
+                  overflowX: "auto"
+                }}>
+                  <code>{`{
+  "category": "High-Performance Workstation",
+  "fields": [
+    { "name": "gpuModel", "type": "text", "required": true },
+    { "name": "vramSizeGb", "type": "number", "required": false },
+    { "name": "lastRepasteDate", "type": "date", "required": true }
+  ]
+}`}</code>
+                </pre>
+                <button
+                  onClick={() => {
+                    navigator.clipboard.writeText(`{\n  "category": "High-Performance Workstation",\n  "fields": [\n    { "name": "gpuModel", "type": "text", "required": true },\n    { "name": "vramSizeGb", "type": "number", "required": false },\n    { "name": "lastRepasteDate", "type": "date", "required": true }\n  ]\n}`);
+                    alert("JSON Schema payload copied to clipboard!");
+                  }}
+                  style={{
+                    position: "absolute", top: 10, right: 10,
+                    background: "rgba(34, 211, 238, 0.1)", border: "1px solid rgba(34, 211, 238, 0.3)",
+                    color: "#22d3ee", padding: "4px 8px", borderRadius: 6, fontSize: 11, fontWeight: 700,
+                    cursor: "pointer", transition: "all 0.15s ease"
+                  }}
+                  onMouseEnter={e => { e.currentTarget.style.background = "rgba(34, 211, 238, 0.2)"; }}
+                  onMouseLeave={e => { e.currentTarget.style.background = "rgba(34, 211, 238, 0.1)"; }}
+                >
+                  Copy JSON Schema
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {/* Right Sidebar Details */}
+          <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+            {/* Identity & SSO */}
+            <div className="card" style={{
+              background: "rgba(255, 255, 255, 0.02)",
+              border: "1px solid var(--border-primary)",
+              padding: 20,
+              borderRadius: 12
+            }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
+                <Key size={16} style={{ color: "#f59e0b" }} />
+                <span style={{ fontSize: 13, fontWeight: 800, color: "var(--text-primary)" }}>Single Sign-On (SSO)</span>
+              </div>
+              <p style={{ fontSize: 12, color: "var(--text-secondary)", lineHeight: 1.6, marginBottom: 12 }}>
+                Enable unified employee provisioning via Google Workspace or Microsoft Azure AD (Entra ID).
+              </p>
+              <div style={{ display: "flex", flexDirection: "column", gap: 8, fontSize: 11.5, color: "var(--text-secondary)" }}>
+                <div style={{ display: "flex", alignItems: "flex-start", gap: 6 }}>
+                  <CheckCircle2 size={13} style={{ color: "#10b981", marginTop: 2, flexShrink: 0 }} />
+                  <span>Map email domains (e.g. acme.com) to restrict registration permissions.</span>
+                </div>
+                <div style={{ display: "flex", alignItems: "flex-start", gap: 6 }}>
+                  <CheckCircle2 size={13} style={{ color: "#10b981", marginTop: 2, flexShrink: 0 }} />
+                  <span>Configure client credentials securely in Settings.</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Quotas & Subscription Card */}
+            <div className="card" style={{
+              background: "rgba(255, 255, 255, 0.02)",
+              border: "1px solid var(--border-primary)",
+              padding: 20,
+              borderRadius: 12
+            }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
+                <Building2 size={16} style={{ color: "#06b6d4" }} />
+                <span style={{ fontSize: 13, fontWeight: 800, color: "var(--text-primary)" }}>Plan Quota Limits</span>
+              </div>
+              <ul style={{ paddingLeft: 16, margin: 0, fontSize: 11.5, color: "var(--text-secondary)", display: "flex", flexDirection: "column", gap: 8, lineHeight: 1.5 }}>
+                <li><strong style={{ color: "var(--text-primary)" }}>Standard Trial:</strong> Capped at 50 monitored hardware items.</li>
+                <li><strong style={{ color: "var(--text-primary)" }}>Professional:</strong> Capped at 1,000 active assets + SSH sweeps.</li>
+                <li><strong style={{ color: "var(--text-primary)" }}>Enterprise:</strong> Unlimited capacity, multi-site scanning, and full SLA automation engines.</li>
+              </ul>
+            </div>
+
+            {/* Scaling Worker Microservices */}
+            <div className="card" style={{
+              background: "rgba(255, 255, 255, 0.02)",
+              border: "1px solid var(--border-primary)",
+              padding: 20,
+              borderRadius: 12
+            }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
+                <Radar size={16} style={{ color: "#22d3ee" }} />
+                <span style={{ fontSize: 13, fontWeight: 800, color: "var(--text-primary)" }}>Telemetry Engine Scaling</span>
+              </div>
+              <p style={{ fontSize: 12, color: "var(--text-secondary)", lineHeight: 1.6, margin: 0 }}>
+                Scale scanning nodes horizontally. In active deployments, background discovery jobs are queued using Redis and routed across independent, scalable scanning worker instances to prevent bottleneck overheads.
+              </p>
+            </div>
           </div>
         </div>
       )}

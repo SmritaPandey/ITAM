@@ -1,6 +1,7 @@
 "use client";
 import { CookieConsent } from "@/components/CookieConsent";
 import { AnalyticsProvider } from "@/components/Analytics";
+import { ThemeProvider } from "@/components/ThemeProvider";
 
 /**
  * Client-side providers that need browser APIs.
@@ -9,8 +10,10 @@ import { AnalyticsProvider } from "@/components/Analytics";
 export function ClientProviders({ children }: { children: React.ReactNode }) {
   return (
     <AnalyticsProvider>
-      {children}
-      <CookieConsent />
+      <ThemeProvider>
+        {children}
+        <CookieConsent />
+      </ThemeProvider>
     </AnalyticsProvider>
   );
 }

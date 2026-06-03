@@ -813,7 +813,9 @@ function getActiveShellUsers() {
   return Array.from(active);
 }
 
-let mockFailedLoginCounter = 0;
+let failedLoginsCountCached = 0;
+let lastFailedLoginsCheckTime = 0;
+
 function getFailedLoginsCount() {
   const platform = os.platform();
   try {
@@ -822,23 +824,27 @@ function getFailedLoginsCount() {
       const count = (output.match(/Event ID:\s*4625/g) || []).length;
       return count;
     } else if (platform === 'darwin') {
-      // Optimize from rolling 10m to 2m and tighten the query to prevent false brute force alarms
-      const output = execCmd('log show --predicate \'eventMessage contains "failed to authenticate" || eventMessage contains "Authentication failed"\' --last 2m 2>/dev/null');
-      const lines = output.split('\n').filter(line => {
-        const trimmed = line.trim();
-        if (!trimmed) return false;
-        if (trimmed.startsWith('Filtering the log')) return false;
-        if (trimmed.startsWith('Timestamp')) return false;
-        return true;
-      });
-      let count = 0;
-      for (const line of lines) {
-        if (/fail/gi.test(line)) count++;
+      // macOS: log show is very slow (takes 10s+), so check asynchronously and return cached value
+      const now = Date.now();
+      if (now - lastFailedLoginsCheckTime > 60000) { // throttle checks to once per minute
+        lastFailedLoginsCheckTime = now;
+        exec('log show --predicate \'eventMessage contains "failed to authenticate" || eventMessage contains "Authentication failed"\' --last 2m 2>/dev/null', (err, stdout) => {
+          if (err || !stdout) return;
+          const lines = stdout.split('\n').filter(line => {
+            const trimmed = line.trim();
+            if (!trimmed) return false;
+            if (trimmed.startsWith('Filtering the log')) return false;
+            if (trimmed.startsWith('Timestamp')) return false;
+            return true;
+          });
+          let count = 0;
+          for (const line of lines) {
+            if (/fail/gi.test(line)) count++;
+          }
+          failedLoginsCountCached = count;
+        });
       }
-      if (count === 0) {
-        return mockFailedLoginCounter;
-      }
-      return count;
+      return failedLoginsCountCached || mockFailedLoginCounter;
     } else {
       let count = 0;
       if (fs.existsSync('/var/log/auth.log')) {

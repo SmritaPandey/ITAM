@@ -75,6 +75,22 @@ export default function DiscoveryPage() {
   const [isMerging, setIsMerging] = useState(false);
   const [isApproving, setIsApproving] = useState(false);
 
+  // Schedule form state
+  const [showScheduleForm, setShowScheduleForm] = useState(false);
+  const [scheduleName, setScheduleName] = useState("");
+  const [scheduleSubnet, setScheduleSubnet] = useState("");
+  const [scheduleScanType, setScheduleScanType] = useState("PING_SWEEP");
+  const [scheduleCron, setScheduleCron] = useState("0 0 * * *");
+
+  // Credential form state
+  const [showCredForm, setShowCredForm] = useState(false);
+  const [credName, setCredName] = useState("");
+  const [credType, setCredType] = useState("SSH");
+  const [credUsername, setCredUsername] = useState("");
+  const [credPassword, setCredPassword] = useState("");
+  const [credCommunity, setCredCommunity] = useState("public");
+  const [credPrivateKey, setCredPrivateKey] = useState("");
+
   const refresh = useCallback(async () => {
     try {
       const [s, sc, p, sch, cr, ag] = await Promise.all([
@@ -91,7 +107,9 @@ export default function DiscoveryPage() {
       setSchedules(Array.isArray(sch) ? sch : []);
       setCredentials(Array.isArray(cr) ? cr : []);
       setAgents(Array.isArray(ag) ? ag : []);
-    } catch {} finally { setLoading(false); }
+    } catch (err: any) {
+      console.error("Discovery refresh failed:", err);
+    } finally { setLoading(false); }
   }, []);
 
   useEffect(() => {
@@ -144,22 +162,86 @@ export default function DiscoveryPage() {
         body: JSON.stringify({ subnet, scanType, name: `${SCAN_TYPES.find(t => t.value === scanType)?.label} — ${subnet}` }),
       });
       await refresh();
-    } catch {} finally { setScanning(false); }
+    } catch (err: any) {
+      alert(`Scan failed: ${err.message || "Unknown error"}`);
+    } finally { setScanning(false); }
   }
 
   async function deleteSchedule(id: string) {
-    await apiFetch(`/discovery/schedules/${id}`, { method: "DELETE" });
-    await refresh();
+    if (!confirm("Delete this scheduled scan?")) return;
+    try {
+      await apiFetch(`/discovery/schedules/${id}`, { method: "DELETE" });
+      await refresh();
+    } catch (err: any) { alert(`Failed to delete schedule: ${err.message || err}`); }
   }
 
   async function toggleSchedule(id: string, isActive: boolean) {
-    await apiFetch(`/discovery/schedules/${id}`, { method: "PATCH", body: JSON.stringify({ isActive: !isActive }) });
-    await refresh();
+    try {
+      await apiFetch(`/discovery/schedules/${id}`, { method: "PATCH", body: JSON.stringify({ isActive: !isActive }) });
+      await refresh();
+    } catch (err: any) { alert(`Failed to toggle schedule: ${err.message || err}`); }
   }
 
   async function deleteCredential(id: string) {
-    await apiFetch(`/discovery/credentials/${id}`, { method: "DELETE" });
-    await refresh();
+    if (!confirm("Delete this credential? This cannot be undone.")) return;
+    try {
+      await apiFetch(`/discovery/credentials/${id}`, { method: "DELETE" });
+      await refresh();
+    } catch (err: any) { alert(`Failed to delete credential: ${err.message || err}`); }
+  }
+
+  async function deleteScan(id: string) {
+    if (!confirm("Delete this scan and its pending review devices?")) return;
+    try {
+      await apiFetch(`/discovery/scans/${id}`, { method: "DELETE" });
+      await refresh();
+    } catch (err: any) { alert(`Failed to delete scan: ${err.message || err}`); }
+  }
+
+  async function deleteAgent(id: string) {
+    if (!confirm("Remove this agent? It will need to re-register on next heartbeat.")) return;
+    try {
+      await apiFetch(`/discovery/agents/${id}`, { method: "DELETE" });
+      setExpandedAgent(null);
+      await refresh();
+    } catch (err: any) { alert(`Failed to delete agent: ${err.message || err}`); }
+  }
+
+  async function createSchedule() {
+    if (!scheduleName || !scheduleSubnet) { alert("Name and subnet are required."); return; }
+    try {
+      await apiFetch("/discovery/schedules", {
+        method: "POST",
+        body: JSON.stringify({ name: scheduleName, subnet: scheduleSubnet, scanType: scheduleScanType, schedule: scheduleCron }),
+      });
+      setShowScheduleForm(false);
+      setScheduleName(""); setScheduleSubnet(""); setScheduleScanType("PING_SWEEP"); setScheduleCron("0 0 * * *");
+      await refresh();
+    } catch (err: any) { alert(`Failed to create schedule: ${err.message || err}`); }
+  }
+
+  async function createCredential() {
+    if (!credName) { alert("Credential name is required."); return; }
+    const credentials: Record<string, any> = {};
+    if (credType === "SSH" || credType === "SSH_KEY") {
+      credentials.username = credUsername;
+      if (credType === "SSH_KEY") { credentials.privateKey = credPrivateKey; }
+      else { credentials.password = credPassword; }
+    } else if (credType === "SNMP_V2C" || credType === "SNMP") {
+      credentials.community = credCommunity;
+    } else if (credType === "WMI") {
+      credentials.username = credUsername;
+      credentials.password = credPassword;
+    }
+    try {
+      await apiFetch("/discovery/credentials", {
+        method: "POST",
+        body: JSON.stringify({ name: credName, type: credType, credentials }),
+      });
+      setShowCredForm(false);
+      setCredName(""); setCredType("SSH"); setCredUsername(""); setCredPassword(""); setCredCommunity("public"); setCredPrivateKey("");
+      await refresh();
+    } catch (err: any) { alert(`Failed to create credential: ${err.message || err}`); }
   }
 
   async function viewScanDetails(scanId: string) {
@@ -215,7 +297,9 @@ export default function DiscoveryPage() {
       await apiFetch(`/discovery/devices/${deviceId}/enrich`, { method: "POST", body: JSON.stringify({}) });
       await refresh();
       setExpandedDevice(deviceId);
-    } catch {} finally { setEnriching(null); }
+    } catch (err: any) {
+      alert(`Enrichment failed: ${err.message || "Unknown error"}`);
+    } finally { setEnriching(null); }
   }
 
   async function triggerRemoteDeploy() {
@@ -547,17 +631,19 @@ export default function DiscoveryPage() {
             </div>
           ) : (
             <table className="data-table">
-              <thead><tr><th>Scan Name</th><th>Subnet</th><th>Status</th><th>Devices Found</th><th>New</th><th>Duration</th><th>Actions</th></tr></thead>
+              <thead><tr><th>Scan Name</th><th>Subnet</th><th>Type</th><th>Status</th><th>Started</th><th>Devices</th><th>New</th><th>Duration</th><th>Actions</th></tr></thead>
               <tbody>
                 {scans.map((s: any) => {
                   const colors = STATUS_COLORS[s.status] || STATUS_COLORS.PENDING;
                   const duration = s.startedAt && s.completedAt
                     ? `${Math.round((new Date(s.completedAt).getTime() - new Date(s.startedAt).getTime()) / 1000)}s`
                     : s.status === "RUNNING" ? "Running..." : "—";
+                  const canDelete = ["COMPLETED", "FAILED", "CANCELLED"].includes(s.status);
                   return (
                     <tr key={s.id}>
                       <td style={{ fontWeight: 500, color: "var(--text-primary)" }}>{s.name || "Scan"}</td>
                       <td><code style={{ fontSize: 11, color: "var(--brand-400)" }}>{s.subnet}</code></td>
+                      <td><span className="badge cyan" style={{ fontSize: 9 }}>{s.scanType || "PING"}</span></td>
                       <td>
                         <span style={{
                           display: "inline-flex", alignItems: "center", gap: 4,
@@ -570,10 +656,13 @@ export default function DiscoveryPage() {
                           {s.status}
                         </span>
                       </td>
-                      <td style={{ fontWeight: 600 }}>{s.devicesFound}</td>
+                      <td style={{ fontSize: 11, color: "var(--text-tertiary)" }}>
+                        {s.startedAt ? new Date(s.startedAt).toLocaleString(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }) : "—"}
+                      </td>
+                      <td style={{ fontWeight: 600 }}>{s.devicesFound ?? "—"}</td>
                       <td>
                         {s.newDevices > 0 && <span className="badge amber">{s.newDevices} new</span>}
-                        {s.newDevices === 0 && "—"}
+                        {(!s.newDevices || s.newDevices === 0) && "—"}
                       </td>
                       <td style={{ fontSize: 11, color: "var(--text-tertiary)" }}>{duration}</td>
                       <td style={{ display: "flex", gap: 6 }}>
@@ -585,6 +674,12 @@ export default function DiscoveryPage() {
                           <button className="btn btn-secondary" style={{ padding: "3px 8px", fontSize: 10, color: "#ef4444", borderColor: "rgba(239,68,68,0.2)", display: "flex", alignItems: "center", gap: 4 }}
                             onClick={() => stopScanJob(s.id)}>
                             <XCircle size={10} /> Stop
+                          </button>
+                        )}
+                        {canDelete && (
+                          <button className="btn btn-secondary" style={{ padding: "3px 8px", fontSize: 10, color: "#ef4444", borderColor: "rgba(239,68,68,0.15)", display: "flex", alignItems: "center", gap: 4 }}
+                            onClick={() => deleteScan(s.id)}>
+                            <Trash2 size={10} />
                           </button>
                         )}
                       </td>
@@ -642,8 +737,22 @@ export default function DiscoveryPage() {
                   disabled={selectedDevices.size === 0} onClick={bulkIgnore}>
                   <EyeOff size={12} /> Ignore Selected
                 </button>
+                <select
+                  value={pendingFilter}
+                  onChange={e => setPendingFilter(e.target.value)}
+                  style={{
+                    padding: "6px 10px", fontSize: 11, borderRadius: 6,
+                    background: "rgba(0,0,0,0.25)", border: "1px solid var(--border-primary)",
+                    color: "var(--text-primary)", cursor: "pointer", outline: "none",
+                  }}
+                >
+                  <option value="all">All Types</option>
+                  {[...new Set(pending.map((d: any) => d.deviceType || "Unknown"))].map(t => (
+                    <option key={t} value={t}>{t}</option>
+                  ))}
+                </select>
                 <button className="btn btn-secondary" style={{ padding: "6px 14px", fontSize: 11, marginLeft: "auto" }}
-                  onClick={() => { setSelectedDevices(new Set(pending.map((d: any) => d.id))); }}>
+                  onClick={() => { setSelectedDevices(new Set(pending.filter((d: any) => pendingFilter === "all" || (d.deviceType || "Unknown") === pendingFilter).map((d: any) => d.id))); }}>
                   <Check size={12} /> Select All
                 </button>
               </div>
@@ -660,7 +769,7 @@ export default function DiscoveryPage() {
                     <th>Seen</th><th>Source</th><th>Actions</th>
                   </tr></thead>
                   <tbody>
-                    {pending.map((d: any) => {
+                    {pending.filter((d: any) => pendingFilter === "all" || (d.deviceType || "Unknown") === pendingFilter).map((d: any) => {
                       const risk = getRiskBadge(d.riskScore || 0);
                       const isExpanded = expandedDevice === d.id;
                       const ago = d.firstSeenAt ? Math.round((Date.now() - new Date(d.firstSeenAt).getTime()) / 3600000) : 0;
@@ -828,92 +937,232 @@ export default function DiscoveryPage() {
 
       {/* Schedules Tab */}
       {tab === "schedules" && (
-        <div className="card" style={{ padding: 0, overflow: "hidden" }}>
-          {schedules.length === 0 ? (
-            <div style={{ textAlign: "center", padding: 48, color: "var(--text-tertiary)" }}>
-              <Calendar size={36} style={{ margin: "0 auto 12px" }} />
-              <div style={{ fontSize: 14, fontWeight: 600 }}>No scheduled scans</div>
-              <p style={{ fontSize: 12 }}>Use the API to create cron-based scan schedules</p>
+        <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+          {/* New Schedule Form */}
+          {showScheduleForm && (
+            <div className="card" style={{ padding: 24, border: "1px solid rgba(6,182,212,0.2)" }}>
+              <h3 style={{ fontSize: 14, fontWeight: 700, marginBottom: 16, display: "flex", alignItems: "center", gap: 8 }}>
+                <Calendar size={16} style={{ color: "var(--brand-400)" }} /> New Scheduled Scan
+              </h3>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+                <div>
+                  <label style={{ fontSize: 11, fontWeight: 600, color: "var(--text-secondary)", display: "block", marginBottom: 4 }}>Schedule Name</label>
+                  <input value={scheduleName} onChange={e => setScheduleName(e.target.value)} placeholder="e.g. Nightly Office Scan"
+                    style={{ width: "100%", padding: "8px 12px", background: "rgba(0,0,0,0.2)", border: "1px solid var(--border-primary)", borderRadius: 6, fontSize: 12, color: "#fff", outline: "none" }} />
+                </div>
+                <div>
+                  <label style={{ fontSize: 11, fontWeight: 600, color: "var(--text-secondary)", display: "block", marginBottom: 4 }}>Target Subnet</label>
+                  <input value={scheduleSubnet} onChange={e => setScheduleSubnet(e.target.value)} placeholder="e.g. 192.168.1.0/24"
+                    style={{ width: "100%", padding: "8px 12px", background: "rgba(0,0,0,0.2)", border: "1px solid var(--border-primary)", borderRadius: 6, fontSize: 12, color: "#fff", outline: "none", fontFamily: "monospace" }} />
+                </div>
+                <div>
+                  <label style={{ fontSize: 11, fontWeight: 600, color: "var(--text-secondary)", display: "block", marginBottom: 4 }}>Scan Type</label>
+                  <select value={scheduleScanType} onChange={e => setScheduleScanType(e.target.value)}
+                    style={{ width: "100%", padding: "8px 12px", background: "rgba(0,0,0,0.2)", border: "1px solid var(--border-primary)", borderRadius: 6, fontSize: 12, color: "#fff", outline: "none", cursor: "pointer" }}>
+                    {SCAN_TYPES.map(t => <option key={t.value} value={t.value}>{t.label} — {t.desc}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label style={{ fontSize: 11, fontWeight: 600, color: "var(--text-secondary)", display: "block", marginBottom: 4 }}>Cron Expression</label>
+                  <input value={scheduleCron} onChange={e => setScheduleCron(e.target.value)}
+                    style={{ width: "100%", padding: "8px 12px", background: "rgba(0,0,0,0.2)", border: "1px solid var(--border-primary)", borderRadius: 6, fontSize: 12, color: "#fff", outline: "none", fontFamily: "monospace" }} />
+                  <div style={{ display: "flex", gap: 4, marginTop: 6 }}>
+                    {[
+                      { label: "Hourly", cron: "0 * * * *" },
+                      { label: "Daily midnight", cron: "0 0 * * *" },
+                      { label: "Daily 6 AM", cron: "0 6 * * *" },
+                      { label: "Weekly Sun", cron: "0 0 * * 0" },
+                    ].map(p => (
+                      <button key={p.label} className="btn btn-secondary" style={{ padding: "2px 6px", fontSize: 9, borderColor: scheduleCron === p.cron ? "var(--brand-400)" : undefined, color: scheduleCron === p.cron ? "var(--brand-400)" : undefined }}
+                        onClick={() => setScheduleCron(p.cron)}>{p.label}</button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+              <div style={{ display: "flex", gap: 8, marginTop: 16, justifyContent: "flex-end" }}>
+                <button className="btn btn-secondary" onClick={() => setShowScheduleForm(false)} style={{ padding: "8px 16px", fontSize: 11 }}>Cancel</button>
+                <button className="btn btn-primary" onClick={createSchedule} style={{ padding: "8px 16px", fontSize: 11 }}>
+                  <Plus size={12} /> Create Schedule
+                </button>
+              </div>
             </div>
-          ) : (
-            <table className="data-table">
-              <thead><tr><th>Name</th><th>Subnet</th><th>Scan Type</th><th>Schedule (Cron)</th><th>Status</th><th>Next Run</th><th>Actions</th></tr></thead>
-              <tbody>
-                {schedules.map((s: any) => (
-                  <tr key={s.id}>
-                    <td style={{ fontWeight: 500 }}>{s.name}</td>
-                    <td><code style={{ fontSize: 11, color: "var(--brand-400)" }}>{s.subnet}</code></td>
-                    <td><span className="badge cyan" style={{ fontSize: 10 }}>{s.scanType}</span></td>
-                    <td style={{ fontFamily: "monospace", fontSize: 11 }}>{s.schedule}</td>
-                    <td>
-                      <span className={`badge ${s.isActive ? "green" : "gray"}`} style={{ fontSize: 10 }}>
-                        {s.isActive ? "Active" : "Paused"}
-                      </span>
-                    </td>
-                    <td style={{ fontSize: 11, color: "var(--text-tertiary)" }}>
-                      {s.nextRunAt ? new Date(s.nextRunAt).toLocaleString() : "—"}
-                    </td>
-                    <td style={{ display: "flex", gap: 4 }}>
-                      <button className="btn btn-secondary" style={{ padding: "3px 8px", fontSize: 10 }}
-                        onClick={() => toggleSchedule(s.id, s.isActive)}>
-                        {s.isActive ? "Pause" : "Activate"}
-                      </button>
-                      <button className="btn btn-secondary" style={{ padding: "3px 8px", fontSize: 10, color: "#ef4444" }}
-                        onClick={() => deleteSchedule(s.id)}>
-                        <Trash2 size={10} />
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
           )}
+
+          <div className="card" style={{ padding: 0, overflow: "hidden" }}>
+            <div style={{ padding: "12px 16px", borderBottom: "1px solid var(--border-primary)", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <span style={{ fontSize: 13, fontWeight: 600 }}>Scheduled Scans ({schedules.length})</span>
+              {!showScheduleForm && (
+                <button className="btn btn-primary" onClick={() => setShowScheduleForm(true)} style={{ padding: "5px 12px", fontSize: 11 }}>
+                  <Plus size={12} /> New Schedule
+                </button>
+              )}
+            </div>
+            {schedules.length === 0 ? (
+              <div style={{ textAlign: "center", padding: 48, color: "var(--text-tertiary)" }}>
+                <Calendar size={36} style={{ margin: "0 auto 12px" }} />
+                <div style={{ fontSize: 14, fontWeight: 600 }}>No scheduled scans</div>
+                <p style={{ fontSize: 12, marginBottom: 16 }}>Create your first automated scan schedule</p>
+                {!showScheduleForm && (
+                  <button className="btn btn-primary" onClick={() => setShowScheduleForm(true)} style={{ padding: "8px 20px", fontSize: 12 }}>
+                    <Plus size={14} /> Create Schedule
+                  </button>
+                )}
+              </div>
+            ) : (
+              <table className="data-table">
+                <thead><tr><th>Name</th><th>Subnet</th><th>Scan Type</th><th>Schedule (Cron)</th><th>Status</th><th>Next Run</th><th>Actions</th></tr></thead>
+                <tbody>
+                  {schedules.map((s: any) => (
+                    <tr key={s.id}>
+                      <td style={{ fontWeight: 500 }}>{s.name}</td>
+                      <td><code style={{ fontSize: 11, color: "var(--brand-400)" }}>{s.subnet}</code></td>
+                      <td><span className="badge cyan" style={{ fontSize: 10 }}>{s.scanType}</span></td>
+                      <td style={{ fontFamily: "monospace", fontSize: 11 }}>{s.schedule}</td>
+                      <td>
+                        <span className={`badge ${s.isActive ? "green" : "gray"}`} style={{ fontSize: 10 }}>
+                          {s.isActive ? "Active" : "Paused"}
+                        </span>
+                      </td>
+                      <td style={{ fontSize: 11, color: "var(--text-tertiary)" }}>
+                        {s.nextRunAt ? new Date(s.nextRunAt).toLocaleString() : "—"}
+                      </td>
+                      <td style={{ display: "flex", gap: 4 }}>
+                        <button className="btn btn-secondary" style={{ padding: "3px 8px", fontSize: 10 }}
+                          onClick={() => toggleSchedule(s.id, s.isActive)}>
+                          {s.isActive ? "Pause" : "Activate"}
+                        </button>
+                        <button className="btn btn-secondary" style={{ padding: "3px 8px", fontSize: 10, color: "#ef4444" }}
+                          onClick={() => deleteSchedule(s.id)}>
+                          <Trash2 size={10} />
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </div>
         </div>
       )}
 
       {/* Credential Vault Tab */}
       {tab === "credentials" && (
-        <div className="card" style={{ padding: 0, overflow: "hidden" }}>
-          {credentials.length === 0 ? (
-            <div style={{ textAlign: "center", padding: 48, color: "var(--text-tertiary)" }}>
-              <Key size={36} style={{ margin: "0 auto 12px" }} />
-              <div style={{ fontSize: 14, fontWeight: 600 }}>No scan credentials</div>
-              <p style={{ fontSize: 12 }}>Add SSH, SNMP, or WMI credentials for agentless scanning</p>
+        <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+          {/* Add Credential Form */}
+          {showCredForm && (
+            <div className="card" style={{ padding: 24, border: "1px solid rgba(6,182,212,0.2)" }}>
+              <h3 style={{ fontSize: 14, fontWeight: 700, marginBottom: 16, display: "flex", alignItems: "center", gap: 8 }}>
+                <Key size={16} style={{ color: "var(--brand-400)" }} /> Add Scan Credential
+              </h3>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+                <div>
+                  <label style={{ fontSize: 11, fontWeight: 600, color: "var(--text-secondary)", display: "block", marginBottom: 4 }}>Credential Name</label>
+                  <input value={credName} onChange={e => setCredName(e.target.value)} placeholder="e.g. Linux SSH Root"
+                    style={{ width: "100%", padding: "8px 12px", background: "rgba(0,0,0,0.2)", border: "1px solid var(--border-primary)", borderRadius: 6, fontSize: 12, color: "#fff", outline: "none" }} />
+                </div>
+                <div>
+                  <label style={{ fontSize: 11, fontWeight: 600, color: "var(--text-secondary)", display: "block", marginBottom: 4 }}>Credential Type</label>
+                  <select value={credType} onChange={e => setCredType(e.target.value)}
+                    style={{ width: "100%", padding: "8px 12px", background: "rgba(0,0,0,0.2)", border: "1px solid var(--border-primary)", borderRadius: 6, fontSize: 12, color: "#fff", outline: "none", cursor: "pointer" }}>
+                    <option value="SSH">SSH (Password)</option>
+                    <option value="SSH_KEY">SSH (Private Key)</option>
+                    <option value="SNMP_V2C">SNMP v2c</option>
+                    <option value="WMI">WMI (Windows)</option>
+                  </select>
+                </div>
+                {(credType === "SSH" || credType === "SSH_KEY" || credType === "WMI") && (
+                  <div>
+                    <label style={{ fontSize: 11, fontWeight: 600, color: "var(--text-secondary)", display: "block", marginBottom: 4 }}>Username</label>
+                    <input value={credUsername} onChange={e => setCredUsername(e.target.value)} placeholder={credType === "WMI" ? "DOMAIN\\Admin" : "root"}
+                      style={{ width: "100%", padding: "8px 12px", background: "rgba(0,0,0,0.2)", border: "1px solid var(--border-primary)", borderRadius: 6, fontSize: 12, color: "#fff", outline: "none" }} />
+                  </div>
+                )}
+                {(credType === "SSH" || credType === "WMI") && (
+                  <div>
+                    <label style={{ fontSize: 11, fontWeight: 600, color: "var(--text-secondary)", display: "block", marginBottom: 4 }}>Password</label>
+                    <input type="password" value={credPassword} onChange={e => setCredPassword(e.target.value)} placeholder="••••••••"
+                      style={{ width: "100%", padding: "8px 12px", background: "rgba(0,0,0,0.2)", border: "1px solid var(--border-primary)", borderRadius: 6, fontSize: 12, color: "#fff", outline: "none" }} />
+                  </div>
+                )}
+                {credType === "SSH_KEY" && (
+                  <div style={{ gridColumn: "span 2" }}>
+                    <label style={{ fontSize: 11, fontWeight: 600, color: "var(--text-secondary)", display: "block", marginBottom: 4 }}>Private Key (PEM)</label>
+                    <textarea value={credPrivateKey} onChange={e => setCredPrivateKey(e.target.value)} placeholder="-----BEGIN OPENSSH PRIVATE KEY-----" rows={4}
+                      style={{ width: "100%", padding: "8px 12px", background: "rgba(0,0,0,0.2)", border: "1px solid var(--border-primary)", borderRadius: 6, fontSize: 11, color: "#fff", outline: "none", fontFamily: "monospace", resize: "vertical" }} />
+                  </div>
+                )}
+                {(credType === "SNMP_V2C" || credType === "SNMP") && (
+                  <div>
+                    <label style={{ fontSize: 11, fontWeight: 600, color: "var(--text-secondary)", display: "block", marginBottom: 4 }}>Community String</label>
+                    <input value={credCommunity} onChange={e => setCredCommunity(e.target.value)} placeholder="public"
+                      style={{ width: "100%", padding: "8px 12px", background: "rgba(0,0,0,0.2)", border: "1px solid var(--border-primary)", borderRadius: 6, fontSize: 12, color: "#fff", outline: "none", fontFamily: "monospace" }} />
+                  </div>
+                )}
+              </div>
+              <div style={{ display: "flex", gap: 8, marginTop: 16, justifyContent: "flex-end" }}>
+                <button className="btn btn-secondary" onClick={() => setShowCredForm(false)} style={{ padding: "8px 16px", fontSize: 11 }}>Cancel</button>
+                <button className="btn btn-primary" onClick={createCredential} style={{ padding: "8px 16px", fontSize: 11 }}>
+                  <Shield size={12} /> Save Credential
+                </button>
+              </div>
             </div>
-          ) : (
-            <table className="data-table">
-              <thead><tr><th>Name</th><th>Type</th><th>Scope</th><th>Last Used</th><th>Encrypted</th><th>Actions</th></tr></thead>
-              <tbody>
-                {credentials.map((c: any) => (
-                  <tr key={c.id}>
-                    <td style={{ fontWeight: 500 }}>
-                      <span style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                        <Shield size={14} style={{ color: "var(--brand-400)" }} /> {c.name}
-                      </span>
-                    </td>
-                    <td><span className="badge cyan" style={{ fontSize: 10 }}>{c.type}</span></td>
-                    <td style={{ fontSize: 11, color: "var(--text-tertiary)" }}>
-                      {c.scope?.subnets ? c.scope.subnets.join(", ") : "All subnets"}
-                    </td>
-                    <td style={{ fontSize: 11, color: "var(--text-tertiary)" }}>
-                      {c.lastUsedAt ? new Date(c.lastUsedAt).toLocaleDateString() : "Never"}
-                    </td>
-                    <td>
-                      <span className="badge green" style={{ fontSize: 9 }}>
-                        <Shield size={8} /> AES-256
-                      </span>
-                    </td>
-                    <td>
-                      <button className="btn btn-secondary" style={{ padding: "3px 8px", fontSize: 10, color: "#ef4444" }}
-                        onClick={() => deleteCredential(c.id)}>
-                        <Trash2 size={10} /> Delete
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
           )}
+
+          <div className="card" style={{ padding: 0, overflow: "hidden" }}>
+            <div style={{ padding: "12px 16px", borderBottom: "1px solid var(--border-primary)", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <span style={{ fontSize: 13, fontWeight: 600 }}>Credential Vault ({credentials.length})</span>
+              {!showCredForm && (
+                <button className="btn btn-primary" onClick={() => setShowCredForm(true)} style={{ padding: "5px 12px", fontSize: 11 }}>
+                  <Plus size={12} /> Add Credential
+                </button>
+              )}
+            </div>
+            {credentials.length === 0 ? (
+              <div style={{ textAlign: "center", padding: 48, color: "var(--text-tertiary)" }}>
+                <Key size={36} style={{ margin: "0 auto 12px" }} />
+                <div style={{ fontSize: 14, fontWeight: 600 }}>No scan credentials</div>
+                <p style={{ fontSize: 12, marginBottom: 16 }}>Add SSH, SNMP, or WMI credentials for agentless scanning</p>
+                {!showCredForm && (
+                  <button className="btn btn-primary" onClick={() => setShowCredForm(true)} style={{ padding: "8px 20px", fontSize: 12 }}>
+                    <Plus size={14} /> Add Credential
+                  </button>
+                )}
+              </div>
+            ) : (
+              <table className="data-table">
+                <thead><tr><th>Name</th><th>Type</th><th>Scope</th><th>Last Used</th><th>Encrypted</th><th>Actions</th></tr></thead>
+                <tbody>
+                  {credentials.map((c: any) => (
+                    <tr key={c.id}>
+                      <td style={{ fontWeight: 500 }}>
+                        <span style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                          <Shield size={14} style={{ color: "var(--brand-400)" }} /> {c.name}
+                        </span>
+                      </td>
+                      <td><span className="badge cyan" style={{ fontSize: 10 }}>{c.type}</span></td>
+                      <td style={{ fontSize: 11, color: "var(--text-tertiary)" }}>
+                        {c.scope?.subnets ? c.scope.subnets.join(", ") : "All subnets"}
+                      </td>
+                      <td style={{ fontSize: 11, color: "var(--text-tertiary)" }}>
+                        {c.lastUsedAt ? new Date(c.lastUsedAt).toLocaleDateString() : "Never"}
+                      </td>
+                      <td>
+                        <span className="badge green" style={{ fontSize: 9 }}>
+                          <Shield size={8} /> AES-256
+                        </span>
+                      </td>
+                      <td>
+                        <button className="btn btn-secondary" style={{ padding: "3px 8px", fontSize: 10, color: "#ef4444" }}
+                          onClick={() => deleteCredential(c.id)}>
+                          <Trash2 size={10} /> Delete
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </div>
         </div>
       )}
 
@@ -1763,23 +2012,36 @@ export default function DiscoveryPage() {
                                       <div>
                                         <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11, marginBottom: 4 }}>
                                           <span>CPU Core Status</span>
-                                          <span style={{ color: "var(--brand-400)" }}>{a.systemInfo?.cpu?.cores || "4"} Cores</span>
+                                          <span style={{ color: "var(--brand-400)" }}>{a.systemInfo?.cpu?.cores || a.systemInfo?.hardware?.cpuCores || "—"} {(a.systemInfo?.cpu?.cores || a.systemInfo?.hardware?.cpuCores) ? "Cores" : ""}</span>
                                         </div>
                                         <div style={{ fontSize: 11, color: "var(--text-tertiary)", fontWeight: 500 }}>
-                                          {a.systemInfo?.cpu?.model || "Intel Xeon / Apple Silicon Processor"}
+                                          {a.systemInfo?.cpu?.model || a.systemInfo?.hardware?.cpuModel || "No CPU data reported"}
                                         </div>
                                       </div>
 
                                       <div>
-                                        <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11, marginBottom: 4 }}>
-                                          <span>Memory (RAM) Allocation</span>
-                                          <span style={{ color: "var(--brand-400)" }}>
-                                            {a.systemInfo?.mem?.total ? `${Math.round(a.systemInfo.mem.total / (1024 * 1024 * 1024))} GB` : "8 GB"}
-                                          </span>
-                                        </div>
-                                        <div style={{ height: 6, borderRadius: 3, background: "rgba(255,255,255,0.08)", overflow: "hidden" }}>
-                                          <div style={{ height: "100%", width: "42%", background: "var(--brand-400)", borderRadius: 3 }}></div>
-                                        </div>
+                                        {(() => {
+                                          const memTotal = a.systemInfo?.mem?.total || a.systemInfo?.hardware?.totalRamMb;
+                                          const memUsed = a.systemInfo?.mem?.used;
+                                          const memPercent = memTotal && memUsed ? Math.round((memUsed / memTotal) * 100) : null;
+                                          const memTotalGb = memTotal ? (memTotal > 10000000 ? Math.round(memTotal / (1024 * 1024 * 1024)) : Math.round(memTotal / 1024)) : null;
+                                          return (
+                                            <>
+                                              <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11, marginBottom: 4 }}>
+                                                <span>Memory (RAM) Allocation</span>
+                                                <span style={{ color: "var(--brand-400)" }}>
+                                                  {memTotalGb ? `${memTotalGb} GB` : "—"}
+                                                </span>
+                                              </div>
+                                              <div style={{ height: 6, borderRadius: 3, background: "rgba(255,255,255,0.08)", overflow: "hidden" }}>
+                                                <div style={{ height: "100%", width: memPercent ? `${memPercent}%` : "0%", background: memPercent && memPercent > 80 ? "#ef4444" : "var(--brand-400)", borderRadius: 3, transition: "width 0.3s" }}></div>
+                                              </div>
+                                              {memPercent !== null && (
+                                                <div style={{ fontSize: 9, color: "var(--text-tertiary)", marginTop: 2 }}>{memPercent}% utilized</div>
+                                              )}
+                                            </>
+                                          );
+                                        })()}
                                       </div>
 
                                       <div>
@@ -1788,23 +2050,27 @@ export default function DiscoveryPage() {
                                         </div>
                                         <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                                           <span className="badge cyan" style={{ fontSize: 9 }}>
-                                            {a.systemInfo?.os?.distro || a.platform || "unknown"} {a.systemInfo?.os?.release || ""}
+                                            {a.systemInfo?.os?.distro || a.systemInfo?.operatingSystem?.type || a.platform || "—"} {a.systemInfo?.os?.release || a.systemInfo?.operatingSystem?.release || ""}
                                           </span>
-                                          <span className="badge" style={{ fontSize: 9, background: "rgba(255,255,255,0.05)", color: "var(--text-secondary)" }}>
-                                            Arch: {a.systemInfo?.os?.arch || "x64"}
-                                          </span>
-                                          <span className="badge" style={{ fontSize: 9, background: "rgba(255,255,255,0.05)", color: "var(--text-secondary)" }}>
-                                            Uptime: {a.systemInfo?.os?.uptime ? `${Math.round(a.systemInfo.os.uptime / 3600)}h` : "48h"}
-                                          </span>
+                                          {(a.systemInfo?.os?.arch || a.systemInfo?.operatingSystem?.arch) && (
+                                            <span className="badge" style={{ fontSize: 9, background: "rgba(255,255,255,0.05)", color: "var(--text-secondary)" }}>
+                                              Arch: {a.systemInfo?.os?.arch || a.systemInfo?.operatingSystem?.arch}
+                                            </span>
+                                          )}
+                                          {(a.systemInfo?.os?.uptime || a.systemInfo?.operatingSystem?.uptime) && (
+                                            <span className="badge" style={{ fontSize: 9, background: "rgba(255,255,255,0.05)", color: "var(--text-secondary)" }}>
+                                              Uptime: {Math.round((a.systemInfo?.os?.uptime || a.systemInfo?.operatingSystem?.uptime) / 3600)}h
+                                            </span>
+                                          )}
                                         </div>
                                       </div>
                                     </div>
                                   </div>
 
-                                  {/* Right: Security Audit & Active Tasks */}
+                                  {/* Right: Network & Security */}
                                   <div>
                                     <h4 style={{ fontSize: 12, fontWeight: 700, marginBottom: 12, display: "flex", alignItems: "center", gap: 6, color: "var(--text-secondary)" }}>
-                                      <Shield size={14} /> Local Subnet Scan & Compliance Audit
+                                      <Shield size={14} /> Network & Security Status
                                     </h4>
                                     <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
                                       <div>
@@ -1820,33 +2086,46 @@ export default function DiscoveryPage() {
                                               </div>
                                             ))
                                           ) : (
-                                            <>
-                                              <div style={{ fontSize: 10, display: "flex", justifyContent: "space-between", padding: "4px 8px", background: "rgba(255,255,255,0.02)", borderRadius: 4 }}>
-                                                <span style={{ fontFamily: "monospace", color: "var(--brand-300)" }}>eth0 (Primary LAN)</span>
-                                                <span style={{ color: "var(--text-tertiary)" }}>{a.ipAddress}{" / 24"}</span>
-                                              </div>
-                                              <div style={{ fontSize: 10, display: "flex", justifyContent: "space-between", padding: "4px 8px", background: "rgba(255,255,255,0.02)", borderRadius: 4 }}>
-                                                <span style={{ fontFamily: "monospace", color: "var(--brand-300)" }}>lo0 (Loopback)</span>
-                                                <span style={{ color: "var(--text-tertiary)" }}>127.0.0.1</span>
-                                              </div>
-                                            </>
+                                            <div style={{ fontSize: 10, color: "var(--text-tertiary)", padding: "6px 8px", background: "rgba(255,255,255,0.02)", borderRadius: 4, fontStyle: "italic" }}>
+                                              No interface data reported — awaiting next heartbeat
+                                            </div>
                                           )}
                                         </div>
                                       </div>
 
                                       <div>
-                                        <div style={{ fontSize: 11, color: "var(--text-secondary)", marginBottom: 4 }}>Compliance / Security Integrity</div>
+                                        <div style={{ fontSize: 11, color: "var(--text-secondary)", marginBottom: 4 }}>Security Posture</div>
                                         <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-                                          <span className="badge green" style={{ fontSize: 9, display: "flex", alignItems: "center", gap: 4 }}>
-                                            <CheckCircle2 size={8} /> OS Compliant
-                                          </span>
-                                          <span className="badge green" style={{ fontSize: 9, display: "flex", alignItems: "center", gap: 4 }}>
-                                            <Shield size={8} /> SentinelOne Active
-                                          </span>
-                                          <span className="badge green" style={{ fontSize: 9, display: "flex", alignItems: "center", gap: 4 }}>
-                                            <Network size={8} /> Subnet Sweeper Ready
+                                          {a.systemInfo?.security ? (
+                                            <>
+                                              {a.systemInfo.security.firewallStatus && (
+                                                <span className={`badge ${a.systemInfo.security.firewallStatus.toLowerCase().includes("enabled") || a.systemInfo.security.firewallStatus.toLowerCase().includes("active") ? "green" : "amber"}`} style={{ fontSize: 9, display: "flex", alignItems: "center", gap: 4 }}>
+                                                  <Shield size={8} /> Firewall: {a.systemInfo.security.firewallStatus}
+                                                </span>
+                                              )}
+                                              {a.systemInfo.security.encryptionEnabled !== undefined && (
+                                                <span className={`badge ${a.systemInfo.security.encryptionEnabled ? "green" : "red"}`} style={{ fontSize: 9, display: "flex", alignItems: "center", gap: 4 }}>
+                                                  <Shield size={8} /> Disk Encryption: {a.systemInfo.security.encryptionEnabled ? "On" : "Off"}
+                                                </span>
+                                              )}
+                                            </>
+                                          ) : (
+                                            <span className="badge gray" style={{ fontSize: 9, display: "flex", alignItems: "center", gap: 4 }}>
+                                              <Shield size={8} /> No security telemetry — agent pending compliance scan
+                                            </span>
+                                          )}
+                                          <span className={`badge ${a.status === "ONLINE" ? "green" : "gray"}`} style={{ fontSize: 9, display: "flex", alignItems: "center", gap: 4 }}>
+                                            <Network size={8} /> Agent {a.status === "ONLINE" ? "Connected" : a.status}
                                           </span>
                                         </div>
+                                      </div>
+
+                                      {/* Delete Agent */}
+                                      <div style={{ marginTop: 8, borderTop: "1px solid rgba(255,255,255,0.06)", paddingTop: 12 }}>
+                                        <button className="btn btn-secondary" style={{ padding: "4px 10px", fontSize: 10, color: "#ef4444", borderColor: "rgba(239,68,68,0.2)", display: "flex", alignItems: "center", gap: 4 }}
+                                          onClick={() => deleteAgent(a.id)}>
+                                          <Trash2 size={10} /> Remove Agent
+                                        </button>
                                       </div>
                                     </div>
                                   </div>

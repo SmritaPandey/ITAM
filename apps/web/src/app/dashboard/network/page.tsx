@@ -160,16 +160,16 @@ export default function NetworkPage() {
           <button className="btn btn-secondary" onClick={refresh}><RefreshCw size={14} /></button>
           <button className="btn btn-secondary" onClick={async () => {
             setSnmpPolling(true);
-            try { await apiFetch("/monitoring/snmp/poll", { method: "POST" }); refresh(); } catch {}
+            try { await apiFetch("/monitoring/snmp/poll", { method: "POST" }); refresh(); } catch (err: any) { alert(`SNMP poll failed: ${err.message || err}`); }
             finally { setSnmpPolling(false); }
           }} disabled={snmpPolling}>
             {snmpPolling ? <><Loader2 size={14} style={{ animation: "spin 1s linear infinite" }} /> Polling...</> : <><Activity size={14} /> SNMP Poll</>}
           </button>
-          <button className="btn btn-secondary" onClick={async () => { setDiscovering(true); try { const r = await apiFetch("/monitoring/network/auto-discover", { method: "POST" }); setScanResult({ message: `Auto-discovered ${r.created} devices from ${r.total} assets` }); refresh(); } catch {} finally { setDiscovering(false); } }} disabled={discovering}>
+          <button className="btn btn-secondary" onClick={async () => { setDiscovering(true); try { const r = await apiFetch("/monitoring/network/auto-discover", { method: "POST" }); setScanResult({ message: `Auto-discovered ${r.created} devices from ${r.total} assets` }); refresh(); } catch (err: any) { alert(`Auto-discover failed: ${err.message || err}`); } finally { setDiscovering(false); } }} disabled={discovering}>
             {discovering ? <><Loader2 size={14} style={{ animation: "spin 1s linear infinite" }} /> Discovering...</> : <><Zap size={14} /> Auto-Discover</>}
           </button>
           <button className="btn btn-secondary" onClick={() => router.push("/dashboard/network/configs")}><FileCode size={14} /> Config Backup</button>
-          <button className="btn btn-primary" onClick={async () => { setScanning(true); setScanResult(null); try { const r = await apiFetch("/monitoring/network/scan", { method: "POST" }); setScanResult(r); refresh(); } catch {} finally { setScanning(false); } }} disabled={scanning}>
+          <button className="btn btn-primary" onClick={async () => { setScanning(true); setScanResult(null); try { const r = await apiFetch("/monitoring/network/scan", { method: "POST" }); setScanResult(r); refresh(); } catch (err: any) { alert(`Network scan failed: ${err.message || err}`); } finally { setScanning(false); } }} disabled={scanning}>
             {scanning ? <><Loader2 size={14} style={{ animation: "spin 1s linear infinite" }} /> Scanning...</> : <><Scan size={14} /> Scan Network</>}
           </button>
         </div>
@@ -303,7 +303,7 @@ export default function NetworkPage() {
                   </button>
                 )}
                 <button className="btn btn-secondary" style={{ padding: "4px 10px", fontSize: 11 }} onClick={async () => {
-                  try { await apiFetch(`/monitoring/snmp/devices/${selectedDevice.id}/poll`, { method: "POST" }); refresh(); } catch {}
+                  try { await apiFetch(`/monitoring/snmp/devices/${selectedDevice.id}/poll`, { method: "POST" }); refresh(); } catch (err: any) { alert(`Poll failed: ${err.message || err}`); }
                 }}><Activity size={12} /> Poll Now</button>
                 <button onClick={() => setSelectedDevice(null)} className="btn btn-secondary" style={{ padding: "4px 8px" }}><X size={14} /></button>
               </div>

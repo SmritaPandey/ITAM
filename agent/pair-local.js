@@ -54,11 +54,15 @@ fetch(url, {
     
     const config = {
       server: SERVER,
-      token: data.accessToken
+      token: data.accessToken,
+      email: email,
+      password: password
     };
     
     const configPath = path.join(__dirname, 'config.json');
     fs.writeFileSync(configPath, JSON.stringify(config, null, 2), 'utf8');
+    // Restrict permissions on config file (contains credentials)
+    try { if (process.platform !== 'win32') fs.chmodSync(configPath, 0o600); } catch {}
     console.log(`📦 Wrote local config.json to: ${configPath}`);
     
     // Restart launch agent on Mac

@@ -71,7 +71,7 @@ export default function CompliancePage() {
       ]);
       setDashboard(d); setChanges(c); setPolicies(p); setTemplates(t);
       // Fetch credential vault for agentless tab
-      try { const creds = await apiFetch("/discovery/credentials"); setCredentials(Array.isArray(creds) ? creds : creds.data || []); } catch {}
+      try { const creds = await apiFetch("/discovery/credentials"); setCredentials(Array.isArray(creds) ? creds : creds.data || []); } catch (err: any) { console.error("Credentials fetch failed:", err); }
     } catch (e) { console.error(e); } finally { setLoading(false); }
   }, [statusFilter]);
 

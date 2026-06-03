@@ -837,6 +837,32 @@ export class DiscoveryService {
     return updated;
   }
 
+  async deleteScan(id: string, tenantId: string) {
+    const scanJob = await this.prisma.scanJob.findFirst({
+      where: { id, tenantId },
+    });
+    if (!scanJob) {
+      throw new NotFoundException('Scan job not found');
+    }
+    if (scanJob.status === 'RUNNING' || scanJob.status === 'PENDING') {
+      throw new BadRequestException('Cannot delete a running or pending scan. Stop it first.');
+    }
+
+    // Delete discovered devices that are still PENDING_REVIEW from this scan
+    // Don't delete APPROVED/MERGED/IGNORED devices — those are user decisions
+    await this.prisma.discoveredDevice.deleteMany({
+      where: {
+        scanJobId: id,
+        tenantId,
+        status: 'PENDING_REVIEW',
+      },
+    });
+
+    await this.prisma.scanJob.delete({ where: { id } });
+    this.logger.log(`Scan job ${id} deleted.`);
+    return { deleted: true };
+  }
+
   async findPendingDevices(tenantId: string) {
     return this.prisma.discoveredDevice.findMany({
       where: { tenantId, status: 'PENDING_REVIEW' },
@@ -1212,6 +1238,23 @@ export class DiscoveryService {
     return agent;
   }
 
+  async deleteAgent(id: string, tenantId: string) {
+    const agent = await this.prisma.agent.findFirst({ where: { id, tenantId } });
+    if (!agent) throw new NotFoundException('Agent not found');
+
+    // Unlink from any associated asset
+    if (agent.assetId) {
+      await this.prisma.asset.updateMany({
+        where: { id: agent.assetId, agentId: agent.id },
+        data: { agentId: null },
+      });
+    }
+
+    await this.prisma.agent.delete({ where: { id } });
+    this.logger.log(`Agent ${agent.hostname} (${agent.ipAddress}) deleted from tenant ${tenantId}`);
+    return { deleted: true };
+  }
+
   async registerAgent(tenantId: string, data: {
     hostname: string; platform: string; agentVersion: string;
     ipAddress: string; macAddress?: string; systemInfo?: any;
@@ -1537,6 +1580,28 @@ export class DiscoveryService {
       this.logger.log(`Delegated scan job ${pendingScan.id} to agent ${agent.hostname}`);
     }
 
+    // Check if tenant has agentStartOnBoot enabled — push INSTALL_SERVICE to agents that haven't installed yet
+    try {
+      const tenant = await this.prisma.tenant.findUnique({
+        where: { id: tenantId },
+        select: { settings: true },
+      });
+      const tenantSettings = typeof tenant?.settings === 'object' ? (tenant.settings as Record<string, any>) : {};
+      const startOnBoot = tenantSettings.agentStartOnBoot;
+      const agentInfo = (updated.systemInfo as any) || {};
+      const serviceInstalled = agentInfo?.serviceInstalled === true;
+
+      if (startOnBoot === true && !serviceInstalled) {
+        actions.push({ type: 'INSTALL_SERVICE' });
+        this.logger.log(`Dispatching INSTALL_SERVICE to agent ${agent.hostname} (Start on Boot enabled)`);
+      } else if (startOnBoot === false && serviceInstalled) {
+        actions.push({ type: 'UNINSTALL_SERVICE' });
+        this.logger.log(`Dispatching UNINSTALL_SERVICE to agent ${agent.hostname} (Start on Boot disabled)`);
+      }
+    } catch (err: any) {
+      this.logger.warn(`Failed to check agentStartOnBoot setting: ${err.message}`);
+    }
+
     return {
       ...updated,
       actions,
@@ -1725,6 +1790,129 @@ export class DiscoveryService {
       where: { id: deviceId, tenantId },
     });
     if (!device) throw new NotFoundException('Device not found');
+
+    // ─── Detect unreachable private LAN IPs from a cloud server ─────
+    const ip = device.ipAddress || '';
+    const isPrivateIp = /^(10\.|172\.(1[6-9]|2\d|3[01])\.|192\.168\.|169\.254\.)/.test(ip);
+    const isCloudHosted = !!(process.env.RAILWAY_ENVIRONMENT || process.env.RENDER_EXTERNAL_URL ||
+      process.env.FLY_APP_NAME || process.env.HEROKU_APP_NAME || process.env.CLOUD_RUN_JOB);
+
+    if (isPrivateIp && isCloudHosted) {
+      // Can't reach local LAN from cloud — build the richest possible profile from all available data
+      this.logger.log(`Cloud server cannot reach private IP ${ip} — building comprehensive heuristic profile`);
+
+      // 1. Gather all available data sources
+      const scanJob = device.scanJobId ? await this.prisma.scanJob.findUnique({ where: { id: device.scanJobId } }) : null;
+      const existingPorts = device.openPorts ? JSON.parse(device.openPorts as string) : [];
+      const existingServices = device.services ? JSON.parse(device.services as string) : [];
+      const mac = device.macAddress || '';
+      const hostname = device.hostname || '';
+
+      // 2. MAC OUI deep vendor analysis
+      const ouiLookup = this.deepMacLookup(mac);
+      
+      // 3. Hostname pattern analysis
+      const hostnameAnalysis = this.analyzeHostname(hostname);
+
+      // 4. Port-based classification (use ports discovered during the scan)
+      const classification = this.classifyDevice(
+        existingPorts.map((p: any) => typeof p === 'object' ? p : { port: p, service: `port-${p}` }),
+        mac || undefined,
+      );
+
+      // 5. Risk assessment
+      const riskFactors: string[] = [];
+      if (existingPorts.some((p: any) => [21, 23, 25, 137, 139, 445, 3389].includes(typeof p === 'object' ? p.port : p))) {
+        riskFactors.push('High-risk ports open (FTP/Telnet/SMB/RDP)');
+      }
+      if (!mac) riskFactors.push('No MAC address — may be spoofed or behind NAT');
+      if (hostname.toLowerCase().includes('guest') || hostname.toLowerCase().includes('byod')) {
+        riskFactors.push('Guest/BYOD device detected from hostname');
+      }
+
+      // 6. Build comprehensive enrichment profile
+      const enrichmentData: any = {
+        collectedAt: new Date().toISOString(),
+        method: 'DEEP_HEURISTIC',
+        dataQuality: existingPorts.length > 0 ? 'GOOD' : 'LIMITED',
+        hardware: {
+          detectedType: classification.deviceType,
+          manufacturer: ouiLookup.manufacturer,
+          manufacturerCountry: ouiLookup.country,
+          macPrefix: mac ? mac.substring(0, 8).toUpperCase() : null,
+          isVirtual: ouiLookup.isVirtual,
+          possibleModels: ouiLookup.possibleModels,
+        },
+        operatingSystem: {
+          osGuess: classification.osGuess || hostnameAnalysis.osGuess,
+          confidence: classification.osGuess ? 'MEDIUM' : 'LOW',
+          hostname: hostname,
+          hostnamePattern: hostnameAnalysis.pattern,
+        },
+        network: {
+          ipAddress: ip,
+          macAddress: mac,
+          openPorts: existingPorts.map((p: any) => {
+            const port = typeof p === 'object' ? p.port : p;
+            const service = typeof p === 'object' ? p.service : (PORT_SERVICE_MAP[port] || `port-${port}`);
+            return {
+              port, service,
+              protocol: 'TCP',
+              risk: [21, 23, 25, 445, 3389].includes(port) ? 'HIGH' :
+                    [80, 8080, 8443].includes(port) ? 'MEDIUM' : 'LOW',
+              description: this.getPortDescription(port),
+            };
+          }),
+          services: existingServices.length > 0 ? existingServices : classification.services,
+          discoveredVia: scanJob ? `Network scan (${scanJob.scanType || 'FULL'})` : 'Agent discovery',
+          firstSeen: device.createdAt,
+          lastSeen: device.lastSeenAt,
+        },
+        software: {
+          detectedServices: classification.services,
+          webServer: existingPorts.some((p: any) => [80, 443, 8080, 8443].includes(typeof p === 'object' ? p.port : p))
+            ? 'Web server detected (HTTP/HTTPS)' : null,
+          databaseServer: existingPorts.some((p: any) => [3306, 5432, 1433, 27017, 6379].includes(typeof p === 'object' ? p.port : p))
+            ? 'Database server detected' : null,
+          remoteAccess: existingPorts.some((p: any) => [22, 3389, 5900].includes(typeof p === 'object' ? p.port : p))
+            ? 'Remote access enabled (SSH/RDP/VNC)' : null,
+          fileSharing: existingPorts.some((p: any) => [21, 139, 445, 2049].includes(typeof p === 'object' ? p.port : p))
+            ? 'File sharing active (FTP/SMB/NFS)' : null,
+        },
+        security: {
+          riskScore: device.riskScore || (riskFactors.length * 25),
+          riskLevel: riskFactors.length >= 3 ? 'CRITICAL' : riskFactors.length >= 2 ? 'HIGH' :
+                     riskFactors.length >= 1 ? 'MEDIUM' : 'LOW',
+          riskFactors: riskFactors.length > 0 ? riskFactors : ['No immediate risk factors identified'],
+          recommendations: this.getSecurityRecommendations(existingPorts, classification.deviceType),
+        },
+        enrichmentNote: `Comprehensive analysis using MAC OUI database, hostname patterns, port fingerprinting, and scan results. ${
+          existingPorts.length > 0 ? `${existingPorts.length} ports analyzed.` : 'No port data available from scan.'
+        } For full software/hardware inventory, deploy the on-premise discovery agent.`,
+      };
+
+      const updated = await this.prisma.discoveredDevice.update({
+        where: { id: deviceId },
+        data: {
+          enrichmentData: enrichmentData as any,
+          enrichmentStatus: 'ENRICHED',
+          deviceType: classification.deviceType || device.deviceType,
+          manufacturer: ouiLookup.manufacturer || device.manufacturer,
+        },
+      });
+
+      return {
+        device: updated,
+        enrichmentSummary: {
+          method: 'DEEP_HEURISTIC',
+          deviceType: classification.deviceType,
+          manufacturer: ouiLookup.manufacturer,
+          openPorts: existingPorts.length,
+          riskLevel: enrichmentData.security.riskLevel,
+          note: `Cloud-side deep heuristic analysis complete. ${existingPorts.length} ports, ${riskFactors.length} risk factors. Deploy agent for full inventory.`,
+        },
+      };
+    }
 
     let enrichmentData: any = {
       collectedAt: new Date().toISOString(),
@@ -1953,7 +2141,7 @@ export class DiscoveryService {
   /**
    * Package all agent collector files into an in-memory ZIP buffer with OS-specific hierarchy.
    */
-  getAgentZipPackage(serverUrl?: string, token?: string): Buffer {
+  getAgentZipPackage(serverUrl?: string, token?: string, userEmail?: string): Buffer {
     const zip = new AdmZip();
     
     // Resolve agent directory
@@ -2013,10 +2201,19 @@ export class DiscoveryService {
       zip.addLocalFolder(appBundlePath, 'QS-Discovery-Agent.app');
     }
 
-    // 2. Inject config.json into all functional locations
+    // 2. Inject config.json with token + email for credential-based re-auth
     if (serverUrl && token) {
       try {
-        const configBuffer = Buffer.from(JSON.stringify({ server: serverUrl, token }, null, 2), 'utf-8');
+        // Include email so the agent can re-authenticate via credentials when the JWT expires
+        const configObj: Record<string, any> = { server: serverUrl, token };
+        if (userEmail) {
+          configObj.email = userEmail;
+          // NOTE: password is NOT embedded for security — the agent will prompt or
+          // the user must run pair-local.js to complete credential setup.
+          // The agent's login flow will use the email + token initially, then
+          // fall back to pair-local.js if the token fully expires.
+        }
+        const configBuffer = Buffer.from(JSON.stringify(configObj, null, 2), 'utf-8');
         zip.addFile('bin/config.json', configBuffer);
         zip.addFile('win/config.json', configBuffer);
         zip.addFile('core/config.json', configBuffer);
@@ -2203,5 +2400,181 @@ export class DiscoveryService {
         error: err.message,
       };
     }
+  }
+
+  // ─── Deep MAC OUI Lookup ─────────────────────────────────────
+  private deepMacLookup(mac: string): {
+    manufacturer: string; country: string; isVirtual: boolean; possibleModels: string[];
+  } {
+    if (!mac) return { manufacturer: 'Unknown', country: '', isVirtual: false, possibleModels: [] };
+    const oui = mac.substring(0, 8).toUpperCase().replace(/[:-]/g, '');
+    
+    const OUI_DB: Record<string, { m: string; c: string; v?: boolean; models?: string[] }> = {
+      // Apple
+      'DCED96': { m: 'Apple Inc.', c: 'USA', models: ['MacBook Pro', 'MacBook Air', 'iMac', 'Mac Mini'] },
+      'DC4F22': { m: 'Apple Inc.', c: 'USA', models: ['iPhone', 'iPad', 'Apple TV'] },
+      'A4C3F0': { m: 'Apple Inc.', c: 'USA', models: ['MacBook Pro M-series'] },
+      'F0B479': { m: 'Apple Inc.', c: 'USA', models: ['Apple Silicon Mac'] },
+      '5C9BA6': { m: 'Apple Inc.', c: 'USA', models: ['MacBook Pro', 'MacBook Air'] },
+      '3C22FB': { m: 'Apple Inc.', c: 'USA', models: ['MacBook Air', 'MacBook Pro'] },
+      // HP
+      'B8AEED': { m: 'Hewlett-Packard', c: 'USA', models: ['HP EliteBook', 'HP ProBook', 'HP ZBook'] },
+      '001B44': { m: 'Hewlett-Packard', c: 'USA', models: ['HP Server', 'HP Switch'] },
+      '08003E': { m: 'Hewlett-Packard', c: 'USA', models: ['HP Enterprise'] },
+      // Dell
+      'D4BE26': { m: 'Dell Inc.', c: 'USA', models: ['Dell Latitude', 'Dell XPS'] },
+      '246E96': { m: 'Dell Inc.', c: 'USA', models: ['Dell OptiPlex', 'Dell PowerEdge'] },
+      'F8DB88': { m: 'Dell Inc.', c: 'USA', models: ['Dell Server', 'Dell Workstation'] },
+      // Lenovo
+      '54AB3A': { m: 'Lenovo', c: 'China', models: ['ThinkPad', 'ThinkCentre'] },
+      '8CEC4B': { m: 'Lenovo', c: 'China', models: ['ThinkPad', 'IdeaPad'] },
+      // Cisco
+      '0050BA': { m: 'Cisco Systems', c: 'USA', models: ['Cisco Switch', 'Cisco Router'] },
+      '0023EA': { m: 'Cisco Systems', c: 'USA', models: ['Cisco Catalyst', 'Cisco Meraki'] },
+      '001D70': { m: 'Cisco Systems', c: 'USA', models: ['Cisco Access Point'] },
+      // Network devices
+      '44D9E7': { m: 'Ubiquiti Inc.', c: 'USA', models: ['UniFi AP', 'UniFi Switch', 'EdgeRouter'] },
+      '802AA8': { m: 'Ubiquiti Inc.', c: 'USA', models: ['UniFi Dream Machine'] },
+      '0418D6': { m: 'Ubiquiti Inc.', c: 'USA', models: ['UniFi'] },
+      'C0A0BB': { m: 'D-Link', c: 'Taiwan', models: ['D-Link Router', 'D-Link Switch'] },
+      '001E58': { m: 'D-Link', c: 'Taiwan', models: ['D-Link NAS', 'D-Link Camera'] },
+      '40167E': { m: 'TP-Link', c: 'China', models: ['TP-Link Router', 'TP-Link Switch'] },
+      '8C210A': { m: 'TP-Link', c: 'China', models: ['TP-Link Router'] },
+      'FCECDA': { m: 'Ubiquiti Inc.', c: 'USA', models: ['UniFi'] },
+      // Printers
+      '0025B3': { m: 'HP Printing', c: 'USA', models: ['HP LaserJet', 'HP OfficeJet'] },
+      '3C2C94': { m: 'HP Printing', c: 'USA', models: ['HP Enterprise Printer'] },
+      // Samsung
+      'BC7285': { m: 'Samsung', c: 'South Korea', models: ['Samsung Galaxy', 'Samsung TV'] },
+      // Virtual
+      'F0DEF1': { m: 'VMware Inc.', c: 'USA', v: true, models: ['VMware VM'] },
+      '00505A': { m: 'VMware Inc.', c: 'USA', v: true, models: ['VMware VM'] },
+      '000C29': { m: 'VMware Inc.', c: 'USA', v: true, models: ['VMware ESXi VM'] },
+      '005056': { m: 'VMware Inc.', c: 'USA', v: true, models: ['VMware vSphere VM'] },
+      '00155D': { m: 'Microsoft Hyper-V', c: 'USA', v: true, models: ['Hyper-V VM'] },
+      '525400': { m: 'QEMU/KVM', c: 'Open Source', v: true, models: ['KVM Virtual Machine'] },
+      '080027': { m: 'Oracle VirtualBox', c: 'USA', v: true, models: ['VirtualBox VM'] },
+      // Intel
+      'A0369F': { m: 'Intel Corp.', c: 'USA', models: ['Intel NUC', 'Intel NIC'] },
+      // Synology
+      '0011322': { m: 'Synology Inc.', c: 'Taiwan', models: ['Synology NAS'] },
+      // Raspberry Pi
+      'B827EB': { m: 'Raspberry Pi Foundation', c: 'UK', models: ['Raspberry Pi 3/4'] },
+      'DC26B0': { m: 'Raspberry Pi Foundation', c: 'UK', models: ['Raspberry Pi 4/5'] },
+      'E45F01': { m: 'Raspberry Pi Foundation', c: 'UK', models: ['Raspberry Pi'] },
+    };
+
+    // Try exact 6-char match first, then 4-char prefix
+    const entry = OUI_DB[oui.substring(0, 6)] || OUI_DB[oui.substring(0, 4)];
+    if (entry) {
+      return {
+        manufacturer: entry.m,
+        country: entry.c,
+        isVirtual: entry.v || false,
+        possibleModels: entry.models || [],
+      };
+    }
+
+    return { manufacturer: 'Unknown', country: '', isVirtual: false, possibleModels: [] };
+  }
+
+  // ─── Hostname Pattern Analysis ──────────────────────────────
+  private analyzeHostname(hostname: string): {
+    osGuess: string; pattern: string; deviceRole: string;
+  } {
+    if (!hostname) return { osGuess: '', pattern: 'Unknown', deviceRole: '' };
+    const h = hostname.toLowerCase();
+
+    if (h.includes('macbook') || h.includes('imac') || h.includes('-mac'))
+      return { osGuess: 'macOS', pattern: 'Apple naming convention', deviceRole: 'Workstation' };
+    if (h.endsWith('.local'))
+      return { osGuess: 'macOS/Linux (mDNS)', pattern: 'Bonjour/mDNS .local suffix', deviceRole: 'Endpoint' };
+    if (h.includes('win') && (h.includes('desktop') || h.includes('pc') || h.includes('ws')))
+      return { osGuess: 'Windows', pattern: 'Windows naming convention', deviceRole: 'Workstation' };
+    if (h.startsWith('dc-') || h.includes('-dc') || h.includes('domain'))
+      return { osGuess: 'Windows Server', pattern: 'Domain controller naming', deviceRole: 'Domain Controller' };
+    if (h.includes('srv') || h.includes('server') || h.includes('esxi') || h.includes('vcenter'))
+      return { osGuess: 'Server OS', pattern: 'Server naming convention', deviceRole: 'Server' };
+    if (h.includes('fw-') || h.includes('firewall') || h.includes('pfsense') || h.includes('opnsense'))
+      return { osGuess: 'Firewall OS', pattern: 'Firewall naming', deviceRole: 'Firewall' };
+    if (h.includes('ap-') || h.includes('access-point') || h.includes('unifi'))
+      return { osGuess: 'Embedded', pattern: 'Access point naming', deviceRole: 'Wireless AP' };
+    if (h.includes('switch') || h.includes('sw-'))
+      return { osGuess: 'Network OS', pattern: 'Switch naming', deviceRole: 'Network Switch' };
+    if (h.includes('router') || h.includes('gw-') || h.includes('gateway'))
+      return { osGuess: 'Router OS', pattern: 'Router/gateway naming', deviceRole: 'Router' };
+    if (h.includes('printer') || h.includes('prn') || h.includes('hp-') || h.includes('epson') || h.includes('canon'))
+      return { osGuess: 'Embedded', pattern: 'Printer naming', deviceRole: 'Printer' };
+    if (h.includes('nas') || h.includes('synology') || h.includes('qnap'))
+      return { osGuess: 'Linux (NAS)', pattern: 'NAS device naming', deviceRole: 'NAS Storage' };
+    if (h.includes('cam') || h.includes('ipcam') || h.includes('hikvision') || h.includes('dahua'))
+      return { osGuess: 'Embedded', pattern: 'IP camera naming', deviceRole: 'IP Camera' };
+    if (h.includes('pi') || h.includes('raspberry'))
+      return { osGuess: 'Linux (Raspberry Pi)', pattern: 'Raspberry Pi naming', deviceRole: 'IoT Device' };
+
+    return { osGuess: '', pattern: 'Standard', deviceRole: '' };
+  }
+
+  // ─── Port Description Database ──────────────────────────────
+  private getPortDescription(port: number): string {
+    const descs: Record<number, string> = {
+      21: 'FTP — File Transfer Protocol (unencrypted)',
+      22: 'SSH — Secure Shell (encrypted remote access)',
+      23: 'Telnet — Unencrypted remote access (INSECURE)',
+      25: 'SMTP — Email relay (often spam target)',
+      53: 'DNS — Domain Name System',
+      80: 'HTTP — Web server (unencrypted)',
+      110: 'POP3 — Email retrieval',
+      111: 'RPCbind — Remote Procedure Call',
+      135: 'MS-RPC — Microsoft RPC (Windows)',
+      137: 'NetBIOS — Windows name service',
+      139: 'NetBIOS — Windows file sharing (legacy)',
+      143: 'IMAP — Email access',
+      161: 'SNMP — Network management',
+      389: 'LDAP — Directory services',
+      443: 'HTTPS — Encrypted web server',
+      445: 'SMB — Windows file sharing',
+      631: 'IPP — Internet Printing Protocol',
+      993: 'IMAPS — Encrypted email',
+      995: 'POP3S — Encrypted email',
+      1433: 'MSSQL — Microsoft SQL Server',
+      1521: 'Oracle DB — Oracle Database',
+      2049: 'NFS — Network File System',
+      3306: 'MySQL — MySQL Database',
+      3389: 'RDP — Remote Desktop (Windows)',
+      5432: 'PostgreSQL — PostgreSQL Database',
+      5900: 'VNC — Virtual Network Computing',
+      5985: 'WinRM — Windows Remote Management',
+      6379: 'Redis — In-memory database',
+      8080: 'HTTP Alt — Alternative web server',
+      8443: 'HTTPS Alt — Alternative encrypted web',
+      9100: 'RAW Print — Direct printer port',
+      27017: 'MongoDB — MongoDB Database',
+    };
+    return descs[port] || `Port ${port}`;
+  }
+
+  // ─── Security Recommendations ───────────────────────────────
+  private getSecurityRecommendations(ports: any[], deviceType: string): string[] {
+    const recs: string[] = [];
+    const portNums = ports.map((p: any) => typeof p === 'object' ? p.port : p);
+    
+    if (portNums.includes(23)) recs.push('CRITICAL: Disable Telnet and switch to SSH for remote management');
+    if (portNums.includes(21)) recs.push('HIGH: Replace FTP with SFTP or SCP for file transfers');
+    if (portNums.includes(445) || portNums.includes(139)) recs.push('HIGH: Ensure SMB is secured with authentication and not exposed to untrusted networks');
+    if (portNums.includes(3389)) recs.push('HIGH: Use VPN or Network Level Authentication for RDP access');
+    if (portNums.includes(25)) recs.push('MEDIUM: Ensure SMTP relay is properly configured to prevent spam abuse');
+    if (portNums.includes(161)) recs.push('MEDIUM: Use SNMPv3 with authentication instead of SNMPv2c community strings');
+    if (portNums.includes(80) && !portNums.includes(443)) recs.push('MEDIUM: Enable HTTPS and redirect HTTP traffic');
+    if (portNums.includes(3306) || portNums.includes(5432) || portNums.includes(27017)) {
+      recs.push('HIGH: Ensure database ports are not exposed to the public network');
+    }
+    if (portNums.includes(6379)) recs.push('CRITICAL: Redis should not be exposed — requires authentication and firewall rules');
+    
+    if (recs.length === 0) {
+      recs.push('No critical vulnerabilities detected from port analysis');
+      if (deviceType === 'Unknown') recs.push('Consider running a full agent-based scan for deeper analysis');
+    }
+    return recs;
   }
 }

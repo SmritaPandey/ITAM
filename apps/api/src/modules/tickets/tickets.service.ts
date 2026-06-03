@@ -31,7 +31,8 @@ export class TicketsService {
     const { page: rawPage = 1, limit: rawLimit = 20, status, type, priority, assignedToId, requesterId } = filters;
     const page = Number(rawPage) || 1;
     const limit = Number(rawLimit) || 20;
-    const skip = (page - 1) * limit;
+    const _page = Number(page) || 1; const _limit = Number(limit) || 20;
+    const skip = (_page - 1) * _limit;
 
     const where: Prisma.TicketWhereInput = {
       tenantId,
@@ -53,7 +54,7 @@ export class TicketsService {
           assets: { include: { asset: { select: { id: true, name: true, assetTag: true } } } },
         },
         skip,
-        take: limit,
+        take: _limit,
         orderBy: { createdAt: 'desc' },
       }),
       this.prisma.ticket.count({ where }),

@@ -67,8 +67,36 @@ async function tryRefreshToken(): Promise<string | null> {
 
 // ─── Main API Fetch ───────────────────────────────────────────
 
-const DEFAULT_TIMEOUT_MS = 30000;
+const DEFAULT_TIMEOUT_MS = 90000; // 90s — enrichment + Railway cold starts need more time
 const MAX_RETRIES = 2;
+
+/**
+ * Proactively refresh the token if it's about to expire (within 5 min).
+ * This avoids 401 round-trips and provides seamless UX.
+ */
+async function ensureFreshToken(): Promise<string> {
+  const token = getToken();
+  if (!token) return '';
+
+  try {
+    // Decode JWT payload (base64url)
+    const payloadB64 = token.split('.')[1];
+    if (!payloadB64) return token;
+    const payload = JSON.parse(atob(payloadB64.replace(/-/g, '+').replace(/_/g, '/')));
+    const expiresAt = (payload.exp || 0) * 1000;
+    const now = Date.now();
+    const timeLeft = expiresAt - now;
+
+    // If more than 5 minutes left, the token is still good
+    if (timeLeft > 5 * 60 * 1000) return token;
+
+    // Proactively refresh before expiry
+    const newToken = await tryRefreshToken();
+    return newToken || token; // Fall back to current token if refresh fails
+  } catch {
+    return token;
+  }
+}
 
 /**
  * Fetch with timeout — prevents hanging requests.
@@ -87,7 +115,8 @@ function fetchWithTimeout(url: string, opts: RequestInit, timeoutMs = DEFAULT_TI
  * - Returns parsed JSON on success
  */
 export async function apiFetch<T = any>(path: string, opts?: RequestInit): Promise<T> {
-  const token = getToken();
+  // Proactively refresh token if near expiry (prevents 401 round-trips)
+  const token = await ensureFreshToken();
   const headers = {
     Authorization: `Bearer ${token}`,
     "Content-Type": "application/json",

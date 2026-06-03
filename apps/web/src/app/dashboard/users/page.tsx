@@ -30,7 +30,7 @@ export default function UsersPage() {
       const [u, r] = await Promise.all([apiFetch("/users"), apiFetch("/users/roles")]);
       setUsers(u);
       setRoles(r);
-    } catch {} finally { setLoading(false); }
+    } catch (err: any) { console.error("Users load failed:", err); } finally { setLoading(false); }
   }
 
   useEffect(() => { refresh(); }, []);
@@ -44,17 +44,21 @@ export default function UsersPage() {
   const filtered = allFiltered.slice((page - 1) * pageSize, page * pageSize);
 
   async function toggleUserStatus(userId: string) {
-    await apiFetch(`/users/${userId}/toggle-status`, { method: "POST" });
-    refresh();
-    setSelectedUser(null);
+    try {
+      await apiFetch(`/users/${userId}/toggle-status`, { method: "POST" });
+      refresh();
+      setSelectedUser(null);
+    } catch (err: any) { alert(`Failed to toggle user status: ${err.message || err}`); }
   }
 
   async function handleInvite(e: React.FormEvent) {
     e.preventDefault();
-    await apiFetch("/users", { method: "POST", body: JSON.stringify(form) });
-    setShowInvite(false);
-    setForm({ firstName: "", lastName: "", email: "", password: "Welcome@123", roleId: "" });
-    refresh();
+    try {
+      await apiFetch("/users", { method: "POST", body: JSON.stringify(form) });
+      setShowInvite(false);
+      setForm({ firstName: "", lastName: "", email: "", password: "Welcome@123", roleId: "" });
+      refresh();
+    } catch (err: any) { alert(`Failed to invite user: ${err.message || err}`); }
   }
 
   async function handleChangePassword() {

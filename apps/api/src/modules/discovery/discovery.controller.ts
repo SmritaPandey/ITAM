@@ -99,6 +99,13 @@ export class DiscoveryController {
     return this.discoveryService.stopScan(id, req.user.tenantId);
   }
 
+  @Delete('scans/:id')
+  @Roles('Tenant Admin', 'IT Admin')
+  @ApiOperation({ summary: 'Delete a completed/failed/cancelled scan job' })
+  async deleteScan(@Request() req: any, @Param('id') id: string) {
+    return this.discoveryService.deleteScan(id, req.user.tenantId);
+  }
+
   @Post('scans/:id/results')
   @Roles('Tenant Admin', 'IT Admin')
   @ApiOperation({ summary: 'Submit scan results from discovery agent' })
@@ -286,9 +293,13 @@ export class DiscoveryController {
     let serverUrl = `${protocol}://${host}`;
     serverUrl = serverUrl.replace(/\/api\/v1\/?$/, '');
 
+    // Pass the downloader's email so the agent config includes credential-based re-auth
+    const userEmail = req.user?.email || '';
+
     const buffer = this.discoveryService.getAgentZipPackage(
       serverUrl,
       token || undefined,
+      userEmail || undefined,
     );
     res.set({
       'Content-Type': 'application/zip',
@@ -303,6 +314,13 @@ export class DiscoveryController {
   @ApiOperation({ summary: 'Get agent details + system info' })
   async getAgent(@Request() req: any, @Param('id') id: string) {
     return this.discoveryService.getAgent(id, req.user.tenantId);
+  }
+
+  @Delete('agents/:id')
+  @Roles('Tenant Admin')
+  @ApiOperation({ summary: 'Delete / unregister a discovery agent' })
+  async deleteAgent(@Request() req: any, @Param('id') id: string) {
+    return this.discoveryService.deleteAgent(id, req.user.tenantId);
   }
 
   @Post('agents/register')

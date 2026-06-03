@@ -55,6 +55,8 @@ const INTERVAL = parseInt(getArg('--interval', 'QS_AGENT_INTERVAL', '') || proce
 const SILENT_MODE = args.includes('--silent') || process.env.QS_AGENT_SILENT === 'true';
 
 let tokenFromFile = '';
+let configEmail = '';
+let configPassword = '';
 const configPath = path.join(__dirname, 'config.json');
 
 if (fs.existsSync(configPath)) {
@@ -62,13 +64,20 @@ if (fs.existsSync(configPath)) {
     const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
     if (config.server) SERVER = config.server;
     if (config.token) tokenFromFile = config.token;
+    if (config.email) configEmail = config.email;
+    if (config.password) configPassword = config.password;
     log('info', '📦 Loaded local config.json successfully');
+    try { if (process.platform !== 'win32') fs.chmodSync(configPath, 0o600); } catch {}
   } catch (e) {
     log('error', `⚠️ Failed to parse config.json: ${e.message}`);
   }
 }
 
 const API_BASE = `${SERVER}/api/v1`;
+
+// Merge credentials: CLI args > config.json > env vars
+if (!USER && configEmail) USER = configEmail;
+if (!PASS && configPassword) PASS = configPassword;
 
 if (!tokenFromFile && (!USER || !PASS)) {
   log('error', '❌ Usage: node qs-discovery-agent.js --server http://SERVER:4100 --user EMAIL --pass PASSWORD');
@@ -78,11 +87,17 @@ if (!tokenFromFile && (!USER || !PASS)) {
 let accessToken = '';
 let agentId = '';
 
-process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
+if (process.argv.includes('--insecure')) {
+  process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
+  log('warn', '⚠️  TLS verification disabled (--insecure flag). Do NOT use in production.');
+}
 
-function request(method, path, body) {
-  return new Promise((resolve, reject) => {
-    const url = `${API_BASE}${path}`;
+const MAX_RETRIES = 3;
+const BASE_BACKOFF_MS = 2000;
+
+function request(method, apiPath, body, retries = MAX_RETRIES) {
+  return new Promise(async (resolve, reject) => {
+    const url = `${API_BASE}${apiPath}`;
     const options = {
       method,
       headers: {
@@ -92,8 +107,9 @@ function request(method, path, body) {
       body: body ? JSON.stringify(body) : undefined,
     };
 
-    fetch(url, options)
-      .then(async (res) => {
+    for (let attempt = 0; attempt <= retries; attempt++) {
+      try {
+        const res = await fetch(url, options);
         const text = await res.text();
         let responseData;
         try {
@@ -102,26 +118,94 @@ function request(method, path, body) {
           responseData = text;
         }
         resolve({ status: res.status, data: responseData });
-      })
-      .catch(reject);
+        return;
+      } catch (err) {
+        if (attempt < retries) {
+          const delay = BASE_BACKOFF_MS * Math.pow(2, attempt);
+          log('info', `⏳ Request to ${apiPath} failed (attempt ${attempt + 1}/${retries + 1}): ${err.message}. Retrying in ${delay / 1000}s...`);
+          await new Promise(r => setTimeout(r, delay));
+        } else {
+          reject(new Error(`Request to ${apiPath} failed after ${retries + 1} attempts: ${err.message}`));
+        }
+      }
+    }
   });
 }
 
+// ─── JWT Helpers ────────────────────────────────────────────
+function isTokenExpired(token) {
+  try {
+    const parts = token.split('.');
+    if (parts.length !== 3) return true;
+    const payload = JSON.parse(Buffer.from(parts[1], 'base64url').toString());
+    if (!payload.exp) return false;
+    // Consider expired if less than 60 seconds remaining
+    return (payload.exp * 1000) < (Date.now() + 60000);
+  } catch {
+    return true;
+  }
+}
+
+function saveTokenToConfig(newToken) {
+  try {
+    let config = {};
+    if (fs.existsSync(configPath)) {
+      config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+    }
+    config.token = newToken;
+    fs.writeFileSync(configPath, JSON.stringify(config, null, 2), 'utf8');
+    try { if (process.platform !== 'win32') fs.chmodSync(configPath, 0o600); } catch {}
+    log('info', '📦 Refreshed token saved to config.json');
+  } catch (e) {
+    log('error', `Failed to save refreshed token: ${e.message}`);
+  }
+}
+
 // ─── Login ──────────────────────────────────────────────────
+async function loginWithCredentials() {
+  if (!USER || !PASS) return false;
+  log('info', `🔑 Authenticating with credentials as ${USER}...`);
+  try {
+    const res = await request('POST', '/auth/login', { email: USER, password: PASS }, 1);
+    if (res.status === 200 || res.status === 201) {
+      accessToken = res.data.accessToken || res.data.access_token;
+      log('success', 'Authenticated successfully via credentials');
+      // Persist new token so future restarts use fresh token
+      saveTokenToConfig(accessToken);
+      tokenFromFile = accessToken;
+      return true;
+    }
+    log('error', `Credential login failed (${res.status}): ${res.data.message || res.data}`);
+    return false;
+  } catch (err) {
+    log('error', `Credential login network error: ${err.message}`);
+    return false;
+  }
+}
+
 async function login() {
-  if (tokenFromFile) {
-    log('info', '🔑 Authenticating using pre-seeded secure token...');
+  // 1. Try config token if present and NOT expired
+  if (tokenFromFile && !isTokenExpired(tokenFromFile)) {
+    log('info', '🔑 Authenticating using valid pre-seeded token...');
     accessToken = tokenFromFile;
     return true;
   }
-  log('info', `🔑 Authenticating as ${USER}...`);
-  const res = await request('POST', '/auth/login', { email: USER, password: PASS });
-  if (res.status === 200 || res.status === 201) {
-    accessToken = res.data.accessToken || res.data.access_token;
-    log('success', 'Authenticated successfully');
+
+  // 2. Token is expired or missing — try credential-based login
+  if (tokenFromFile && isTokenExpired(tokenFromFile)) {
+    log('info', '⚠️  Config token has expired. Attempting credential-based re-authentication...');
+  }
+
+  if (await loginWithCredentials()) return true;
+
+  // 3. Last resort: use the expired token anyway (server might accept it)
+  if (tokenFromFile) {
+    log('info', '🔑 Falling back to config token (may be expired)...');
+    accessToken = tokenFromFile;
     return true;
   }
-  log('error', `Login failed (${res.status}): ${res.data.message || res.data}`);
+
+  log('error', 'No valid authentication method available.');
   return false;
 }
 
@@ -247,30 +331,32 @@ function getDiskUsage() {
   const platform = os.platform();
   try {
     if (platform === 'win32') {
-      const output = execCmd('wmic logicaldisk get size,freespace,caption /format:list');
+      const output = execCmd('powershell -command "Get-CimInstance Win32_LogicalDisk | Select-Object DeviceID,Size,FreeSpace,FileSystem | ConvertTo-Json"');
       const drives = [];
-      const blocks = output.split('\n\n').filter(b => b.includes('Caption'));
-      for (const block of blocks) {
-        const lines = block.split('\n').map(l => l.trim());
-        const caption = lines.find(l => l.startsWith('Caption='))?.split('=')[1];
-        const free = parseInt(lines.find(l => l.startsWith('FreeSpace='))?.split('=')[1] || '0');
-        const total = parseInt(lines.find(l => l.startsWith('Size='))?.split('=')[1] || '0');
-        if (caption && total > 0) {
-          const totalGb = Math.round(total / 1073741824);
-          const usedGb = Math.round((total - free) / 1073741824);
-          const freeGb = Math.round(free / 1073741824);
-          drives.push({
-            mount: caption,
-            totalGb,
-            sizeGb: totalGb,
-            size: totalGb,
-            usedGb,
-            used: usedGb,
-            freeGb,
-            available: freeGb
-          });
+      try {
+        const parsed = JSON.parse(output);
+        const disks = Array.isArray(parsed) ? parsed : [parsed];
+        for (const disk of disks) {
+          const total = parseInt(disk.Size || '0');
+          const free = parseInt(disk.FreeSpace || '0');
+          if (disk.DeviceID && total > 0) {
+            const totalGb = Math.round(total / 1073741824);
+            const usedGb = Math.round((total - free) / 1073741824);
+            const freeGb = Math.round(free / 1073741824);
+            drives.push({
+              mount: disk.DeviceID,
+              totalGb,
+              sizeGb: totalGb,
+              size: totalGb,
+              usedGb,
+              used: usedGb,
+              freeGb,
+              available: freeGb,
+              fileSystem: disk.FileSystem || 'Unknown'
+            });
+          }
         }
-      }
+      } catch {}
       return drives;
     } else {
       const output = execCmd("df -h 2>/dev/null | grep -E '^/dev/' || df -h 2>/dev/null");
@@ -299,11 +385,12 @@ function getInstalledSoftware() {
   const platform = os.platform();
   try {
     if (platform === 'win32') {
-      const output = execCmd('wmic product get name,version /format:csv 2>nul');
-      return output.split('\n').filter(l => l.includes(',')).slice(1, 30).map(l => {
-        const parts = l.trim().split(',');
-        return { name: parts[1], version: parts[2] };
-      }).filter(s => s.name);
+      const output = execCmd('powershell -command "Get-CimInstance Win32_Product | Select-Object Name,Version | ConvertTo-Json"');
+      try {
+        const parsed = JSON.parse(output);
+        const items = Array.isArray(parsed) ? parsed : [parsed];
+        return items.filter(s => s.Name).map(s => ({ name: s.Name, version: s.Version || 'N/A' }));
+      } catch { return []; }
     } else if (platform === 'darwin') {
       const apps = [];
       try {
@@ -332,9 +419,9 @@ function getInstalledSoftware() {
       } catch {}
 
       if (apps.length > 0) {
-        return apps.slice(0, 40);
+        return apps;
       } else {
-        const brew = execCmd('brew list --versions 2>/dev/null | head -20');
+        const brew = execCmd('brew list --versions 2>/dev/null | head -200');
         return brew.split('\n').filter(Boolean).map(l => {
           const parts = l.split(' ');
           return { name: parts[0], version: parts.slice(1).join(' ') };
@@ -342,9 +429,9 @@ function getInstalledSoftware() {
       }
     } else {
       // Linux: dpkg or rpm
-      const dpkg = execCmd("dpkg-query -W -f='${Package} ${Version}\\n' 2>/dev/null | head -30");
+      const dpkg = execCmd("dpkg-query -W -f='${Package} ${Version}\\n' 2>/dev/null | head -200");
       if (dpkg) return dpkg.split('\n').filter(Boolean).map(l => { const p = l.split(' '); return { name: p[0], version: p[1] }; });
-      const rpm = execCmd("rpm -qa --qf '%{NAME} %{VERSION}\\n' 2>/dev/null | head -30");
+      const rpm = execCmd("rpm -qa --qf '%{NAME} %{VERSION}\\n' 2>/dev/null | head -200");
       if (rpm) return rpm.split('\n').filter(Boolean).map(l => { const p = l.split(' '); return { name: p[0], version: p[1] }; });
       return [];
     }
@@ -394,6 +481,18 @@ function getSecurityInfo() {
     } else {
       const iptablesCount = parseInt(execCmd('sudo iptables -L -n 2>/dev/null | wc -l') || '0', 10);
       info.firewallEnabled = iptablesCount > 10 || execCmd('systemctl is-active ufw 2>/dev/null') === 'active';
+      // LUKS encryption detection
+      const luksCheck = execCmd('lsblk -o NAME,FSTYPE 2>/dev/null | grep -i luks');
+      if (luksCheck) {
+        info.encryptionEnabled = true;
+        info.encryptionMethod = 'LUKS';
+      } else if (fs.existsSync('/etc/crypttab')) {
+        const crypttab = execCmd('cat /etc/crypttab 2>/dev/null');
+        if (crypttab && crypttab.trim().length > 0) {
+          info.encryptionEnabled = true;
+          info.encryptionMethod = 'LUKS (crypttab)';
+        }
+      }
     }
   } catch {}
   return info;
@@ -426,10 +525,14 @@ function getUsbDevices() {
         return { name: match ? match[2] : l, vendor: match ? match[1] : '', serial: '', type: 'USB' };
       });
     } else if (platform === 'win32') {
-      const output = execCmd('wmic path Win32_USBControllerDevice get Dependent /format:list 2>nul');
-      return output.split('\n').filter(l => l.includes('Dependent')).slice(0, 15).map(l => ({
-        name: l.split('=')[1]?.trim() || 'USB Device', vendor: '', serial: '', type: 'USB',
-      }));
+      const output = execCmd('powershell -command "Get-CimInstance Win32_PnPEntity | Where-Object { $_.PNPClass -eq \'USB\' } | Select-Object Name | ConvertTo-Json"');
+      try {
+        const parsed = JSON.parse(output);
+        const items = Array.isArray(parsed) ? parsed : [parsed];
+        return items.filter(d => d.Name).slice(0, 30).map(d => ({
+          name: d.Name || 'USB Device', vendor: '', serial: '', type: 'USB',
+        }));
+      } catch { return []; }
     }
   } catch {}
   return [];
@@ -459,6 +562,164 @@ function getRunningServices() {
     }
   } catch {}
   return [];
+}
+
+function getGpuInfo() {
+  const platform = os.platform();
+  try {
+    if (platform === 'darwin') {
+      const output = execCmd('system_profiler SPDisplaysDataType -json 2>/dev/null');
+      if (output) {
+        try {
+          const data = JSON.parse(output);
+          const gpus = [];
+          const displays = data.SPDisplaysDataType || [];
+          for (const gpu of displays) {
+            gpus.push({
+              name: gpu.sppci_model || gpu._name || 'Unknown',
+              vram: gpu.sppci_vram || gpu.spdisplays_vram || 'Unknown',
+              vendor: gpu.sppci_vendor || 'Unknown',
+            });
+          }
+          return gpus.length > 0 ? gpus : null;
+        } catch { return null; }
+      }
+    } else if (platform === 'win32') {
+      const output = execCmd('powershell -command "Get-CimInstance Win32_VideoController | Select-Object Name,AdapterRAM,DriverVersion | ConvertTo-Json"');
+      if (output) {
+        try {
+          const parsed = JSON.parse(output);
+          const items = Array.isArray(parsed) ? parsed : [parsed];
+          return items.map(g => ({
+            name: g.Name || 'Unknown',
+            vramBytes: g.AdapterRAM || 0,
+            vramMb: g.AdapterRAM ? Math.round(g.AdapterRAM / 1048576) : 0,
+            driverVersion: g.DriverVersion || 'Unknown',
+          }));
+        } catch { return null; }
+      }
+    } else {
+      // Linux: try nvidia-smi first, fallback to lspci
+      const nvidiaSmi = execCmd('nvidia-smi --query-gpu=name,memory.total --format=csv,noheader 2>/dev/null');
+      if (nvidiaSmi) {
+        return nvidiaSmi.split('\n').filter(Boolean).map(line => {
+          const parts = line.split(',').map(p => p.trim());
+          return { name: parts[0] || 'NVIDIA GPU', vram: parts[1] || 'Unknown' };
+        });
+      }
+      const lspci = execCmd('lspci 2>/dev/null | grep -i vga');
+      if (lspci) {
+        return lspci.split('\n').filter(Boolean).map(line => ({
+          name: line.replace(/^.*VGA compatible controller:\s*/i, '').trim(),
+          vram: 'Unknown',
+        }));
+      }
+    }
+  } catch {}
+  return null;
+}
+
+function getBatteryInfo() {
+  const platform = os.platform();
+  try {
+    if (platform === 'darwin') {
+      const output = execCmd('pmset -g batt 2>/dev/null');
+      if (output) {
+        const percentMatch = output.match(/(\d+)%/);
+        const chargingMatch = output.match(/(charging|discharging|charged|AC attached)/i);
+        if (percentMatch) {
+          return {
+            percentage: parseInt(percentMatch[1], 10),
+            status: chargingMatch ? chargingMatch[1] : 'unknown',
+            hasBattery: true,
+          };
+        }
+      }
+    } else if (platform === 'win32') {
+      const output = execCmd('powershell -command "Get-CimInstance Win32_Battery | Select-Object EstimatedChargeRemaining,BatteryStatus | ConvertTo-Json"');
+      if (output) {
+        try {
+          const parsed = JSON.parse(output);
+          const bat = Array.isArray(parsed) ? parsed[0] : parsed;
+          if (bat && bat.EstimatedChargeRemaining !== undefined) {
+            const statusMap = { 1: 'discharging', 2: 'AC connected', 3: 'fully charged', 4: 'low', 5: 'critical', 6: 'charging' };
+            return {
+              percentage: bat.EstimatedChargeRemaining,
+              status: statusMap[bat.BatteryStatus] || 'unknown',
+              hasBattery: true,
+            };
+          }
+        } catch {}
+      }
+    } else {
+      // Linux
+      const capacity = execCmd('cat /sys/class/power_supply/BAT0/capacity 2>/dev/null');
+      const status = execCmd('cat /sys/class/power_supply/BAT0/status 2>/dev/null');
+      if (capacity) {
+        return {
+          percentage: parseInt(capacity, 10),
+          status: status?.toLowerCase() || 'unknown',
+          hasBattery: true,
+        };
+      }
+    }
+  } catch {}
+  return null; // No battery detected (desktop/server)
+}
+
+function getAntivirusInfo() {
+  const platform = os.platform();
+  const avList = [];
+  try {
+    if (platform === 'darwin') {
+      // XProtect
+      const xprotect = execCmd('defaults read /System/Library/CoreServices/XProtect.bundle/Contents/Resources/XProtect.meta.plist Version 2>/dev/null');
+      if (xprotect) {
+        avList.push({ name: 'XProtect', version: xprotect.trim(), status: 'active' });
+      } else {
+        avList.push({ name: 'XProtect', version: 'built-in', status: 'active' });
+      }
+      // CrowdStrike
+      try {
+        execSync('pgrep -x falcond', { timeout: 3000, stdio: 'ignore' });
+        avList.push({ name: 'CrowdStrike Falcon', version: 'N/A', status: 'running' });
+      } catch {}
+      // SentinelOne
+      try {
+        execSync('pgrep -x SentinelAgent', { timeout: 3000, stdio: 'ignore' });
+        avList.push({ name: 'SentinelOne', version: 'N/A', status: 'running' });
+      } catch {}
+    } else if (platform === 'win32') {
+      const output = execCmd('powershell -command "Get-CimInstance -Namespace root/SecurityCenter2 -ClassName AntiVirusProduct | Select-Object displayName,productState | ConvertTo-Json"');
+      if (output) {
+        try {
+          const parsed = JSON.parse(output);
+          const items = Array.isArray(parsed) ? parsed : [parsed];
+          for (const av of items) {
+            if (av.displayName) {
+              avList.push({
+                name: av.displayName,
+                productState: av.productState,
+                status: av.productState ? 'registered' : 'unknown',
+              });
+            }
+          }
+        } catch {}
+      }
+    } else {
+      // Linux
+      const clamav = execCmd('clamd --version 2>/dev/null');
+      if (clamav) {
+        avList.push({ name: 'ClamAV', version: clamav.trim(), status: 'installed' });
+      }
+      // CrowdStrike
+      try {
+        execSync('pgrep -x falcon-sensor', { timeout: 3000, stdio: 'ignore' });
+        avList.push({ name: 'CrowdStrike Falcon', version: 'N/A', status: 'running' });
+      } catch {}
+    }
+  } catch {}
+  return avList.length > 0 ? avList : [];
 }
 
 function getSystemUsers() {
@@ -583,8 +844,8 @@ function getFailedLoginsCount() {
       if (fs.existsSync('/var/log/auth.log')) {
         const content = execCmd('grep -i "fail" /var/log/auth.log | wc -l');
         count = parseInt(content, 10) || 0;
-      } else if (fs.existsSync('/var/log/secure.log')) {
-        const content = execCmd('grep -i "fail" /var/log/secure.log | wc -l');
+      } else if (fs.existsSync('/var/log/secure')) {
+        const content = execCmd('grep -i "fail" /var/log/secure | wc -l');
         count = parseInt(content, 10) || 0;
       }
       return count;
@@ -708,24 +969,26 @@ function getSystemHardwareDetails() {
 
   try {
     if (platform === 'win32') {
-      const serialOut = execCmd('wmic bios get serialnumber /format:list');
-      details.serialNumber = serialOut.split('\n').find(l => l.startsWith('SerialNumber='))?.split('=')[1]?.trim() || 'Unknown';
-      const biosVendorOut = execCmd('wmic bios get manufacturer /format:list');
-      details.biosVendor = biosVendorOut.split('\n').find(l => l.startsWith('Manufacturer='))?.split('=')[1]?.trim() || 'Unknown';
-      const biosVerOut = execCmd('wmic bios get name /format:list');
-      details.biosVersion = biosVerOut.split('\n').find(l => l.startsWith('Name='))?.split('=')[1]?.trim() || 'Unknown';
+      details.serialNumber = execCmd('powershell -command "(Get-CimInstance Win32_BIOS).SerialNumber"')?.trim() || 'Unknown';
+      details.biosVendor = execCmd('powershell -command "(Get-CimInstance Win32_BIOS).Manufacturer"')?.trim() || 'Unknown';
+      details.biosVersion = execCmd('powershell -command "(Get-CimInstance Win32_BIOS).Name"')?.trim() || 'Unknown';
 
-      const boardVendor = execCmd('wmic baseboard get manufacturer /format:list').split('\n').find(l => l.startsWith('Manufacturer='))?.split('=')[1]?.trim() || '';
-      const boardProduct = execCmd('wmic baseboard get product /format:list').split('\n').find(l => l.startsWith('Product='))?.split('=')[1]?.trim() || '';
-      if (boardVendor || boardProduct) {
-        details.motherboard = `${boardVendor} ${boardProduct}`.trim();
-      }
+      try {
+        const boardOut = execCmd('powershell -command "Get-CimInstance Win32_BaseBoard | Select-Object Manufacturer,Product | ConvertTo-Json"');
+        const board = JSON.parse(boardOut);
+        if (board.Manufacturer || board.Product) {
+          details.motherboard = `${board.Manufacturer || ''} ${board.Product || ''}`.trim();
+        }
+      } catch {}
 
-      const tpmOut = execCmd('wmic /namespace:\\\\root\\cimv2\\security\\microsofttpm path Win32_Tpm get IsEnabled_InitialValue,SpecVersion /format:list 2>nul');
-      if (tpmOut.includes('IsEnabled_InitialValue')) {
-        details.tpmEnabled = tpmOut.split('\n').find(l => l.startsWith('IsEnabled_InitialValue='))?.split('=')[1]?.trim() === 'TRUE';
-        details.tpmVersion = tpmOut.split('\n').find(l => l.startsWith('SpecVersion='))?.split('=')[1]?.trim() || 'N/A';
-      }
+      try {
+        const tpmOut = execCmd('powershell -command "Get-CimInstance -Namespace root/cimv2/Security/MicrosoftTpm -ClassName Win32_Tpm | Select-Object IsEnabled_InitialValue,SpecVersion | ConvertTo-Json" 2>nul');
+        if (tpmOut) {
+          const tpm = JSON.parse(tpmOut);
+          details.tpmEnabled = tpm.IsEnabled_InitialValue === true;
+          details.tpmVersion = tpm.SpecVersion || 'N/A';
+        }
+      } catch {}
     } else if (platform === 'darwin') {
       const serialOut = execCmd("ioreg -rd1 -c IOPlatformExpertDevice | awk -F'\"' '/IOPlatformSerialNumber/ { print $4 }'");
       details.serialNumber = serialOut?.trim() || 'Unknown';
@@ -813,6 +1076,9 @@ function collectSystemInfo() {
     processes: getRunningProcesses(),
     usbDevices: getUsbDevices(),
     services: getRunningServices(),
+    gpu: getGpuInfo(),
+    battery: getBatteryInfo(),
+    antivirus: getAntivirusInfo(),
   };
 }
 
@@ -836,18 +1102,111 @@ async function registerAgent() {
     log('success', `Agent registered successfully. ID: ${agentId}`);
     return true;
   }
+
+  // Handle expired token — re-authenticate and retry
+  if (res.status === 401) {
+    log('info', '🔑 Registration returned 401 — token expired. Re-authenticating...');
+    const loggedIn = await loginWithCredentials();
+    if (loggedIn) {
+      const retryRes = await request('POST', '/discovery/agents/register', body);
+      if (retryRes.status === 200 || retryRes.status === 201) {
+        agentId = retryRes.data.id;
+        log('success', `Agent registered successfully after re-auth. ID: ${agentId}`);
+        return true;
+      }
+      log('error', `Registration retry failed (${retryRes.status}): ${retryRes.data.message || retryRes.data}`);
+    } else {
+      log('error', 'Re-authentication failed. Cannot register agent.');
+    }
+    return false;
+  }
+
   log('error', `Registration failed (${res.status}): ${res.data.message || res.data}`);
   return false;
 }
 
+// ─── File Integrity Monitoring ────────────────────────────────
+const FIM_BASELINE_PATH = path.join(__dirname, 'fim-baseline.json');
+const FIM_WATCH_PATHS = process.platform === 'darwin'
+  ? ['/etc/hosts', '/etc/sudoers', '/etc/ssh/sshd_config', '/etc/pam.d', '/etc/shells']
+  : process.platform === 'linux'
+    ? ['/etc/hosts', '/etc/passwd', '/etc/shadow', '/etc/sudoers', '/etc/ssh/sshd_config', '/etc/crontab', '/etc/fstab']
+    : ['C:\\Windows\\System32\\drivers\\etc\\hosts', 'C:\\Windows\\System32\\config\\SAM'];
+
+function computeFileHash(filePath) {
+  try {
+    const content = fs.readFileSync(filePath);
+    return require('crypto').createHash('sha256').update(content).digest('hex');
+  } catch { return null; }
+}
+
+function checkFIM() {
+  let baseline = {};
+  try { baseline = JSON.parse(fs.readFileSync(FIM_BASELINE_PATH, 'utf8')); } catch {}
+  const changes = [];
+  const current = {};
+  for (const fp of FIM_WATCH_PATHS) {
+    const hash = computeFileHash(fp);
+    if (!hash) continue;
+    current[fp] = hash;
+    if (baseline[fp] && baseline[fp] !== hash) {
+      try {
+        const stat = fs.statSync(fp);
+        changes.push({ path: fp, oldHash: baseline[fp], newHash: hash, modifiedAt: stat.mtime.toISOString(), size: stat.size });
+        log('warn', `FIM: ${fp} modified (hash changed)`);
+      } catch {}
+    }
+  }
+  try { fs.writeFileSync(FIM_BASELINE_PATH, JSON.stringify(current, null, 2)); } catch {}
+  return changes;
+}
+
+// ─── Heartbeat Data Buffering (Offline Resilience) ────────────
+const BUFFER_PATH = path.join(__dirname, 'heartbeat-buffer.jsonl');
+const MAX_BUFFER_ENTRIES = 100;
+
+function bufferHeartbeat(data) {
+  try {
+    const lines = fs.existsSync(BUFFER_PATH) ? fs.readFileSync(BUFFER_PATH, 'utf8').split('\n').filter(Boolean) : [];
+    if (lines.length >= MAX_BUFFER_ENTRIES) lines.shift();
+    lines.push(JSON.stringify({ timestamp: new Date().toISOString(), data }));
+    fs.writeFileSync(BUFFER_PATH, lines.join('\n') + '\n');
+    log('info', `Heartbeat buffered locally (${lines.length} pending)`);
+  } catch (e) { log('error', `Buffer write failed: ${e.message}`); }
+}
+
+async function drainBuffer() {
+  if (!fs.existsSync(BUFFER_PATH)) return;
+  try {
+    const lines = fs.readFileSync(BUFFER_PATH, 'utf8').split('\n').filter(Boolean);
+    if (lines.length === 0) return;
+    log('info', `Draining ${lines.length} buffered heartbeats...`);
+    for (const line of lines) {
+      try {
+        const { data } = JSON.parse(line);
+        await request('POST', `/discovery/agents/${agentId}/heartbeat`, data);
+      } catch { break; }
+    }
+    fs.unlinkSync(BUFFER_PATH);
+    log('info', 'Buffer drained successfully');
+  } catch (e) { log('error', `Buffer drain failed: ${e.message}`); }
+}
+
 // ─── Heartbeat ──────────────────────────────────────────────
+let heartbeatInProgress = false;
+
 async function sendHeartbeat() {
   if (!agentId) return;
+  if (heartbeatInProgress) { log('info', 'Heartbeat already in progress, skipping'); return; }
+  heartbeatInProgress = true;
 
   const systemInfo = collectSystemInfo();
+  const fimChanges = checkFIM();
+  const heartbeatPayload = { systemInfo, version: VERSION, fim: fimChanges };
   try {
-    const res = await request('POST', `/discovery/agents/${agentId}/heartbeat`, { systemInfo });
+    const res = await request('POST', `/discovery/agents/${agentId}/heartbeat`, heartbeatPayload);
     if (res.status === 200 || res.status === 201) {
+      await drainBuffer();
       const mem = systemInfo.hardware;
       log('heartbeat', `Heartbeat sent — CPU: ${systemInfo.performance.cpuUsagePercent}% | RAM: ${mem.ramUsagePercent}% (${mem.usedRamMb}/${mem.totalRamMb} MB) | Uptime: ${systemInfo.operatingSystem.uptimeHours}h`);
       
@@ -857,6 +1216,14 @@ async function sendHeartbeat() {
         for (const act of res.data.actions) {
           if (act.type === 'KILL_PROCESS') {
             const { processName, pid } = act;
+            if (processName && !/^[a-zA-Z0-9._\-]+$/.test(processName)) {
+              log('error', `Invalid process name rejected: "${processName}"`);
+              continue;
+            }
+            if (pid && (isNaN(pid) || pid < 1)) {
+              log('error', `Invalid PID rejected: "${pid}"`);
+              continue;
+            }
             log('security', `Terminating unauthorized process "${processName}" (PID: ${pid})...`);
             try {
               if (pid) {
@@ -960,21 +1327,31 @@ async function sendHeartbeat() {
             }
           } else if (act.type === 'BLOCK_PORT') {
             const { port, processName } = act;
-            log('security', `Blocking unauthorized open port ${port} (Process: "${processName || 'unknown'}")...`);
+            const portNum = parseInt(port);
+            if (isNaN(portNum) || portNum < 1 || portNum > 65535) {
+              log('error', `Invalid port number rejected: "${port}"`);
+              continue;
+            }
+            log('security', `Blocking unauthorized open port ${portNum} (Process: "${processName || 'unknown'}")...`);
             try {
               if (os.platform() === 'win32') {
-                exec(`netsh advfirewall firewall add rule name="Block Port ${port}" dir=in action=block protocol=TCP localport=${port}`);
-                log('success', `Blocked port ${port} successfully on Windows Firewall.`);
+                exec(`netsh advfirewall firewall add rule name="Block Port ${portNum}" dir=in action=block protocol=TCP localport=${portNum}`);
+                log('success', `Blocked port ${portNum} successfully on Windows Firewall.`);
               } else if (os.platform() === 'linux') {
                 try {
-                  exec(`ufw deny ${port}`);
-                  log('success', `Blocked port ${port} via ufw.`);
+                  exec(`ufw deny ${portNum}`);
+                  log('success', `Blocked port ${portNum} via ufw.`);
                 } catch {
-                  exec(`iptables -A INPUT -p tcp --dport ${port} -j DROP`);
-                  log('success', `Blocked port ${port} via iptables.`);
+                  exec(`iptables -A INPUT -p tcp --dport ${portNum} -j DROP`);
+                  log('success', `Blocked port ${portNum} via iptables.`);
                 }
               } else if (os.platform() === 'darwin') {
-                log('security', `⚠️  Port blocking requested for port ${port} on macOS. Dynamic pfctl rule injection requires elevated sudo privileges.`);
+                try {
+                  execSync(`echo 'block drop quick proto tcp from any to any port ${portNum}' | sudo pfctl -ef -`, { timeout: 10000 });
+                  log('success', `Port ${portNum} blocked via pfctl.`);
+                } catch (pfErr) {
+                  log('error', `pfctl failed for port ${port}: ${pfErr.message}. Elevated sudo privileges required.`);
+                }
               } else {
                 log('security', `⚠️  Port blocking not supported on platform: ${os.platform()}`);
               }
@@ -987,11 +1364,73 @@ async function sendHeartbeat() {
             runLANScan(scanJobId, subnet, scanType, portRange).catch(err => {
               log('error', `Delegated scan ${scanJobId} failed: ${err.message}`);
             });
+          } else if (act.type === 'BLOCK_USB') {
+            const { deviceName, serialNumber, mountPoint } = act;
+            if (mountPoint && /[;&|$`\\]/.test(mountPoint)) {
+              log('error', `Invalid device path rejected: "${mountPoint}"`);
+              continue;
+            }
+            log('security', `🚨 ACTIVE COMPLIANCE THREAT: Disapproved/Unauthorized external device "${deviceName}" (Serial: ${serialNumber || 'unknown'}, Mount: ${mountPoint || 'unknown'}). Enforcing active port block...`);
+            try {
+              if (os.platform() === 'win32') {
+                if (mountPoint) {
+                  const driveLetter = mountPoint.trim().slice(0, 2);
+                  exec(`powershell -Command "(New-Object -comObject Shell.Application).Namespace(17).ParseName('${driveLetter}').InvokeVerb('Eject')"`);
+                }
+                exec('sc config usbstor start=disabled');
+                log('success', `Blocked unauthorized USB Storage device via System Registry / usbstor driver config.`);
+              } else if (os.platform() === 'darwin') {
+                if (mountPoint) {
+                  exec(`diskutil eject "${mountPoint}" || diskutil unmount force "${mountPoint}"`);
+                  log('success', `Forcefully unmounted and ejected unauthorized storage volume at mount: ${mountPoint}`);
+                } else {
+                  log('security', `⚠️ macOS active block requires storage volume mount point details.`);
+                }
+              } else if (os.platform() === 'linux') {
+                if (mountPoint) {
+                  exec(`umount -f "${mountPoint}" || eject "${mountPoint}"`);
+                  log('success', `Forcefully unmounted unauthorized USB storage filesystem: ${mountPoint}`);
+                } else {
+                  log('security', `⚠️ Linux active block requires mount point details.`);
+                }
+              }
+            } catch (err) {
+              log('error', `Failed to execute active USB storage block: ${err.message}`);
+            }
           } else if (act.type === 'ALERT') {
             const { category, summary, details } = act;
             log('security', `[ALERT DETECTED] Category: ${category} | Summary: ${summary} | Details: ${JSON.stringify(details)}`);
           }
         }
+      }
+
+      // Check for auto-update from server
+      if (res.data && res.data.updateAvailable && res.data.updateUrl) {
+        log('info', `🔄 Agent update available. Downloading...`);
+        try {
+          const updateFetch = await globalThis.fetch(res.data.updateUrl);
+          if (updateFetch.ok) {
+            const newScript = await updateFetch.text();
+            const newPath = __filename + '.new';
+            fs.writeFileSync(newPath, newScript);
+            if (res.data.updateChecksum) {
+              const hash = require('crypto').createHash('sha256').update(newScript).digest('hex');
+              if (hash !== res.data.updateChecksum) {
+                log('error', 'Update checksum mismatch — aborting update');
+                fs.unlinkSync(newPath);
+              } else {
+                fs.renameSync(newPath, __filename);
+                log('success', '✅ Agent updated successfully. Service manager will restart...');
+                process.exit(0);
+              }
+            } else {
+              // No checksum provided — apply anyway with warning
+              fs.renameSync(newPath, __filename);
+              log('warn', 'Agent updated without checksum verification. Restarting...');
+              process.exit(0);
+            }
+          }
+        } catch (e) { log('error', `Auto-update failed: ${e.message}`); }
       }
     } else if (res.status === 401) {
       log('info', '🔑 Token expired, re-authenticating...');
@@ -1007,6 +1446,9 @@ async function sendHeartbeat() {
     }
   } catch (err) {
     log('error', `Heartbeat failed: ${err.message}`);
+    bufferHeartbeat(heartbeatPayload);
+  } finally {
+    heartbeatInProgress = false;
   }
 }
 
@@ -1028,9 +1470,9 @@ function launchDefaultBrowser(url) {
 function startStatusServer() {
   const server = http.createServer((req, res) => {
     // Add CORS headers for native status dashboard loading
-    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Access-Control-Allow-Origin', `http://localhost:${PORT}`);
     res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-    res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
 
     if (req.method === 'OPTIONS') {
       res.writeHead(200);
@@ -1090,6 +1532,12 @@ function startStatusServer() {
     }
 
     if (parsedUrl.pathname === '/api/control' && req.method === 'POST') {
+      const authHeader = req.headers.authorization;
+      if (!authHeader || authHeader !== 'Bearer ' + accessToken) {
+        res.writeHead(401, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: 'Unauthorized' }));
+        return;
+      }
       let body = '';
       req.on('data', chunk => { body += chunk; });
       req.on('end', () => {
@@ -1136,7 +1584,7 @@ function startStatusServer() {
   });
 
   const PORT = 49152;
-  server.listen(PORT, '0.0.0.0', () => {
+  server.listen(PORT, '127.0.0.1', () => {
     log('success', `Local Status Dashboard API running on http://localhost:${PORT}`);
     
     // Automatically launch default native web browser window on startup unless running in silent daemon mode
@@ -1233,7 +1681,7 @@ async function main() {
   log('info', '╚══════════════════════════════════════════════════════╝');
   log('info', '');
   log('info', `  Server:   ${SERVER}`);
-  log('info', `  User:     ${USER}`);
+  log('info', `  User:     ${USER || '(token-based)'}`);
   log('info', `  Host:     ${os.hostname()}`);
   log('info', `  IP:       ${getPrimaryIP()}`);
   log('info', `  Platform: ${os.platform()} ${os.arch()}`);
@@ -1243,24 +1691,84 @@ async function main() {
   // Start background HTTP telemetry status server
   startStatusServer();
 
-  // Login
-  if (!await login()) {
-    log('error', '❌ Cannot start agent without authentication.');
+  // Wait for server connectivity (up to 10 attempts, 5s apart)
+  const MAX_CONNECT_ATTEMPTS = 10;
+  const CONNECT_DELAY_MS = 5000;
+  let serverReachable = false;
+
+  for (let i = 1; i <= MAX_CONNECT_ATTEMPTS; i++) {
+    try {
+      await fetch(`${SERVER}/api/v1/health`, { signal: AbortSignal.timeout(3000) }).catch(() => null);
+      // Even if health endpoint doesn't exist, if we don't get a network error the server is up
+      serverReachable = true;
+      break;
+    } catch {
+      // Try a simple TCP connect fallback
+      try {
+        const serverUrl = new URL(SERVER);
+        const port = serverUrl.port || (serverUrl.protocol === 'https:' ? 443 : 80);
+        await probePort(serverUrl.hostname, parseInt(port), 2000);
+        serverReachable = true;
+        break;
+      } catch {}
+    }
+    if (i < MAX_CONNECT_ATTEMPTS) {
+      log('info', `⏳ Server at ${SERVER} not reachable (attempt ${i}/${MAX_CONNECT_ATTEMPTS}). Retrying in ${CONNECT_DELAY_MS / 1000}s...`);
+      await new Promise(r => setTimeout(r, CONNECT_DELAY_MS));
+    }
+  }
+
+  if (!serverReachable) {
+    log('error', `⚠️  Server at ${SERVER} unreachable after ${MAX_CONNECT_ATTEMPTS} attempts. Will continue trying during heartbeat loop...`);
+  }
+
+  // Login with retry
+  let loggedIn = false;
+  for (let i = 1; i <= 3; i++) {
+    try {
+      loggedIn = await login();
+      if (loggedIn) break;
+    } catch (err) {
+      log('error', `Login attempt ${i}/3 failed: ${err.message}`);
+    }
+    if (i < 3) {
+      log('info', `Retrying login in 5s...`);
+      await new Promise(r => setTimeout(r, 5000));
+    }
+  }
+
+  if (!loggedIn) {
+    log('error', '❌ Cannot start agent without authentication. Check server URL and credentials.');
     process.exit(1);
   }
 
-  // Register
-  if (!await registerAgent()) {
-    log('error', '❌ Cannot start agent without registration.');
+  // Register with retry
+  let registered = false;
+  for (let i = 1; i <= 3; i++) {
+    try {
+      registered = await registerAgent();
+      if (registered) break;
+    } catch (err) {
+      log('error', `Registration attempt ${i}/3 failed: ${err.message}`);
+    }
+    if (i < 3) {
+      log('info', `Retrying registration in 5s...`);
+      await new Promise(r => setTimeout(r, 5000));
+    }
+  }
+
+  if (!registered) {
+    log('error', '❌ Cannot start agent without registration. Check server URL and credentials.');
     process.exit(1);
   }
 
-  // Heartbeat loop
+  // Heartbeat loop — use setTimeout chain to prevent overlapping heartbeats
   log('success', `Sending heartbeats every ${INTERVAL}s (Ctrl+C to stop)`);
-  setInterval(sendHeartbeat, INTERVAL * 1000);
-
-  // Send first heartbeat immediately
-  await sendHeartbeat();
+  async function heartbeatLoop() {
+    await sendHeartbeat();
+    setTimeout(heartbeatLoop, INTERVAL * 1000);
+  }
+  await heartbeatLoop();
 }
 
 main().catch(err => {

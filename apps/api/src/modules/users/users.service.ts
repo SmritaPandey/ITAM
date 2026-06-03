@@ -22,6 +22,8 @@ export class UsersService {
   }
 
   async findAll(tenantId: string, page = 1, limit = 20) {
+    page = Number(page) || 1;
+    limit = Number(limit) || 20;
     const skip = (page - 1) * limit;
     const [data, total] = await Promise.all([
       this.prisma.user.findMany({

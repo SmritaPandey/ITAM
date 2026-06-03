@@ -3,15 +3,34 @@
 // ═══════════════════════════════════════════════════════════════
 const fs = require('fs');
 const path = require('path');
+const readline = require('readline');
 const { execSync } = require('child_process');
 
 const SERVER = 'http://localhost:4100';
-const EMAIL = 'admin@acme.com';
-const PASSWORD = 'Admin@123';
+
+function promptUser(question) {
+  const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+  return new Promise((resolve) => rl.question(question, (answer) => { rl.close(); resolve(answer); }));
+}
+
+async function getCredentials() {
+  let email = process.env.QS_ADMIN_EMAIL;
+  let password = process.env.QS_ADMIN_PASSWORD;
+  if (!email) {
+    email = await promptUser('Enter admin email: ');
+  }
+  if (!password) {
+    password = await promptUser('Enter admin password: ');
+  }
+  return { email, password };
+}
+
+async function main() {
+const { email, password } = await getCredentials();
 
 console.log('📡 Authenticating locally with QS API Server...');
 
-const body = JSON.stringify({ email: EMAIL, password: PASSWORD });
+const body = JSON.stringify({ email, password });
 const url = `${SERVER}/api/v1/auth/login`;
 
 fetch(url, {
@@ -35,11 +54,15 @@ fetch(url, {
     
     const config = {
       server: SERVER,
-      token: data.accessToken
+      token: data.accessToken,
+      email: email,
+      password: password
     };
     
     const configPath = path.join(__dirname, 'config.json');
     fs.writeFileSync(configPath, JSON.stringify(config, null, 2), 'utf8');
+    // Restrict permissions on config file (contains credentials)
+    try { if (process.platform !== 'win32') fs.chmodSync(configPath, 0o600); } catch {}
     console.log(`📦 Wrote local config.json to: ${configPath}`);
     
     // Restart launch agent on Mac
@@ -59,3 +82,6 @@ fetch(url, {
     console.error('❌ Network error connected to local API:', err.message);
     process.exit(1);
   });
+}
+
+main();

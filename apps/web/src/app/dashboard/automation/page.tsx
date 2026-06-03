@@ -62,7 +62,7 @@ export default function AutomationPage() {
       // Load scripts
       const sc = await apiFetch("/automation/scripts");
       setScripts(Array.isArray(sc) ? sc : []);
-    } catch {} finally { setLoading(false); }
+    } catch (err: any) { console.error("Automation refresh failed:", err); } finally { setLoading(false); }
   }
 
   useEffect(() => { refresh(); }, []);
@@ -70,27 +70,36 @@ export default function AutomationPage() {
   const filtered = filter === "all" ? rules : rules.filter(r => r.status === filter);
 
   async function toggleStatus(rule: any) {
-    const newStatus = rule.status === "ACTIVE" ? "PAUSED" : "ACTIVE";
-    await apiFetch(`/automation/rules/${rule.id}`, { method: "PATCH", body: JSON.stringify({ status: newStatus }) });
-    refresh();
+    try {
+      const newStatus = rule.status === "ACTIVE" ? "PAUSED" : "ACTIVE";
+      await apiFetch(`/automation/rules/${rule.id}`, { method: "PATCH", body: JSON.stringify({ status: newStatus }) });
+      refresh();
+    } catch (err: any) { alert(`Failed to toggle rule: ${err.message || err}`); }
   }
 
   async function deleteRule(id: string) {
-    await apiFetch(`/automation/rules/${id}`, { method: "DELETE" });
-    refresh();
+    if (!confirm("Delete this automation rule?")) return;
+    try {
+      await apiFetch(`/automation/rules/${id}`, { method: "DELETE" });
+      refresh();
+    } catch (err: any) { alert(`Failed to delete rule: ${err.message || err}`); }
   }
 
   async function handleAdd(e: React.FormEvent) {
     e.preventDefault();
-    await apiFetch("/automation/rules", { method: "POST", body: JSON.stringify({ ...form, status: "DRAFT" }) });
-    setShowAdd(false);
-    setForm({ name: "", description: "", triggerModule: "Discovery", triggerEvent: "", condition: "", actionModule: "Notifications", actionType: "send_notification" });
-    refresh();
+    try {
+      await apiFetch("/automation/rules", { method: "POST", body: JSON.stringify({ ...form, status: "DRAFT" }) });
+      setShowAdd(false);
+      setForm({ name: "", description: "", triggerModule: "Discovery", triggerEvent: "", condition: "", actionModule: "Notifications", actionType: "send_notification" });
+      refresh();
+    } catch (err: any) { alert(`Failed to create rule: ${err.message || err}`); }
   }
 
   async function viewDetails(rule: any) {
-    const data = await apiFetch(`/automation/rules/${rule.id}`);
-    setSelectedRule(data);
+    try {
+      const data = await apiFetch(`/automation/rules/${rule.id}`);
+      setSelectedRule(data);
+    } catch (err: any) { alert(`Failed to load rule details: ${err.message || err}`); }
   }
 
   if (loading) return (
@@ -504,23 +513,23 @@ export default function AutomationPage() {
                     }}>
                       {sc.approvalStatus === "PENDING" && (
                         <>
-                          <button onClick={async () => { await apiFetch(`/automation/scripts/${sc.id}/approve`, { method: "POST" }); refresh(); }}
+                          <button onClick={async () => { try { await apiFetch(`/automation/scripts/${sc.id}/approve`, { method: "POST" }); refresh(); } catch (err: any) { alert(`Approve failed: ${err.message || err}`); } }}
                             className="btn btn-secondary" style={{ padding: "4px 10px", fontSize: 10.5, borderColor: "rgba(16,185,129,0.3)", color: "#10b981", background: "rgba(16,185,129,0.05)" }}>
                             Approve
                           </button>
-                          <button onClick={async () => { await apiFetch(`/automation/scripts/${sc.id}/reject`, { method: "POST" }); refresh(); }}
+                          <button onClick={async () => { try { await apiFetch(`/automation/scripts/${sc.id}/reject`, { method: "POST" }); refresh(); } catch (err: any) { alert(`Reject failed: ${err.message || err}`); } }}
                             className="btn btn-secondary" style={{ padding: "4px 10px", fontSize: 10.5, borderColor: "rgba(239,68,68,0.3)", color: "#ef4444", background: "rgba(239,68,68,0.05)" }}>
                             Reject
                           </button>
                         </>
                       )}
                       {sc.approvalStatus === "APPROVED" && (
-                        <button onClick={async () => { await apiFetch(`/automation/scripts/${sc.id}/execute`, { method: "POST", body: JSON.stringify({ agentId: "default" }) }); refresh(); }}
+                        <button onClick={async () => { try { await apiFetch(`/automation/scripts/${sc.id}/execute`, { method: "POST", body: JSON.stringify({ agentId: "default" }) }); refresh(); } catch (err: any) { alert(`Execution failed: ${err.message || err}`); } }}
                           className="btn btn-secondary" style={{ padding: "4px 12px", fontSize: 11, borderColor: "rgba(6,182,212,0.4)", color: "#22d3ee", background: "rgba(6,182,212,0.05)" }}>
                           <Play size={10} fill="currentColor" /> Run
                         </button>
                       )}
-                      <button onClick={async () => { await apiFetch(`/automation/scripts/${sc.id}`, { method: "DELETE" }); refresh(); }}
+                      <button onClick={async () => { if (!confirm("Delete this script?")) return; try { await apiFetch(`/automation/scripts/${sc.id}`, { method: "DELETE" }); refresh(); } catch (err: any) { alert(`Delete failed: ${err.message || err}`); } }}
                         className="btn btn-secondary" style={{ padding: "4px 8px", fontSize: 11, color: "#f87171" }}>
                         <Trash2 size={11} />
                       </button>

@@ -55,6 +55,8 @@ const INTERVAL = parseInt(getArg('--interval', 'QS_AGENT_INTERVAL', '') || proce
 const SILENT_MODE = args.includes('--silent') || process.env.QS_AGENT_SILENT === 'true';
 
 let tokenFromFile = '';
+let configEmail = '';
+let configPassword = '';
 const configPath = path.join(__dirname, 'config.json');
 
 if (fs.existsSync(configPath)) {
@@ -62,6 +64,8 @@ if (fs.existsSync(configPath)) {
     const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
     if (config.server) SERVER = config.server;
     if (config.token) tokenFromFile = config.token;
+    if (config.email) configEmail = config.email;
+    if (config.password) configPassword = config.password;
     log('info', '📦 Loaded local config.json successfully');
     try { if (process.platform !== 'win32') fs.chmodSync(configPath, 0o600); } catch {}
   } catch (e) {
@@ -70,6 +74,10 @@ if (fs.existsSync(configPath)) {
 }
 
 const API_BASE = `${SERVER}/api/v1`;
+
+// Merge credentials: CLI args > config.json > env vars
+if (!USER && configEmail) USER = configEmail;
+if (!PASS && configPassword) PASS = configPassword;
 
 if (!tokenFromFile && (!USER || !PASS)) {
   log('error', '❌ Usage: node qs-discovery-agent.js --server http://SERVER:4100 --user EMAIL --pass PASSWORD');
@@ -84,9 +92,12 @@ if (process.argv.includes('--insecure')) {
   log('warn', '⚠️  TLS verification disabled (--insecure flag). Do NOT use in production.');
 }
 
-function request(method, path, body) {
-  return new Promise((resolve, reject) => {
-    const url = `${API_BASE}${path}`;
+const MAX_RETRIES = 3;
+const BASE_BACKOFF_MS = 2000;
+
+function request(method, apiPath, body, retries = MAX_RETRIES) {
+  return new Promise(async (resolve, reject) => {
+    const url = `${API_BASE}${apiPath}`;
     const options = {
       method,
       headers: {
@@ -96,8 +107,9 @@ function request(method, path, body) {
       body: body ? JSON.stringify(body) : undefined,
     };
 
-    fetch(url, options)
-      .then(async (res) => {
+    for (let attempt = 0; attempt <= retries; attempt++) {
+      try {
+        const res = await fetch(url, options);
         const text = await res.text();
         let responseData;
         try {
@@ -106,26 +118,94 @@ function request(method, path, body) {
           responseData = text;
         }
         resolve({ status: res.status, data: responseData });
-      })
-      .catch(reject);
+        return;
+      } catch (err) {
+        if (attempt < retries) {
+          const delay = BASE_BACKOFF_MS * Math.pow(2, attempt);
+          log('info', `⏳ Request to ${apiPath} failed (attempt ${attempt + 1}/${retries + 1}): ${err.message}. Retrying in ${delay / 1000}s...`);
+          await new Promise(r => setTimeout(r, delay));
+        } else {
+          reject(new Error(`Request to ${apiPath} failed after ${retries + 1} attempts: ${err.message}`));
+        }
+      }
+    }
   });
 }
 
+// ─── JWT Helpers ────────────────────────────────────────────
+function isTokenExpired(token) {
+  try {
+    const parts = token.split('.');
+    if (parts.length !== 3) return true;
+    const payload = JSON.parse(Buffer.from(parts[1], 'base64url').toString());
+    if (!payload.exp) return false;
+    // Consider expired if less than 60 seconds remaining
+    return (payload.exp * 1000) < (Date.now() + 60000);
+  } catch {
+    return true;
+  }
+}
+
+function saveTokenToConfig(newToken) {
+  try {
+    let config = {};
+    if (fs.existsSync(configPath)) {
+      config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+    }
+    config.token = newToken;
+    fs.writeFileSync(configPath, JSON.stringify(config, null, 2), 'utf8');
+    try { if (process.platform !== 'win32') fs.chmodSync(configPath, 0o600); } catch {}
+    log('info', '📦 Refreshed token saved to config.json');
+  } catch (e) {
+    log('error', `Failed to save refreshed token: ${e.message}`);
+  }
+}
+
 // ─── Login ──────────────────────────────────────────────────
+async function loginWithCredentials() {
+  if (!USER || !PASS) return false;
+  log('info', `🔑 Authenticating with credentials as ${USER}...`);
+  try {
+    const res = await request('POST', '/auth/login', { email: USER, password: PASS }, 1);
+    if (res.status === 200 || res.status === 201) {
+      accessToken = res.data.accessToken || res.data.access_token;
+      log('success', 'Authenticated successfully via credentials');
+      // Persist new token so future restarts use fresh token
+      saveTokenToConfig(accessToken);
+      tokenFromFile = accessToken;
+      return true;
+    }
+    log('error', `Credential login failed (${res.status}): ${res.data.message || res.data}`);
+    return false;
+  } catch (err) {
+    log('error', `Credential login network error: ${err.message}`);
+    return false;
+  }
+}
+
 async function login() {
-  if (tokenFromFile) {
-    log('info', '🔑 Authenticating using pre-seeded secure token...');
+  // 1. Try config token if present and NOT expired
+  if (tokenFromFile && !isTokenExpired(tokenFromFile)) {
+    log('info', '🔑 Authenticating using valid pre-seeded token...');
     accessToken = tokenFromFile;
     return true;
   }
-  log('info', `🔑 Authenticating as ${USER}...`);
-  const res = await request('POST', '/auth/login', { email: USER, password: PASS });
-  if (res.status === 200 || res.status === 201) {
-    accessToken = res.data.accessToken || res.data.access_token;
-    log('success', 'Authenticated successfully');
+
+  // 2. Token is expired or missing — try credential-based login
+  if (tokenFromFile && isTokenExpired(tokenFromFile)) {
+    log('info', '⚠️  Config token has expired. Attempting credential-based re-authentication...');
+  }
+
+  if (await loginWithCredentials()) return true;
+
+  // 3. Last resort: use the expired token anyway (server might accept it)
+  if (tokenFromFile) {
+    log('info', '🔑 Falling back to config token (may be expired)...');
+    accessToken = tokenFromFile;
     return true;
   }
-  log('error', `Login failed (${res.status}): ${res.data.message || res.data}`);
+
+  log('error', 'No valid authentication method available.');
   return false;
 }
 
@@ -999,7 +1079,32 @@ function collectSystemInfo() {
     gpu: getGpuInfo(),
     battery: getBatteryInfo(),
     antivirus: getAntivirusInfo(),
+    serviceInstalled: checkServiceInstalled(),
   };
+}
+
+function checkServiceInstalled() {
+  try {
+    if (os.platform() === 'darwin') {
+      const plistPath = path.join(process.env.HOME || '~', 'Library/LaunchAgents/com.qsasset.discovery.agent.plist');
+      return fs.existsSync(plistPath);
+    } else if (os.platform() === 'linux') {
+      try {
+        execSync('systemctl is-enabled qsasset-agent 2>/dev/null', { stdio: 'pipe', timeout: 3000 });
+        return true;
+      } catch {
+        return false;
+      }
+    } else if (os.platform() === 'win32') {
+      try {
+        execSync('sc query QSAssetAgent 2>nul', { stdio: 'pipe', timeout: 3000 });
+        return true;
+      } catch {
+        return false;
+      }
+    }
+  } catch {}
+  return false;
 }
 
 // ─── Register Agent ─────────────────────────────────────────
@@ -1022,6 +1127,25 @@ async function registerAgent() {
     log('success', `Agent registered successfully. ID: ${agentId}`);
     return true;
   }
+
+  // Handle expired token — re-authenticate and retry
+  if (res.status === 401) {
+    log('info', '🔑 Registration returned 401 — token expired. Re-authenticating...');
+    const loggedIn = await loginWithCredentials();
+    if (loggedIn) {
+      const retryRes = await request('POST', '/discovery/agents/register', body);
+      if (retryRes.status === 200 || retryRes.status === 201) {
+        agentId = retryRes.data.id;
+        log('success', `Agent registered successfully after re-auth. ID: ${agentId}`);
+        return true;
+      }
+      log('error', `Registration retry failed (${retryRes.status}): ${retryRes.data.message || retryRes.data}`);
+    } else {
+      log('error', 'Re-authentication failed. Cannot register agent.');
+    }
+    return false;
+  }
+
   log('error', `Registration failed (${res.status}): ${res.data.message || res.data}`);
   return false;
 }
@@ -1301,6 +1425,62 @@ async function sendHeartbeat() {
           } else if (act.type === 'ALERT') {
             const { category, summary, details } = act;
             log('security', `[ALERT DETECTED] Category: ${category} | Summary: ${summary} | Details: ${JSON.stringify(details)}`);
+          } else if (act.type === 'INSTALL_SERVICE') {
+            log('info', '🚀 Server requested persistent background service installation (Start on Boot)...');
+            try {
+              const script = os.platform() === 'win32' ? 'install-service.bat' : './install-service.sh';
+              const scriptPath = path.join(__dirname, script);
+              if (!fs.existsSync(scriptPath)) {
+                log('error', `Service installer script not found: ${scriptPath}`);
+                continue;
+              }
+              // Make executable on Unix
+              if (os.platform() !== 'win32') {
+                try { fs.chmodSync(scriptPath, 0o755); } catch {}
+              }
+              exec(script, { cwd: __dirname, timeout: 30000 }, (error, stdout, stderr) => {
+                if (error) {
+                  log('error', `Failed to install background service: ${error.message}`);
+                  if (stderr) log('error', `Service installer stderr: ${stderr}`);
+                } else {
+                  log('success', '✅ Persistent background service installed! Agent will now start automatically on boot.');
+                  if (stdout) log('info', stdout.trim());
+                }
+              });
+            } catch (err) {
+              log('error', `Service installation failed: ${err.message}`);
+            }
+          } else if (act.type === 'UNINSTALL_SERVICE') {
+            log('info', '🛑 Server requested removal of persistent background service...');
+            try {
+              if (os.platform() === 'darwin') {
+                const plistPath = path.join(process.env.HOME || '~', 'Library/LaunchAgents/com.qsasset.discovery.agent.plist');
+                if (fs.existsSync(plistPath)) {
+                  execSync(`launchctl unload "${plistPath}" 2>/dev/null || true`, { timeout: 5000 });
+                  fs.unlinkSync(plistPath);
+                  log('success', 'macOS LaunchAgent removed. Agent will no longer start on boot.');
+                } else {
+                  log('info', 'No LaunchAgent plist found — service not installed.');
+                }
+              } else if (os.platform() === 'linux') {
+                try {
+                  execSync('sudo systemctl stop qsasset-agent 2>/dev/null || true', { timeout: 5000 });
+                  execSync('sudo systemctl disable qsasset-agent 2>/dev/null || true', { timeout: 5000 });
+                  log('success', 'systemd service disabled. Agent will no longer start on boot.');
+                } catch (e) {
+                  log('error', `Failed to remove systemd service: ${e.message}`);
+                }
+              } else if (os.platform() === 'win32') {
+                try {
+                  execSync('sc stop QSAssetAgent 2>nul & sc delete QSAssetAgent 2>nul', { timeout: 5000 });
+                  log('success', 'Windows service removed. Agent will no longer start on boot.');
+                } catch (e) {
+                  log('error', `Failed to remove Windows service: ${e.message}`);
+                }
+              }
+            } catch (err) {
+              log('error', `Service uninstall failed: ${err.message}`);
+            }
           }
         }
       }
@@ -1582,7 +1762,7 @@ async function main() {
   log('info', '╚══════════════════════════════════════════════════════╝');
   log('info', '');
   log('info', `  Server:   ${SERVER}`);
-  log('info', `  User:     ${USER}`);
+  log('info', `  User:     ${USER || '(token-based)'}`);
   log('info', `  Host:     ${os.hostname()}`);
   log('info', `  IP:       ${getPrimaryIP()}`);
   log('info', `  Platform: ${os.platform()} ${os.arch()}`);
@@ -1592,15 +1772,74 @@ async function main() {
   // Start background HTTP telemetry status server
   startStatusServer();
 
-  // Login
-  if (!await login()) {
-    log('error', '❌ Cannot start agent without authentication.');
+  // Wait for server connectivity (up to 10 attempts, 5s apart)
+  const MAX_CONNECT_ATTEMPTS = 10;
+  const CONNECT_DELAY_MS = 5000;
+  let serverReachable = false;
+
+  for (let i = 1; i <= MAX_CONNECT_ATTEMPTS; i++) {
+    try {
+      await fetch(`${SERVER}/api/v1/health`, { signal: AbortSignal.timeout(3000) }).catch(() => null);
+      // Even if health endpoint doesn't exist, if we don't get a network error the server is up
+      serverReachable = true;
+      break;
+    } catch {
+      // Try a simple TCP connect fallback
+      try {
+        const serverUrl = new URL(SERVER);
+        const port = serverUrl.port || (serverUrl.protocol === 'https:' ? 443 : 80);
+        await probePort(serverUrl.hostname, parseInt(port), 2000);
+        serverReachable = true;
+        break;
+      } catch {}
+    }
+    if (i < MAX_CONNECT_ATTEMPTS) {
+      log('info', `⏳ Server at ${SERVER} not reachable (attempt ${i}/${MAX_CONNECT_ATTEMPTS}). Retrying in ${CONNECT_DELAY_MS / 1000}s...`);
+      await new Promise(r => setTimeout(r, CONNECT_DELAY_MS));
+    }
+  }
+
+  if (!serverReachable) {
+    log('error', `⚠️  Server at ${SERVER} unreachable after ${MAX_CONNECT_ATTEMPTS} attempts. Will continue trying during heartbeat loop...`);
+  }
+
+  // Login with retry
+  let loggedIn = false;
+  for (let i = 1; i <= 3; i++) {
+    try {
+      loggedIn = await login();
+      if (loggedIn) break;
+    } catch (err) {
+      log('error', `Login attempt ${i}/3 failed: ${err.message}`);
+    }
+    if (i < 3) {
+      log('info', `Retrying login in 5s...`);
+      await new Promise(r => setTimeout(r, 5000));
+    }
+  }
+
+  if (!loggedIn) {
+    log('error', '❌ Cannot start agent without authentication. Check server URL and credentials.');
     process.exit(1);
   }
 
-  // Register
-  if (!await registerAgent()) {
-    log('error', '❌ Cannot start agent without registration.');
+  // Register with retry
+  let registered = false;
+  for (let i = 1; i <= 3; i++) {
+    try {
+      registered = await registerAgent();
+      if (registered) break;
+    } catch (err) {
+      log('error', `Registration attempt ${i}/3 failed: ${err.message}`);
+    }
+    if (i < 3) {
+      log('info', `Retrying registration in 5s...`);
+      await new Promise(r => setTimeout(r, 5000));
+    }
+  }
+
+  if (!registered) {
+    log('error', '❌ Cannot start agent without registration. Check server URL and credentials.');
     process.exit(1);
   }
 

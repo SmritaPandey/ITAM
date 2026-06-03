@@ -53,6 +53,34 @@ export class SettingsService {
     'teamsWebhookUrl',
     'emailNotifications',
     'dashboardLayout',
+    // Discovery & Scanning settings
+    'autoDiscovery',
+    'snmpEnabled',
+    'agentEnabled',
+    'wmiEnabled',
+    'agentStartOnBoot',
+    'scanInterval',
+    'snmpCommunity',
+    'agentPort',
+    // Notification settings
+    'emailAlerts',
+    'slackEnabled',
+    'webhookUrl',
+    // Security settings
+    'sessionTimeout',
+    'mfaEnforced',
+    'passwordExpiry',
+    'ipWhitelist',
+    // Storage & System settings
+    'storageProvider',
+    'storagePath',
+    'maxUploadLimit',
+    'backupPath',
+    'backupInterval',
+    'retentionDays',
+    'scannerConcurrency',
+    // Module customization
+    'userDisabledModules',
   ]);
 
   async updateSettings(tenantId: string, data: Record<string, any>) {

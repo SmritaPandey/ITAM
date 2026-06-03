@@ -50,7 +50,7 @@ tryRegisterOAuth();
         }
         return {
           secret: secret || 'assetcommand-fallback-jwt-secret',
-          signOptions: { expiresIn: (configService.get<string>('JWT_EXPIRATION') || '15m') as any },
+          signOptions: { expiresIn: (configService.get<string>('JWT_EXPIRATION') || '4h') as any },
         };
       },
       inject: [ConfigService],

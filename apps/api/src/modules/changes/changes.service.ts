@@ -22,7 +22,8 @@ export class ChangesService {
   async list(tenantId: string, status?: string, page = 1, limit = 50) {
     const where: any = { tenantId };
     if (status) where.status = status;
-    const skip = (page - 1) * limit;
+    const _page = Number(page) || 1; const _limit = Number(limit) || 20;
+    const skip = (_page - 1) * _limit;
     const [data, total] = await Promise.all([
       this.prisma.changeRequest.findMany({ where, orderBy: { createdAt: 'desc' }, skip, take: limit }),
       this.prisma.changeRequest.count({ where }),

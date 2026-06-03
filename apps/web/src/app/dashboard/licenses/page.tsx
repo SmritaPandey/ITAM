@@ -33,7 +33,7 @@ export default function LicensesPage() {
       ]);
       setLicenses(l.data || []);
       setCompliance(c);
-    } catch {} finally { setLoading(false); }
+    } catch (err: any) { console.error("Licenses load failed:", err); } finally { setLoading(false); }
   }
 
   useEffect(() => { refresh(); }, []);

@@ -12,7 +12,8 @@ export class AuditLogsService {
   }) {
     const page = Number(filters.page) || 1;
     const limit = Number(filters.limit) || 30;
-    const skip = (page - 1) * limit;
+    const _page = Number(page) || 1; const _limit = Number(limit) || 20;
+    const skip = (_page - 1) * _limit;
 
     const where: any = { tenantId };
     if (filters.action) where.action = filters.action;
@@ -30,7 +31,7 @@ export class AuditLogsService {
         include: { actor: { select: { firstName: true, lastName: true, email: true } } },
         orderBy: { timestamp: 'desc' },
         skip,
-        take: limit,
+        take: _limit,
       }),
       this.prisma.auditLog.count({ where }),
     ]);

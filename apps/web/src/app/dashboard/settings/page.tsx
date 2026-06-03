@@ -61,6 +61,7 @@ export default function SettingsPage() {
     wmiEnabled: false, emailAlerts: true, slackEnabled: false, webhookUrl: "",
     sessionTimeout: 30, mfaEnforced: false, passwordExpiry: 90, ipWhitelist: "",
     scanInterval: 60, snmpCommunity: "public", agentPort: 8443,
+    agentStartOnBoot: false,
     storageProvider: "local",
     storagePath: "/var/lib/qsasset/data",
     maxUploadLimit: 50,
@@ -828,6 +829,106 @@ export default function SettingsPage() {
                 <ToggleRow label="SNMP Scanning" desc="Use SNMP protocol for network device discovery" value={settings.snmpEnabled} onChange={() => setSettings({ ...settings, snmpEnabled: !settings.snmpEnabled })} />
                 <ToggleRow label="Agent-based Collection" desc="Collect data from installed agents on endpoints" value={settings.agentEnabled} onChange={() => setSettings({ ...settings, agentEnabled: !settings.agentEnabled })} />
                 <ToggleRow label="WMI Discovery" desc="Use Windows Management Instrumentation for Windows assets" value={settings.wmiEnabled} onChange={() => setSettings({ ...settings, wmiEnabled: !settings.wmiEnabled })} />
+
+                {/* ── Start on Boot — Premium Feature ── */}
+                <div style={{
+                  padding: 20,
+                  borderRadius: 14,
+                  background: settings.agentStartOnBoot
+                    ? "linear-gradient(135deg, rgba(16,185,129,0.06) 0%, rgba(6,182,212,0.04) 100%)"
+                    : "var(--bg-card)",
+                  border: `1px solid ${settings.agentStartOnBoot ? "rgba(16,185,129,0.25)" : "var(--border-primary)"}`,
+                  transition: "all 0.3s cubic-bezier(0.4, 0, 0.2, 1)",
+                }}>
+                  <ToggleRow
+                    label="Start on Boot (Persistent Service)"
+                    desc="Install the discovery agent as a persistent OS daemon that survives reboots. Applies to all connected agents on next heartbeat."
+                    value={settings.agentStartOnBoot}
+                    onChange={() => setSettings({ ...settings, agentStartOnBoot: !settings.agentStartOnBoot })}
+                  />
+
+                  {/* Permissions & OS-specific instructions */}
+                  <div style={{
+                    marginTop: 16,
+                    padding: 16,
+                    borderRadius: 10,
+                    background: "rgba(15, 23, 42, 0.35)",
+                    backdropFilter: "blur(8px)",
+                    border: "1px solid rgba(255,255,255,0.04)",
+                  }}>
+                    <div style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em", color: "var(--text-tertiary)", marginBottom: 12 }}>
+                      Required OS Permissions
+                    </div>
+
+                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12 }}>
+                      {/* macOS */}
+                      <div style={{
+                        padding: 14, borderRadius: 10, background: "rgba(255,255,255,0.02)",
+                        border: "1px solid rgba(255,255,255,0.04)",
+                      }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 8 }}>
+                          <span style={{ fontSize: 16 }}>🍏</span>
+                          <span style={{ fontSize: 12, fontWeight: 700, color: "var(--text-primary)" }}>macOS</span>
+                        </div>
+                        <div style={{ fontSize: 11, color: "var(--text-tertiary)", lineHeight: 1.6 }}>
+                          <strong style={{ color: "var(--text-secondary)" }}>LaunchAgent</strong><br />
+                          Installed at <code style={{ fontSize: 10, padding: "1px 4px", borderRadius: 4, background: "rgba(6,182,212,0.1)", color: "#06b6d4" }}>~/Library/LaunchAgents/</code><br />
+                          No sudo required. Persists across reboots and user logins.
+                        </div>
+                      </div>
+
+                      {/* Linux */}
+                      <div style={{
+                        padding: 14, borderRadius: 10, background: "rgba(255,255,255,0.02)",
+                        border: "1px solid rgba(255,255,255,0.04)",
+                      }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 8 }}>
+                          <span style={{ fontSize: 16 }}>🐧</span>
+                          <span style={{ fontSize: 12, fontWeight: 700, color: "var(--text-primary)" }}>Linux</span>
+                        </div>
+                        <div style={{ fontSize: 11, color: "var(--text-tertiary)", lineHeight: 1.6 }}>
+                          <strong style={{ color: "var(--text-secondary)" }}>systemd Service</strong><br />
+                          Requires <code style={{ fontSize: 10, padding: "1px 4px", borderRadius: 4, background: "rgba(239,68,68,0.1)", color: "#ef4444" }}>sudo</code> to install at <code style={{ fontSize: 10, padding: "1px 4px", borderRadius: 4, background: "rgba(6,182,212,0.1)", color: "#06b6d4" }}>/etc/systemd/system/</code>.
+                          Auto-restarts on crash.
+                        </div>
+                      </div>
+
+                      {/* Windows */}
+                      <div style={{
+                        padding: 14, borderRadius: 10, background: "rgba(255,255,255,0.02)",
+                        border: "1px solid rgba(255,255,255,0.04)",
+                      }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 8 }}>
+                          <span style={{ fontSize: 16 }}>🪟</span>
+                          <span style={{ fontSize: 12, fontWeight: 700, color: "var(--text-primary)" }}>Windows</span>
+                        </div>
+                        <div style={{ fontSize: 11, color: "var(--text-tertiary)", lineHeight: 1.6 }}>
+                          <strong style={{ color: "var(--text-secondary)" }}>Windows Service</strong><br />
+                          Requires <code style={{ fontSize: 10, padding: "1px 4px", borderRadius: 4, background: "rgba(239,68,68,0.1)", color: "#ef4444" }}>Administrator</code> to install via <code style={{ fontSize: 10, padding: "1px 4px", borderRadius: 4, background: "rgba(6,182,212,0.1)", color: "#06b6d4" }}>sc.exe</code>.
+                          Runs as Local System.
+                        </div>
+                      </div>
+                    </div>
+
+                    {settings.agentStartOnBoot && (
+                      <div style={{
+                        marginTop: 12, padding: "10px 14px", borderRadius: 8,
+                        background: "rgba(16,185,129,0.06)", border: "1px solid rgba(16,185,129,0.15)",
+                        display: "flex", alignItems: "center", gap: 8,
+                      }}>
+                        <div style={{
+                          width: 8, height: 8, borderRadius: "50%", background: "#10b981",
+                          boxShadow: "0 0 10px rgba(16,185,129,0.5)",
+                          animation: "pulseGlow 2s infinite",
+                        }} />
+                        <span style={{ fontSize: 12, fontWeight: 600, color: "#10b981" }}>
+                          Active — all connected agents will receive the install directive on their next heartbeat cycle.
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
                 <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 16 }}>
                   <Field label="Scan Interval (min)" value={String(settings.scanInterval)} onChange={v => setSettings({ ...settings, scanInterval: Number(v) })} />
                   <Field label="SNMP Community" value={settings.snmpCommunity} onChange={v => setSettings({ ...settings, snmpCommunity: v })} />

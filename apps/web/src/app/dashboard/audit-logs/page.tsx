@@ -42,7 +42,7 @@ export default function AuditLogsPage() {
       setStats(s);
       setChain(c);
       setPage(p);
-    } catch {} finally { setLoading(false); }
+    } catch (err: any) { console.error("Audit logs load failed:", err); } finally { setLoading(false); }
   }
 
   useEffect(() => { refresh(); }, []);

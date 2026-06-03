@@ -844,7 +844,7 @@ function getFailedLoginsCount() {
           failedLoginsCountCached = count;
         });
       }
-      return failedLoginsCountCached || mockFailedLoginCounter;
+      return failedLoginsCountCached || 0;
     } else {
       let count = 0;
       if (fs.existsSync('/var/log/auth.log')) {
@@ -857,7 +857,7 @@ function getFailedLoginsCount() {
       return count;
     }
   } catch {
-    return mockFailedLoginCounter;
+    return 0;
   }
 }
 

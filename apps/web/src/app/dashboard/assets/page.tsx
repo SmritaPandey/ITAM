@@ -43,7 +43,20 @@ export default function AssetsPage() {
         </div>
         <div style={{ display: "flex", gap: 8 }}>
           <button className="btn btn-secondary" onClick={() => router.push('/dashboard/assets/import')}><Upload size={14} /> Import CSV</button>
-          <button className="btn btn-secondary"><Download size={14} /> Export</button>
+          <button className="btn btn-secondary" onClick={async () => {
+            try {
+              const token = localStorage.getItem("accessToken") || "";
+              const base = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4100/api/v1";
+              const res = await fetch(`${base}/reports/download/assets?format=csv`, {
+                headers: { Authorization: `Bearer ${token}` },
+              });
+              if (!res.ok) throw new Error("Export failed");
+              const blob = await res.blob();
+              const url = URL.createObjectURL(blob);
+              const a = document.createElement("a"); a.href = url; a.download = `assets-export-${new Date().toISOString().slice(0,10)}.csv`;
+              document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
+            } catch { alert("Export failed. Please try again."); }
+          }}><Download size={14} /> Export</button>
           <button className="btn btn-primary" onClick={() => setShowCreate(true)}><Plus size={14} /> Add Asset</button>
         </div>
       </div>

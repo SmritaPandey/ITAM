@@ -1,0 +1,600 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Project Proposal: QS Asset Deployment - NABARD Uttarakhand</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;500;600;700;800&display=swap');
+
+    :root {
+      --primary: #0f5132; /* NABARD Forest Green */
+      --primary-light: #e8f5e9;
+      --primary-border: #a3cfbb;
+      --secondary: #146c43;
+      --secondary-dark: #0a3622;
+      --accent: #0284c7; /* Tech Blue */
+      --dark: #1e293b;
+      --light: #f8fafc;
+      --border: #e2e8f0;
+      --text: #334155;
+      --text-light: #64748b;
+      --shadow: 0 4px 6px -1px rgb(0 0 0 / 0.05), 0 2px 4px -2px rgb(0 0 0 / 0.05);
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: 'Inter', sans-serif;
+      color: var(--text);
+      line-height: 1.6;
+      background-color: #f1f5f9;
+      padding: 40px 20px;
+    }
+
+    .proposal-card {
+      max-width: 900px;
+      margin: 0 auto;
+      background-color: #ffffff;
+      padding: 60px 80px;
+      border-radius: 20px;
+      box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.05), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+      border: 1px solid var(--border);
+    }
+
+    /* Cover Page Elements */
+    .cover-section {
+      text-align: center;
+      padding-bottom: 50px;
+      border-bottom: 2px solid var(--primary-light);
+      margin-bottom: 50px;
+      position: relative;
+    }
+
+    .cover-badge {
+      display: inline-block;
+      background-color: var(--primary-light);
+      color: var(--primary);
+      padding: 6px 16px;
+      border-radius: 100px;
+      font-size: 0.85rem;
+      font-weight: 600;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+      margin-bottom: 20px;
+      border: 1px solid var(--primary-border);
+    }
+
+    .cover-title {
+      font-family: 'Outfit', sans-serif;
+      font-size: 2.4rem;
+      color: var(--secondary-dark);
+      font-weight: 800;
+      line-height: 1.25;
+      margin-bottom: 15px;
+    }
+
+    .cover-subtitle {
+      font-size: 1.2rem;
+      color: var(--text-light);
+      max-width: 600px;
+      margin: 0 auto 30px auto;
+      font-weight: 400;
+    }
+
+    .meta-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 20px;
+      max-width: 650px;
+      margin: 40px auto 0 auto;
+      text-align: left;
+      background-color: var(--light);
+      padding: 20px 30px;
+      border-radius: 12px;
+      border: 1px solid var(--border);
+    }
+
+    .meta-item label {
+      display: block;
+      font-size: 0.75rem;
+      text-transform: uppercase;
+      color: var(--text-light);
+      font-weight: 600;
+      margin-bottom: 4px;
+    }
+
+    .meta-item span {
+      font-size: 0.95rem;
+      font-weight: 600;
+      color: var(--dark);
+    }
+
+    /* Content Structure */
+    h2 {
+      font-family: 'Outfit', sans-serif;
+      font-size: 1.5rem;
+      color: var(--secondary-dark);
+      font-weight: 700;
+      margin-top: 40px;
+      margin-bottom: 15px;
+      border-bottom: 2px solid var(--border);
+      padding-bottom: 8px;
+      page-break-after: avoid;
+    }
+
+    h3 {
+      font-family: 'Outfit', sans-serif;
+      font-size: 1.15rem;
+      color: var(--primary);
+      font-weight: 600;
+      margin-top: 25px;
+      margin-bottom: 10px;
+      page-break-after: avoid;
+    }
+
+    p {
+      margin-bottom: 16px;
+      font-size: 0.975rem;
+      text-align: justify;
+    }
+
+    ul, ol {
+      margin-bottom: 20px;
+      padding-left: 20px;
+    }
+
+    li {
+      margin-bottom: 8px;
+      font-size: 0.95rem;
+    }
+
+    /* GFM style alert boxes */
+    .alert-box {
+      border-left: 4px solid;
+      padding: 16px 20px;
+      border-radius: 0 8px 8px 0;
+      margin: 25px 0;
+      font-size: 0.95rem;
+    }
+
+    .alert-note {
+      background-color: #f8fafc;
+      border-color: #64748b;
+      color: #334155;
+    }
+
+    .alert-important {
+      background-color: var(--primary-light);
+      border-color: var(--primary);
+      color: var(--secondary-dark);
+    }
+
+    .alert-box-title {
+      font-weight: 700;
+      margin-bottom: 6px;
+      font-family: 'Outfit', sans-serif;
+      text-transform: uppercase;
+      font-size: 0.8rem;
+      letter-spacing: 0.05em;
+    }
+
+    /* Tables */
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 25px 0;
+      font-size: 0.9rem;
+    }
+
+    th, td {
+      border: 1px solid var(--border);
+      padding: 12px 16px;
+      text-align: left;
+    }
+
+    th {
+      background-color: var(--light);
+      color: var(--secondary-dark);
+      font-weight: 600;
+    }
+
+    tr:nth-child(even) td {
+      background-color: #fafbfb;
+    }
+
+    /* Architecture Grid Diagram */
+    .arch-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 20px;
+      margin: 25px 0;
+    }
+
+    .arch-card {
+      background-color: var(--light);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 24px;
+    }
+
+    .arch-card h4 {
+      font-family: 'Outfit', sans-serif;
+      color: var(--primary);
+      margin-bottom: 10px;
+      font-size: 1.05rem;
+      border-bottom: 1px solid var(--border);
+      padding-bottom: 6px;
+    }
+
+    .usp-box {
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 20px;
+      background-color: #ffffff;
+      margin-bottom: 15px;
+      box-shadow: var(--shadow);
+    }
+
+    .usp-box h4 {
+      font-family: 'Outfit', sans-serif;
+      color: var(--primary);
+      margin-bottom: 6px;
+      font-size: 1rem;
+      font-weight: 600;
+    }
+
+    /* Roadmap Timeline */
+    .roadmap-list {
+      list-style-type: none;
+      padding-left: 0;
+      position: relative;
+      margin: 30px 0;
+    }
+
+    .roadmap-list::before {
+      content: '';
+      position: absolute;
+      left: 15px;
+      top: 0;
+      bottom: 0;
+      width: 2px;
+      background-color: var(--primary-light);
+    }
+
+    .roadmap-item {
+      position: relative;
+      padding-left: 45px;
+      margin-bottom: 30px;
+    }
+
+    .roadmap-item::before {
+      content: '';
+      position: absolute;
+      left: 7px;
+      top: 5px;
+      width: 18px;
+      height: 18px;
+      border-radius: 50%;
+      background-color: var(--primary);
+      border: 4px solid var(--primary-light);
+      z-index: 2;
+    }
+
+    .roadmap-title {
+      font-family: 'Outfit', sans-serif;
+      font-weight: 700;
+      color: var(--secondary-dark);
+      font-size: 1.05rem;
+      margin-bottom: 6px;
+    }
+
+    .roadmap-desc {
+      font-size: 0.925rem;
+      color: var(--text-light);
+    }
+
+    /* Print Optimization styles */
+    @media print {
+      body {
+        background-color: #ffffff;
+        padding: 0;
+        color: #000000;
+      }
+
+      .proposal-card {
+        box-shadow: none;
+        border: none;
+        padding: 0;
+        max-width: 100%;
+      }
+
+      .page-break {
+        page-break-before: always;
+      }
+
+      .cover-section {
+        height: 100vh;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        border-bottom: none;
+        margin-bottom: 0;
+        page-break-after: always;
+      }
+
+      .meta-grid {
+        background-color: transparent !important;
+        border: 1px solid #000000;
+      }
+
+      h2 {
+        border-bottom-color: #000000;
+      }
+
+      .alert-box {
+        background-color: transparent !important;
+        border: 1px solid #000000 !important;
+      }
+
+      .arch-card {
+        background-color: transparent !important;
+        border: 1px solid #000000 !important;
+      }
+
+      tr:nth-child(even) td {
+        background-color: transparent !important;
+      }
+
+      th {
+        background-color: #f1f5f9 !important;
+        color: #000000 !important;
+      }
+    }
+  </style>
+</head>
+<body>
+
+  <div class="proposal-card">
+    
+    <!-- Cover Section -->
+    <div class="cover-section">
+      <span class="cover-badge">PROJECT PROPOSAL</span>
+      <h1 class="cover-title">QS Asset Deployment</h1>
+      <p class="cover-subtitle">Enterprise IT Asset Management, Network Discovery & ITIL Service Desk Platform for Banking Infrastructure and Rural Cooperative Digitization</p>
+      
+      <div class="meta-grid">
+        <div class="meta-item">
+          <label>Target Partner</label>
+          <span>NABARD Uttarakhand</span>
+        </div>
+        <div class="meta-item">
+          <label>Reference Code</label>
+          <span>QS-ITAM-NABARD-UA-2026</span>
+        </div>
+        <div class="meta-item">
+          <label>Published Date</label>
+          <span>June 1, 2026</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Section 1 -->
+    <h2>1. Executive Summary</h2>
+    <p>Uttarakhand's financial and cooperative banking ecosystems are undergoing a rapid digital evolution. Under the national mandate for Primary Agricultural Cooperative Societies (PACS) computerization and the expansion of digital banking services by District Central Cooperative Banks (DCCBs) and Regional Rural Banks (such as Uttarakhand Gramin Bank), IT infrastructure has spread deeply into the remote, mountainous districts of the state.</p>
+    
+    <p>However, this rapid decentralization poses severe operational and security challenges:</p>
+    <ul>
+      <li><strong>Security & Vulnerability Exposure:</strong> Maintaining rigid compliance with the Reserve Bank of India (RBI) cybersecurity guidelines for cooperative banks is extremely difficult in remote mountain branches without dedicated IT staff.</li>
+      <li><strong>Asset Visibility Gaps:</strong> Physical tracking of distributed hardware (computers, routers, biometric scanners, solar power systems, and CCTV units) across hundreds of rural sites is prone to leakage, obsolescence, and theft.</li>
+      <li><strong>Delayed Maintenance:</strong> Technical breakdowns in hilly regions like Pithoragarh, Chamoli, or Uttarkashi lead to extended system downtime, disrupting banking services for rural farmers.</li>
+    </ul>
+
+    <h3>The Solution: QS Asset</h3>
+    <p><strong>QS Asset</strong> is a premium, secure, and enterprise-grade <strong>IT Asset Management (ITAM), Network Discovery, and ITIL-compliant Service Desk platform</strong>. Built to run either on-premises (inside secure, air-gapped banking data centers) or in the cloud, QS Asset integrates automated Layer-2/3 network sweeping, remote agentless hardware audits, continuous endpoint compliance telemetry, and a fully featured ticketing and maintenance engine into a unified interface.</p>
+    <p>This proposal outlines the strategic deployment of the <strong>QS Asset Platform</strong> to fortify IT security, automate asset tracking, and optimize IT operations for NABARD Uttarakhand and the cooperative/regional banking sectors it supervises and funds.</p>
+
+    <!-- Section 2 -->
+    <h2>2. Project Objectives</h2>
+    <ol>
+      <li><strong>Achieve 100% IT Inventory Visibility:</strong> Automatically discover, catalog, and monitor every device (authorized or unauthorized) connected to the local subnets of the NABARD Regional Office, DCCBs, and PACS.</li>
+      <li><strong>Enforce Banking Cybersecurity Compliance:</strong> Enable automatic tracking of operating system patch levels, firewall states, antivirus running status, and software license compliance to satisfy RBI audits.</li>
+      <li><strong>Minimize Banking Downtime in Hilly Terrains:</strong> Establish an ITIL-compliant service desk with SLA policies and automated work-order dispatching for field engineers.</li>
+      <li><strong>Prevent Asset Leakage & Hardware Loss:</strong> Implement a digitized asset-checkout lifecycle and a localized "Asset Attestation" mechanism to physically verify hardware presence at remote locations.</li>
+      <li><strong>Optimize IT Expenditure:</strong> Cleanly audit software licensing usage and track Annual Maintenance Contracts (AMCs) and warranties to eliminate vendor overcharging.</li>
+    </ol>
+
+    <div class="alert-box alert-note">
+      <div class="alert-box-title">Security Focus</div>
+      <strong>On-Premises Air-Gapped Deployment:</strong> The entire platform can be deployed in a localized virtual machine environment (via Docker Compose or bare-metal node runtimes) behind the bank's internal firewalls. Absolutely no telemetries or system attributes are transmitted externally, fully satisfying banking data sovereignty rules.
+    </div>
+
+    <!-- Page Break for Print -->
+    <div class="page-break"></div>
+
+    <!-- Section 3 -->
+    <h2>3. Platform Architecture</h2>
+    <p>QS Asset employs a hybrid-capable architecture. When deployed on-premises within a secure banking network or inside the State Cooperative Bank's central data center, it functions without external dependencies:</p>
+
+    <div class="arch-grid">
+      <div class="arch-card">
+        <h4>Centralized Core (Data Center / Cloud)</h4>
+        <ul>
+          <li><strong>Next.js Frontend:</strong> Fast, modern dashboard running securely on Port 3100.</li>
+          <li><strong>NestJS Backend API:</strong> High-performance business logic orchestrating scans on Port 4100.</li>
+          <li><strong>PostgreSQL Database:</strong> Advanced relational schema storing CMDB, tickets, and contracts.</li>
+          <li><strong>Redis Task Queue:</strong> Handles asynchronous network discovery tasks smoothly.</li>
+        </ul>
+      </div>
+      <div class="arch-card">
+        <h4>Subnet Sweepers & Local Agents</h4>
+        <ul>
+          <li><strong>Agentless Sweeper:</strong> Runs Layer-2 ARP and Layer-3 ICMP active sweeps across subnets.</li>
+          <li><strong>SSH / WinRM Poller:</strong> Queries remote terminals for CPU, OS, RAM, and Disk details.</li>
+          <li><strong>Continuous Telemetry Agent:</strong> Lightweight daemon running on local bank workstations.</li>
+        </ul>
+      </div>
+    </div>
+
+    <!-- Section 4 -->
+    <h2>4. Comprehensive Feature Suite</h2>
+    
+    <h3>A. Intelligent Network Discovery & Active Sweeper</h3>
+    <p>The platform initiates network audits without manual interference. Using active ARP and ping sweeps, it registers active hosts inside subnets. It securely logs into terminal interfaces via SSH and WinRM protocols to gather low-level CPU, RAM, and storage specifications. A continuous background agent reports delta telemetry parameters periodically to catch any changes.</p>
+
+    <h3>B. Enterprise Configuration Management Database (CMDB)</h3>
+    <p>Maintains dynamic records of hardware and software dependencies. Out-of-the-box asset typologies allow bank administrators to register everything from core servers to branch CCTV cameras and solar systems. It continuously records endpoint security postures, including BitLocker/FileVault encryption status, active local firewalls, and antivirus definition updates.</p>
+
+    <h3>C. ITIL-Compliant Service Desk (ITSM)</h3>
+    <p>Integrates ticketing, incidents, changes, and work orders with physical CMDB records. When a router fails, a support ticket is generated and pre-linked with the router's warranty, configuration backups, and switch port history. Field engineers are dispatched with complete hardware details, diagnostic files, and checksheets, significantly boosting first-visit fix rates.</p>
+
+    <h3>D. Compliance, Procurement & Financial Management</h3>
+    <p>Mitigates operational overhead and license overspending. Tracks OS updates and patch levels to satisfy standard security checks. Compares actual software installations against cataloged commercial licenses. Automatically triggers support warnings and email alerts weeks before hardware warranties and AMCs expire.</p>
+
+    <!-- Page Break for Print -->
+    <div class="page-break"></div>
+
+    <!-- Section 5 -->
+    <h2>5. Unique Selling Propositions (USPs) for Uttarakhand</h2>
+
+    <div class="usp-box">
+      <h4>1. Hill-Network Optimization (Low-Bandwidth Operation)</h4>
+      <p>Hilly regions in Uttarakhand face erratic satellite/VSAT bandwidth, high latency, and frequent fiber cuts. The QS Asset continuous agent is built with a resilient, state-aware telemetry loop. Telemetry updates are packaged into highly compressed, differential JSON payloads. If a remote branch loses internet connectivity for days, the agent caches execution history locally and syncs seamlessly once connectivity is restored, without duplicate packets or network strain.</p>
+    </div>
+
+    <div class="usp-box">
+      <h4>2. Compliance with RBI Circulars for Cooperative & Rural Banks</h4>
+      <p>Cooperative banks are under strict RBI scrutiny to implement cyber security controls (e.g., preventing unauthorized devices from accessing the Core Banking network). QS Asset’s active network sweep immediately flags any "rogue" device (e.g., a personal laptop plugged into a banking switch port) that does not match the CMDB whitelist. It fires immediate SMS/Email alerts and logs audit trails, keeping the bank audit-ready 24/7.</p>
+    </div>
+
+    <div class="usp-box">
+      <h4>3. Digital PACS Asset Accountability (Anti-Leakage Control)</h4>
+      <p>Under the Computerization of PACS project, hundreds of rural cooperative societies receive expensive computer setups. Physically tracking their operating status and ensuring they are not misplaced is a massive administrative headache. With QS Asset's "Asset Attestation" module, local PACS administrators can complete a single-click attestation from their portal. Additionally, the network sweeps continuously map local subnets to ensure the machines remain physically located at the registered coordinates.</p>
+    </div>
+
+    <div class="usp-box">
+      <h4>4. WMI & SSH Push-to-Deploy Simplicity</h4>
+      <p>Remote branches do not have technical personnel to manually install monitoring software. Through a single central console, an administrator can utilize the visual "Remote Push Deployer" to automatically transmit, configure, and register the QS Agent service across thousands of target machines within a subnet using existing domain or network credentials.</p>
+    </div>
+
+    <!-- Section 6 -->
+    <h2>6. Key Performance Indicators (KPIs) & Target Metrics</h2>
+    <p>Deploying QS Asset will allow NABARD Uttarakhand and participating banks to monitor and prove success using concrete, data-driven parameters:</p>
+
+    <table>
+      <thead>
+        <tr>
+          <th>Metric Category</th>
+          <th>Specific Key Performance Indicator (KPI)</th>
+          <th>Target Baseline</th>
+          <th>Verification Method</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>Inventory Visibility</strong></td>
+          <td>Active Subnet Discovery Accuracy</td>
+          <td>&gt; 99.5%</td>
+          <td>Cross-referencing active sweeps with physical registers</td>
+        </tr>
+        <tr>
+          <td><strong>Inventory Visibility</strong></td>
+          <td>CMDB Auto-Update Rate</td>
+          <td>Real-Time</td>
+          <td>Database audit logs generated on hardware events</td>
+        </tr>
+        <tr>
+          <td><strong>Cybersecurity</strong></td>
+          <td>Rogue Device Detection Time</td>
+          <td>&lt; 10 Mins</td>
+          <td>Immediate admin console and SMS alerts</td>
+        </tr>
+        <tr>
+          <td><strong>Cybersecurity</strong></td>
+          <td>Security Posture Compliance</td>
+          <td>100%</td>
+          <td>Percentage of endpoints running AV and Active Firewalls</td>
+        </tr>
+        <tr>
+          <td><strong>Operational Excellence</strong></td>
+          <td>Mean Time to Resolution (MTTR)</td>
+          <td>Reduced by 40%</td>
+          <td>Incident ticket resolution time statistics</td>
+        </tr>
+        <tr>
+          <td><strong>Operational Excellence</strong></td>
+          <td>SLA Resolution Compliance</td>
+          <td>&gt; 95.0%</td>
+          <td>Automated weekly compliance reports</td>
+        </tr>
+        <tr>
+          <td><strong>Financial Control</strong></td>
+          <td>AMC Breach Penalties Avoided</td>
+          <td>100%</td>
+          <td>Prior-warning triggers fired at 60/30 day thresholds</td>
+        </tr>
+        <tr>
+          <td><strong>Financial Control</strong></td>
+          <td>Unused License Reclamation</td>
+          <td>15% - 20%</td>
+          <td>Comparative software catalog auditing reports</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <!-- Page Break for Print -->
+    <div class="page-break"></div>
+
+    <!-- Section 7 -->
+    <h2>7. Strategic Implementation Roadmap</h2>
+    <p>A detailed 16-week rollout strategy tailored for Uttarakhand's geographic layout:</p>
+
+    <div class="roadmap-list">
+      <div class="roadmap-item">
+        <div class="roadmap-title">Weeks 01 - 04: Central Installation & Core Configurations</div>
+        <div class="roadmap-desc">Provisioning servers inside secure banking hosting / Data Center. Database setup, tenant creation, and Active Directory authentication sync. Defining Core Asset Types (workstations, servers, switches, routers, solar units).</div>
+      </div>
+      <div class="roadmap-item">
+        <div class="roadmap-title">Weeks 05 - 08: Pilot Subnet Sweeps & Vault Integrations</div>
+        <div class="roadmap-desc">Initiating agentless network sweeps at HQ and Dehradun Regional Office. Setting up secure credential Vaults for SSH, SNMP, and WinRM tasks. Launching pilot agent installations on 100 client machines.</div>
+      </div>
+      <div class="roadmap-item">
+        <div class="roadmap-title">Weeks 09 - 12: Mass Regional Branch Expansion & GPO Deployment</div>
+        <div class="roadmap-desc">Pushing mass agent installations using Active Directory Group Policy (GPO). Initiating remote subnet sweeps for District Cooperative Banks (DCCBs). Deploying the technician service desk portal and training support agents.</div>
+      </div>
+      <div class="roadmap-item">
+        <div class="roadmap-title">Weeks 13 - 16: Attestation Framework & Final Handover</div>
+        <div class="roadmap-desc">Initializing PACS Asset Attestation workflow for pilot rural districts. Setting up automated compliance reporting schedules (RBI layout format). Continuous operations training and final handovers to the IT team.</div>
+      </div>
+    </div>
+
+    <!-- Section 8 -->
+    <h2>8. Financial Inclusion & Tech Development Funding</h2>
+    
+    <div class="alert-box alert-important">
+      <div class="alert-box-title">NABARD Support Alignment</div>
+      The deployment of advanced technology systems like <strong>QS Asset</strong> in cooperative and rural banks qualifies for strategic financial support from NABARD under the:
+      <br><br>
+      1. <strong>Financial Inclusion Fund (FIF):</strong> Subsidizing cybersecurity infrastructure and audit tools for Regional Rural Banks (RRBs) and Cooperative Banks.<br>
+      2. <strong>Technology Development Fund (TDF):</strong> Assisting in the digital strengthening of cooperative institutions and primary cooperative networks.
+    </div>
+
+    <h3>Scalable Licensing & Operational Models</h3>
+    <p>QS Asset offers a simple, scalable commercial model:</p>
+    <ul>
+      <li><strong>Model A: Cooperative Bank Enterprise License:</strong> An all-inclusive annual subscription covering all district offices and branches, providing unlimited network discovery scans, a fully integrated service desk, and comprehensive patch management.</li>
+      <li><strong>Model B: Centralized PACS Monitoring Portal:</strong> A unified dashboard deployed at the state cooperative department to track all PACS computerized nodes with cost-effective per-node pricing.</li>
+    </ul>
+
+    <!-- Section 9 -->
+    <h2>9. Conclusion</h2>
+    <p>Deploying the <strong>QS Asset Management & ITIL Service Desk platform</strong> is a critical step in modernizing and safeguarding the digital assets powering rural prosperity in Uttarakhand. By providing complete network visibility, automated security auditing, and a highly responsive ITIL service desk, the platform ensures that vital banking networks and rural credit institutions remain stable, secure, and fully compliant.</p>
+
+  </div>
+
+</body>
+</html>

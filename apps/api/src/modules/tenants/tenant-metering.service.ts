@@ -1,5 +1,6 @@
 import { Injectable, HttpException, HttpStatus, Logger } from '@nestjs/common';
 import { PrismaService } from '../../common/database/prisma.service';
+import { PLAN_LIMITS } from '../../common/constants/plan-limits';
 
 /**
  * Tenant usage metering — enforces plan limits for SaaS billing.
@@ -7,14 +8,6 @@ import { PrismaService } from '../../common/database/prisma.service';
 @Injectable()
 export class TenantMeteringService {
   private readonly logger = new Logger(TenantMeteringService.name);
-
-  // Plan limits configuration
-  private readonly PLAN_LIMITS: Record<string, { maxAssets: number; maxUsers: number; maxScansPerMonth: number }> = {
-    STARTER:      { maxAssets: 5,        maxUsers: 4,        maxScansPerMonth: 10 },
-    PROFESSIONAL: { maxAssets: Infinity,  maxUsers: Infinity, maxScansPerMonth: Infinity },
-    ENTERPRISE:   { maxAssets: Infinity,  maxUsers: Infinity, maxScansPerMonth: Infinity },
-    ON_PREMISE:   { maxAssets: Infinity,  maxUsers: Infinity, maxScansPerMonth: Infinity },
-  };
 
   constructor(private prisma: PrismaService) {}
 
@@ -105,7 +98,7 @@ export class TenantMeteringService {
   }
 
   private getPlanLimits(plan: string) {
-    return this.PLAN_LIMITS[plan] || this.PLAN_LIMITS.STARTER;
+    return PLAN_LIMITS[plan] || PLAN_LIMITS.STARTER;
   }
 
   private getEffectiveLimits(tenant: any) {

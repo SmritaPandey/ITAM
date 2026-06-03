@@ -55,7 +55,8 @@ export default function DashboardPage() {
   const [assets, setAssets] = useState<any[]>([]);
   const [tickets, setTickets] = useState<any[]>([]);
   const [patchCompliance, setPatchCompliance] = useState<any[]>([]);
-  const [networkHealth, setNetworkHealth] = useState<any[]>([]);
+  const [patchComplianceRaw, setPatchComplianceRaw] = useState<any>(null);
+  const [networkHealth, setNetworkHealth] = useState<any[] | null>(null);
   const [weeklyTrend, setWeeklyTrend] = useState<any[]>([]);
   const [activityFeed, setActivityFeed] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -74,29 +75,47 @@ export default function DashboardPage() {
       apiFetch("/assets?limit=200").catch(() => ({ data: [] })),
       apiFetch("/tickets?limit=200").catch(() => ({ data: [] })),
       apiFetch("/admin/audit-logs?limit=8").catch(() => ({ data: [] })),
-    ]).then(([s, a, t, pc, net, allAssets, allTickets, logs]) => {
+    ]).then(async ([s, a, t, pc, net, allAssets, allTickets, logs]) => {
       setStats(s);
       setAssets(a.data || []);
       setTickets(t.data || []);
+      setPatchComplianceRaw(pc);
       if (pc?.bySeverity) {
         setPatchCompliance(pc.bySeverity.map((sv: any) => ({
           name: sv.severity, patched: sv.deployed, unpatched: sv.total - sv.deployed,
         })));
       }
-      // Build network health from real device statuses
+      // Fetch real SNMP bandwidth history from network devices
       const devices = net.data || [];
-      const online = devices.filter((d: any) => d.status === "ONLINE").length;
-      const total = devices.length || 1;
-      const uptimePct = Math.round((online / total) * 1000) / 10;
-      setNetworkHealth([
-        { time: "00:00", bandwidth: Math.round(Math.random() * 200 + 100), uptime: uptimePct },
-        { time: "04:00", bandwidth: Math.round(Math.random() * 100 + 50), uptime: uptimePct },
-        { time: "08:00", bandwidth: Math.round(Math.random() * 300 + 200), uptime: uptimePct },
-        { time: "12:00", bandwidth: Math.round(Math.random() * 400 + 300), uptime: uptimePct },
-        { time: "16:00", bandwidth: Math.round(Math.random() * 350 + 250), uptime: uptimePct },
-        { time: "20:00", bandwidth: Math.round(Math.random() * 250 + 150), uptime: uptimePct },
-        { time: "Now", bandwidth: Math.round(Math.random() * 200 + 150), uptime: uptimePct },
-      ]);
+      const snmpDevices = devices.filter((d: any) => d.metrics?.snmpAvailable || d.metrics?.ifInOctets !== undefined);
+      if (snmpDevices.length > 0) {
+        try {
+          // Fetch history for all SNMP-capable devices and aggregate
+          const histories = await Promise.all(
+            snmpDevices.slice(0, 5).map((d: any) =>
+              apiFetch(`/monitoring/snmp/devices/${d.id}/history?hours=24`).catch(() => [])
+            )
+          );
+          // Aggregate into time buckets
+          const buckets: Record<string, { bandwidth: number; count: number }> = {};
+          histories.forEach((history: any[]) => {
+            (Array.isArray(history) ? history : []).forEach((m: any) => {
+              const hour = new Date(m.collectedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+              if (!buckets[hour]) buckets[hour] = { bandwidth: 0, count: 0 };
+              buckets[hour].bandwidth += Math.round(((m.metrics?.ifInOctets || 0) + (m.metrics?.ifOutOctets || 0)) / 1024 / 1024);
+              buckets[hour].count++;
+            });
+          });
+          const chartData = Object.entries(buckets)
+            .map(([time, v]) => ({ time, bandwidth: Math.round(v.bandwidth / Math.max(v.count, 1)) }))
+            .sort((a, b) => a.time.localeCompare(b.time));
+          setNetworkHealth(chartData.length > 0 ? chartData : null);
+        } catch {
+          setNetworkHealth(null);
+        }
+      } else {
+        setNetworkHealth(null);
+      }
       // Compute weekly trend from real data
       setWeeklyTrend(computeWeeklyTrend(allAssets.data || [], allTickets.data || []));
       // Build activity feed from real audit logs
@@ -153,6 +172,15 @@ export default function DashboardPage() {
     };
   }) || [];
 
+  // Compute real patch compliance percentage from API data
+  const patchCompliancePct = patchComplianceRaw?.overall != null ? `${patchComplianceRaw.overall}%` : "—";
+
+  // Compute critical unpatched count from real patch data
+  const criticalUnpatched = patchComplianceRaw?.bySeverity?.find((s: any) => s.severity === "Critical");
+  const criticalCount = criticalUnpatched ? criticalUnpatched.total - criticalUnpatched.deployed : 0;
+  const criticalBadgeText = criticalCount > 0 ? `${criticalCount} Critical` : "All Clear";
+  const criticalBadgeColor = criticalCount > 0 ? "amber" : "green";
+
   return (
     <>
       <div className="page-header">
@@ -181,10 +209,10 @@ export default function DashboardPage() {
 
       {/* Stat Cards — Click to drill down */}
       <div className="stats-grid">
-        <StatCard icon={<Package size={22} />} iconClass="cyan" label="Total Assets" value={stats?.total || 0} change="+12%" changeUp href="/dashboard/assets" />
-        <StatCard icon={<Monitor size={22} />} iconClass="blue" label="IT Assets" value={typeData.reduce((a: number, t: any) => a + t.count, 0)} change="+5%" changeUp href="/dashboard/it-assets" />
-        <StatCard icon={<Ticket size={22} />} iconClass="purple" label="Open Tickets" value={tickets.length} change="+2" changeUp={false} href="/dashboard/tickets" />
-        <StatCard icon={<Shield size={22} />} iconClass="green" label="Patch Compliance" value="94%" change="+3%" changeUp href="/dashboard/patches" />
+        <StatCard icon={<Package size={22} />} iconClass="cyan" label="Total Assets" value={stats?.total || 0} href="/dashboard/assets" />
+        <StatCard icon={<Monitor size={22} />} iconClass="blue" label="IT Assets" value={typeData.reduce((a: number, t: any) => a + t.count, 0)} href="/dashboard/it-assets" />
+        <StatCard icon={<Ticket size={22} />} iconClass="purple" label="Open Tickets" value={tickets.length} href="/dashboard/tickets" />
+        <StatCard icon={<Shield size={22} />} iconClass="green" label="Patch Compliance" value={patchCompliancePct} href="/dashboard/patches" />
       </div>
 
       {/* Charts Row 1 */}
@@ -266,8 +294,9 @@ export default function DashboardPage() {
               <div className="card-title" style={{ display: "flex", alignItems: "center", gap: 6 }}>Network Bandwidth <ExternalLink size={10} style={{ opacity: 0.5 }} /></div>
               <div className="card-subtitle">24h traffic overview (Mbps)</div>
             </div>
-            <span className="badge green"><Wifi size={10} /> Healthy</span>
+            {networkHealth && networkHealth.length > 0 && <span className="badge green"><Wifi size={10} /> Healthy</span>}
           </div>
+          {networkHealth && networkHealth.length > 0 ? (
           <SafeChart height={200}>
 <AreaChart data={networkHealth}>
                 <defs>
@@ -283,6 +312,13 @@ export default function DashboardPage() {
                 <Area type="monotone" dataKey="bandwidth" stroke="#06b6d4" fill="url(#areaGrad)" strokeWidth={2} />
               </AreaChart>
 </SafeChart>
+          ) : (
+            <div style={{ height: 200, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 8, color: "var(--text-tertiary)" }}>
+              <Wifi size={28} style={{ opacity: 0.25 }} />
+              <div style={{ fontSize: 13, fontWeight: 500, color: "var(--text-secondary)" }}>No bandwidth data available</div>
+              <div style={{ fontSize: 11 }}>Configure SNMP polling to see live bandwidth</div>
+            </div>
+          )}
         </div>
 
         {/* Patch Compliance */}
@@ -292,7 +328,7 @@ export default function DashboardPage() {
               <div className="card-title" style={{ display: "flex", alignItems: "center", gap: 6 }}>Patch Compliance <ExternalLink size={10} style={{ opacity: 0.5 }} /></div>
               <div className="card-subtitle">By severity level</div>
             </div>
-            <span className="badge amber"><AlertTriangle size={10} /> 3 Critical</span>
+            <span className={`badge ${criticalBadgeColor}`}>{criticalCount > 0 ? <AlertTriangle size={10} /> : <CheckCircle2 size={10} />} {criticalBadgeText}</span>
           </div>
           <SafeChart height={200}>
 <BarChart data={patchCompliance} barSize={20}>
@@ -459,7 +495,7 @@ export default function DashboardPage() {
 // Stat Card Component — Now with drilldown link
 function StatCard({ icon, iconClass, label, value, change, changeUp, href }: {
   icon: React.ReactNode; iconClass: string; label: string;
-  value: string | number; change: string; changeUp: boolean; href?: string;
+  value: string | number; change?: string; changeUp?: boolean; href?: string;
 }) {
   const content = (
     <div className="stat-card" style={href ? { cursor: "pointer", transition: "transform 0.15s, box-shadow 0.15s" } : {}}
@@ -471,10 +507,12 @@ function StatCard({ icon, iconClass, label, value, change, changeUp, href }: {
           {label} {href && <ExternalLink size={9} style={{ opacity: 0.4 }} />}
         </div>
         <div className="stat-value">{value}</div>
-        <div className={`stat-change ${changeUp ? "up" : "down"}`}>
-          {changeUp ? <ArrowUpRight size={12} /> : <ArrowDownRight size={12} />}
-          {change} this week
-        </div>
+        {change && (
+          <div className={`stat-change ${changeUp ? "up" : "down"}`}>
+            {changeUp ? <ArrowUpRight size={12} /> : <ArrowDownRight size={12} />}
+            {change} this week
+          </div>
+        )}
       </div>
     </div>
   );

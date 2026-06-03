@@ -2,6 +2,8 @@ import { Injectable, Logger, OnModuleInit, OnModuleDestroy } from '@nestjs/commo
 import { PrismaService } from '../../common/database/prisma.service';
 import { EventBusService } from '../../common/events/event-bus.service';
 import * as dgram from 'dgram';
+import * as fs from 'fs';
+import * as path from 'path';
 
 /**
  * Well-known SNMP trap OIDs mapped to human-readable event types.
@@ -49,12 +51,18 @@ export class SnmpTrapReceiverService implements OnModuleInit, OnModuleDestroy {
   private trapBuffer: ParsedTrap[] = [];
   private isRunning = false;
 
+  /** Path to the JSON-Lines persistence file */
+  private readonly trapFilePath = path.resolve('data', 'snmp-traps.jsonl');
+
   constructor(
     private prisma: PrismaService,
     private eventBus: EventBusService,
   ) {}
 
   onModuleInit() {
+    // Restore traps from disk before starting the listener
+    this.loadTrapsFromFile();
+
     if (process.env.ENABLE_SNMP_TRAPS === 'true') {
       this.start();
     } else {
@@ -120,11 +128,14 @@ export class SnmpTrapReceiverService implements OnModuleInit, OnModuleDestroy {
       const parsed = this.parseTrapPdu(msg, rinfo);
       if (!parsed) return;
 
-      // Buffer the trap
+      // Buffer the trap in memory
       this.trapBuffer.push(parsed);
       if (this.trapBuffer.length > this.maxStoredTraps) {
         this.trapBuffer = this.trapBuffer.slice(-this.maxStoredTraps);
       }
+
+      // Persist to disk
+      this.appendTrapToFile(parsed);
 
       // Match to a monitored device and emit events
       this.correlateAndEmit(parsed);
@@ -341,5 +352,51 @@ export class SnmpTrapReceiverService implements OnModuleInit, OnModuleDestroy {
     const count = this.trapBuffer.length;
     this.trapBuffer = [];
     return { cleared: count };
+  }
+
+  // ─── File-based persistence ───────────────────────────────────────
+
+  /**
+   * Append a single trap as a JSON line to the persistence file.
+   */
+  private appendTrapToFile(trap: ParsedTrap) {
+    try {
+      const dir = path.dirname(this.trapFilePath);
+      if (!fs.existsSync(dir)) {
+        fs.mkdirSync(dir, { recursive: true });
+      }
+      fs.appendFileSync(this.trapFilePath, JSON.stringify(trap) + '\n');
+    } catch (err: any) {
+      this.logger.warn(`Failed to persist trap to file: ${err.message}`);
+    }
+  }
+
+  /**
+   * On startup, read the last 1000 lines from the persistence file
+   * back into the in-memory buffer.
+   */
+  private loadTrapsFromFile() {
+    try {
+      if (!fs.existsSync(this.trapFilePath)) return;
+
+      const content = fs.readFileSync(this.trapFilePath, 'utf-8');
+      const lines = content.split('\n').filter(Boolean);
+      const tail = lines.slice(-1000);
+
+      for (const line of tail) {
+        try {
+          const trap = JSON.parse(line) as ParsedTrap;
+          // Restore Date object from serialized string
+          trap.receivedAt = new Date(trap.receivedAt);
+          this.trapBuffer.push(trap);
+        } catch {
+          // skip malformed lines
+        }
+      }
+
+      this.logger.log(`Loaded ${this.trapBuffer.length} trap(s) from persistence file`);
+    } catch (err: any) {
+      this.logger.warn(`Failed to load traps from file: ${err.message}`);
+    }
   }
 }

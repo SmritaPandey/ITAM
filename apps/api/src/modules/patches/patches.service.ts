@@ -1,7 +1,8 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { PrismaService } from '../../common/database/prisma.service';
 import { EventBusService } from '../../common/events/event-bus.service';
+import { EmailService } from '../notifications/email.service';
 import { exec } from 'child_process';
 import { promisify } from 'util';
 import * as os from 'os';
@@ -15,6 +16,7 @@ export class PatchesService {
   constructor(
     private prisma: PrismaService,
     private eventBus: EventBusService,
+    private emailService: EmailService,
   ) {}
 
   // ─── LIST ────────────────────────────────────────────────────────
@@ -36,28 +38,70 @@ export class PatchesService {
     return this.prisma.patch.create({ data: { tenantId, ...body } });
   }
 
-  async update(id: string, body: any) {
+  async update(id: string, tenantId: string, body: any) {
+    const existing = await this.prisma.patch.findFirst({ where: { id, tenantId } });
+    if (!existing) throw new NotFoundException('Patch not found');
     return this.prisma.patch.update({ where: { id }, data: body });
   }
 
+  async delete(id: string, tenantId: string) {
+    const existing = await this.prisma.patch.findFirst({ where: { id, tenantId } });
+    if (!existing) throw new NotFoundException('Patch not found');
+    // Delete related deployments first
+    await this.prisma.patchDeployment.deleteMany({ where: { patchId: id } });
+    return this.prisma.patch.delete({ where: { id } });
+  }
+
   // ─── DEPLOY ──────────────────────────────────────────────────────
+  /**
+   * Queue a patch for agent-based deployment.
+   * Instead of immediately marking as 'Deployed', sets status to 'PENDING_DEPLOYMENT'.
+   * Agents will pick up QUEUED PatchDeployment records on their next heartbeat check-in
+   * and execute the actual patch installation on managed endpoints.
+   */
   async deploy(id: string, tenantId?: string) {
     const patch = await this.prisma.patch.update({
       where: { id },
-      data: { status: 'Deployed', deployedDate: new Date() },
+      data: { status: 'PENDING_DEPLOYMENT' },
     });
 
-    // If we have a tenantId, update all PatchDeployment records too
+    // If we have a tenantId, queue PatchDeployment records for agent-based deployment
     if (tenantId) {
       await this.prisma.patchDeployment.updateMany({
         where: { patchId: id, tenantId, status: { in: ['PENDING', 'DEPLOYING'] } },
-        data: { status: 'DEPLOYED', deployedAt: new Date() },
+        data: { status: 'QUEUED' },
       });
+
+      // Create QUEUED PatchDeployment records for assets with agents that don't have one yet
+      const assetsWithAgents = await this.prisma.asset.findMany({
+        where: { tenantId, deletedAt: null, agentId: { not: null }, status: 'ACTIVE' },
+        select: { id: true },
+      });
+
+      for (const asset of assetsWithAgents) {
+        await this.prisma.patchDeployment.upsert({
+          where: { patchId_assetId: { patchId: id, assetId: asset.id } },
+          create: {
+            tenantId,
+            patchId: id,
+            assetId: asset.id,
+            status: 'QUEUED',
+          },
+          update: {},
+        });
+      }
+
+      this.logger.log(`Patch ${patch.patchId} queued for agent-based deployment on ${assetsWithAgents.length} endpoints`);
     }
 
     return patch;
   }
 
+  /**
+   * Queue all pending/scheduled patches for agent-based deployment.
+   * Marks patches as 'PENDING_DEPLOYMENT' instead of 'Deployed'.
+   * Agents will execute actual installations on their next heartbeat check-in.
+   */
   async deployAll(tenantId: string) {
     const pending = await this.prisma.patch.findMany({
       where: { tenantId, status: { in: ['Pending', 'Scheduled'] } },
@@ -65,17 +109,38 @@ export class PatchesService {
 
     const results = { deployed: 0, failed: 0, errors: [] as string[] };
 
+    // Get all assets with online agents for this tenant
+    const assetsWithAgents = await this.prisma.asset.findMany({
+      where: { tenantId, deletedAt: null, agentId: { not: null }, status: 'ACTIVE' },
+      select: { id: true },
+    });
+
     for (const patch of pending) {
       try {
         await this.prisma.patch.update({
           where: { id: patch.id },
-          data: { status: 'Deployed', deployedDate: new Date() },
+          data: { status: 'PENDING_DEPLOYMENT' },
         });
-        // Update per-asset deployments
+        // Queue per-asset deployments for agent pickup
         await this.prisma.patchDeployment.updateMany({
           where: { patchId: patch.id, tenantId, status: { in: ['PENDING', 'DEPLOYING'] } },
-          data: { status: 'DEPLOYED', deployedAt: new Date() },
+          data: { status: 'QUEUED' },
         });
+
+        // Create QUEUED PatchDeployment records for assets that don't have one
+        for (const asset of assetsWithAgents) {
+          await this.prisma.patchDeployment.upsert({
+            where: { patchId_assetId: { patchId: patch.id, assetId: asset.id } },
+            create: {
+              tenantId,
+              patchId: patch.id,
+              assetId: asset.id,
+              status: 'QUEUED',
+            },
+            update: {},
+          });
+        }
+
         results.deployed++;
       } catch (err: any) {
         results.failed++;
@@ -87,6 +152,8 @@ export class PatchesService {
       count: results.deployed,
       timestamp: new Date(),
     });
+
+    this.logger.log(`Queued ${results.deployed} patches for agent-based deployment on ${assetsWithAgents.length} endpoints`);
 
     return { ...results, total: pending.length };
   }
@@ -157,6 +224,9 @@ export class PatchesService {
   async scanForPatches(tenantId: string, source: string = 'MANUAL') {
     const platform = os.platform();
     const scanStartedAt = new Date();
+    // NOTE: This scan runs on the API SERVER host, not on managed endpoints.
+    // For agent-based scanning, patches are detected via agent heartbeat reports.
+    // See processAgentPatchReport() for agent-submitted patch inventory.
     this.logger.log(`Starting patch scan on ${platform} for tenant ${tenantId} (source: ${source})`);
 
     const results: {
@@ -233,16 +303,32 @@ export class PatchesService {
       timestamp: scanStartedAt,
     });
 
-    const summary = {
+    // Check if discovery agents exist for this tenant
+    const agentCount = await this.prisma.agent.count({
+      where: {
+        tenantId,
+        status: 'ONLINE',
+        lastHeartbeat: { gte: new Date(Date.now() - 5 * 60 * 1000) },
+      },
+    });
+
+    const summary: any = {
       platform,
       scannedAt: scanStartedAt,
-      source,
+      // Label results with source to distinguish from agent-reported patches
+      source: 'API_SERVER',
+      scanTrigger: source,
       totalFound: results.length,
       created,
       updated,
       skipped: results.length - created - updated,
       patches: results,
     };
+
+    // If agents are available, note that agent-based scanning is preferred
+    if (agentCount > 0) {
+      summary.agentNote = `Agent-based scanning available — ${agentCount} online agent(s) detected. Patches from managed endpoints are reported via agent heartbeat. These results are from the API server host only.`;
+    }
 
     this.logger.log(`Patch scan complete: ${results.length} found, ${created} created, ${updated} updated`);
     return summary;
@@ -502,9 +588,161 @@ export class PatchesService {
         await this.scanForPatches(tenant.id, 'SCHEDULED').catch(err =>
           this.logger.error(`Scheduled scan failed for tenant ${tenant.id}: ${err.message}`),
         );
+
+        // Check for critical overdue patches (Pending for >7 days)
+        await this.sendOverdueAlerts(tenant.id).catch(err =>
+          this.logger.error(`Overdue alert failed for tenant ${tenant.id}: ${err.message}`),
+        );
       }
     } catch (err: any) {
       this.logger.error(`Scheduled patch scan error: ${err.message}`);
     }
+  }
+
+  /**
+   * Detect Critical patches that have been Pending for >7 days and send alert emails
+   */
+  private async sendOverdueAlerts(tenantId: string) {
+    const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+
+    const overduePatches = await this.prisma.patch.findMany({
+      where: {
+        tenantId,
+        severity: 'Critical',
+        status: 'Pending',
+        createdAt: { lte: sevenDaysAgo },
+      },
+    });
+
+    if (overduePatches.length === 0) return;
+
+    // Resolve admin emails for this tenant
+    const admins = await this.prisma.user.findMany({
+      where: {
+        tenantId,
+        role: { name: { in: ['Tenant Admin', 'IT Admin'] } },
+        status: 'ACTIVE',
+      },
+      select: { email: true },
+    });
+    const adminEmails = admins.map(a => a.email).filter(Boolean);
+    if (adminEmails.length === 0) return;
+
+    for (const patch of overduePatches) {
+      await this.emailService.sendPatchOverdueAlert(
+        adminEmails,
+        patch.patchId,
+        patch.title,
+        patch.severity,
+        patch.affectedAssets || 0,
+      );
+    }
+
+    this.logger.log(`Sent ${overduePatches.length} overdue patch alerts for tenant ${tenantId}`);
+  }
+
+  // ─── AGENT PATCH REPORT ────────────────────────────────────────────
+  /**
+   * Process patch inventory reported by an agent during heartbeat.
+   * Agents submit their detected patches (available updates on their host OS),
+   * which are then upserted into the patch database for the tenant.
+   */
+  async processAgentPatchReport(
+    tenantId: string,
+    agentId: string,
+    patches: { patchId: string; title: string; severity: string; category: string; installed?: boolean }[],
+  ) {
+    this.logger.log(`Processing agent patch report from agent ${agentId}: ${patches.length} patches reported`);
+
+    const agent = await this.prisma.agent.findFirst({
+      where: { id: agentId, tenantId },
+    });
+    if (!agent) {
+      throw new NotFoundException(`Agent ${agentId} not found for tenant ${tenantId}`);
+    }
+
+    let created = 0;
+    let updated = 0;
+
+    for (const patch of patches) {
+      const existing = await this.prisma.patch.findFirst({
+        where: { tenantId, patchId: patch.patchId },
+      });
+
+      if (existing) {
+        // Update scan metadata
+        if (existing.status !== 'Deployed') {
+          await this.prisma.patch.update({
+            where: { id: existing.id },
+            data: {
+              title: patch.title,
+              severity: patch.severity,
+              category: patch.category,
+              lastScanAt: new Date(),
+              scanSource: 'AGENT',
+            },
+          });
+          updated++;
+        }
+
+        // If agent reports patch as installed, mark the per-asset deployment as DEPLOYED
+        if (patch.installed && agent.assetId) {
+          await this.prisma.patchDeployment.upsert({
+            where: { patchId_assetId: { patchId: existing.id, assetId: agent.assetId } },
+            create: {
+              tenantId,
+              patchId: existing.id,
+              assetId: agent.assetId,
+              status: 'DEPLOYED',
+              deployedAt: new Date(),
+            },
+            update: {
+              status: 'DEPLOYED',
+              deployedAt: new Date(),
+            },
+          });
+        }
+      } else {
+        const newPatch = await this.prisma.patch.create({
+          data: {
+            tenantId,
+            patchId: patch.patchId,
+            title: patch.title,
+            severity: patch.severity,
+            category: patch.category,
+            status: patch.installed ? 'Deployed' : 'Pending',
+            lastScanAt: new Date(),
+            scanSource: 'AGENT',
+          },
+        });
+
+        // Create per-asset deployment record
+        if (agent.assetId) {
+          await this.prisma.patchDeployment.create({
+            data: {
+              tenantId,
+              patchId: newPatch.id,
+              assetId: agent.assetId,
+              status: patch.installed ? 'DEPLOYED' : 'PENDING',
+              deployedAt: patch.installed ? new Date() : null,
+            },
+          });
+        }
+
+        created++;
+      }
+    }
+
+    this.eventBus.emitAssetEvent(tenantId, 'agent_patch_report', {
+      agentId,
+      hostname: agent.hostname,
+      patchesReported: patches.length,
+      created,
+      updated,
+      timestamp: new Date(),
+    });
+
+    this.logger.log(`Agent patch report processed: ${created} created, ${updated} updated`);
+    return { agentId, created, updated, total: patches.length };
   }
 }

@@ -2,7 +2,8 @@
 import { useEffect, useState } from "react";
 import {
   Key, Plus, AlertTriangle, CheckCircle2, Clock, XCircle,
-  Loader2, RefreshCw, DollarSign, Copy, Check, ChevronRight, X
+  Loader2, RefreshCw, DollarSign, Copy, Check, ChevronRight, X,
+  Search, Trash2, Edit3, Save
 } from "lucide-react";
 import { apiFetch } from "@/lib/api";
 import { PageHelp } from "@/components/HelpSystem";
@@ -14,6 +15,10 @@ export default function LicensesPage() {
   const [showAdd, setShowAdd] = useState(false);
   const [selectedLicense, setSelectedLicense] = useState<any>(null);
   const [copiedKey, setCopiedKey] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [statusFilter, setStatusFilter] = useState<string>("");
+  const [editing, setEditing] = useState(false);
+  const [editForm, setEditForm] = useState<any>({});
   const [form, setForm] = useState({
     softwareName: "", vendor: "", version: "", totalSeats: 1,
     licenseType: "PER_SEAT", licenseModel: "ANNUAL",
@@ -35,18 +40,20 @@ export default function LicensesPage() {
 
   async function handleAdd(e: React.FormEvent) {
     e.preventDefault();
-    await apiFetch("/licenses", {
-      method: "POST",
-      body: JSON.stringify({
-        ...form,
-        totalSeats: Number(form.totalSeats),
-        purchaseCost: form.purchaseCost ? Number(form.purchaseCost) : null,
-        expiryDate: form.expiryDate ? new Date(form.expiryDate).toISOString() : null,
-      }),
-    });
-    setShowAdd(false);
-    setForm({ softwareName: "", vendor: "", version: "", totalSeats: 1, licenseType: "PER_SEAT", licenseModel: "ANNUAL", purchaseCost: "", expiryDate: "" });
-    refresh();
+    try {
+      await apiFetch("/licenses", {
+        method: "POST",
+        body: JSON.stringify({
+          ...form,
+          totalSeats: Number(form.totalSeats),
+          purchaseCost: form.purchaseCost ? Number(form.purchaseCost) : null,
+          expiryDate: form.expiryDate ? new Date(form.expiryDate).toISOString() : null,
+        }),
+      });
+      setShowAdd(false);
+      setForm({ softwareName: "", vendor: "", version: "", totalSeats: 1, licenseType: "PER_SEAT", licenseModel: "ANNUAL", purchaseCost: "", expiryDate: "" });
+      refresh();
+    } catch (e) { alert('Failed to add license'); }
   }
 
   const handleCopy = (text: string) => {
@@ -55,6 +62,47 @@ export default function LicensesPage() {
     setCopiedKey(true);
     setTimeout(() => setCopiedKey(false), 2000);
   };
+
+  async function handleDelete(id: string) {
+    if (!confirm("Delete this license? This cannot be undone.")) return;
+    try {
+      await apiFetch(`/licenses/${id}`, { method: "DELETE" });
+      setSelectedLicense(null);
+      refresh();
+    } catch { alert("Failed to delete."); }
+  }
+
+  async function handleEdit() {
+    try {
+      await apiFetch(`/licenses/${selectedLicense.id}`, {
+        method: "PATCH",
+        body: JSON.stringify({
+          ...editForm,
+          totalSeats: Number(editForm.totalSeats),
+          purchaseCost: editForm.purchaseCost ? Number(editForm.purchaseCost) : null,
+          expiryDate: editForm.expiryDate ? new Date(editForm.expiryDate).toISOString() : null,
+        }),
+      });
+      setEditing(false);
+      setSelectedLicense(null);
+      refresh();
+    } catch { alert("Failed to update."); }
+  }
+
+  // Client-side search/filter
+  const displayedLicenses = licenses.filter((l: any) => {
+    const q = searchQuery.toLowerCase();
+    const matchSearch = !q || l.softwareName?.toLowerCase().includes(q) || l.vendor?.toLowerCase().includes(q);
+    const matchStatus = !statusFilter || (() => {
+      const isExpired = l.expiryDate && new Date(l.expiryDate) < new Date();
+      const isOverused = l.usedSeats > l.totalSeats;
+      if (statusFilter === "EXPIRED") return isExpired;
+      if (statusFilter === "OVERUSED") return isOverused;
+      if (statusFilter === "COMPLIANT") return !isExpired && !isOverused;
+      return true;
+    })();
+    return matchSearch && matchStatus;
+  });
 
   if (loading) return (
     <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "60vh", color: "var(--text-tertiary)" }}>
@@ -78,6 +126,23 @@ export default function LicensesPage() {
             <Plus size={16} /> Add License
           </button>
         </div>
+      </div>
+
+      {/* Search & Filter Bar */}
+      <div style={{ display: "flex", gap: 10, marginBottom: 16, alignItems: "center" }}>
+        <div style={{ flex: 1, display: "flex", alignItems: "center", gap: 8, background: "var(--bg-elevated)", border: "1px solid var(--border-primary)", borderRadius: 10, padding: "8px 14px" }}>
+          <Search size={15} style={{ color: "var(--text-tertiary)" }} />
+          <input value={searchQuery} onChange={e => setSearchQuery(e.target.value)}
+            placeholder="Search by software name or vendor..."
+            style={{ width: "100%", background: "none", border: "none", color: "var(--text-primary)", fontSize: 13, fontFamily: "inherit", outline: "none" }} />
+        </div>
+        <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)}
+          style={{ background: "var(--bg-input)", border: "1px solid var(--border-primary)", borderRadius: 10, padding: "8px 14px", color: "var(--text-primary)", fontSize: 13, fontFamily: "inherit", outline: "none" }}>
+          <option value="">All Status</option>
+          <option value="COMPLIANT">Compliant</option>
+          <option value="OVERUSED">Overused</option>
+          <option value="EXPIRED">Expired</option>
+        </select>
       </div>
 
       <PageHelp id="licenses" title="License Management">
@@ -269,7 +334,7 @@ export default function LicensesPage() {
                 </tr>
               </thead>
               <tbody>
-                {licenses.map((l: any) => {
+                {displayedLicenses.map((l: any) => {
                   const usage = l.totalSeats > 0 ? Math.round((l.usedSeats / l.totalSeats) * 100) : 0;
                   const isOverused = l.usedSeats > l.totalSeats;
                   const isExpired = l.expiryDate && new Date(l.expiryDate) < new Date();
@@ -336,7 +401,13 @@ export default function LicensesPage() {
                           {isExpired ? "EXPIRED" : isOverused ? "OVERUSED" : "COMPLIANT"}
                         </span>
                       </td>
-                      <td style={{ padding: "16px 20px", textAlign: "right" }}>
+                      <td style={{ padding: "16px 20px", display: "flex", alignItems: "center", gap: 8, justifyContent: "flex-end" }}>
+                        <button onClick={e => { e.stopPropagation(); handleDelete(l.id); }}
+                          style={{ background: "none", border: "none", cursor: "pointer", color: "var(--text-tertiary)", padding: 4, borderRadius: 6, transition: "all 0.15s" }}
+                          onMouseEnter={e => { e.currentTarget.style.color = "#ef4444"; e.currentTarget.style.background = "rgba(239,68,68,0.1)"; }}
+                          onMouseLeave={e => { e.currentTarget.style.color = "var(--text-tertiary)"; e.currentTarget.style.background = "none"; }}>
+                          <Trash2 size={14} />
+                        </button>
                         <ChevronRight size={16} style={{ color: "var(--text-tertiary)", opacity: 0.5 }} className="arrow-hover" />
                       </td>
                     </tr>
@@ -396,13 +467,32 @@ export default function LicensesPage() {
                     {l.vendor || "No vendor recorded"} • Build v{l.version || "N/A"}
                   </p>
                 </div>
-                <button onClick={() => setSelectedLicense(null)} style={{
-                  background: "var(--bg-elevated)", border: "1px solid var(--border-primary)",
-                  borderRadius: 10, width: 32, height: 32, display: "flex", alignItems: "center", justifyContent: "center",
-                  color: "var(--text-secondary)", cursor: "pointer", transition: "all 0.2s"
-                }} className="btn-close-drawer">
-                  <X size={16} />
-                </button>
+                <div style={{ display: "flex", gap: 8 }}>
+                  <button onClick={() => {
+                    setEditing(true);
+                    setEditForm({ softwareName: l.softwareName, vendor: l.vendor || "", version: l.version || "", totalSeats: l.totalSeats, purchaseCost: l.purchaseCost || "", expiryDate: l.expiryDate ? l.expiryDate.slice(0, 10) : "" });
+                  }} style={{
+                    background: "var(--bg-elevated)", border: "1px solid var(--border-primary)",
+                    borderRadius: 10, width: 32, height: 32, display: "flex", alignItems: "center", justifyContent: "center",
+                    color: "var(--text-secondary)", cursor: "pointer", transition: "all 0.2s"
+                  }}>
+                    <Edit3 size={14} />
+                  </button>
+                  <button onClick={() => handleDelete(l.id)} style={{
+                    background: "var(--bg-elevated)", border: "1px solid rgba(239,68,68,0.3)",
+                    borderRadius: 10, width: 32, height: 32, display: "flex", alignItems: "center", justifyContent: "center",
+                    color: "#f87171", cursor: "pointer", transition: "all 0.2s"
+                  }}>
+                    <Trash2 size={14} />
+                  </button>
+                  <button onClick={() => setSelectedLicense(null)} style={{
+                    background: "var(--bg-elevated)", border: "1px solid var(--border-primary)",
+                    borderRadius: 10, width: 32, height: 32, display: "flex", alignItems: "center", justifyContent: "center",
+                    color: "var(--text-secondary)", cursor: "pointer", transition: "all 0.2s"
+                  }} className="btn-close-drawer">
+                    <X size={16} />
+                  </button>
+                </div>
               </div>
 
               {/* Drawer Content */}

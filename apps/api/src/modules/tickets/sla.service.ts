@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { PrismaService } from '../../common/database/prisma.service';
 import { EventBusService } from '../../common/events/event-bus.service';
@@ -59,21 +59,27 @@ export class SlaService {
       const created = new Date(ticket.createdAt).getTime();
       const elapsed = now.getTime() - created;
 
+      // Track which breach types have already been notified to prevent duplicate events
+      const breachFlags = this.getBreachFlags(ticket);
+
       // Check response SLA
       if (ticket.responseDueAt) {
         const responseWindow = ticket.responseDueAt.getTime() - created;
         const responseElapsed = elapsed / responseWindow;
 
         if (now > ticket.responseDueAt) {
-          // Response SLA BREACHED
-          this.eventBus.emit('ticket.sla_breach', {
-            tenantId: ticket.tenantId,
-            ticketId: ticket.id,
-            ticketNumber: ticket.ticketNumber,
-            slaType: 'response',
-            dueAt: ticket.responseDueAt,
-            priority: ticket.priority,
-          });
+          // Response SLA BREACHED — only emit if not already notified
+          if (!breachFlags.responseBreachNotified) {
+            this.eventBus.emit('ticket.sla_breach', {
+              tenantId: ticket.tenantId,
+              ticketId: ticket.id,
+              ticketNumber: ticket.ticketNumber,
+              slaType: 'response',
+              dueAt: ticket.responseDueAt,
+              priority: ticket.priority,
+            });
+            await this.markBreachNotified(ticket.id, 'response', ticket);
+          }
         } else if (responseElapsed >= warningThreshold) {
           // Response SLA WARNING
           this.eventBus.emit('ticket.sla_warning', {
@@ -94,15 +100,18 @@ export class SlaService {
         const resElapsed = elapsed / resWindow;
 
         if (now > ticket.resolutionDueAt) {
-          // Resolution SLA BREACHED → auto-escalate
-          this.eventBus.emit('ticket.sla_breach', {
-            tenantId: ticket.tenantId,
-            ticketId: ticket.id,
-            ticketNumber: ticket.ticketNumber,
-            slaType: 'resolution',
-            dueAt: ticket.resolutionDueAt,
-            priority: ticket.priority,
-          });
+          // Resolution SLA BREACHED — only emit if not already notified
+          if (!breachFlags.resolutionBreachNotified) {
+            this.eventBus.emit('ticket.sla_breach', {
+              tenantId: ticket.tenantId,
+              ticketId: ticket.id,
+              ticketNumber: ticket.ticketNumber,
+              slaType: 'resolution',
+              dueAt: ticket.resolutionDueAt,
+              priority: ticket.priority,
+            });
+            await this.markBreachNotified(ticket.id, 'resolution', ticket);
+          }
 
           // Auto-escalate: bump priority if not already CRITICAL
           if (ticket.priority !== 'CRITICAL') {
@@ -144,11 +153,15 @@ export class SlaService {
     });
   }
 
-  async update(id: string, data: any) {
+  async update(id: string, tenantId: string, data: any) {
+    const existing = await this.prisma.slaPolicy.findFirst({ where: { id, tenantId } });
+    if (!existing) throw new NotFoundException('SLA policy not found');
     return this.prisma.slaPolicy.update({ where: { id }, data });
   }
 
-  async delete(id: string) {
+  async delete(id: string, tenantId: string) {
+    const existing = await this.prisma.slaPolicy.findFirst({ where: { id, tenantId } });
+    if (!existing) throw new NotFoundException('SLA policy not found');
     return this.prisma.slaPolicy.delete({ where: { id } });
   }
 
@@ -171,5 +184,57 @@ export class SlaService {
     ]);
     const onTrack = total - breached - atRisk;
     return { total, onTrack, atRisk, breached };
+  }
+
+  // ─── SLA Breach Deduplication Helpers ───────────────────────
+
+  /**
+   * Extract breach notification flags from the ticket's description JSON metadata.
+   * We use a structured JSON suffix in the description to avoid schema changes.
+   */
+  private getBreachFlags(ticket: any): { responseBreachNotified: boolean; resolutionBreachNotified: boolean } {
+    try {
+      // Check if description contains embedded breach metadata (JSON block at end)
+      const desc = ticket.description || '';
+      const metaMatch = desc.match(/<!--SLA_META:(.*?)-->$/);
+      if (metaMatch) {
+        const meta = JSON.parse(metaMatch[1]);
+        return {
+          responseBreachNotified: !!meta.responseBreachNotified,
+          resolutionBreachNotified: !!meta.resolutionBreachNotified,
+        };
+      }
+    } catch {
+      // Ignore parse errors — treat as not notified
+    }
+    return { responseBreachNotified: false, resolutionBreachNotified: false };
+  }
+
+  /**
+   * Mark a breach type as notified by appending/updating metadata in the ticket description.
+   */
+  private async markBreachNotified(ticketId: string, slaType: 'response' | 'resolution', ticket: any) {
+    try {
+      const desc = ticket.description || '';
+      const metaMatch = desc.match(/<!--SLA_META:(.*?)-->$/);
+      let meta: any = {};
+      let baseDesc = desc;
+
+      if (metaMatch) {
+        meta = JSON.parse(metaMatch[1]);
+        baseDesc = desc.replace(/<!--SLA_META:.*?-->$/, '');
+      }
+
+      if (slaType === 'response') meta.responseBreachNotified = true;
+      if (slaType === 'resolution') meta.resolutionBreachNotified = true;
+
+      const updatedDesc = `${baseDesc}<!--SLA_META:${JSON.stringify(meta)}-->`;
+      await this.prisma.ticket.update({
+        where: { id: ticketId },
+        data: { description: updatedDesc },
+      });
+    } catch (err: any) {
+      this.logger.warn(`Failed to mark breach notified for ticket ${ticketId}: ${err.message}`);
+    }
   }
 }

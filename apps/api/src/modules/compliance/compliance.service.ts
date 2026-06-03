@@ -4,7 +4,13 @@ import { EventBusService } from '../../common/events/event-bus.service';
 import { SshScanner } from '../../common/scanners/ssh.scanner';
 import * as crypto from 'crypto';
 
-const VAULT_KEY = process.env.VAULT_ENCRYPTION_KEY || 'assetcommand-default-vault-key-32!'; // 32 chars for AES-256
+const VAULT_KEY = (() => {
+  const key = process.env.VAULT_ENCRYPTION_KEY;
+  if (!key && process.env.NODE_ENV === 'production') {
+    throw new Error('CRITICAL: VAULT_ENCRYPTION_KEY must be set in production. Refusing to start with a default key.');
+  }
+  return key || 'assetcommand-default-vault-key-32!'; // fallback for development only
+})();
 const ALGORITHM = 'aes-256-cbc';
 
 interface ChangeDetection {
@@ -405,6 +411,35 @@ export class ComplianceService {
         }
       }
 
+      if (change.category === 'USB_DEVICE') {
+        const usbName = change.newValue?.name;
+        const usbSerial = change.newValue?.serial;
+        const existingChanges = await this.prisma.endpointChange.findMany({
+          where: { agentId, category: 'USB_DEVICE' },
+        });
+        const matched = existingChanges.find(c => {
+          const u = c.newValue as any;
+          return u && ((usbSerial && u.serial === usbSerial) || (u.name === usbName));
+        });
+        if (matched) {
+          if (matched.status === 'APPROVED') {
+            continue; // Already approved by admin! Allow connection.
+          }
+          results.push(matched); // Keep active review gate
+          continue;
+        }
+      }
+
+      if (change.category === 'DISK_CHANGE') {
+        const existingChanges = await this.prisma.endpointChange.findMany({
+          where: { agentId, category: 'DISK_CHANGE' },
+        });
+        const matched = existingChanges.find(c => c.status === 'APPROVED');
+        if (matched) {
+          continue; // Already approved by admin! Allow volume.
+        }
+      }
+
       // Find matching policy
       const matchedPolicy = policies.find(p => {
         if (p.category !== change.category) return false;
@@ -769,7 +804,7 @@ export class ComplianceService {
         description: 'Detect when a USB storage device is connected',
         category: 'USB_DEVICE',
         severity: 'WARNING',
-        action: 'ALERT_ONLY',
+        action: 'REQUIRE_APPROVAL',
         matchPattern: {},
         scope: {},
       },
@@ -796,7 +831,7 @@ export class ComplianceService {
         description: 'Alert when storage drives are added or removed',
         category: 'DISK_CHANGE',
         severity: 'WARNING',
-        action: 'ALERT_ONLY',
+        action: 'REQUIRE_APPROVAL',
         matchPattern: {},
         scope: {},
       },
@@ -876,6 +911,12 @@ export class ComplianceService {
         diskDrives: (ssh.diskUsage || []).map((d: any) => ({
           mount: d.mount, totalGb: d.size, usedGb: d.used, freeGb: d.available, usedPercent: d.percent,
         })),
+        serialNumber: ssh.hardwareDetails?.serialNumber || 'Unknown',
+        biosVendor: ssh.hardwareDetails?.biosVendor || 'Unknown',
+        biosVersion: ssh.hardwareDetails?.biosVersion || 'Unknown',
+        motherboard: ssh.hardwareDetails?.motherboard || 'Unknown',
+        tpmEnabled: ssh.hardwareDetails?.tpmEnabled !== undefined ? ssh.hardwareDetails.tpmEnabled : false,
+        tpmVersion: ssh.hardwareDetails?.tpmVersion || 'N/A',
       },
       operatingSystem: {
         platform: 'linux',

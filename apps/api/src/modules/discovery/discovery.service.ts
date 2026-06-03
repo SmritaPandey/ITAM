@@ -1,4 +1,5 @@
-import { Injectable, Logger, NotFoundException, BadRequestException } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException, BadRequestException, NotImplementedException } from '@nestjs/common';
+import { Cron, CronExpression } from '@nestjs/schedule';
 import { PrismaService } from '../../common/database/prisma.service';
 import { EventBusService } from '../../common/events/event-bus.service';
 import { ComplianceService } from '../compliance/compliance.service';
@@ -877,8 +878,9 @@ export class DiscoveryService {
         ipAddress: device.ipAddress, macAddress: device.macAddress,
         hostname: device.hostname, status: 'ACTIVE',
         discoverySource: 'NETWORK_SCAN', createdById: userId,
-        manufacturer: device.manufacturer || enrichment?.hardware?.manufacturer || null,
-        model: enrichment?.hardware?.model || null,
+        serialNumber: enrichment?.hardware?.serialNumber || null,
+        manufacturer: device.manufacturer || enrichment?.hardware?.biosVendor || enrichment?.hardware?.manufacturer || null,
+        model: enrichment?.hardware?.motherboard || enrichment?.hardware?.model || null,
         category: device.deviceType ? this.mapDeviceTypeToAssetType(device.deviceType) : 'Other',
       },
     });
@@ -915,6 +917,10 @@ export class DiscoveryService {
           cpuCores: hwData.cpuCores ? parseInt(hwData.cpuCores) : null,
           ramTotalGb: hwData.totalRamMb ? hwData.totalRamMb / 1024 : null,
           diskTotalGb: diskTotalGb || null,
+          biosVendor: hwData.biosVendor || null,
+          biosVersion: hwData.biosVersion || null,
+          tpmEnabled: hwData.tpmEnabled !== undefined ? hwData.tpmEnabled : null,
+          tpmVersion: hwData.tpmVersion || null,
         },
       });
     }
@@ -928,10 +934,21 @@ export class DiscoveryService {
         ? firewallStatus.toLowerCase().includes('enabled') || firewallStatus.toLowerCase().includes('active')
         : null;
 
+      const encryptionStatus = secData?.encryptionEnabled || secData?.diskEncryptionStatus;
+      const encryptionEnabled = typeof encryptionStatus === 'boolean'
+        ? encryptionStatus
+        : encryptionStatus
+          ? encryptionStatus.toLowerCase().includes('enabled') || encryptionStatus.toLowerCase().includes('active') || encryptionStatus.toLowerCase().includes('encrypted')
+          : null;
+
       await this.prisma.securityPosture.create({
         data: {
           assetId: asset.id,
           firewallEnabled: firewallEnabled,
+          encryptionEnabled: encryptionEnabled,
+          encryptionType: secData?.encryptionType || null,
+          complianceScore: secData?.complianceScore || null,
+          lastAssessedAt: new Date(),
         },
       });
     }
@@ -973,11 +990,18 @@ export class DiscoveryService {
     if (!asset.hostname && device.hostname) assetUpdateData.hostname = device.hostname;
 
     const enrichment = device.enrichmentData ? (device.enrichmentData as any) : null;
-    const discoveredManufacturer = device.manufacturer || enrichment?.hardware?.manufacturer;
-    const discoveredModel = enrichment?.hardware?.model;
+    const discoveredManufacturer = device.manufacturer || enrichment?.hardware?.biosVendor || enrichment?.hardware?.manufacturer;
+    const discoveredModel = enrichment?.hardware?.motherboard || enrichment?.hardware?.model;
 
-    if (!asset.manufacturer && discoveredManufacturer) assetUpdateData.manufacturer = discoveredManufacturer;
-    if (!asset.model && discoveredModel) assetUpdateData.model = discoveredModel;
+    if (!asset.serialNumber && enrichment?.hardware?.serialNumber) {
+      assetUpdateData.serialNumber = enrichment.hardware.serialNumber;
+    }
+    if (!asset.manufacturer && discoveredManufacturer) {
+      assetUpdateData.manufacturer = discoveredManufacturer;
+    }
+    if (!asset.model && discoveredModel) {
+      assetUpdateData.model = discoveredModel;
+    }
 
     const updatedAsset = await this.prisma.asset.update({
       where: { id: asset.id },
@@ -1028,12 +1052,20 @@ export class DiscoveryService {
           cpuCores: hwData.cpuCores ? parseInt(hwData.cpuCores) : null,
           ramTotalGb: hwData.totalRamMb ? hwData.totalRamMb / 1024 : null,
           diskTotalGb: diskTotalGb || null,
+          biosVendor: hwData.biosVendor || null,
+          biosVersion: hwData.biosVersion || null,
+          tpmEnabled: hwData.tpmEnabled !== undefined ? hwData.tpmEnabled : null,
+          tpmVersion: hwData.tpmVersion || null,
         },
         update: {
           cpuModel: existingHw?.cpuModel || hwData.cpuModel || null,
           cpuCores: existingHw?.cpuCores || (hwData.cpuCores ? parseInt(hwData.cpuCores) : null),
           ramTotalGb: existingHw?.ramTotalGb || (hwData.totalRamMb ? hwData.totalRamMb / 1024 : null),
           diskTotalGb: existingHw?.diskTotalGb || diskTotalGb || null,
+          biosVendor: existingHw?.biosVendor || hwData.biosVendor || null,
+          biosVersion: existingHw?.biosVersion || hwData.biosVersion || null,
+          tpmEnabled: existingHw?.tpmEnabled !== null ? existingHw?.tpmEnabled : (hwData.tpmEnabled !== undefined ? hwData.tpmEnabled : null),
+          tpmVersion: existingHw?.tpmVersion || hwData.tpmVersion || null,
         },
       });
     }
@@ -1048,14 +1080,29 @@ export class DiscoveryService {
         ? firewallStatus.toLowerCase().includes('enabled') || firewallStatus.toLowerCase().includes('active')
         : null;
 
+      const encryptionStatus = secData?.encryptionEnabled || secData?.diskEncryptionStatus;
+      const encryptionEnabled = typeof encryptionStatus === 'boolean'
+        ? encryptionStatus
+        : encryptionStatus
+          ? encryptionStatus.toLowerCase().includes('enabled') || encryptionStatus.toLowerCase().includes('active') || encryptionStatus.toLowerCase().includes('encrypted')
+          : null;
+
       await this.prisma.securityPosture.upsert({
         where: { assetId: asset.id },
         create: {
           assetId: asset.id,
           firewallEnabled: firewallEnabled,
+          encryptionEnabled: encryptionEnabled,
+          encryptionType: secData?.encryptionType || null,
+          complianceScore: secData?.complianceScore || null,
+          lastAssessedAt: new Date(),
         },
         update: {
           firewallEnabled: existingSec?.firewallEnabled !== null ? existingSec?.firewallEnabled : firewallEnabled,
+          encryptionEnabled: existingSec?.encryptionEnabled !== null ? existingSec?.encryptionEnabled : encryptionEnabled,
+          encryptionType: existingSec?.encryptionType || secData?.encryptionType || null,
+          complianceScore: existingSec?.complianceScore || secData?.complianceScore || null,
+          lastAssessedAt: new Date(),
         },
       });
     }
@@ -1127,6 +1174,38 @@ export class DiscoveryService {
     });
   }
 
+  @Cron(CronExpression.EVERY_5_MINUTES)
+  async checkStaleAgents() {
+    const staleThreshold = new Date(Date.now() - 10 * 60 * 1000);
+    const staleAgents = await this.prisma.agent.findMany({
+      where: {
+        status: 'ONLINE',
+        lastHeartbeat: { lt: staleThreshold },
+      },
+    });
+
+    for (const agent of staleAgents) {
+      await this.prisma.agent.update({
+        where: { id: agent.id },
+        data: { status: 'STALE' },
+      });
+
+      this.eventBus.emitDiscoveryEvent(agent.tenantId, 'agent_offline', {
+        agentId: agent.id,
+        hostname: agent.hostname,
+        ipAddress: agent.ipAddress,
+        lastHeartbeat: agent.lastHeartbeat,
+        message: `Agent ${agent.hostname} has gone offline`,
+      });
+
+      this.logger.warn(`Agent ${agent.hostname} (${agent.ipAddress}) marked as STALE — last heartbeat: ${agent.lastHeartbeat?.toISOString()}`);
+    }
+
+    if (staleAgents.length > 0) {
+      this.logger.log(`Stale agent check: ${staleAgents.length} agent(s) marked as STALE.`);
+    }
+  }
+
   async getAgent(id: string, tenantId: string) {
     const agent = await this.prisma.agent.findFirst({ where: { id, tenantId } });
     if (!agent) throw new NotFoundException('Agent not found');
@@ -1152,21 +1231,244 @@ export class DiscoveryService {
     });
   }
 
-  async agentHeartbeat(id: string, tenantId: string, data?: { systemInfo?: any }) {
+  async agentHeartbeat(id: string, tenantId: string, data?: { systemInfo?: any; version?: string }) {
     const agent = await this.prisma.agent.findFirst({ where: { id, tenantId } });
     if (!agent) throw new NotFoundException('Agent not found');
 
     const updated = await this.prisma.agent.update({
       where: { id },
-      data: { lastHeartbeat: new Date(), status: 'ONLINE', ...(data?.systemInfo ? { systemInfo: data.systemInfo } : {}) },
+      data: {
+        lastHeartbeat: new Date(),
+        status: 'ONLINE',
+        ...(data?.systemInfo ? { systemInfo: data.systemInfo } : {}),
+        ...(data?.version ? { agentVersion: data.version } : {}),
+      },
     });
 
-    // Run compliance change detection if snapshot provided
+    // Warn if agent version is outdated
+    if (data?.version && data.version !== '1.1.0') {
+      this.logger.warn(`Agent ${agent.hostname} is running outdated version ${data.version} (latest: 1.1.0)`);
+    }
+
+    // Run compliance change detection and sync systemInfo snapshot directly to CMDB Asset tables
     if (data?.systemInfo) {
       try {
         await this.complianceService.processHeartbeat(tenantId, id, agent, data.systemInfo);
       } catch (err) {
         this.logger.warn(`Compliance check failed for agent ${agent.hostname}: ${err.message}`);
+      }
+
+      // --- Live CMDB Asset Synchronization ---
+      try {
+        let asset = null;
+        if (agent.assetId) {
+          asset = await this.prisma.asset.findFirst({
+            where: { id: agent.assetId, tenantId, deletedAt: null },
+          });
+        }
+        if (!asset) {
+          asset = await this.prisma.asset.findFirst({
+            where: {
+              tenantId,
+              deletedAt: null,
+              OR: [
+                { agentId: agent.id },
+                ...(agent.macAddress ? [{ macAddress: agent.macAddress }] : []),
+                { hostname: agent.hostname, ipAddress: agent.ipAddress }
+              ]
+            },
+          });
+        }
+
+        if (!asset) {
+          // Provision a new Asset automatically for this agent
+          let typeName = 'Workstation';
+          if (agent.platform === 'linux') {
+            typeName = agent.hostname.toLowerCase().includes('server') ? 'Server' : 'Workstation';
+          } else if (agent.platform === 'windows') {
+            typeName = agent.hostname.toLowerCase().includes('server') ? 'Server' : 'Workstation';
+          }
+
+          let assetType = await this.prisma.assetType.findFirst({
+            where: { tenantId, name: { contains: typeName, mode: 'insensitive' } },
+          });
+          if (!assetType) {
+            assetType = await this.prisma.assetType.create({
+              data: { tenantId, name: typeName, icon: this.getAssetTypeIcon(typeName) },
+            });
+          }
+
+          asset = await this.prisma.asset.create({
+            data: {
+              tenantId,
+              name: agent.hostname,
+              assetTypeId: assetType.id,
+              ipAddress: agent.ipAddress,
+              macAddress: agent.macAddress,
+              hostname: agent.hostname,
+              status: 'ACTIVE',
+              discoverySource: 'AGENT',
+              serialNumber: data.systemInfo.hardware?.serialNumber || null,
+              manufacturer: data.systemInfo.hardware?.biosVendor || null,
+              model: data.systemInfo.hardware?.motherboard || null,
+              category: typeName,
+              agentId: agent.id,
+              lastScannedAt: new Date(),
+            },
+          });
+
+          // Link agent to the new asset
+          await this.prisma.agent.update({
+            where: { id: agent.id },
+            data: { assetId: asset.id },
+          });
+        } else {
+          // Ensure agent-asset cross-link exists
+          if (agent.assetId !== asset.id || !asset.agentId) {
+            await this.prisma.agent.update({
+              where: { id: agent.id },
+              data: { assetId: asset.id },
+            });
+            if (!asset.agentId) {
+              await this.prisma.asset.update({
+                where: { id: asset.id },
+                data: { agentId: agent.id },
+              });
+            }
+          }
+        }
+
+        // Dynamically update the main Asset fields
+        const assetUpdateData: any = {
+          lastScannedAt: new Date(),
+        };
+        if (data.systemInfo.hardware?.serialNumber && asset.serialNumber !== data.systemInfo.hardware.serialNumber) {
+          assetUpdateData.serialNumber = data.systemInfo.hardware.serialNumber;
+        }
+        if (data.systemInfo.hardware?.biosVendor && !asset.manufacturer) {
+          assetUpdateData.manufacturer = data.systemInfo.hardware.biosVendor;
+        }
+        if (data.systemInfo.hardware?.motherboard && !asset.model) {
+          assetUpdateData.model = data.systemInfo.hardware.motherboard;
+        }
+        if (agent.ipAddress && asset.ipAddress !== agent.ipAddress) {
+          assetUpdateData.ipAddress = agent.ipAddress;
+        }
+        if (agent.macAddress && asset.macAddress !== agent.macAddress) {
+          assetUpdateData.macAddress = agent.macAddress;
+        }
+
+        await this.prisma.asset.update({
+          where: { id: asset.id },
+          data: assetUpdateData,
+        });
+
+        // Upsert OS Details
+        const osData = data.systemInfo.operatingSystem;
+        if (osData) {
+          await this.prisma.osDetail.upsert({
+            where: { assetId: asset.id },
+            create: {
+              assetId: asset.id,
+              osName: osData.type || osData.platform || null,
+              osVersion: osData.release || null,
+              osArchitecture: osData.arch || null,
+              uptimeDays: osData.uptime ? Math.floor(osData.uptime / (24 * 3600)) : null,
+            },
+            update: {
+              osName: osData.type || osData.platform || null,
+              osVersion: osData.release || null,
+              osArchitecture: osData.arch || null,
+              uptimeDays: osData.uptime ? Math.floor(osData.uptime / (24 * 3600)) : null,
+            },
+          });
+        }
+
+        // Upsert Hardware Details
+        const hwData = data.systemInfo.hardware;
+        if (hwData) {
+          let diskTotalGb = 0;
+          if (hwData.diskDrives && Array.isArray(hwData.diskDrives)) {
+            for (const disk of hwData.diskDrives) {
+              const size = parseFloat(disk.sizeGb || (disk.sizeBytes ? (disk.sizeBytes / (1024 * 1024 * 1024)).toString() : '0'));
+              if (!isNaN(size)) diskTotalGb += size;
+            }
+          }
+
+          const ramTotalGb = hwData.totalRamMb
+            ? parseFloat((hwData.totalRamMb / 1024).toFixed(2))
+            : null;
+
+          const cpuSpeedGhz = hwData.cpuSpeed
+            ? parseFloat((hwData.cpuSpeed / 1000).toFixed(2))
+            : null;
+
+          await this.prisma.hardwareDetail.upsert({
+            where: { assetId: asset.id },
+            create: {
+              assetId: asset.id,
+              cpuModel: hwData.cpuModel || null,
+              cpuCores: hwData.cpuCores ? parseInt(hwData.cpuCores) : null,
+              cpuSpeedGhz: cpuSpeedGhz,
+              ramTotalGb: ramTotalGb,
+              diskTotalGb: diskTotalGb || null,
+              biosVendor: hwData.biosVendor || null,
+              biosVersion: hwData.biosVersion || null,
+              tpmEnabled: hwData.tpmEnabled !== undefined ? hwData.tpmEnabled : null,
+              tpmVersion: hwData.tpmVersion || null,
+            },
+            update: {
+              cpuModel: hwData.cpuModel || null,
+              cpuCores: hwData.cpuCores ? parseInt(hwData.cpuCores) : null,
+              cpuSpeedGhz: cpuSpeedGhz,
+              ramTotalGb: ramTotalGb,
+              diskTotalGb: diskTotalGb || null,
+              biosVendor: hwData.biosVendor || null,
+              biosVersion: hwData.biosVersion || null,
+              tpmEnabled: hwData.tpmEnabled !== undefined ? hwData.tpmEnabled : null,
+              tpmVersion: hwData.tpmVersion || null,
+            },
+          });
+        }
+
+        // Upsert Security Posture Details
+        const secData = data.systemInfo.security;
+        if (secData) {
+          const firewallStatus = secData.firewallStatus || secData.firewallEnabled;
+          const firewallEnabled = typeof firewallStatus === 'boolean'
+            ? firewallStatus
+            : firewallStatus
+              ? firewallStatus.toString().toLowerCase().includes('enabled') || firewallStatus.toString().toLowerCase().includes('active')
+              : null;
+
+          const encryptionStatus = secData.encryptionEnabled || secData.diskEncryptionStatus;
+          const encryptionEnabled = typeof encryptionStatus === 'boolean'
+            ? encryptionStatus
+            : encryptionStatus
+              ? encryptionStatus.toString().toLowerCase().includes('enabled') || encryptionStatus.toString().toLowerCase().includes('active') || encryptionStatus.toString().toLowerCase().includes('encrypted')
+              : null;
+
+          await this.prisma.securityPosture.upsert({
+            where: { assetId: asset.id },
+            create: {
+              assetId: asset.id,
+              firewallEnabled: firewallEnabled,
+              encryptionEnabled: encryptionEnabled,
+              encryptionType: secData.encryptionType || null,
+              complianceScore: secData.complianceScore || null,
+              lastAssessedAt: new Date(),
+            },
+            update: {
+              firewallEnabled: firewallEnabled,
+              encryptionEnabled: encryptionEnabled,
+              encryptionType: secData.encryptionType || null,
+              complianceScore: secData.complianceScore || null,
+              lastAssessedAt: new Date(),
+            },
+          });
+        }
+      } catch (err: any) {
+        this.logger.error(`Live CMDB synchronization failed for agent ${agent.hostname}: ${err.message}`);
       }
     }
 
@@ -1193,6 +1495,13 @@ export class DiscoveryService {
           port: val.port,
           processName: val.process || '',
           pid: val.pid || '',
+        };
+      } else if (threat.category === 'USB_DEVICE' || threat.category === 'DISK_CHANGE') {
+        return {
+          type: 'BLOCK_USB',
+          deviceName: val?.name || 'Storage Drive',
+          serialNumber: val?.serial || '',
+          mountPoint: val?.mount || '',
         };
       } else {
         return {
@@ -1504,6 +1813,12 @@ export class DiscoveryService {
                     filesystem: d.filesystem, sizeGb: d.size, used: d.used,
                     available: d.available, percentUsed: d.percent, mount: d.mount,
                   })),
+                  serialNumber: sshResult.hardwareDetails?.serialNumber || 'Unknown',
+                  biosVendor: sshResult.hardwareDetails?.biosVendor || 'Unknown',
+                  biosVersion: sshResult.hardwareDetails?.biosVersion || 'Unknown',
+                  motherboard: sshResult.hardwareDetails?.motherboard || 'Unknown',
+                  tpmEnabled: sshResult.hardwareDetails?.tpmEnabled !== undefined ? sshResult.hardwareDetails.tpmEnabled : false,
+                  tpmVersion: sshResult.hardwareDetails?.tpmVersion || 'N/A',
                 },
                 operatingSystem: {
                   name: sshResult.osInfo?.distro || 'Linux',
@@ -1715,106 +2030,178 @@ export class DiscoveryService {
     return zip.toBuffer();
   }
 
+  /**
+   * Deploy the discovery agent to a remote host via SSH.
+   * Resolves SSH credentials from the credential vault, copies the agent package,
+   * extracts it, configures the server URL and auth token, and starts the agent service.
+   */
   async deployRemoteAgent(
     tenantId: string,
     userId: string,
     targetIp: string,
     credentialId: string,
   ) {
-    this.logger.log(`Initiating remote agent push deployment on target IP: ${targetIp} for tenant: ${tenantId}`);
-
+    this.logger.log(`Starting remote agent deployment to ${targetIp} for tenant ${tenantId}`);
     const logs: string[] = [];
-    const timestamp = () => new Date().toLocaleTimeString();
 
-    logs.push(`[${timestamp()}] 🚀 Initiating secure remote push deployment engine...`);
-    logs.push(`[${timestamp()}] 📡 Resolving target LAN host IP: ${targetIp}...`);
-
-    // 1. Fetch and decrypt target SSH credentials
-    let sshUsername = 'root';
-    let hasKeys = false;
+    // 1. Resolve SSH credentials from the credential vault
+    let credentials: any;
     try {
-      const cred = await this.prisma.scanCredential.findFirst({
-        where: { id: credentialId, tenantId },
-      });
-      if (cred) {
-        logs.push(`[${timestamp()}] 🔑 Retrieval of authorization credentials "${cred.name}" (Type: ${cred.type})... Success`);
-        const credData = await this.credentialVault.getDecrypted(cred.id, tenantId);
-        if (credData) {
-          sshUsername = credData.username || 'root';
-          hasKeys = !!credData.privateKeyPath;
-        }
-      } else {
-        logs.push(`[${timestamp()}] ⚠️ No scan credential selected. Defaulting to standard SSH public keys...`);
+      credentials = await this.credentialVault.getDecrypted(credentialId, tenantId);
+      if (!credentials || (!credentials.password && !credentials.privateKey)) {
+        throw new BadRequestException(
+          'Invalid SSH credentials: must contain either password or privateKey',
+        );
       }
+      logs.push(`[OK] SSH credentials resolved for credential ${credentialId}`);
     } catch (err: any) {
-      logs.push(`[${timestamp()}] ⚠️ Vault decryption bypass: using standard authentication agent.`);
+      logs.push(`[FAIL] Failed to resolve SSH credentials: ${err.message}`);
+      throw new BadRequestException(
+        `Failed to resolve SSH credentials: ${err.message}`,
+      );
     }
 
-    // 2. Perform connection handshakes
-    logs.push(`[${timestamp()}] 🔌 Attempting SSH connection handshake on ${targetIp}:22...`);
-    await new Promise(resolve => setTimeout(resolve, 800)); // simulate network delay
+    const sshUser = credentials.username || 'root';
+    const remoteTmpDir = '/tmp/qs-agent-deploy';
+    const remoteInstallDir = '/opt/qs-discovery-agent';
 
-    logs.push(`[${timestamp()}] 👤 Establishing secure channel for user "${sshUsername}"...`);
-    await new Promise(resolve => setTimeout(resolve, 600));
+    // Build SSH command options
+    const sshOpts = '-o StrictHostKeyChecking=no -o ConnectTimeout=15';
+    let sshAuthArgs: string;
+    let keyPath: string | null = null;
 
-    logs.push(`[${timestamp()}] 🔓 SSH session authenticated successfully (${hasKeys ? 'Private Key' : 'Password'}).`);
+    if (credentials.privateKey) {
+      // Write the private key to a temporary file
+      keyPath = `/tmp/.qs-deploy-key-${Date.now()}`;
+      fs.writeFileSync(keyPath, credentials.privateKey, { mode: 0o600 });
+      sshAuthArgs = `${sshOpts} -i ${keyPath}`;
+      logs.push(`[OK] Using SSH key authentication`);
+    } else {
+      // Use sshpass for password auth (requires sshpass installed on the API server)
+      sshAuthArgs = `${sshOpts}`;
+      logs.push(`[INFO] Using password authentication (requires sshpass on API server)`);
+    }
 
-    // 3. Staging and push transfer
-    logs.push(`[${timestamp()}] 📦 Packing zero-dependency agent probe bundle (qs-discovery-agent.js)...`);
-    logs.push(`[${timestamp()}] 📤 Transmitting installation bundle via SFTP channel to target location /tmp/qs-discovery-agent.js...`);
-    await new Promise(resolve => setTimeout(resolve, 1000));
+    const sshCmd = (cmd: string) => credentials.privateKey
+      ? `ssh ${sshAuthArgs} ${sshUser}@${targetIp} "${cmd.replace(/"/g, '\\"')}"`
+      : `sshpass -p '${credentials.password}' ssh ${sshAuthArgs} ${sshUser}@${targetIp} "${cmd.replace(/"/g, '\\"')}"`;
 
-    logs.push(`[${timestamp()}] 💾 Staging pre-authenticated tenant configurations and daemon scripts...`);
-    await new Promise(resolve => setTimeout(resolve, 500));
+    const scpCmd = (src: string, dest: string) => credentials.privateKey
+      ? `scp ${sshAuthArgs} ${src} ${sshUser}@${targetIp}:${dest}`
+      : `sshpass -p '${credentials.password}' scp ${sshAuthArgs} ${src} ${sshUser}@${targetIp}:${dest}`;
 
-    // 4. Executing installation and environment checks
-    logs.push(`[${timestamp()}] ⚡ Executing installation script on target environment...`);
-    logs.push(`[${timestamp()}] 🔎 Target system identified: Operating System Linux (Ubuntu 22.04 LTS), CPU x86_64.`);
-    logs.push(`[${timestamp()}] 🟢 Prerequisite check: Verified Node.js runtime environment (v20.11.0) is active.`);
-    await new Promise(resolve => setTimeout(resolve, 700));
-
-    logs.push(`[${timestamp()}] 🔧 Injecting persistent systemd process wrapper (/etc/systemd/system/qs-discovery-agent.service)...`);
-    logs.push(`[${timestamp()}] ⚙️ Executing system service configuration (systemctl daemon-reload & systemctl enable)...`);
-    await new Promise(resolve => setTimeout(resolve, 600));
-
-    logs.push(`[${timestamp()}] 🚀 Launching continuous background discovery daemon (systemctl start)...`);
-    
-    // 5. CMDB agent registration
-    const mockAgentId = 'agt-' + Math.random().toString(36).substring(2, 10) + '-' + Math.random().toString(36).substring(2, 6);
-    const mockHostname = 'host-' + targetIp.replace(/\./g, '-');
+    const localPackagePath = `/tmp/qs-agent-${Date.now()}.zip`;
 
     try {
-      await this.prisma.agent.create({
-        data: {
-          tenantId,
-          hostname: mockHostname,
-          platform: 'linux',
-          agentVersion: '1.2.0',
-          ipAddress: targetIp,
-          macAddress: '00:50:56:AB:' + Math.floor(Math.random()*89+10) + ':' + Math.floor(Math.random()*89+10),
-          status: 'ONLINE',
-          lastHeartbeat: new Date(),
-          systemInfo: {
-            distro: 'Ubuntu Linux 22.04',
-            cpu: 'Intel Xeon @ 2.50GHz (2 Cores)',
-            ram: '4096 MB Total',
-            disk: '40 GB total (85% free)',
-          },
-        },
-      });
-      logs.push(`[${timestamp()}] 🟢 Discovery Agent registered successfully in CMDB with ID: ${mockAgentId}`);
-    } catch (dbErr) {
-      // If already registered or DB error, log and continue
-      logs.push(`[${timestamp()}] 🟢 Discovery Agent linked with existing matched asset record.`);
+      // 2. Test SSH connectivity
+      try {
+        const { stdout } = await execAsync(sshCmd('echo CONNECTION_OK'), { timeout: 20000 });
+        if (!stdout.includes('CONNECTION_OK')) {
+          throw new Error('SSH connection test did not return expected response');
+        }
+        logs.push(`[OK] SSH connection to ${targetIp} successful`);
+      } catch (err: any) {
+        logs.push(`[FAIL] SSH connection to ${targetIp} failed: ${err.message}`);
+        throw new BadRequestException(
+          `Cannot establish SSH connection to ${targetIp}: ${err.message}`,
+        );
+      }
+
+      // 3. Generate the agent package with embedded config
+      const serverUrl = process.env.API_URL || process.env.SERVER_URL || `http://${os.hostname()}:3001`;
+      const token = `agent-deploy-${tenantId}-${Date.now()}`;
+      const packageBuffer = this.getAgentZipPackage(serverUrl, token);
+      fs.writeFileSync(localPackagePath, packageBuffer);
+      logs.push(`[OK] Agent package generated (${Math.round(packageBuffer.length / 1024)} KB)`);
+
+      // 4. Copy the agent package to the remote host
+      try {
+        await execAsync(sshCmd(`mkdir -p ${remoteTmpDir}`), { timeout: 10000 });
+        await execAsync(scpCmd(localPackagePath, `${remoteTmpDir}/agent.zip`), { timeout: 60000 });
+        logs.push(`[OK] Agent package copied to ${targetIp}:${remoteTmpDir}/agent.zip`);
+      } catch (err: any) {
+        logs.push(`[FAIL] SCP transfer failed: ${err.message}`);
+        throw new Error(`Failed to copy agent package: ${err.message}`);
+      }
+
+      // 5. Extract the package on the remote host
+      try {
+        await execAsync(sshCmd(
+          `mkdir -p ${remoteInstallDir} && ` +
+          `cd ${remoteTmpDir} && ` +
+          `unzip -o agent.zip -d ${remoteInstallDir} 2>/dev/null || ` +
+          `python3 -c \\\"import zipfile; zipfile.ZipFile('agent.zip').extractall('${remoteInstallDir}')\\\"`,
+        ), { timeout: 30000 });
+        logs.push(`[OK] Agent package extracted to ${remoteInstallDir}`);
+      } catch (err: any) {
+        logs.push(`[FAIL] Package extraction failed: ${err.message}`);
+        throw new Error(`Failed to extract agent package: ${err.message}`);
+      }
+
+      // 6. Configure the agent with server URL and auth token
+      try {
+        const configJson = JSON.stringify({ server: serverUrl, token }, null, 2);
+        await execAsync(sshCmd(
+          `echo '${configJson}' > ${remoteInstallDir}/bin/config.json && ` +
+          `echo '${configJson}' > ${remoteInstallDir}/core/config.json 2>/dev/null; true`,
+        ), { timeout: 10000 });
+        logs.push(`[OK] Agent configured with server URL: ${serverUrl}`);
+      } catch (err: any) {
+        logs.push(`[WARN] Config injection issue (may still work): ${err.message}`);
+      }
+
+      // 7. Start the agent service
+      try {
+        // Try systemd service first, then fall back to direct execution
+        await execAsync(sshCmd(
+          `cd ${remoteInstallDir} && ` +
+          `chmod +x bin/install-service.sh bin/run-agent.sh 2>/dev/null; ` +
+          `if [ -f bin/install-service.sh ]; then bash bin/install-service.sh; ` +
+          `elif command -v node >/dev/null 2>&1; then nohup node bin/qs-discovery-agent.js > /var/log/qs-agent.log 2>&1 & fi`,
+        ), { timeout: 30000 });
+        logs.push(`[OK] Agent service started on ${targetIp}`);
+      } catch (err: any) {
+        logs.push(`[WARN] Service start had issues (agent may still be running): ${err.message}`);
+      }
+
+      // 8. Clean up temporary files
+      try {
+        await execAsync(sshCmd(`rm -rf ${remoteTmpDir}`), { timeout: 5000 });
+        fs.unlinkSync(localPackagePath);
+      } catch {
+        // Cleanup failures are non-critical
+      }
+
+      // Clean up the temporary key file if used
+      if (keyPath) {
+        try { fs.unlinkSync(keyPath); } catch {}
+      }
+
+      this.logger.log(`Remote agent deployment to ${targetIp} completed successfully`);
+
+      return {
+        status: 'SUCCESS',
+        targetIp,
+        installDir: remoteInstallDir,
+        logs,
+        message: `Agent deployed to ${targetIp}. It will register with the server on first heartbeat.`,
+      };
+    } catch (err: any) {
+      // Clean up the temporary key file on error
+      if (keyPath) {
+        try { fs.unlinkSync(keyPath); } catch {}
+      }
+      try { fs.unlinkSync(localPackagePath); } catch {}
+
+      this.logger.error(`Remote agent deployment to ${targetIp} failed: ${err.message}`);
+      logs.push(`[FAIL] Deployment failed: ${err.message}`);
+
+      return {
+        status: 'FAILED',
+        targetIp,
+        logs,
+        error: err.message,
+      };
     }
-
-    logs.push(`[${timestamp()}] 🎉 Remote push deployment complete. Target machine ${targetIp} is now monitored at all times!`);
-
-    return {
-      success: true,
-      targetIp,
-      hostname: mockHostname,
-      logs,
-    };
   }
 }

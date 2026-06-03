@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Patch, Delete, Body, Param, UseGuards, Request } from '@nestjs/common';
+import { Controller, Get, Post, Patch, Delete, Body, Param, UseGuards, Request, NotFoundException, BadRequestException } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
@@ -91,20 +91,64 @@ export class ScriptLibraryController {
       return { error: 'Script must be approved before execution', status: script.approvalStatus };
     }
 
-    // Update run tracking
+    // 1. Verify the target agent exists and is ONLINE
+    const agent = await this.prisma.agent.findFirst({
+      where: { id: body.agentId, tenantId: req.user.tenantId },
+    });
+
+    if (!agent) {
+      throw new NotFoundException(`Agent ${body.agentId} not found`);
+    }
+
+    const heartbeatThreshold = new Date(Date.now() - 5 * 60 * 1000); // 5 minutes
+    if (!agent.lastHeartbeat || agent.lastHeartbeat < heartbeatThreshold) {
+      throw new BadRequestException(
+        `Agent ${agent.hostname} (${agent.ipAddress}) is offline or unresponsive. ` +
+        `Last heartbeat: ${agent.lastHeartbeat?.toISOString() || 'never'}. ` +
+        `Cannot dispatch script to an offline agent.`,
+      );
+    }
+
+    // 2. Create a real ScanResult record repurposed for script execution tracking.
+    //    This gives us a persistent, queryable record with a real database ID.
+    //    The agent will pick up QUEUED script executions on next heartbeat check-in
+    //    via the actions array returned from the heartbeat endpoint.
+    const execution = await this.prisma.scanResult.create({
+      data: {
+        tenantId: req.user.tenantId,
+        scanType: 'SCRIPT_EXECUTION',
+        targetType: 'HOST',
+        target: agent.ipAddress,
+        status: 'QUEUED',
+        triggeredBy: req.user.sub,
+        summary: {
+          scriptId: id,
+          scriptName: script.name,
+          platform: script.platform,
+          agentId: body.agentId,
+          agentHostname: agent.hostname,
+          parameters: body.parameters || {},
+          timeoutSeconds: script.timeoutSeconds,
+        },
+        rawOutput: script.scriptContent,
+      },
+    });
+
+    // 3. Update run tracking on the script
     await this.prisma.scriptLibrary.update({
       where: { id },
       data: { runCount: { increment: 1 }, lastRunAt: new Date() },
     });
 
-    // In production, this would dispatch to the agent via WebSocket/SSH
     return {
-      executionId: `exec-${Date.now()}`,
+      executionId: execution.id,
       scriptId: id,
       scriptName: script.name,
       agentId: body.agentId,
-      status: 'DISPATCHED',
-      dispatchedAt: new Date().toISOString(),
+      agentHostname: agent.hostname,
+      // Agent will pick up this queued execution on its next heartbeat check-in
+      status: 'QUEUED',
+      queuedAt: execution.startedAt.toISOString(),
       timeoutSeconds: script.timeoutSeconds,
     };
   }

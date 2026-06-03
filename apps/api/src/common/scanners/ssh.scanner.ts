@@ -22,6 +22,14 @@ export interface SshScanResult {
   activeShellUsers?: string[];
   firewallStatus?: string;
   sshConfigAudit?: { permitRootLogin?: string; passwordAuth?: string; port?: string };
+  hardwareDetails?: {
+    serialNumber?: string;
+    biosVendor?: string;
+    biosVersion?: string;
+    motherboard?: string;
+    tpmEnabled?: boolean;
+    tpmVersion?: string;
+  };
   error?: string;
 }
 
@@ -104,6 +112,48 @@ export class SshScanner {
       // Hostname & Uptime
       result.hostname = await runCmd('hostname');
       result.uptime = await runCmd('uptime -p 2>/dev/null || uptime');
+
+      // Deep Hardware serials, BIOS, TPM, and Motherboard remote audit
+      let serialNumber = 'Unknown';
+      let biosVendor = 'Unknown';
+      let biosVersion = 'Unknown';
+      let motherboard = 'Unknown';
+      let tpmEnabled = false;
+      let tpmVersion = 'N/A';
+
+      if (isMac) {
+        serialNumber = (await runCmd("ioreg -rd1 -c IOPlatformExpertDevice | awk -F'\"' '/IOPlatformSerialNumber/ { print $4 }'")).trim() || 'Unknown';
+        biosVendor = 'Apple Inc.';
+        biosVersion = (await runCmd('sysctl -n machdep.cpu.brand_string 2>/dev/null || sysctl -n hw.model 2>/dev/null')).trim() || 'Apple Silicon';
+        motherboard = (await runCmd('sysctl -n hw.model 2>/dev/null')).trim() || 'Apple Baseboard';
+        tpmEnabled = true;
+        tpmVersion = 'Secure Enclave';
+      } else {
+        serialNumber = (await runCmd('cat /sys/class/dmi/id/product_serial 2>/dev/null || cat /sys/class/dmi/id/board_serial 2>/dev/null || echo "Unknown"')).trim();
+        biosVendor = (await runCmd('cat /sys/class/dmi/id/bios_vendor 2>/dev/null || echo "Unknown"')).trim();
+        biosVersion = (await runCmd('cat /sys/class/dmi/id/bios_version 2>/dev/null || echo "Unknown"')).trim();
+        
+        const boardVendor = (await runCmd('cat /sys/class/dmi/id/board_vendor 2>/dev/null')).trim();
+        const boardName = (await runCmd('cat /sys/class/dmi/id/board_name 2>/dev/null')).trim();
+        if (boardVendor || boardName) {
+          motherboard = `${boardVendor} ${boardName}`.trim();
+        }
+
+        const tpmCheck = await runCmd('ls /sys/class/tpm/tpm0 2>/dev/null || ls /dev/tpm0 2>/dev/null');
+        if (tpmCheck) {
+          tpmEnabled = true;
+          tpmVersion = (await runCmd('cat /sys/class/tpm/tpm0/device/description 2>/dev/null || echo "2.0"')).trim() || '2.0';
+        }
+      }
+
+      result.hardwareDetails = {
+        serialNumber,
+        biosVendor,
+        biosVersion,
+        motherboard,
+        tpmEnabled,
+        tpmVersion,
+      };
 
       // 2. Hardware and Performance Audit
       // CPU Information

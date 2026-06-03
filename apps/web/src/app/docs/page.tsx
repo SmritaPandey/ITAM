@@ -437,38 +437,42 @@ const ARTICLES = [
       <div>
         <h2 style={{ fontSize: 26, fontWeight: 800, marginBottom: 16 }}>Agent Installation</h2>
         <p style={{ fontSize: 15, lineHeight: 1.7, marginBottom: 16 }}>
-          Auditing clients securely can be done via background system daemons (Agents). The agent reports system telemetry, missing software patches, and security configurations to the central API.
+          The QS Asset Discovery Agent is a zero-dependency Node.js script (<code>qs-discovery-agent.js</code>) that reports system telemetry, missing software patches, and security configurations to the central API. Copy it from your QS Asset server&apos;s <code>/agent/</code> directory.
         </p>
 
-        <h3 style={{ fontSize: 18, fontWeight: 700, margin: "24px 0 12px" }}>💻 Windows PowerShell Installation</h3>
+        <Alert type="info">
+          The agent requires <strong>Node.js v20+</strong> on the target machine. No other dependencies are needed.
+        </Alert>
+
+        <h3 style={{ fontSize: 18, fontWeight: 700, margin: "24px 0 12px" }}>💻 Windows Installation</h3>
         <p style={{ fontSize: 14.5, lineHeight: 1.6, marginBottom: 12 }}>
-          Open PowerShell as an Administrator and execute this one-liner script to download, configure, and install the Windows background service daemon:
+          Copy the agent folder from the server and run it with Node.js:
         </p>
         <CodeBlock
           lang="powershell"
-          code={`Set-ExecutionPolicy Bypass -Scope Process -Force; [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.SecurityProtocolType]::Tls12;\nInvoke-Expression ((New-Object System.Net.WebClient).DownloadString('https://qsasset.com/downloads/agent/win/install.ps1'));\nStart-QSAgent -ServerUrl "https://yourserver.com" -Token "YOUR_API_TOKEN"`}
+          code={`# Copy the agent folder from your QS Asset server, then run:\nnode qs-discovery-agent.js --server https://YOUR_SERVER:4100`}
         />
 
         <h3 style={{ fontSize: 18, fontWeight: 700, margin: "24px 0 12px" }}>🍎 macOS Installation</h3>
         <p style={{ fontSize: 14.5, lineHeight: 1.6, marginBottom: 12 }}>
-          Open the terminal and run the secure curl installer script to deploy the LaunchDaemon process:
+          Use SCP to copy the agent from the server, then start it:
         </p>
         <CodeBlock
           lang="bash"
-          code={`curl -fsSL https://qsasset.com/downloads/agent/mac/install.sh | bash -s -- --url "https://yourserver.com" --token "YOUR_API_TOKEN"`}
+          code={`scp admin@server:/path/to/agent/* ./qs-agent/ && node qs-agent/qs-discovery-agent.js --server https://YOUR_SERVER:4100`}
         />
 
         <h3 style={{ fontSize: 18, fontWeight: 700, margin: "24px 0 12px" }}>🐧 Linux Installation</h3>
         <p style={{ fontSize: 14.5, lineHeight: 1.6, marginBottom: 12 }}>
-          For Ubuntu, RHEL, and Debian systems, run the unified bash installer to deploy the Systemd service:
+          Same as macOS &mdash; copy the agent folder via SCP and launch with Node:
         </p>
         <CodeBlock
           lang="bash"
-          code={`wget -qO- https://qsasset.com/downloads/agent/linux/install.sh | sudo bash -s -- --url "https://yourserver.com" --token "YOUR_API_TOKEN"`}
+          code={`scp admin@server:/path/to/agent/* ./qs-agent/ && node qs-agent/qs-discovery-agent.js --server https://YOUR_SERVER:4100`}
         />
 
         <Alert type="info">
-          The `YOUR_API_TOKEN` parameter must be obtained from the **NMS &gt; Agents Settings** console tab, which maps host assets securely to your Tenant organization workspace.
+          Replace <code>YOUR_SERVER:4100</code> with your actual QS Asset API server address. The agent will auto-register with your tenant workspace.
         </Alert>
       </div>
     )
@@ -715,29 +719,34 @@ const ARTICLES = [
             <thead>
               <tr style={{ borderBottom: "2px solid rgba(255,255,255,0.1)", background: "rgba(255,255,255,0.02)" }}>
                 <th style={{ padding: 12 }}>Feature</th>
-                <th style={{ padding: 12 }}>Standard Trial</th>
-                <th style={{ padding: 12 }}>Premium Enterprise</th>
+                <th style={{ padding: 12 }}>Starter</th>
+                <th style={{ padding: 12 }}>Professional</th>
+                <th style={{ padding: 12 }}>Enterprise</th>
               </tr>
             </thead>
             <tbody>
               <tr style={{ borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
                 <td style={{ padding: 12, fontWeight: 600 }}>Asset Capacity</td>
-                <td style={{ padding: 12 }}>Up to 50 monitored hardware items</td>
+                <td style={{ padding: 12 }}>Up to 5 assets</td>
+                <td style={{ padding: 12 }}>Unlimited assets</td>
                 <td style={{ padding: 12 }}>Unlimited assets</td>
               </tr>
               <tr style={{ borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
                 <td style={{ padding: 12, fontWeight: 600 }}>Network Scanning</td>
                 <td style={{ padding: 12 }}>Single-subnet scan sweep</td>
-                <td style={{ padding: 12 }}>Concurrent multi-subnet background workers</td>
+                <td style={{ padding: 12 }}>Multi-subnet background workers</td>
+                <td style={{ padding: 12 }}>Concurrent multi-subnet + priority queues</td>
               </tr>
               <tr style={{ borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
                 <td style={{ padding: 12, fontWeight: 600 }}>SSO & OAuth</td>
                 <td style={{ padding: 12 }}>Password authentication only</td>
-                <td style={{ padding: 12 }}>Google & Microsoft Azure AD Integration</td>
+                <td style={{ padding: 12 }}>Google & Microsoft Azure AD</td>
+                <td style={{ padding: 12 }}>Google & Microsoft Azure AD + SAML</td>
               </tr>
               <tr style={{ borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
                 <td style={{ padding: 12, fontWeight: 600 }}>Custom Columns</td>
                 <td style={{ padding: 12 }}>Standard attributes only</td>
+                <td style={{ padding: 12 }}>Dynamic custom field schemas</td>
                 <td style={{ padding: 12 }}>Unlimited dynamic custom field schemas</td>
               </tr>
             </tbody>

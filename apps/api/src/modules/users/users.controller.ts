@@ -4,6 +4,7 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { UsersService } from './users.service';
+import { CreateUserDto } from './dto/create-user.dto';
 
 @ApiTags('users')
 @ApiBearerAuth()
@@ -73,7 +74,7 @@ export class UsersController {
   @Post()
   @Roles('Tenant Admin')
   @ApiOperation({ summary: 'Create a new user' })
-  async create(@Request() req: any, @Body() body: any) {
+  async create(@Request() req: any, @Body() body: CreateUserDto) {
     return this.usersService.create(req.user.tenantId, body);
   }
 
@@ -96,6 +97,13 @@ export class UsersController {
   @ApiOperation({ summary: 'Change user role' })
   async changeRole(@Request() req: any, @Param('id') id: string, @Body() body: { roleId: string }) {
     return this.usersService.changeRole(id, req.user.tenantId, body.roleId);
+  }
+
+  @Post(':id/change-password')
+  @Roles('Tenant Admin', '*')
+  @ApiOperation({ summary: 'Change user password' })
+  async changePassword(@Request() req: any, @Param('id') id: string, @Body() body: { newPassword: string; oldPassword?: string }) {
+    return this.usersService.changePassword(id, req.user.tenantId, body.newPassword, body.oldPassword, req.user.role);
   }
 
   @Delete(':id')

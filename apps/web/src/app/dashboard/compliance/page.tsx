@@ -83,30 +83,40 @@ export default function CompliancePage() {
   }
 
   async function createPolicy() {
-    await apiFetch("/compliance/policies", { method: "POST", body: JSON.stringify(newPolicy) });
-    setShowCreate(false);
-    setNewPolicy({ name: "", description: "", category: "RAM_CHANGE", severity: "WARNING", action: "ALERT_ONLY" });
-    refresh();
+    try {
+      await apiFetch("/compliance/policies", { method: "POST", body: JSON.stringify(newPolicy) });
+      setShowCreate(false);
+      setNewPolicy({ name: "", description: "", category: "RAM_CHANGE", severity: "WARNING", action: "ALERT_ONLY" });
+      refresh();
+    } catch (e) { alert('Failed to create policy'); }
   }
 
   async function togglePolicy(id: string, isActive: boolean) {
-    await apiFetch(`/compliance/policies/${id}`, { method: "PATCH", body: JSON.stringify({ isActive: !isActive }) });
-    refresh();
+    try {
+      await apiFetch(`/compliance/policies/${id}`, { method: "PATCH", body: JSON.stringify({ isActive: !isActive }) });
+      refresh();
+    } catch (e) { alert('Failed to toggle policy'); }
   }
 
   async function deletePolicy(id: string) {
-    await apiFetch(`/compliance/policies/${id}`, { method: "DELETE" });
-    refresh();
+    try {
+      await apiFetch(`/compliance/policies/${id}`, { method: "DELETE" });
+      refresh();
+    } catch (e) { alert('Failed to delete policy'); }
   }
 
   async function approveChange(id: string) {
-    await apiFetch(`/compliance/changes/${id}/approve`, { method: "PATCH", body: JSON.stringify({ note: reviewNote }) });
-    setReviewModal(null); setReviewNote(""); refresh();
+    try {
+      await apiFetch(`/compliance/changes/${id}/approve`, { method: "PATCH", body: JSON.stringify({ note: reviewNote }) });
+      setReviewModal(null); setReviewNote(""); refresh();
+    } catch (e) { alert('Failed to approve change'); }
   }
 
   async function rejectChange(id: string) {
-    await apiFetch(`/compliance/changes/${id}/reject`, { method: "PATCH", body: JSON.stringify({ note: reviewNote }) });
-    setReviewModal(null); setReviewNote(""); refresh();
+    try {
+      await apiFetch(`/compliance/changes/${id}/reject`, { method: "PATCH", body: JSON.stringify({ note: reviewNote }) });
+      setReviewModal(null); setReviewNote(""); refresh();
+    } catch (e) { alert('Failed to reject change'); }
   }
 
   async function instantApprove(id: string, note: string = "Approved from threat board") {

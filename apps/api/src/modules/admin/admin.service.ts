@@ -160,7 +160,16 @@ export class AdminService {
       where: { id },
       data: { status: 'CANCELLED' },
     });
-    this.logger.warn(`Tenant ${id} soft-deleted (status → CANCELLED)`);
+
+    // Deactivate all users belonging to this tenant
+    const { count: deactivatedUsers } = await this.prisma.user.updateMany({
+      where: { tenantId: id, status: 'ACTIVE' },
+      data: { status: 'INACTIVE' },
+    });
+
+    this.logger.warn(
+      `Tenant ${id} soft-deleted (status → CANCELLED). Deactivated ${deactivatedUsers} user(s).`,
+    );
     return { success: true };
   }
 

@@ -120,7 +120,7 @@ const MODULES = [
     tabs: ["All Users", "Active", "Inactive", "Roles"],
     features: ["Invite users by email with role assignment", "4 default roles: Tenant Admin, IT Admin, Staff, Employee", "Custom permission editing per role"] },
   { icon: <Settings size={18} />, name: "Settings", href: "/dashboard/settings", desc: "Organization-wide configuration for your QS Asset workspace.",
-    tabs: ["General", "Billing & Plan", "SLA Policies", "Asset Types", "Departments", "Sites"],
+    tabs: ["General", "Workspace", "Account", "Billing & Plan", "Invoices", "Notifications", "Security", "Discovery", "Storage", "Integrations"],
     features: ["Organization name, timezone, industry configuration", "Billing plan management (Starter, Professional, Enterprise)", "SLA policy customization", "Multi-site support with HQ designation"] },
 ];
 
@@ -714,8 +714,8 @@ export default function HelpPage() {
                 <span style={{ fontSize: 13, fontWeight: 800, color: "var(--text-primary)" }}>Plan Quota Limits</span>
               </div>
               <ul style={{ paddingLeft: 16, margin: 0, fontSize: 11.5, color: "var(--text-secondary)", display: "flex", flexDirection: "column", gap: 8, lineHeight: 1.5 }}>
-                <li><strong style={{ color: "var(--text-primary)" }}>Standard Trial:</strong> Capped at 50 monitored hardware items.</li>
-                <li><strong style={{ color: "var(--text-primary)" }}>Professional:</strong> Capped at 1,000 active assets + SSH sweeps.</li>
+                <li><strong style={{ color: "var(--text-primary)" }}>Starter:</strong> Up to 5 assets.</li>
+                <li><strong style={{ color: "var(--text-primary)" }}>Professional:</strong> Unlimited assets + SSH sweeps.</li>
                 <li><strong style={{ color: "var(--text-primary)" }}>Enterprise:</strong> Unlimited capacity, multi-site scanning, and full SLA automation engines.</li>
               </ul>
             </div>
@@ -764,7 +764,7 @@ export default function HelpPage() {
           <a href="mailto:support@neurqai.com" className="btn btn-primary" style={{
             fontSize: 12, padding: "8px 16px", borderRadius: 6, textDecoration: "none", fontWeight: 700
           }}>Email Support Ticket</a>
-          <a href="/contact" className="btn btn-secondary" style={{
+          <a href="mailto:support@neurqai.com?subject=Platform Architecture Inquiry" className="btn btn-secondary" style={{
             fontSize: 12, padding: "8px 16px", borderRadius: 6, textDecoration: "none", fontWeight: 700
           }}>Contact Platform Architect</a>
         </div>

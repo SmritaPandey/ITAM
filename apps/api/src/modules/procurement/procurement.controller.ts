@@ -4,6 +4,9 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { ProcurementService } from './procurement.service';
+import { CreateVendorDto } from './dto/create-vendor.dto';
+import { CreateContractDto } from './dto/create-contract.dto';
+import { CreatePurchaseOrderDto } from './dto/create-purchase-order.dto';
 import { ModuleGuard } from '../../common/guards/module.guard';
 import { RequireModule } from '../../common/decorators/require-module.decorator';
 
@@ -24,7 +27,7 @@ export class ProcurementController {
   @Post('vendors')
   @Roles('Tenant Admin')
   @ApiOperation({ summary: 'Create vendor' })
-  createVendor(@Request() req: any, @Body() body: any) { return this.service.createVendor(req.user.tenantId, body); }
+  createVendor(@Request() req: any, @Body() body: CreateVendorDto) { return this.service.createVendor(req.user.tenantId, body); }
 
   @Patch('vendors/:id')
   @Roles('Tenant Admin')
@@ -50,7 +53,7 @@ export class ProcurementController {
   @Post('contracts')
   @Roles('Tenant Admin')
   @ApiOperation({ summary: 'Create contract' })
-  createContract(@Request() req: any, @Body() body: any) { return this.service.createContract(req.user.tenantId, body); }
+  createContract(@Request() req: any, @Body() body: CreateContractDto) { return this.service.createContract(req.user.tenantId, body); }
 
   @Patch('contracts/:id')
   @Roles('Tenant Admin')
@@ -81,7 +84,7 @@ export class ProcurementController {
   @Post('purchase-orders')
   @Roles('Tenant Admin')
   @ApiOperation({ summary: 'Create purchase order with items' })
-  createPO(@Request() req: any, @Body() body: any) { return this.service.createPurchaseOrder(req.user.tenantId, req.user.sub, body); }
+  createPO(@Request() req: any, @Body() body: CreatePurchaseOrderDto) { return this.service.createPurchaseOrder(req.user.tenantId, req.user.sub, body); }
 
   @Post('purchase-orders/:id/approve')
   @Roles('Tenant Admin')

@@ -169,9 +169,11 @@ export class SnmpScanner {
         const lldpNeighborsMap: Map<string, SnmpNeighbor> = new Map();
         const cdpNeighborsMap: Map<string, SnmpNeighbor> = new Map();
         const lldpLocPortMap: Map<number, string> = new Map();
+        const cpuLoadValues: number[] = [];
 
         const walkOids = [
           OID.ifDescr, OID.ifMtu, OID.ifSpeed, OID.ifPhysAddress, OID.ifAdminStatus, OID.ifOperStatus, OID.ifInOctets, OID.ifOutOctets,
+          OID.hrProcessorLoad,
           OID.lldpRemChassisId, OID.lldpRemPortId, OID.lldpRemPortDesc, OID.lldpRemSysName, OID.lldpRemSysDesc, OID.lldpRemManAddrTable, OID.lldpLocPortDesc,
           OID.cdpCacheAddress, OID.cdpCacheVersion, OID.cdpCacheDeviceId, OID.cdpCacheDevicePort, OID.cdpCacheSysName
         ];
@@ -244,6 +246,11 @@ export class SnmpScanner {
                 const localPortNum = parseInt(parts.pop()!);
                 lldpLocPortMap.set(localPortNum, strVal);
 
+              } else if (vb.oid.startsWith(OID.hrProcessorLoad)) {
+                // HOST-RESOURCES-MIB: per-CPU load percentage
+                const loadVal = parseInt(strVal);
+                if (!isNaN(loadVal)) cpuLoadValues.push(loadVal);
+
               } else if (vb.oid.startsWith('1.3.6.1.4.1.9.9.23.1.2.1.1.')) {
                 // CDP remote table mapping
                 const localIfIndex = parseInt(parts[14]);
@@ -291,6 +298,11 @@ export class SnmpScanner {
             done++;
             if (done >= walkOids.length) {
               result.interfaces = Array.from(ifaces.values()) as SnmpInterface[];
+
+              // Average per-CPU load into a single cpuLoad value
+              if (cpuLoadValues.length > 0) {
+                result.cpuLoad = Math.round(cpuLoadValues.reduce((a, b) => a + b, 0) / cpuLoadValues.length);
+              }
 
               // Resolve interface descriptions for LLDP neighbors
               result.lldpNeighbors = Array.from(lldpNeighborsMap.values()).map(n => {

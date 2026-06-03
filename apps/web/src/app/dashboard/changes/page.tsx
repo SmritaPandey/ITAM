@@ -3,7 +3,7 @@ import { useState, useEffect, useCallback } from "react";
 import {
   GitBranch, Plus, RefreshCw, Filter, Calendar, Clock, CheckCircle2,
   AlertTriangle, XCircle, ArrowRight, RotateCcw, Loader2, X,
-  ChevronRight, Send, ShieldCheck, Zap, Eye, FileText,
+  ChevronRight, Send, ShieldCheck, Zap, Eye, FileText, Trash2,
 } from "lucide-react";
 import { apiFetch } from "@/lib/api";
 
@@ -47,6 +47,11 @@ export default function ChangesPage() {
   const [selected, setSelected] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+
+  const handleDelete = async (id: string) => {
+    if (!confirm("Delete this change request? This cannot be undone.")) return;
+    try { await apiFetch(`/changes/${id}`, { method: "DELETE" }); setSelected(null); load(); } catch { alert("Failed to delete."); }
+  };
 
   const load = useCallback(async () => {
     setLoading(true);

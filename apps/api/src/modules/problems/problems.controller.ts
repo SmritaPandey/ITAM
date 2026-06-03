@@ -1,9 +1,10 @@
-import { Controller, Get, Post, Patch, Body, Param, Query, UseGuards, Request } from '@nestjs/common';
-import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
+import { Controller, Get, Post, Patch, Delete, Body, Param, Query, UseGuards, Request, ParseIntPipe, DefaultValuePipe } from '@nestjs/common';
+import { ApiTags, ApiBearerAuth, ApiOperation, ApiQuery } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { ProblemsService } from './problems.service';
+import { CreateProblemDto } from './dto/create-problem.dto';
 import { ModuleGuard } from '../../common/guards/module.guard';
 import { RequireModule } from '../../common/decorators/require-module.decorator';
 
@@ -18,7 +19,17 @@ export class ProblemsController {
   @Get()
   @Roles('Tenant Admin', 'IT Admin')
   @ApiOperation({ summary: 'List problems' })
-  list(@Request() req: any, @Query('status') status?: string) { return this.service.list(req.user.tenantId, status); }
+  @ApiQuery({ name: 'page', required: false, type: Number })
+  @ApiQuery({ name: 'limit', required: false, type: Number })
+  @ApiQuery({ name: 'status', required: false })
+  list(
+    @Request() req: any,
+    @Query('status') status?: string,
+    @Query('page', new DefaultValuePipe(1), ParseIntPipe) page?: number,
+    @Query('limit', new DefaultValuePipe(50), ParseIntPipe) limit?: number,
+  ) {
+    return this.service.list(req.user.tenantId, status, page, limit);
+  }
 
   @Get('stats')
   @Roles('Tenant Admin', 'IT Admin')
@@ -38,7 +49,7 @@ export class ProblemsController {
   @Post()
   @Roles('Tenant Admin')
   @ApiOperation({ summary: 'Create problem record' })
-  create(@Request() req: any, @Body() body: any) { return this.service.create(req.user.tenantId, body); }
+  create(@Request() req: any, @Body() body: CreateProblemDto) { return this.service.create(req.user.tenantId, body); }
 
   @Patch(':id')
   @Roles('Tenant Admin')
@@ -65,4 +76,9 @@ export class ProblemsController {
   promoteChange(@Param('id') id: string, @Request() req: any, @Body() body: any) {
     return this.service.promoteToChangeRequest(id, req.user.tenantId, req.user.sub, body);
   }
+
+  @Delete(':id')
+  @Roles('Tenant Admin')
+  @ApiOperation({ summary: 'Delete a problem record' })
+  remove(@Param('id') id: string, @Request() req: any) { return this.service.delete(id, req.user.tenantId); }
 }

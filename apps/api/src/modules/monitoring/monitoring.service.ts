@@ -1,8 +1,9 @@
-import { Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException, Optional } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { PrismaService } from '../../common/database/prisma.service';
 import { EventBusService } from '../../common/events/event-bus.service';
 import { NmapScanner } from '../../common/scanners/nmap.scanner';
+import { SnmpTrapReceiverService } from './snmp-trap-receiver.service';
 import { exec } from 'child_process';
 import { promisify } from 'util';
 import * as os from 'os';
@@ -24,6 +25,7 @@ export class MonitoringService {
     private prisma: PrismaService,
     private eventBus: EventBusService,
     private topologyService: TopologyService,
+    @Optional() private trapReceiver?: SnmpTrapReceiverService,
   ) {}
 
   // ─── Real ICMP Ping ──────────────────────────────────────────────
@@ -34,7 +36,8 @@ export class MonitoringService {
       const { stdout } = await execAsync(cmd, { timeout: 5000 });
       const match = stdout.match(/time[=<]([\d.]+)/);
       return { alive: true, latency: match ? parseFloat(match[1]) : undefined };
-    } catch {
+    } catch (err: any) {
+      this.logger.debug(`Ping failed for ${ip}: ${err.message || 'unknown error'}`);
       return { alive: false };
     }
   }
@@ -332,37 +335,57 @@ export class MonitoringService {
       include: { assetType: true },
     });
 
-    let created = 0;
+    // Batch-fetch existing monitored IPs to avoid N+1 lookups
+    const existingDevices = await this.prisma.monitoredDevice.findMany({
+      where: { tenantId, type: 'NETWORK_DEVICE', ipAddress: { not: null } },
+      select: { ipAddress: true },
+    });
+    const existingIPs = new Set(existingDevices.map(d => d.ipAddress));
+
     let skipped = 0;
+    const candidates: { asset: typeof networkAssets[number]; isNetworkDevice: boolean }[] = [];
 
     for (const asset of networkAssets) {
       const typeName = asset.assetType?.name?.toLowerCase() || '';
       const isNetworkDevice = ['switch', 'router', 'firewall', 'access point', 'network', 'gateway', 'load balancer'].some(t => typeName.includes(t));
 
       if (!isNetworkDevice && !asset.ipAddress) { skipped++; continue; }
+      if (existingIPs.has(asset.ipAddress)) { skipped++; continue; }
 
-      const existing = await this.prisma.monitoredDevice.findFirst({
-        where: { tenantId, ipAddress: asset.ipAddress!, type: 'NETWORK_DEVICE' },
-      });
+      candidates.push({ asset, isNetworkDevice });
+    }
 
-      if (existing) { skipped++; continue; }
+    // Batch-ping all candidates with concurrency limit of 20
+    const newDevices: any[] = [];
+    const batchSize = 20;
+    for (let i = 0; i < candidates.length; i += batchSize) {
+      const batch = candidates.slice(i, i + batchSize);
+      const pingResults = await Promise.allSettled(
+        batch.map(async ({ asset, isNetworkDevice }) => {
+          const typeName = asset.assetType?.name?.toLowerCase() || '';
+          const ping = await this.pingHost(asset.ipAddress!);
+          return {
+            tenantId,
+            type: 'NETWORK_DEVICE' as const,
+            name: asset.name || asset.hostname || asset.ipAddress!,
+            ipAddress: asset.ipAddress,
+            status: ping.alive ? 'ONLINE' : 'OFFLINE',
+            lastSeen: ping.alive ? new Date() : null,
+            config: { deviceType: isNetworkDevice ? typeName : 'endpoint', sourceAssetId: asset.id },
+            metrics: { latency: ping.latency || null },
+          };
+        }),
+      );
+      for (const r of pingResults) {
+        if (r.status === 'fulfilled') newDevices.push(r.value);
+      }
+    }
 
-      // Ping to check if alive
-      const ping = await this.pingHost(asset.ipAddress!);
-
-      await this.prisma.monitoredDevice.create({
-        data: {
-          tenantId,
-          type: 'NETWORK_DEVICE',
-          name: asset.name || asset.hostname || asset.ipAddress!,
-          ipAddress: asset.ipAddress,
-          status: ping.alive ? 'ONLINE' : 'OFFLINE',
-          lastSeen: ping.alive ? new Date() : null,
-          config: { deviceType: isNetworkDevice ? typeName : 'endpoint', sourceAssetId: asset.id },
-          metrics: { latency: ping.latency || null },
-        },
-      });
-      created++;
+    // Batch-insert all new devices at once
+    let created = 0;
+    if (newDevices.length > 0) {
+      const result = await this.prisma.monitoredDevice.createMany({ data: newDevices });
+      created = result.count;
     }
 
     return { created, skipped, total: networkAssets.length };
@@ -372,47 +395,77 @@ export class MonitoringService {
   @Cron(CronExpression.EVERY_5_MINUTES)
   async scheduledHealthCheck() {
     try {
-      const tenants = await this.prisma.tenant.findMany({
-        where: { status: 'ACTIVE' },
-        select: { id: true },
+      // Batch-fetch all network devices across all active tenants in one query
+      const allDevices = await this.prisma.monitoredDevice.findMany({
+        where: {
+          type: 'NETWORK_DEVICE',
+          ipAddress: { not: null },
+          tenant: { status: 'ACTIVE' },
+        },
+        select: { id: true, ipAddress: true, status: true, name: true, tenantId: true, metrics: true },
       });
 
-      for (const tenant of tenants) {
-        const devices = await this.prisma.monitoredDevice.findMany({
-          where: { tenantId: tenant.id, type: 'NETWORK_DEVICE', ipAddress: { not: null } },
-          select: { id: true, ipAddress: true, status: true, name: true },
-        });
+      if (allDevices.length === 0) return;
 
-        if (devices.length === 0) continue;
+      // Batch-ping with concurrency limit of 20
+      const pingResults: { device: typeof allDevices[number]; ping: { alive: boolean; latency?: number } }[] = [];
+      const batchSize = 20;
 
-        // Batch ping all devices
+      for (let i = 0; i < allDevices.length; i += batchSize) {
+        const batch = allDevices.slice(i, i + batchSize);
         const results = await Promise.allSettled(
-          devices.map(async (d) => {
+          batch.map(async (d) => {
             const ping = await this.pingHost(d.ipAddress!);
-            const newStatus = ping.alive ? 'ONLINE' : 'OFFLINE';
-            if (d.status !== newStatus) {
-              await this.prisma.monitoredDevice.update({
-                where: { id: d.id },
-                data: {
-                  status: newStatus,
-                  lastSeen: ping.alive ? new Date() : undefined,
-                  metrics: { latency: ping.latency || null, lastHealthCheck: new Date().toISOString() },
-                },
-              });
-              if (newStatus === 'OFFLINE') {
-                this.eventBus.emitMonitoringEvent(tenant.id, 'device_down', { deviceId: d.id, name: d.name });
-              }
-            } else if (ping.alive) {
-              await this.prisma.monitoredDevice.update({
-                where: { id: d.id },
-                data: { lastSeen: new Date(), metrics: { latency: ping.latency, lastHealthCheck: new Date().toISOString() } },
-              });
-            }
+            return { device: d, ping };
           }),
         );
-
-        this.logger.debug(`Health check: ${devices.length} devices checked for tenant ${tenant.id}`);
+        for (const r of results) {
+          if (r.status === 'fulfilled') pingResults.push(r.value);
+        }
       }
+
+      // Build update operations and collect events to emit
+      const updateOps: any[] = [];
+      const events: { tenantId: string; event: string; data: any }[] = [];
+
+      for (const { device, ping } of pingResults) {
+        const newStatus = ping.alive ? 'ONLINE' : 'OFFLINE';
+        const existingMetrics = (device.metrics as any) || {};
+        if (device.status !== newStatus) {
+          updateOps.push(
+            this.prisma.monitoredDevice.update({
+              where: { id: device.id },
+              data: {
+                status: newStatus,
+                lastSeen: ping.alive ? new Date() : undefined,
+                metrics: { ...existingMetrics, latency: ping.latency || null, lastHealthCheck: new Date().toISOString() },
+              },
+            }),
+          );
+          if (newStatus === 'OFFLINE') {
+            events.push({ tenantId: device.tenantId, event: 'device_down', data: { deviceId: device.id, name: device.name } });
+          }
+        } else if (ping.alive) {
+          updateOps.push(
+            this.prisma.monitoredDevice.update({
+              where: { id: device.id },
+              data: { lastSeen: new Date(), metrics: { ...existingMetrics, latency: ping.latency, lastHealthCheck: new Date().toISOString() } },
+            }),
+          );
+        }
+      }
+
+      // Batch-update all device statuses in a single transaction
+      if (updateOps.length > 0) {
+        await this.prisma.$transaction(updateOps);
+      }
+
+      // Emit events after transaction completes
+      for (const evt of events) {
+        this.eventBus.emitMonitoringEvent(evt.tenantId, evt.event, evt.data);
+      }
+
+      this.logger.debug(`Health check: ${allDevices.length} devices checked across all tenants`);
     } catch (err: any) {
       this.logger.error(`Scheduled health check error: ${err.message}`);
     }
@@ -506,15 +559,15 @@ export class MonitoringService {
 
     const config = device.config as any || {};
 
-    // If stored interfaces exist, return them
+    // If stored SNMP interface data exists, return it (with port scan data separate)
     if (config.interfaces && Array.isArray(config.interfaces) && config.interfaces.length > 0) {
-      return { deviceId: id, deviceName: device.name, interfaces: config.interfaces, source: 'stored' };
+      return { deviceId: id, deviceName: device.name, interfaces: config.interfaces, openPorts: [], source: 'stored' };
     }
 
-    // Otherwise, run a real port scan to build interface data
+    // No real SNMP interface data — run a port scan and return results in 'openPorts', NOT 'interfaces'
     if (device.ipAddress) {
       const ports = [22, 23, 80, 161, 443, 445, 3389, 5432, 8080, 8443, 9100];
-      const interfaces: any[] = [];
+      const openPorts: any[] = [];
 
       const results = await Promise.allSettled(
         ports.map(async (port) => {
@@ -526,46 +579,33 @@ export class MonitoringService {
       for (const r of results) {
         if (r.status === 'fulfilled') {
           const { port, open, service } = r.value;
-          interfaces.push({
-            name: `Port ${port} (${service})`,
-            status: open ? 'up' : 'down',
-            speed: 'N/A',
-            vlan: null,
-            inBytes: 0,
-            outBytes: 0,
+          openPorts.push({
+            port,
+            service,
+            status: open ? 'open' : 'closed',
           });
         }
       }
 
-      // Cache the results
-      await this.prisma.monitoredDevice.update({
-        where: { id },
-        data: { config: { ...config, interfaces, lastInterfaceScan: new Date().toISOString() } },
-      });
-
-      return { deviceId: id, deviceName: device.name, interfaces, source: 'live_scan' };
+      return { deviceId: id, deviceName: device.name, interfaces: [], openPorts, source: 'port_scan' };
     }
 
-    return { deviceId: id, deviceName: device.name, interfaces: [], source: 'none' };
+    return { deviceId: id, deviceName: device.name, interfaces: [], openPorts: [], source: 'none' };
   }
 
   async getTraps(tenantId: string) {
-    const devices = await this.prisma.monitoredDevice.findMany({
-      where: { tenantId, type: 'NETWORK_DEVICE' },
-      orderBy: { lastSeen: 'desc' },
-      take: 10,
-    });
-    const traps = devices.flatMap(d => {
-      const events: any[] = [];
-      if (d.status === 'OFFLINE') {
-        events.push({ deviceId: d.id, deviceName: d.name, oid: '1.3.6.1.6.3.1.1.5.3', type: 'linkDown', severity: 'critical', timestamp: d.lastSeen || new Date(), message: `Interface down on ${d.name}` });
-      }
-      if (d.status === 'WARNING') {
-        events.push({ deviceId: d.id, deviceName: d.name, oid: '1.3.6.1.4.1.9.9.43.2.0.1', type: 'configChange', severity: 'warning', timestamp: d.lastSeen || new Date(), message: `Configuration change on ${d.name}` });
-      }
-      return events;
-    });
-    return { traps, total: traps.length };
+    // Return real SNMP traps from the trap receiver if available
+    if (this.trapReceiver) {
+      const traps = await this.trapReceiver.getRecentTraps(tenantId);
+      return { traps, total: traps.length };
+    }
+
+    // Trap receiver is not enabled — return empty with informational message
+    return {
+      traps: [],
+      total: 0,
+      message: 'SNMP Trap Receiver is disabled. Enable via ENABLE_SNMP_TRAPS=true environment variable.',
+    };
   }
 
   // ─── Virtual Machines (VDI) ─────────────────────────────────────
@@ -599,12 +639,16 @@ export class MonitoringService {
 
   async getVdiSessions(tenantId: string) {
     const runningVms = await this.prisma.monitoredDevice.findMany({ where: { tenantId, type: 'VIRTUAL_MACHINE', status: 'ONLINE' } });
-    const sessions = runningVms.map(vm => ({
+    // Only include VMs that have an assigned user — unassigned VMs are not active sessions
+    const assignedVms = runningVms.filter(vm => (vm.config as any)?.assignedUser);
+    const sessions = assignedVms.map(vm => ({
       vmId: vm.id, vmName: vm.name,
-      user: (vm.config as any)?.assignedUser || 'Unassigned',
-      protocol: 'RDP', sessionState: 'Active',
+      user: (vm.config as any).assignedUser,
+      protocol: (vm.config as any)?.protocol || 'Unknown',
+      sessionState: 'Active',
       connectedSince: vm.lastSeen || new Date(),
       cpu: (vm.metrics as any)?.cpu || 0, ram: (vm.metrics as any)?.ram || 0,
+      note: 'Session data inferred from VM assignment. Connect hypervisor for real-time session tracking.',
     }));
     return { sessions, totalActive: sessions.length };
   }
@@ -649,14 +693,17 @@ export class MonitoringService {
 
   async updateDevice(id: string, tenantId: string, body: any) {
     const existing = await this.prisma.monitoredDevice.findFirst({ where: { id, tenantId } });
-    const device = await this.prisma.monitoredDevice.update({ where: { id }, data: body });
-    if (existing && existing.status !== 'OFFLINE' && device.status === 'OFFLINE') {
+    if (!existing) throw new NotFoundException('Device not found');
+    const device = await this.prisma.monitoredDevice.update({ where: { id: existing.id }, data: body });
+    if (existing.status !== 'OFFLINE' && device.status === 'OFFLINE') {
       this.eventBus.emitMonitoringEvent(tenantId, 'device_down', { deviceId: device.id, name: device.name, type: device.type });
     }
     return device;
   }
 
-  async deleteDevice(id: string) {
+  async deleteDevice(id: string, tenantId: string) {
+    const device = await this.prisma.monitoredDevice.findFirst({ where: { id, tenantId } });
+    if (!device) throw new NotFoundException('Device not found');
     return this.prisma.monitoredDevice.delete({ where: { id } });
   }
 

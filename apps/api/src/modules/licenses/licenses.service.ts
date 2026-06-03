@@ -60,4 +60,11 @@ export class LicensesService {
       orderBy: { assignedAt: 'desc' },
     });
   }
+
+  async delete(id: string, tenantId: string) {
+    await this.findById(id, tenantId);
+    // Cascade: delete related license assignments first
+    await this.prisma.licenseAssignment.deleteMany({ where: { licenseId: id } });
+    return this.prisma.license.delete({ where: { id } });
+  }
 }

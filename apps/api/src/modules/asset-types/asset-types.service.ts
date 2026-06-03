@@ -18,10 +18,16 @@ export class AssetTypesService {
     });
   }
 
-  async update(id: string, body: any) {
+  async update(id: string, tenantId: string, body: any) {
     return this.prisma.assetType.update({
-      where: { id },
+      where: { id, tenantId },
       data: body,
+    });
+  }
+
+  async delete(id: string, tenantId: string) {
+    return this.prisma.assetType.delete({
+      where: { id, tenantId },
     });
   }
 }

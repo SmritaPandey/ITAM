@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 import {
   Users, Shield, UserCheck, UserX, Search, Plus, Clock,
   Mail, MapPin, Building, Key, Eye, MoreVertical, Loader2, RefreshCw,
-  UserPlus, Power, X, Check
+  UserPlus, Power, X, Check, ChevronLeft, ChevronRight
 } from "lucide-react";
 import { apiFetch } from "@/lib/api";
 
@@ -19,6 +19,11 @@ export default function UsersPage() {
   const [selectedUser, setSelectedUser] = useState<any>(null);
   const [showInvite, setShowInvite] = useState(false);
   const [form, setForm] = useState({ firstName: "", lastName: "", email: "", password: "Welcome@123", roleId: "" });
+  const [page, setPage] = useState(1);
+  const pageSize = 12;
+  const [showChangePw, setShowChangePw] = useState(false);
+  const [newPassword, setNewPassword] = useState("");
+  const [changingPw, setChangingPw] = useState(false);
 
   async function refresh() {
     try {
@@ -32,9 +37,11 @@ export default function UsersPage() {
 
   const data = users.data || [];
   const active = data.filter((u: any) => u.status === "ACTIVE").length;
-  const filtered = data.filter((u: any) =>
+  const allFiltered = data.filter((u: any) =>
     !search || `${u.firstName} ${u.lastName} ${u.email}`.toLowerCase().includes(search.toLowerCase())
   );
+  const totalPages = Math.max(1, Math.ceil(allFiltered.length / pageSize));
+  const filtered = allFiltered.slice((page - 1) * pageSize, page * pageSize);
 
   async function toggleUserStatus(userId: string) {
     await apiFetch(`/users/${userId}/toggle-status`, { method: "POST" });
@@ -48,6 +55,24 @@ export default function UsersPage() {
     setShowInvite(false);
     setForm({ firstName: "", lastName: "", email: "", password: "Welcome@123", roleId: "" });
     refresh();
+  }
+
+  async function handleChangePassword() {
+    if (!selectedUser || !newPassword.trim()) return;
+    setChangingPw(true);
+    try {
+      await apiFetch(`/users/${selectedUser.id}/change-password`, {
+        method: "POST",
+        body: JSON.stringify({ password: newPassword }),
+      });
+      setShowChangePw(false);
+      setNewPassword("");
+      alert("Password changed successfully.");
+    } catch {
+      alert("Failed to change password.");
+    } finally {
+      setChangingPw(false);
+    }
   }
 
   function getAvatarGradient(roleName: string) {
@@ -281,6 +306,19 @@ export default function UsersPage() {
         )}
       </div>
 
+      {/* Pagination Controls */}
+      {totalPages > 1 && (
+        <div style={{ display: "flex", justifyContent: "center", alignItems: "center", gap: 12, marginTop: 24 }}>
+          <button className="btn btn-secondary" style={{ padding: "6px 12px", borderRadius: 8 }} disabled={page <= 1} onClick={() => setPage(p => Math.max(1, p - 1))}>
+            <ChevronLeft size={16} />
+          </button>
+          <span style={{ fontSize: 13, color: "var(--text-secondary)", fontWeight: 600 }}>Page {page} of {totalPages}</span>
+          <button className="btn btn-secondary" style={{ padding: "6px 12px", borderRadius: 8 }} disabled={page >= totalPages} onClick={() => setPage(p => Math.min(totalPages, p + 1))}>
+            <ChevronRight size={16} />
+          </button>
+        </div>
+      )}
+
       {/* Premium Detail Drawer Slide-In */}
       {selectedUser && (() => {
         const gradient = getAvatarGradient(selectedUser.role?.name);
@@ -395,6 +433,17 @@ export default function UsersPage() {
                   <Power size={14} />
                   {activeStatus ? "Suspend Account Access" : "Re-activate User Access"}
                 </button>
+                <button style={{
+                  width: "100%", padding: "10px 16px", borderRadius: 10, fontSize: 13, fontWeight: 700,
+                  display: "flex", alignItems: "center", justifyContent: "center", gap: 8, cursor: "pointer",
+                  background: "rgba(139, 92, 246, 0.1)",
+                  border: "1px solid rgba(139, 92, 246, 0.3)",
+                  color: "#a78bfa", transition: "all 0.2s", marginTop: 8,
+                }}
+                  onClick={() => { setShowChangePw(true); setNewPassword(""); }}>
+                  <Key size={14} />
+                  Change Password
+                </button>
               </div>
             </div>
             
@@ -418,6 +467,48 @@ export default function UsersPage() {
           </>
         );
       })()}
+
+      {/* Change Password Modal */}
+      {showChangePw && selectedUser && (
+        <>
+          <div onClick={() => setShowChangePw(false)} style={{
+            position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", zIndex: 1100,
+            backdropFilter: "blur(8px)",
+          }} />
+          <div style={{
+            position: "fixed", top: "50%", left: "50%", transform: "translate(-50%, -50%)",
+            width: "min(420px, 90vw)", background: "linear-gradient(135deg, #111827 0%, #0c0f1d 100%)",
+            border: "1px solid var(--border-primary)", borderRadius: 18,
+            boxShadow: "0 24px 80px rgba(0,0,0,0.6)", zIndex: 1101, overflow: "hidden",
+          }}>
+            <div style={{ padding: "18px 24px", borderBottom: "1px solid var(--border-primary)", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <h2 style={{ fontSize: 16, fontWeight: 800, margin: 0, color: "var(--text-primary)" }}>Change Password</h2>
+              <button onClick={() => setShowChangePw(false)} style={{
+                background: "var(--bg-elevated)", border: "1px solid var(--border-primary)",
+                borderRadius: 8, width: 28, height: 28, display: "flex", alignItems: "center", justifyContent: "center",
+                color: "var(--text-secondary)", cursor: "pointer"
+              }}><X size={15} /></button>
+            </div>
+            <div style={{ padding: 24, display: "grid", gap: 14 }}>
+              <p style={{ fontSize: 13, color: "var(--text-secondary)", margin: 0 }}>
+                Set a new password for <strong style={{ color: "var(--text-primary)" }}>{selectedUser.firstName} {selectedUser.lastName}</strong>
+              </p>
+              <div>
+                <label style={{ fontSize: 12, fontWeight: 700, color: "var(--text-secondary)", display: "block", marginBottom: 6 }}>New Password *</label>
+                <input type="password" value={newPassword} onChange={e => setNewPassword(e.target.value)} placeholder="Enter new password"
+                  style={{ width: "100%", padding: "10px 14px", borderRadius: 10, background: "var(--bg-input)", border: "1px solid var(--border-primary)", color: "var(--text-primary)", fontSize: 13, outline: "none" }} />
+              </div>
+              <div style={{ display: "flex", gap: 10, justifyContent: "flex-end", marginTop: 8 }}>
+                <button onClick={() => setShowChangePw(false)} className="btn btn-secondary" style={{ borderRadius: 10, fontWeight: 600 }}>Cancel</button>
+                <button onClick={handleChangePassword} className="btn btn-primary" disabled={changingPw || !newPassword.trim()}
+                  style={{ display: "flex", alignItems: "center", gap: 8, borderRadius: 10, fontWeight: 600 }}>
+                  {changingPw ? <><Loader2 size={14} style={{ animation: "spin 1s linear infinite" }} /> Saving...</> : <><Key size={14} /> Update Password</>}
+                </button>
+              </div>
+            </div>
+          </div>
+        </>
+      )}
 
       <style>{`
         .team-matrix-card:hover {

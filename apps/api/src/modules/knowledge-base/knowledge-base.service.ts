@@ -73,4 +73,10 @@ export class KnowledgeBaseService {
       data: { helpfulCount: { increment: 1 } },
     });
   }
+
+  async delete(id: string, tenantId: string) {
+    const existing = await this.prisma.knowledgeArticle.findFirst({ where: { id, tenantId } });
+    if (!existing) throw new NotFoundException('Article not found');
+    return this.prisma.knowledgeArticle.delete({ where: { id } });
+  }
 }

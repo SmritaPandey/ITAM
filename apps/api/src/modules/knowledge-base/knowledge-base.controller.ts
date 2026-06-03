@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Patch, Body, Param, Query, UseGuards, Request } from '@nestjs/common';
+import { Controller, Get, Post, Patch, Delete, Body, Param, Query, UseGuards, Request } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth, ApiOperation, ApiQuery } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
@@ -49,5 +49,12 @@ export class KnowledgeBaseController {
   @ApiOperation({ summary: 'Mark article as helpful' })
   async markHelpful(@Request() req: any, @Param('id') id: string) {
     return this.kbService.markHelpful(id, req.user.tenantId);
+  }
+
+  @Delete(':id')
+  @Roles('Tenant Admin', 'IT Admin')
+  @ApiOperation({ summary: 'Delete knowledge base article' })
+  async remove(@Request() req: any, @Param('id') id: string) {
+    return this.kbService.delete(id, req.user.tenantId);
   }
 }

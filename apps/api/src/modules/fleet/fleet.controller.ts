@@ -56,4 +56,14 @@ export class FleetController {
   async getAlerts(@Request() req: any) {
     return this.service.getAlerts(req.user.tenantId);
   }
+
+  @Post('telemetry')
+  @Roles('Tenant Admin', 'Fleet Manager')
+  @ApiOperation({ summary: 'Ingest GPS telemetry data for a vehicle' })
+  async ingestTelemetry(@Request() req: any, @Body() body: {
+    assetId: string; latitude: number; longitude: number;
+    speed?: number; fuelLevel?: number;
+  }) {
+    return this.service.ingestTelemetry(req.user.tenantId, body);
+  }
 }

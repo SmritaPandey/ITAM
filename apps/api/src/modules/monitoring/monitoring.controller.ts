@@ -9,6 +9,7 @@ import { SnmpTrapReceiverService } from './snmp-trap-receiver.service';
 import { OnvifDiscoveryService } from './onvif-discovery.service';
 import { VdiHypervisorService } from './vdi-hypervisor.service';
 import { ModuleGuard } from '../../common/guards/module.guard';
+import { CreateDeviceDto } from './dto/create-device.dto';
 import { RequireModule } from '../../common/decorators/require-module.decorator';
 
 @ApiTags('monitoring')
@@ -266,7 +267,7 @@ export class MonitoringController {
   @Post('devices')
   @Roles('Tenant Admin')
   @ApiOperation({ summary: 'Create a monitored device' })
-  async create(@Request() req: any, @Body() body: any) {
+  async create(@Request() req: any, @Body() body: CreateDeviceDto) {
     return this.service.createDevice(req.user.tenantId, body);
   }
 
@@ -282,8 +283,8 @@ export class MonitoringController {
   @Delete('devices/:id')
   @Roles('Tenant Admin')
   @ApiOperation({ summary: 'Delete a monitored device' })
-  async remove(@Param('id') id: string) {
-    return this.service.deleteDevice(id);
+  async remove(@Request() req: any, @Param('id') id: string) {
+    return this.service.deleteDevice(id, req.user.tenantId);
   }
 }
 

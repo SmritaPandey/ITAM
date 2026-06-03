@@ -11,8 +11,17 @@ export class TicketsService {
   ) {}
 
   private async generateTicketNumber(tenantId: string): Promise<string> {
-    const count = await this.prisma.ticket.count({ where: { tenantId } });
-    return `TKT-${String(count + 1).padStart(6, '0')}`;
+    // Use last-created ticket's number instead of count to reduce race window
+    const last = await this.prisma.ticket.findMany({
+      where: { tenantId },
+      orderBy: { createdAt: 'desc' },
+      take: 1,
+      select: { ticketNumber: true },
+    });
+    const lastNum = last.length > 0
+      ? parseInt(last[0].ticketNumber.replace('TKT-', ''), 10) || 0
+      : 0;
+    return `TKT-${String(lastNum + 1).padStart(6, '0')}`;
   }
 
   async findAll(tenantId: string, filters: {
@@ -76,33 +85,47 @@ export class TicketsService {
     type?: string; category?: string; subject: string;
     description?: string; priority?: string; assetIds?: string[];
   }) {
-    const ticketNumber = await this.generateTicketNumber(tenantId);
+    // Retry loop to handle unique constraint violations from concurrent number generation
+    const MAX_RETRIES = 3;
+    for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
+      try {
+        const ticketNumber = await this.generateTicketNumber(tenantId);
 
-    const ticket = await this.prisma.ticket.create({
-      data: {
-        tenantId,
-        ticketNumber,
-        type: (data.type as any) || 'SERVICE_REQUEST',
-        category: data.category,
-        subject: data.subject,
-        description: data.description,
-        priority: (data.priority as any) || 'MEDIUM',
-        requesterId,
-        ...(data.assetIds?.length && {
-          assets: {
-            create: data.assetIds.map(assetId => ({ assetId })),
+        const ticket = await this.prisma.ticket.create({
+          data: {
+            tenantId,
+            ticketNumber,
+            type: (data.type as any) || 'SERVICE_REQUEST',
+            category: data.category,
+            subject: data.subject,
+            description: data.description,
+            priority: (data.priority as any) || 'MEDIUM',
+            requesterId,
+            ...(data.assetIds?.length && {
+              assets: {
+                create: data.assetIds.map(assetId => ({ assetId })),
+              },
+            }),
           },
-        }),
-      },
-      include: {
-        requester: { select: { id: true, firstName: true, lastName: true } },
-        assets: { include: { asset: { select: { id: true, name: true, assetTag: true } } } },
-      },
-    });
+          include: {
+            requester: { select: { id: true, firstName: true, lastName: true } },
+            assets: { include: { asset: { select: { id: true, name: true, assetTag: true } } } },
+          },
+        });
 
-    this.eventBus.emitTicketEvent(tenantId, 'created', ticket);
+        this.eventBus.emitTicketEvent(tenantId, 'created', ticket);
 
-    return ticket;
+        return ticket;
+      } catch (error: any) {
+        // P2002 is Prisma's unique constraint violation error code
+        if (error?.code === 'P2002' && attempt < MAX_RETRIES - 1) {
+          continue; // Retry with a new number
+        }
+        throw error;
+      }
+    }
+    // This should never be reached due to the throw in the catch block
+    throw new Error('Failed to generate unique ticket number after maximum retries');
   }
 
   async addComment(ticketId: string, tenantId: string, authorId: string, content: string, isInternal = false) {
@@ -167,6 +190,29 @@ export class TicketsService {
       this.prisma.ticket.count({ where: { tenantId, status: { in: ['NEW', 'OPEN', 'IN_PROGRESS'] } } }),
     ]);
     return { total, open: openCount, byStatus, byPriority, byType };
+  }
+
+  async update(id: string, tenantId: string, data: any) {
+    await this.findById(id, tenantId);
+    const updateData: any = { ...data };
+    if (data.status === 'RESOLVED') updateData.resolvedAt = new Date();
+    if (data.status === 'CLOSED') updateData.closedAt = new Date();
+    return this.prisma.ticket.update({
+      where: { id },
+      data: updateData,
+      include: {
+        requester: { select: { id: true, firstName: true, lastName: true } },
+        assignedTo: { select: { id: true, firstName: true, lastName: true } },
+      },
+    });
+  }
+
+  async delete(id: string, tenantId: string) {
+    await this.findById(id, tenantId);
+    // Cascade: delete related comments and asset links first
+    await this.prisma.ticketComment.deleteMany({ where: { ticketId: id } });
+    await this.prisma.ticketAsset.deleteMany({ where: { ticketId: id } });
+    return this.prisma.ticket.delete({ where: { id } });
   }
 }
 

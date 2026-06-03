@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException, ConflictException } from '@nestjs/common';
 import { PrismaService } from '../../common/database/prisma.service';
 import { EventBusService } from '../../common/events/event-bus.service';
 
@@ -32,34 +32,60 @@ export class WorkOrderService {
     return wo;
   }
 
+  private async generateWoNumber(tenantId: string): Promise<string> {
+    // Use last-created work order's number instead of count to reduce race window
+    const last = await this.prisma.workOrder.findMany({
+      where: { tenantId },
+      orderBy: { createdAt: 'desc' },
+      take: 1,
+      select: { workOrderNumber: true },
+    });
+    const lastNum = last.length > 0
+      ? parseInt(last[0].workOrderNumber.replace('WO-', ''), 10) || 0
+      : 0;
+    return `WO-${String(lastNum + 1).padStart(5, '0')}`;
+  }
+
   async create(tenantId: string, userId: string, data: any) {
-    const count = await this.prisma.workOrder.count({ where: { tenantId } });
-    const woNumber = `WO-${String(count + 1).padStart(5, '0')}`;
+    // Retry loop to handle unique constraint violations from concurrent number generation
+    const MAX_RETRIES = 3;
+    for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
+      try {
+        const woNumber = await this.generateWoNumber(tenantId);
 
-    const wo = await this.prisma.workOrder.create({
-      data: {
-        tenantId,
-        workOrderNumber: woNumber,
-        title: data.title,
-        description: data.description,
-        type: data.type || 'MAINTENANCE',
-        priority: data.priority || 'MEDIUM',
-        ticketId: data.ticketId,
-        assetId: data.assetId,
-        assignedToId: data.assignedToId,
-        scheduledStart: data.scheduledStart ? new Date(data.scheduledStart) : null,
-        scheduledEnd: data.scheduledEnd ? new Date(data.scheduledEnd) : null,
-      },
-    });
+        const wo = await this.prisma.workOrder.create({
+          data: {
+            tenantId,
+            workOrderNumber: woNumber,
+            title: data.title,
+            description: data.description,
+            type: data.type || 'MAINTENANCE',
+            priority: data.priority || 'MEDIUM',
+            ticketId: data.ticketId,
+            assetId: data.assetId,
+            assignedToId: data.assignedToId,
+            scheduledStart: data.scheduledStart ? new Date(data.scheduledStart) : null,
+            scheduledEnd: data.scheduledEnd ? new Date(data.scheduledEnd) : null,
+          },
+        });
 
-    this.eventBus.emit('work_order.created', {
-      tenantId,
-      userId,
-      workOrderId: wo.id,
-      woNumber,
-    });
+        this.eventBus.emit('work_order.created', {
+          tenantId,
+          userId,
+          workOrderId: wo.id,
+          woNumber,
+        });
 
-    return wo;
+        return wo;
+      } catch (error: any) {
+        // P2002 is Prisma's unique constraint violation error code
+        if (error?.code === 'P2002' && attempt < MAX_RETRIES - 1) {
+          continue;
+        }
+        throw error;
+      }
+    }
+    throw new Error('Failed to generate unique work order number after maximum retries');
   }
 
   async convertFromTicket(ticketId: string, tenantId: string, userId: string) {
@@ -125,5 +151,17 @@ export class WorkOrderService {
       this.prisma.workOrder.count({ where: { tenantId, status: 'CANCELLED' } }),
     ]);
     return { total, created, assigned, inProgress, completed, verified, cancelled };
+  }
+
+  async delete(id: string, tenantId: string) {
+    await this.findById(id, tenantId);
+    try {
+      return await this.prisma.workOrder.delete({ where: { id } });
+    } catch (error: any) {
+      if (error?.code === 'P2003') {
+        throw new ConflictException('Cannot delete work order — related records exist.');
+      }
+      throw error;
+    }
   }
 }

@@ -38,10 +38,21 @@ tryRegisterOAuth();
     PassportModule,
     JwtModule.registerAsync({
       imports: [ConfigModule],
-      useFactory: async (configService: ConfigService) => ({
-        secret: configService.get<string>('JWT_SECRET') || 'assetcommand-fallback-jwt-secret',
-        signOptions: { expiresIn: (configService.get<string>('JWT_EXPIRATION') || '15m') as any },
-      }),
+      useFactory: async (configService: ConfigService) => {
+        const logger = new Logger('AuthModule');
+        const secret = configService.get<string>('JWT_SECRET');
+        if (!secret) {
+          if (process.env.NODE_ENV === 'production') {
+            logger.error('FATAL: JWT_SECRET environment variable is not set. Refusing to start in production with an insecure fallback.');
+            process.exit(1);
+          }
+          logger.warn('⚠️  WARNING: JWT_SECRET is not set — using insecure fallback. DO NOT run this configuration in production!');
+        }
+        return {
+          secret: secret || 'assetcommand-fallback-jwt-secret',
+          signOptions: { expiresIn: (configService.get<string>('JWT_EXPIRATION') || '15m') as any },
+        };
+      },
       inject: [ConfigService],
     }),
   ],

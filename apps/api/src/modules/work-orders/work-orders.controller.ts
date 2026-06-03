@@ -1,9 +1,10 @@
-import { Controller, Get, Post, Patch, Body, Param, Query, UseGuards, Request } from '@nestjs/common';
+import { Controller, Get, Post, Patch, Delete, Body, Param, Query, UseGuards, Request } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth, ApiOperation, ApiQuery } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { WorkOrderService } from './work-orders.service';
+import { CreateWorkOrderDto } from './dto/create-work-order.dto';
 import { ModuleGuard } from '../../common/guards/module.guard';
 import { RequireModule } from '../../common/decorators/require-module.decorator';
 
@@ -47,7 +48,7 @@ export class WorkOrdersController {
   @Post()
   @Roles('Tenant Admin', 'IT Admin')
   @ApiOperation({ summary: 'Create a new work order' })
-  async create(@Request() req: any, @Body() body: any) {
+  async create(@Request() req: any, @Body() body: CreateWorkOrderDto) {
     return this.service.create(req.user.tenantId, req.user.sub, body);
   }
 
@@ -70,5 +71,12 @@ export class WorkOrdersController {
   @ApiOperation({ summary: 'Transition work order status' })
   async updateStatus(@Request() req: any, @Param('id') id: string, @Body() body: { status: string }) {
     return this.service.updateStatus(id, req.user.tenantId, req.user.sub, body.status);
+  }
+
+  @Delete(':id')
+  @Roles('Tenant Admin', 'IT Admin')
+  @ApiOperation({ summary: 'Delete a work order' })
+  async remove(@Request() req: any, @Param('id') id: string) {
+    return this.service.delete(id, req.user.tenantId);
   }
 }

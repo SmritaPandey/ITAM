@@ -4,6 +4,7 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { ComplianceService } from './compliance.service';
+import { UpdatePolicyDto } from './dto/update-policy.dto';
 import { ModuleGuard } from '../../common/guards/module.guard';
 import { RequireModule } from '../../common/decorators/require-module.decorator';
 
@@ -51,7 +52,7 @@ export class ComplianceController {
   @Patch('policies/:id')
   @Roles('Tenant Admin')
   @ApiOperation({ summary: 'Update an endpoint policy' })
-  async updatePolicy(@Request() req: any, @Param('id') id: string, @Body() body: any) {
+  async updatePolicy(@Request() req: any, @Param('id') id: string, @Body() body: UpdatePolicyDto) {
     return this.complianceService.updatePolicy(id, req.user.tenantId, body);
   }
 

@@ -4,7 +4,7 @@ import {
   ShoppingCart, Plus, Building2, FileText, Package, RefreshCw,
   Filter, Star, DollarSign, AlertTriangle, Calendar, CheckCircle2,
   Clock, Truck, ChevronRight, X, CreditCard, Hash, ArrowRight,
-  Loader2, TrendingUp, ShieldCheck, Trash2,
+  Loader2, TrendingUp, ShieldCheck, Trash2, Search,
 } from "lucide-react";
 import { apiFetch } from "@/lib/api";
 
@@ -36,6 +36,7 @@ export default function ProcurementPage() {
   const [form, setForm] = useState<any>({});
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
   const [poItems, setPoItems] = useState<{ description: string; quantity: number; unitPrice: number }[]>([
     { description: "", quantity: 1, unitPrice: 0 }
   ]);
@@ -89,8 +90,8 @@ export default function ProcurementPage() {
     } catch(e) { alert(String(e)); }
     setSaving(false);
   };
-  const approvePO = async (id: string) => { await apiFetch(`/procurement/purchase-orders/${id}/approve`, { method: "POST" }); load(); };
-  const receivePO = async (id: string) => { await apiFetch(`/procurement/purchase-orders/${id}/receive`, { method: "POST", body: JSON.stringify({}) }); load(); };
+  const approvePO = async (id: string) => { try { await apiFetch(`/procurement/purchase-orders/${id}/approve`, { method: "POST" }); load(); } catch (e) { alert('Failed to approve purchase order'); } };
+  const receivePO = async (id: string) => { try { await apiFetch(`/procurement/purchase-orders/${id}/receive`, { method: "POST", body: JSON.stringify({}) }); load(); } catch (e) { alert('Failed to receive purchase order'); } };
   const closeModal = () => { setShowModal(""); setForm({}); setPoItems([{ description: "", quantity: 1, unitPrice: 0 }]); };
 
   const inputStyle: React.CSSProperties = {
@@ -185,6 +186,15 @@ export default function ProcurementPage() {
           {/* ─── Vendors ─── */}
           {tab === "Vendors" && (
             <div className="card" style={{ padding: 0, overflow: "hidden" }}>
+              <div style={{ padding: "12px 16px", borderBottom: "1px solid var(--border-primary)", display: "flex", alignItems: "center", gap: 8 }}>
+                <Search size={15} style={{ color: "var(--text-tertiary)", flexShrink: 0 }} />
+                <input
+                  value={searchQuery}
+                  onChange={e => setSearchQuery(e.target.value)}
+                  placeholder="Search by vendor name, email, or contact person…"
+                  style={{ width: "100%", background: "none", border: "none", color: "var(--text-primary)", fontSize: 13, fontFamily: "inherit", outline: "none" }}
+                />
+              </div>
               <table className="data-table">
                 <thead>
                   <tr>
@@ -193,7 +203,7 @@ export default function ProcurementPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {vendors.map(v => (
+                  {vendors.filter(v => { const q = searchQuery.toLowerCase(); return !q || v.name?.toLowerCase().includes(q) || v.email?.toLowerCase().includes(q) || v.contactPerson?.toLowerCase().includes(q); }).map(v => (
                     <tr key={v.id}>
                       <td>
                         <div style={{ fontWeight: 600, color: "var(--text-primary)" }}>{v.name}</div>
@@ -227,6 +237,15 @@ export default function ProcurementPage() {
           {/* ─── Contracts ─── */}
           {tab === "Contracts" && (
             <div className="card" style={{ padding: 0, overflow: "hidden" }}>
+              <div style={{ padding: "12px 16px", borderBottom: "1px solid var(--border-primary)", display: "flex", alignItems: "center", gap: 8 }}>
+                <Search size={15} style={{ color: "var(--text-tertiary)", flexShrink: 0 }} />
+                <input
+                  value={searchQuery}
+                  onChange={e => setSearchQuery(e.target.value)}
+                  placeholder="Search by contract title or vendor name…"
+                  style={{ width: "100%", background: "none", border: "none", color: "var(--text-primary)", fontSize: 13, fontFamily: "inherit", outline: "none" }}
+                />
+              </div>
               <table className="data-table">
                 <thead>
                   <tr>
@@ -234,7 +253,7 @@ export default function ProcurementPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {contracts.map(c => (
+                  {contracts.filter(c => { const q = searchQuery.toLowerCase(); return !q || c.title?.toLowerCase().includes(q) || c.vendor?.name?.toLowerCase().includes(q); }).map(c => (
                     <tr key={c.id}>
                       <td style={{ fontWeight: 600, color: "var(--text-primary)" }}>{c.title}</td>
                       <td style={{ fontSize: 12 }}>{c.vendor?.name || "—"}</td>
@@ -266,6 +285,15 @@ export default function ProcurementPage() {
           {/* ─── Purchase Orders ─── */}
           {tab === "Purchase Orders" && (
             <div className="card" style={{ padding: 0, overflow: "hidden" }}>
+              <div style={{ padding: "12px 16px", borderBottom: "1px solid var(--border-primary)", display: "flex", alignItems: "center", gap: 8 }}>
+                <Search size={15} style={{ color: "var(--text-tertiary)", flexShrink: 0 }} />
+                <input
+                  value={searchQuery}
+                  onChange={e => setSearchQuery(e.target.value)}
+                  placeholder="Search by PO number or vendor name…"
+                  style={{ width: "100%", background: "none", border: "none", color: "var(--text-primary)", fontSize: 13, fontFamily: "inherit", outline: "none" }}
+                />
+              </div>
               <table className="data-table">
                 <thead>
                   <tr>
@@ -273,7 +301,7 @@ export default function ProcurementPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {pos.map(p => {
+                  {pos.filter(p => { const q = searchQuery.toLowerCase(); return !q || p.poNumber?.toLowerCase().includes(q) || p.vendor?.name?.toLowerCase().includes(q); }).map(p => {
                     const sc = STATUS_CONFIG[p.status] || STATUS_CONFIG.DRAFT;
                     return (
                       <tr key={p.id}>

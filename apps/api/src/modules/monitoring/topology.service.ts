@@ -28,16 +28,8 @@ export class TopologyService {
         where: { tenantId },
       });
 
-      // Clear existing CONNECTED_TO relationships to prevent stale entries
-      await this.prisma.assetRelationship.deleteMany({
-        where: {
-          tenantId,
-          relationshipType: RelationshipType.CONNECTED_TO,
-        },
-      });
-
-      const linksCreated = new Set<string>();
-      let relationshipCount = 0;
+      // Collect all new links first, then reconcile with DB
+      const newLinks = new Map<string, { sourceAssetId: string; targetAssetId: string; properties: any }>();
 
       for (const device of devices) {
         const config = (device.config as any) || {};
@@ -82,28 +74,72 @@ export class TopologyService {
 
           // Standardize link direction/ID to prevent duplicate bidirectional records
           const linkKey = [sourceAsset.id, targetAsset.id].sort().join('-');
-          if (linksCreated.has(linkKey)) continue;
+          if (newLinks.has(linkKey)) continue;
 
-          linksCreated.add(linkKey);
+          newLinks.set(linkKey, {
+            sourceAssetId: sourceAsset.id,
+            targetAssetId: targetAsset.id,
+            properties: {
+              sourcePort: neighbor.localPortName || `Port ${neighbor.localPortIndex}`,
+              targetPort: neighbor.remotePortName || neighbor.remotePortDesc || 'Unknown',
+              bandwidth: neighbor.portSpeed || '1Gbps',
+              discoverySource: lldpNeighbors.includes(neighbor) ? 'lldp' : 'cdp',
+            },
+          });
+        }
+      }
 
-          // Persist to AssetRelationship database table
+      // Fetch existing CONNECTED_TO relationships
+      const existingRelations = await this.prisma.assetRelationship.findMany({
+        where: { tenantId, relationshipType: RelationshipType.CONNECTED_TO },
+        select: { id: true, sourceAssetId: true, targetAssetId: true },
+      });
+
+      // Delete only relationships that are NOT in the new set
+      const staleIds = existingRelations
+        .filter(rel => {
+          const key = [rel.sourceAssetId, rel.targetAssetId].sort().join('-');
+          return !newLinks.has(key);
+        })
+        .map(rel => rel.id);
+
+      if (staleIds.length > 0) {
+        await this.prisma.assetRelationship.deleteMany({
+          where: { id: { in: staleIds } },
+        });
+      }
+
+      // Build a set of existing link keys to avoid duplicate creates
+      const existingKeys = new Set(
+        existingRelations.map(rel => [rel.sourceAssetId, rel.targetAssetId].sort().join('-')),
+      );
+
+      // Upsert: only create new relationships that don't already exist
+      let relationshipCount = 0;
+      for (const [linkKey, link] of newLinks) {
+        if (existingKeys.has(linkKey)) {
+          // Update properties on existing relationship
+          const existing = existingRelations.find(rel =>
+            [rel.sourceAssetId, rel.targetAssetId].sort().join('-') === linkKey,
+          );
+          if (existing) {
+            await this.prisma.assetRelationship.update({
+              where: { id: existing.id },
+              data: { properties: link.properties },
+            });
+          }
+        } else {
           await this.prisma.assetRelationship.create({
             data: {
               tenantId,
-              sourceAssetId: sourceAsset.id,
-              targetAssetId: targetAsset.id,
+              sourceAssetId: link.sourceAssetId,
+              targetAssetId: link.targetAssetId,
               relationshipType: RelationshipType.CONNECTED_TO,
-              properties: {
-                sourcePort: neighbor.localPortName || `Port ${neighbor.localPortIndex}`,
-                targetPort: neighbor.remotePortName || neighbor.remotePortDesc || 'Unknown',
-                bandwidth: neighbor.portSpeed || '1Gbps',
-                discoverySource: lldpNeighbors.includes(neighbor) ? 'lldp' : 'cdp',
-              },
+              properties: link.properties,
             },
           });
-
-          relationshipCount++;
         }
+        relationshipCount++;
       }
 
       this.logger.log(`Successfully persisted ${relationshipCount} physical network relationships in DB.`);

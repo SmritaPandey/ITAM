@@ -201,46 +201,57 @@ export class AssetsService {
       return { ...results, errors: ['No asset types found. Create asset types first.'] };
     }
 
+    // Pre-validate rows and resolve asset types before entering the transaction
+    const validRows: { index: number; row: any; assetTypeId: string }[] = [];
     for (let i = 0; i < assets.length; i++) {
       const row = assets[i];
-      try {
-        if (!row.name) {
-          results.errors.push(`Row ${i + 1}: Missing required field "name"`);
-          results.failed++;
-          continue;
-        }
-
-        // Find matching asset type or use default
-        let assetTypeId = defaultType.id;
-        if (row.assetType) {
-          const matchedType = await this.prisma.assetType.findFirst({
-            where: { tenantId, name: { contains: row.assetType, mode: 'insensitive' } },
-          });
-          if (matchedType) assetTypeId = matchedType.id;
-        }
-
-        await this.prisma.asset.create({
-          data: {
-            tenantId,
-            assetTypeId,
-            name: row.name,
-            assetTag: row.assetTag || null,
-            serialNumber: row.serialNumber || null,
-            manufacturer: row.manufacturer || null,
-            model: row.model || null,
-            ipAddress: row.ipAddress || null,
-            macAddress: row.macAddress || null,
-            hostname: row.hostname || null,
-            status: 'ACTIVE',
-            discoverySource: 'CSV_IMPORT',
-            createdById: userId,
-            notes: row.notes || null,
-          },
-        });
-        results.imported++;
-      } catch (err: any) {
-        results.errors.push(`Row ${i + 1} (${row.name || 'unnamed'}): ${err.message?.slice(0, 100)}`);
+      if (!row.name) {
+        results.errors.push(`Row ${i + 1}: Missing required field "name"`);
         results.failed++;
+        continue;
+      }
+
+      let assetTypeId = defaultType.id;
+      if (row.assetType) {
+        const matchedType = await this.prisma.assetType.findFirst({
+          where: { tenantId, name: { contains: row.assetType, mode: 'insensitive' } },
+        });
+        if (matchedType) assetTypeId = matchedType.id;
+      }
+
+      validRows.push({ index: i, row, assetTypeId });
+    }
+
+    // Create all valid rows inside a transaction — if any single create fails, the entire batch rolls back
+    if (validRows.length > 0) {
+      try {
+        await this.prisma.$transaction(
+          validRows.map(({ row, assetTypeId }) =>
+            this.prisma.asset.create({
+              data: {
+                tenantId,
+                assetTypeId,
+                name: row.name,
+                assetTag: row.assetTag || null,
+                serialNumber: row.serialNumber || null,
+                manufacturer: row.manufacturer || null,
+                model: row.model || null,
+                ipAddress: row.ipAddress || null,
+                macAddress: row.macAddress || null,
+                hostname: row.hostname || null,
+                status: 'ACTIVE',
+                discoverySource: 'CSV_IMPORT',
+                createdById: userId,
+                notes: row.notes || null,
+              },
+            }),
+          ),
+        );
+        results.imported = validRows.length;
+      } catch (err: any) {
+        // Transaction failed — all creates rolled back
+        results.failed += validRows.length;
+        results.errors.push(`Batch transaction failed (all rows rolled back): ${err.message?.slice(0, 200)}`);
       }
     }
 
@@ -379,7 +390,7 @@ export class AssetsService {
   }
 
   // ─── QR / BARCODE ──────────────────────────────────────────────────────
-  async getQrData(assetId: string, tenantId: string, baseUrl = 'http://localhost:3100') {
+  async getQrData(assetId: string, tenantId: string, baseUrl = process.env.APP_URL || process.env.FRONTEND_URL || 'http://localhost:3100') {
     const asset = await this.findById(assetId, tenantId);
     return {
       assetId: asset.id,
@@ -460,5 +471,51 @@ export class AssetsService {
       where, select: { id: true, name: true, assetTag: true, warrantyExpiry: true, leaseEndDate: true, leaseVendor: true },
       orderBy: type === 'warranty' ? { warrantyExpiry: 'asc' } : { leaseEndDate: 'asc' },
     });
+  }
+
+  // ─── DEPRECIATION CALCULATION ─────────────────────────────────────
+  async calculateDepreciation(assetId: string, tenantId: string) {
+    const asset = await this.findById(assetId, tenantId);
+
+    const purchasePrice = asset.purchasePrice ? Number(asset.purchasePrice) : 0;
+    const salvageValue = asset.salvageValue ? Number(asset.salvageValue) : 0;
+    const usefulLifeMonths = asset.usefulLifeMonths || 60; // default 5 years
+    const method = asset.depreciationMethod || 'STRAIGHT_LINE';
+    const procDate = asset.procurementDate || asset.createdAt;
+    const monthsElapsed = Math.max(0, Math.floor((Date.now() - new Date(procDate).getTime()) / (30.44 * 24 * 3600 * 1000)));
+
+    let currentBookValue: number;
+    let monthlyDepreciation: number;
+
+    if (method === 'DECLINING_BALANCE') {
+      const rate = 2 / usefulLifeMonths;
+      currentBookValue = purchasePrice * Math.pow(1 - rate, Math.min(monthsElapsed, usefulLifeMonths));
+      currentBookValue = Math.max(currentBookValue, salvageValue);
+      monthlyDepreciation = currentBookValue * rate;
+    } else {
+      // Straight-line
+      monthlyDepreciation = (purchasePrice - salvageValue) / usefulLifeMonths;
+      const totalDepreciation = monthlyDepreciation * Math.min(monthsElapsed, usefulLifeMonths);
+      currentBookValue = Math.max(purchasePrice - totalDepreciation, salvageValue);
+    }
+
+    const remainingMonths = Math.max(0, usefulLifeMonths - monthsElapsed);
+    const percentDepreciated = purchasePrice > 0 ? ((purchasePrice - currentBookValue) / purchasePrice) * 100 : 0;
+
+    return {
+      assetId,
+      assetName: asset.name,
+      purchasePrice,
+      salvageValue,
+      usefulLifeMonths,
+      method,
+      monthsElapsed,
+      remainingMonths,
+      monthlyDepreciation: Math.round(monthlyDepreciation * 100) / 100,
+      currentBookValue: Math.round(currentBookValue * 100) / 100,
+      percentDepreciated: Math.round(percentDepreciated * 10) / 10,
+      projectedEolValue: salvageValue,
+      fullyDepreciated: monthsElapsed >= usefulLifeMonths,
+    };
   }
 }

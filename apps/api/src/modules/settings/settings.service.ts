@@ -1,6 +1,7 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../common/database/prisma.service';
 import { getResolvedModules, getActiveModules } from '../../common/utils/modules';
+import { PLAN_LIMITS } from '../../common/constants/plan-limits';
 
 @Injectable()
 export class SettingsService {
@@ -28,18 +29,52 @@ export class SettingsService {
     };
   }
 
+  // Allowlist of user-modifiable settings keys — reject anything not listed
+  private static readonly ALLOWED_SETTINGS_KEYS = new Set([
+    'orgName',
+    'domain',
+    'timezone',
+    'dateFormat',
+    'currency',
+    'language',
+    'theme',
+    'logoUrl',
+    'faviconUrl',
+    'supportEmail',
+    'supportPhone',
+    'notificationPreferences',
+    'maintenanceWindow',
+    'autoAssignTickets',
+    'defaultTicketPriority',
+    'enabledModules',
+    'assetLabelPrefix',
+    'ticketPrefix',
+    'slackWebhookUrl',
+    'teamsWebhookUrl',
+    'emailNotifications',
+    'dashboardLayout',
+  ]);
+
   async updateSettings(tenantId: string, data: Record<string, any>) {
     const tenant = await this.prisma.tenant.findUnique({ where: { id: tenantId } });
     if (!tenant) throw new NotFoundException('Tenant not found');
 
+    // Strip any keys not in the allowlist to prevent arbitrary JSON injection
+    const sanitized: Record<string, any> = {};
+    for (const key of Object.keys(data)) {
+      if (SettingsService.ALLOWED_SETTINGS_KEYS.has(key)) {
+        sanitized[key] = data[key];
+      }
+    }
+
     // Merge with existing settings
     const existing = typeof tenant.settings === 'object' ? (tenant.settings as Record<string, any>) : {};
-    const merged = { ...existing, ...data };
+    const merged = { ...existing, ...sanitized };
 
     // Update org-level fields if provided
     const update: any = { settings: merged };
-    if (data.orgName) update.name = data.orgName;
-    if (data.domain) update.domain = data.domain;
+    if (sanitized.orgName) update.name = sanitized.orgName;
+    if (sanitized.domain) update.domain = sanitized.domain;
 
     const result = await this.prisma.tenant.update({ where: { id: tenantId }, data: update });
     const settingsObj = typeof result.settings === 'object' ? (result.settings as Record<string, any>) : {};
@@ -67,11 +102,16 @@ export class SettingsService {
 
   // ─── Account & Billing ─────────────────────────────────────────
 
-  private readonly PLAN_LIMITS: Record<string, { assets: number; users: number; modules: number; price: number }> = {
-    STARTER: { assets: 5, users: 4, modules: 4, price: 0 },
-    PROFESSIONAL: { assets: -1, users: 50, modules: 12, price: 4999 },
-    ENTERPRISE: { assets: -1, users: -1, modules: 12, price: 14999 },
-  };
+  // UI-facing helper: converts Infinity → -1 for JSON-safe plan limits
+  private getUiPlanLimits(plan: string) {
+    const base = PLAN_LIMITS[plan] || PLAN_LIMITS.STARTER;
+    return {
+      assets: base.maxAssets === Infinity ? -1 : base.maxAssets,
+      users: base.maxUsers === Infinity ? -1 : base.maxUsers,
+      modules: base.modules,
+      price: base.price,
+    };
+  }
 
   async getPricingSettings() {
     const config = await this.prisma.systemConfig.findUnique({
@@ -100,10 +140,10 @@ export class SettingsService {
 
     const pricing = await this.getPricingSettings();
     const planKey = tenant.plan.toLowerCase();
-    const basePrice = pricing[planKey]?.priceINR !== undefined ? pricing[planKey].priceINR : (this.PLAN_LIMITS[tenant.plan]?.price || 0);
+    const basePrice = pricing[planKey]?.priceINR !== undefined ? pricing[planKey].priceINR : (PLAN_LIMITS[tenant.plan]?.price || 0);
 
     const limits = {
-      ...(this.PLAN_LIMITS[tenant.plan] || this.PLAN_LIMITS.STARTER),
+      ...this.getUiPlanLimits(tenant.plan),
       price: basePrice,
     };
 
@@ -145,7 +185,7 @@ export class SettingsService {
       : basePrice * (1 - discountPct / 100);
 
     const limits = {
-      ...(this.PLAN_LIMITS[tenant.plan] || this.PLAN_LIMITS.STARTER),
+      ...this.getUiPlanLimits(tenant.plan),
       price: basePrice,
     };
 
@@ -232,10 +272,9 @@ export class SettingsService {
     const cycleDiscounts: Record<string, number> = { MONTHLY: 0, QUARTERLY: 10, ANNUAL: 20, CUSTOM: 0 };
     const cycleDiscount = cycleDiscounts[cycle] || 0;
 
-    await this.prisma.tenant.update({
-      where: { id: tenantId },
-      data: { plan: plan as any },
-    });
+    // NOTE: Do NOT update tenant.plan here — the plan change should only be
+    // finalized after payment confirmation via the payment webhook handler.
+    // This method creates a *pending* upgrade request, not an immediate switch.
 
     const pricing = await this.getPricingSettings();
     const isUSD = (currency || 'INR').toUpperCase() === 'USD';
@@ -251,21 +290,23 @@ export class SettingsService {
     const existing = await this.prisma.subscription.findFirst({ where: { tenantId } });
 
     if (existing) {
+      // Set status to PENDING_UPGRADE with the *requested* plan — do not activate yet
       await this.prisma.subscription.update({
         where: { id: existing.id },
         data: {
           plan: plan as any,
-          status: 'ACTIVE',
+          status: 'PENDING_UPGRADE',
           billingCycle: cycle,
           mrr: effectiveMrr,
         },
       });
     } else {
+      // Create a new subscription in PENDING_UPGRADE state — not ACTIVE
       await this.prisma.subscription.create({
         data: {
           tenantId,
           plan: plan as any,
-          status: 'ACTIVE',
+          status: 'PENDING_UPGRADE',
           billingCycle: cycle,
           startDate: new Date(),
           mrr: effectiveMrr,
@@ -274,9 +315,13 @@ export class SettingsService {
     }
 
     return {
-      success: true, plan, billingCycle: cycle,
+      success: true,
+      plan,
+      billingCycle: cycle,
       mrr: effectiveMrr,
-      message: `Plan updated to ${plan} (${cycle})${cycleDiscount > 0 ? ` — ${cycleDiscount}% billing discount applied` : ''}`,
+      // Upgrade is pending — actual plan activation happens after payment confirmation
+      status: 'PENDING_UPGRADE',
+      message: `Upgrade to ${plan} (${cycle}) is pending payment confirmation${cycleDiscount > 0 ? ` — ${cycleDiscount}% billing discount will be applied` : ''}. Your plan will be activated once payment is verified.`,
     };
   }
 }

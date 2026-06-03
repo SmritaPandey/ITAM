@@ -72,7 +72,7 @@ export class EmailService {
     return this.sentCount < this.MAX_PER_HOUR;
   }
 
-  async send(options: EmailOptions): Promise<boolean> {
+  async send(options: EmailOptions): Promise<boolean | { sent: false; reason: string; logged: boolean }> {
     const from = this.config.get('SMTP_FROM', 'QS Asset <noreply@qsasset.com>');
 
     if (!this.checkRateLimit()) {
@@ -81,8 +81,8 @@ export class EmailService {
     }
 
     if (!this.transporter) {
-      this.logger.log(`📧 [LOG-ONLY] To: ${Array.isArray(options.to) ? options.to.join(', ') : options.to} | Subject: ${options.subject}`);
-      return true; // Don't fail — just log
+      this.logger.warn(`📧 [NO_SMTP] Email not sent — SMTP not configured. To: ${Array.isArray(options.to) ? options.to.join(', ') : options.to} | Subject: ${options.subject}`);
+      return { sent: false, reason: 'NO_SMTP_CONFIGURED', logged: true };
     }
 
     try {

@@ -1,7 +1,7 @@
 "use client";
 import { useEffect, useState } from "react";
 import {
-  Monitor, Cpu, MemoryStick, Power, CheckCircle2, RefreshCw, Loader2, AlertTriangle
+  Monitor, Cpu, MemoryStick, Power, CheckCircle2, RefreshCw, Loader2, AlertTriangle, Trash2, Search
 } from "lucide-react";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip } from "recharts";
 import { apiFetch } from "@/lib/api";
@@ -11,6 +11,7 @@ export default function VDIPage() {
   const [data, setData] = useState<any>({ data: [], total: 0, running: 0, stopped: 0, avgCpu: 0, avgRam: 0 });
   const [loading, setLoading] = useState(true);
   const [selectedVM, setSelectedVM] = useState<any>(null);
+  const [searchQuery, setSearchQuery] = useState("");
 
   // New VM Modal form states
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -23,6 +24,17 @@ export default function VDIPage() {
   const [purpose, setPurpose] = useState("");
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState("");
+
+  async function handleDeleteVM(id: string) {
+    if (!confirm("Delete this VM?")) return;
+    try {
+      await apiFetch(`/monitoring/devices/${id}`, { method: "DELETE" });
+      setSelectedVM(null);
+      refresh();
+    } catch {
+      alert("Failed to delete VM.");
+    }
+  }
 
   function refresh() {
     apiFetch("/monitoring/vdi").then(setData).catch(console.error).finally(() => setLoading(false));
@@ -38,12 +50,10 @@ export default function VDIPage() {
     setCreating(true);
     setError("");
     try {
-      const randomIp = `10.20.1.${Math.floor(2 + Math.random() * 254)}`;
       await apiFetch("/monitoring/devices", {
         method: "POST",
         body: JSON.stringify({
           name: vmName,
-          ipAddress: randomIp,
           type: "VIRTUAL_MACHINE",
           location: host,
           config: {
@@ -55,12 +65,6 @@ export default function VDIPage() {
             diskGb: disk,
             user: "Unassigned"
           },
-          metrics: {
-            cpu: Math.floor(Math.random() * 40) + 10,
-            ram: Math.floor(Math.random() * 30) + 20,
-            disk: Math.floor(Math.random() * 10) + 5,
-            uptime: "1m",
-          }
         })
       });
       setIsModalOpen(false);
@@ -115,6 +119,16 @@ export default function VDIPage() {
         </div>
       </div>
 
+      {/* Search Bar */}
+      <div style={{ display: "flex", gap: 10, marginBottom: 16, alignItems: "center" }}>
+        <div style={{ flex: 1, display: "flex", alignItems: "center", gap: 8, background: "var(--bg-elevated)", border: "1px solid var(--border-primary)", borderRadius: 10, padding: "8px 14px" }}>
+          <Search size={15} style={{ color: "var(--text-tertiary)" }} />
+          <input value={searchQuery} onChange={e => setSearchQuery(e.target.value)}
+            placeholder="Search by VM name or host..."
+            style={{ width: "100%", background: "none", border: "none", color: "var(--text-primary)", fontSize: 13, fontFamily: "inherit", outline: "none" }} />
+        </div>
+      </div>
+
       <div className="stats-grid" style={{ gridTemplateColumns: "repeat(4, 1fr)" }}>
         <div className="stat-card"><div className="stat-icon cyan"><Monitor size={22} /></div><div className="stat-content"><div className="stat-label">Total VMs</div><div className="stat-value">{data.total}</div></div></div>
         <div className="stat-card"><div className="stat-icon green"><CheckCircle2 size={22} /></div><div className="stat-content"><div className="stat-label">Running</div><div className="stat-value">{data.running}</div></div></div>
@@ -144,26 +158,42 @@ export default function VDIPage() {
             <tr><th>VM Name</th><th>OS</th><th>Status</th><th>CPU</th><th>RAM</th><th>Disk</th><th>Host</th><th>Uptime</th><th>User</th></tr>
           </thead>
           <tbody>
-            {vms.map((vm: any) => {
-              const cfg = vm.config || {};
-              const met = vm.metrics || {};
-              return (
-                <tr key={vm.id} style={{ cursor: "pointer" }} onClick={() => setSelectedVM(vm)}>
-                  <td>
-                    <div style={{ fontWeight: 600, color: "var(--text-primary)" }}>{vm.name}</div>
-                    <div style={{ fontSize: 10, color: "var(--text-tertiary)" }}>{cfg.purpose || "—"}</div>
-                  </td>
-                  <td style={{ fontSize: 11, color: "var(--text-secondary)" }}>{cfg.os || "—"}</td>
-                  <td><span className={`badge ${vm.status === "ONLINE" ? "green" : "gray"}`}>{vm.status === "ONLINE" ? "Running" : "Stopped"}</span></td>
-                  <td><UsageBar value={met.cpu || 0} /></td>
-                  <td><UsageBar value={met.ram || 0} /></td>
-                  <td><UsageBar value={met.disk || 0} /></td>
-                  <td style={{ fontSize: 11, color: "var(--text-secondary)" }}>{cfg.host || vm.location || "—"}</td>
-                  <td style={{ fontSize: 11, color: "var(--text-tertiary)" }}>{met.uptime || "—"}</td>
-                  <td style={{ fontSize: 11, color: "var(--text-secondary)" }}>{cfg.user || "—"}</td>
-                </tr>
+            {(() => {
+              const q = searchQuery.toLowerCase();
+              const filteredVMs = vms.filter((vm: any) => {
+                if (!q) return true;
+                const cfg = vm.config || {};
+                return vm.name?.toLowerCase().includes(q) ||
+                       (cfg.host || vm.location || "").toLowerCase().includes(q);
+              });
+              if (filteredVMs.length === 0) return (
+                <tr><td colSpan={9} style={{ textAlign: "center", padding: 60, color: "var(--text-tertiary)" }}>
+                  <Monitor size={36} style={{ margin: "0 auto 12px", opacity: 0.3 }} />
+                  <div style={{ fontSize: 14, fontWeight: 600, color: "var(--text-primary)" }}>{searchQuery ? "No matching virtual machines" : "No virtual machines configured yet"}</div>
+                  <div style={{ fontSize: 12, marginTop: 4 }}>{searchQuery ? "Try adjusting your search query." : "Click New VM to provision a virtual desktop."}</div>
+                </td></tr>
               );
-            })}
+              return filteredVMs.map((vm: any) => {
+                const cfg = vm.config || {};
+                const met = vm.metrics || {};
+                return (
+                  <tr key={vm.id} style={{ cursor: "pointer" }} onClick={() => setSelectedVM(vm)}>
+                    <td>
+                      <div style={{ fontWeight: 600, color: "var(--text-primary)" }}>{vm.name}</div>
+                      <div style={{ fontSize: 10, color: "var(--text-tertiary)" }}>{cfg.purpose || "—"}</div>
+                    </td>
+                    <td style={{ fontSize: 11, color: "var(--text-secondary)" }}>{cfg.os || "—"}</td>
+                    <td><span className={`badge ${vm.status === "ONLINE" ? "green" : "gray"}`}>{vm.status === "ONLINE" ? "Running" : "Stopped"}</span></td>
+                    <td><UsageBar value={met.cpu || 0} /></td>
+                    <td><UsageBar value={met.ram || 0} /></td>
+                    <td><UsageBar value={met.disk || 0} /></td>
+                    <td style={{ fontSize: 11, color: "var(--text-secondary)" }}>{cfg.host || vm.location || "—"}</td>
+                    <td style={{ fontSize: 11, color: "var(--text-tertiary)" }}>{met.uptime || "—"}</td>
+                    <td style={{ fontSize: 11, color: "var(--text-secondary)" }}>{cfg.user || "—"}</td>
+                  </tr>
+                );
+              });
+            })()}
           </tbody>
         </table>
       </div>
@@ -201,6 +231,15 @@ export default function VDIPage() {
                   <VRow label="Disk Allocated" value={cfg.diskGb ? `${cfg.diskGb} GB` : "—"} />
                   <VRow label="Uptime" value={met.uptime || "—"} />
                   <VRow label="Last Seen" value={selectedVM.lastSeen ? new Date(selectedVM.lastSeen).toLocaleString() : "Never"} />
+                </div>
+                <div style={{ marginTop: 20 }}>
+                  <button
+                    className="btn btn-secondary"
+                    style={{ width: "100%", padding: "10px 16px", display: "flex", alignItems: "center", justifyContent: "center", gap: 8, color: "#ef4444", borderColor: "rgba(239,68,68,0.3)", fontSize: 13, fontWeight: 600 }}
+                    onClick={() => handleDeleteVM(selectedVM.id)}
+                  >
+                    <Trash2 size={14} /> Delete VM
+                  </button>
                 </div>
               </div>
             </div>

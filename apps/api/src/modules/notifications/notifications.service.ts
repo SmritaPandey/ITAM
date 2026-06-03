@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../common/database/prisma.service';
 
 @Injectable()
@@ -37,6 +37,14 @@ export class NotificationsService {
   async getUnreadCount(userId: string) {
     const count = await this.prisma.notification.count({ where: { userId, isRead: false } });
     return { unread: count };
+  }
+
+  async delete(id: string, userId: string) {
+    const result = await this.prisma.notification.deleteMany({
+      where: { id, userId },
+    });
+    if (result.count === 0) throw new NotFoundException('Notification not found');
+    return { deleted: true };
   }
 
   /**

@@ -86,11 +86,29 @@ export default function ImportWizardPage() {
     setFileName(file.name);
     const reader = new FileReader();
     reader.onload = (ev) => {
-      const text = ev.target?.result as string;
-      const parsed = parseCSV(text);
-      setFileData(parsed);
-      setMapping(autoMap(parsed.headers));
-      setStep(2);
+      try {
+        const text = ev.target?.result as string;
+        let parsed: { headers: string[]; rows: string[][] };
+        if (file.name.toLowerCase().endsWith(".json")) {
+          const json = JSON.parse(text);
+          const array = Array.isArray(json) ? json : json.assets || [];
+          if (!Array.isArray(array)) {
+            alert("Invalid JSON format. The file must contain a JSON array of asset objects.");
+            return;
+          }
+          // Extract all unique keys across all objects to define the headers
+          const headers = Array.from(new Set(array.flatMap(obj => Object.keys(obj))));
+          const rows = array.map(obj => headers.map(h => obj[h] !== undefined && obj[h] !== null ? String(obj[h]) : ""));
+          parsed = { headers, rows };
+        } else {
+          parsed = parseCSV(text);
+        }
+        setFileData(parsed);
+        setMapping(autoMap(parsed.headers));
+        setStep(2);
+      } catch (err: any) {
+        alert("Failed to parse file: " + err.message);
+      }
     };
     reader.readAsText(file);
   };
@@ -150,6 +168,37 @@ export default function ImportWizardPage() {
     a.href = url; a.download = "asset_import_template.csv"; a.click();
   };
 
+  const downloadJSONTemplate = () => {
+    const template = [
+      {
+        name: "Ergonomic Desk",
+        assetTag: "FUR-101",
+        serialNumber: "SN-DESK-789",
+        category: "Furniture",
+        manufacturer: "Steelcase",
+        model: "Gesture",
+        status: "ACTIVE",
+        purchasePrice: "980.00",
+        notes: "Executive desk with electric height adjustment"
+      },
+      {
+        name: "Enterprise HVAC Unit",
+        assetTag: "FAC-302",
+        serialNumber: "SN-HVAC-9876",
+        category: "Facilities",
+        manufacturer: "Carrier",
+        model: "WeatherMaker",
+        status: "ACTIVE",
+        purchasePrice: "8500.00",
+        notes: "Server room dedicated climate control unit"
+      }
+    ];
+    const blob = new Blob([JSON.stringify(template, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url; a.download = "asset_import_template.json"; a.click();
+  };
+
   const STEPS = [
     { num: 1, label: "Upload" },
     { num: 2, label: "Map Columns" },
@@ -190,36 +239,85 @@ export default function ImportWizardPage() {
 
       {/* Step 1: Upload */}
       {step === 1 && (
-        <div className="card" style={{ padding: 40, textAlign: "center" }}>
+        <div className="card" style={{ padding: "48px 40px", textAlign: "center", background: "linear-gradient(135deg, var(--bg-card) 0%, rgba(30, 37, 64, 0.2) 100%)", border: "1px solid var(--border-primary)", borderRadius: 16 }}>
           <div style={{
-            width: 64, height: 64, borderRadius: 16, margin: "0 auto 16px",
-            background: "rgba(34,211,238,0.1)", display: "flex", alignItems: "center", justifyContent: "center",
+            width: 72, height: 72, borderRadius: 20, margin: "0 auto 20px",
+            background: "rgba(34,211,238,0.08)", display: "flex", alignItems: "center", justifyContent: "center",
+            boxShadow: "0 0 20px rgba(34, 211, 238, 0.05)"
           }}>
-            <Upload size={28} style={{ color: "#22d3ee" }} />
+            <Upload size={32} style={{ color: "#22d3ee" }} />
           </div>
-          <h2 style={{ fontSize: 18, fontWeight: 700, margin: "0 0 8px", color: "var(--text-primary)" }}>Upload CSV File</h2>
-          <p style={{ fontSize: 12, color: "var(--text-tertiary)", marginBottom: 20, maxWidth: 400, margin: "0 auto 20px" }}>
-            Upload a CSV file with your asset data. The first row should contain column headers.
-            Supports up to 10,000 rows per import.
+          <h2 style={{ fontSize: 20, fontWeight: 800, margin: "0 0 10px", color: "var(--text-primary)", letterSpacing: "-0.02em" }}>Upload Inventory Data File</h2>
+          <p style={{ fontSize: 13, color: "var(--text-tertiary)", marginBottom: 24, maxWidth: 500, margin: "0 auto 24px", lineHeight: 1.6 }}>
+            Upload a CSV or JSON file containing your physical (Non-IT) or IT assets to keep track of inventory.
+            We support smart column mapping, schema validations, and plan capacity checks.
           </p>
 
-          <input ref={fileInputRef} type="file" accept=".csv,.txt" onChange={handleFileUpload} style={{ display: "none" }} />
+          <input ref={fileInputRef} type="file" accept=".csv,.txt,.json" onChange={handleFileUpload} style={{ display: "none" }} />
           <button onClick={() => fileInputRef.current?.click()} style={{
-            padding: "12px 28px", borderRadius: 10, border: "2px dashed var(--border-subtle)",
-            background: "transparent", color: "var(--brand-400)", fontSize: 13, fontWeight: 600,
-            cursor: "pointer", fontFamily: "inherit", marginBottom: 12, display: "inline-flex", alignItems: "center", gap: 8,
-          }}>
-            <FileSpreadsheet size={16} /> Choose CSV File
+            padding: "16px 36px", borderRadius: 12, border: "2px dashed rgba(34, 211, 238, 0.3)",
+            background: "rgba(34, 211, 238, 0.02)", color: "#22d3ee", fontSize: 14, fontWeight: 700,
+            cursor: "pointer", fontFamily: "inherit", marginBottom: 20, display: "inline-flex", alignItems: "center", gap: 10,
+            transition: "all 0.2s"
+          }}
+          className="hover:scale-95"
+          >
+            <FileSpreadsheet size={18} /> Choose CSV or JSON File
           </button>
 
-          <div style={{ marginTop: 16 }}>
+          <div style={{ display: "flex", gap: 12, justifyContent: "center", marginTop: 12 }}>
             <button onClick={downloadTemplate} style={{
-              padding: "8px 16px", borderRadius: 8, border: "none",
-              background: "rgba(100,116,139,0.15)", color: "var(--text-secondary)", fontSize: 11,
-              cursor: "pointer", fontFamily: "inherit", display: "inline-flex", alignItems: "center", gap: 6,
+              padding: "8px 16px", borderRadius: 10, border: "1px solid var(--border-primary)",
+              background: "rgba(255,255,255,0.03)", color: "var(--text-secondary)", fontSize: 12,
+              fontWeight: 600, cursor: "pointer", fontFamily: "inherit", display: "inline-flex", alignItems: "center", gap: 6,
             }}>
-              <Download size={12} /> Download Template CSV
+              <Download size={14} /> Template CSV
             </button>
+            <button onClick={downloadJSONTemplate} style={{
+              padding: "8px 16px", borderRadius: 10, border: "1px solid var(--border-primary)",
+              background: "rgba(255,255,255,0.03)", color: "var(--text-secondary)", fontSize: 12,
+              fontWeight: 600, cursor: "pointer", fontFamily: "inherit", display: "inline-flex", alignItems: "center", gap: 6,
+            }}>
+              <Download size={14} /> Template JSON
+            </button>
+          </div>
+
+          {/* Premium Excel helper banner */}
+          <div style={{
+            marginTop: 36,
+            padding: 18,
+            borderRadius: 14,
+            background: "rgba(34, 211, 238, 0.02)",
+            border: "1.5px dashed rgba(34, 211, 238, 0.15)",
+            textAlign: "left",
+            display: "flex",
+            gap: 14,
+            alignItems: "flex-start",
+            maxWidth: 600,
+            margin: "36px auto 0"
+          }}>
+            <div style={{
+              background: "rgba(34, 211, 238, 0.08)",
+              borderRadius: 10,
+              width: 36,
+              height: 36,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              color: "#22d3ee",
+              flexShrink: 0
+            }}>
+              <AlertTriangle size={18} />
+            </div>
+            <div>
+              <h4 style={{ margin: 0, fontSize: 13.5, fontWeight: 700, color: "var(--text-primary)", marginBottom: 4 }}>
+                Importing from Microsoft Excel or Google Sheets?
+              </h4>
+              <p style={{ margin: 0, fontSize: 12, color: "var(--text-tertiary)", lineHeight: 1.6 }}>
+                Simply save your worksheet as a <strong>CSV (Comma Delimited)</strong> or export it as a <strong>JSON array</strong>.
+                Upload that file here, and our importer will guide you through the process of mapping each column to your asset schema.
+              </p>
+            </div>
           </div>
         </div>
       )}

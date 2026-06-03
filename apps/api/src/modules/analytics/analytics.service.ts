@@ -13,6 +13,10 @@ import { PrismaService } from '../../common/database/prisma.service';
  * NOT collected: PII, form inputs, passwords, tracking pixels, cross-site data
  */
 
+// System tenant ID for audit logs that have no user/tenant context.
+// Falls back to first available tenant if not set.
+const SYSTEM_TENANT_ID = process.env.SYSTEM_TENANT_ID || null;
+
 interface AnalyticsEvent {
   event: string;
   sessionId?: string;
@@ -32,6 +36,7 @@ export class AnalyticsService {
   private readonly logger = new Logger(AnalyticsService.name);
   private eventBuffer: AnalyticsEvent[] = [];
   private flushInterval: ReturnType<typeof setInterval>;
+  private cachedSystemTenantId: string | null = null;
 
   constructor(private prisma: PrismaService) {
     // Flush buffered events to DB every 30 seconds for performance
@@ -58,13 +63,8 @@ export class AnalyticsService {
    * Dynamic real-time geolocation mapping via ip-api.com
    */
   private async geolocate(ip?: string) {
-    // Local / development coordinates fallback - random Indian business centers
-    const fallbackLocations = [
-      { country: 'India', region: 'Maharashtra', city: 'Mumbai', lat: 19.0760, lon: 72.8777 },
-      { country: 'India', region: 'Karnataka', city: 'Bengaluru', lat: 12.9716, lon: 77.5946 },
-      { country: 'India', region: 'Delhi', city: 'New Delhi', lat: 28.6139, lon: 77.2090 }
-    ];
-    const localFallback = fallbackLocations[Math.floor(Math.random() * fallbackLocations.length)];
+    // Deterministic fallback for local/private network IPs
+    const localFallback = { country: 'Local', region: 'Private Network', city: 'Local', lat: 0, lon: 0 };
 
     if (!ip || ip === '127.0.0.1' || ip === '::1' || ip.startsWith('192.168.') || ip.startsWith('10.')) {
       return localFallback;
@@ -76,11 +76,11 @@ export class AnalyticsService {
       const data = await res.json();
       if (data.status !== 'success') return localFallback;
       return {
-        country: data.country || 'India',
-        region: data.regionName || 'Delhi',
-        city: data.city || 'New Delhi',
-        lat: data.lat || 28.6139,
-        lon: data.lon || 77.2090,
+        country: data.country || 'Unknown',
+        region: data.regionName || 'Unknown',
+        city: data.city || 'Unknown',
+        lat: data.lat || 0,
+        lon: data.lon || 0,
       };
     } catch (err) {
       this.logger.debug(`IP Geo lookup failed for ${ip}: ${err}`);
@@ -156,6 +156,17 @@ export class AnalyticsService {
   /**
    * Flush buffered events to the database using audit_logs (no schema change needed)
    */
+  private async resolveSystemTenantId(): Promise<string | null> {
+    if (this.cachedSystemTenantId) return this.cachedSystemTenantId;
+    if (SYSTEM_TENANT_ID) {
+      this.cachedSystemTenantId = SYSTEM_TENANT_ID;
+      return SYSTEM_TENANT_ID;
+    }
+    const firstTenant = await this.prisma.tenant.findFirst({ select: { id: true } });
+    if (firstTenant) this.cachedSystemTenantId = firstTenant.id;
+    return this.cachedSystemTenantId;
+  }
+
   private async flush() {
     if (this.eventBuffer.length === 0) return;
     const events = [...this.eventBuffer];
@@ -175,14 +186,17 @@ export class AnalyticsService {
         if (e.duration) { totalDuration += e.duration; durationCount++; }
       }
 
-      // Get first tenant for system-level logs
-      const firstTenant = await this.prisma.tenant.findFirst({ select: { id: true } });
-      if (!firstTenant) return;
+      // Use cached system tenant ID; skip audit log if no tenant context exists
+      const tenantId = await this.resolveSystemTenantId();
+      if (!tenantId) {
+        this.logger.warn('No tenant available for analytics audit log — skipping flush persistence');
+        return;
+      }
 
       const today = new Date().toISOString().split('T')[0];
       await this.prisma.auditLog.create({
         data: {
-          tenantId: firstTenant.id,
+          tenantId,
           action: 'ANALYTICS_FLUSH',
           module: 'ANALYTICS',
           resourceType: 'analytics_summary',
@@ -209,12 +223,12 @@ export class AnalyticsService {
    */
   async recordConsent(data: { analytics: boolean; version: string }, ip?: string) {
     try {
-      const firstTenant = await this.prisma.tenant.findFirst({ select: { id: true } });
-      if (!firstTenant) return;
+      const tenantId = await this.resolveSystemTenantId();
+      if (!tenantId) return;
 
       await this.prisma.auditLog.create({
         data: {
-          tenantId: firstTenant.id,
+          tenantId,
           action: 'COOKIE_CONSENT',
           module: 'COMPLIANCE',
           resourceType: 'consent',

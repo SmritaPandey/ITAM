@@ -98,7 +98,7 @@ export default function SettingsPage() {
         if (allowed) setAllowedModules(allowed);
         if (active) setActiveModules(active);
         if (disabled) setUserDisabledModules(disabled);
-      }).catch(() => {}).finally(() => setLoading(false));
+      }).catch((e) => { console.error('Settings load error:', e); }).finally(() => setLoading(false));
   }, []);
 
   // Hash deep-linking
@@ -143,20 +143,20 @@ export default function SettingsPage() {
   // Load account data when tab is activated
   useEffect(() => {
     if (activeSection === "account" && !account) {
-      apiFetch("/settings/account").then(setAccount).catch(() => {});
+      apiFetch("/settings/account").then(setAccount).catch((e) => { console.error('Settings load error:', e); });
     }
     if (activeSection === "billing" && !subscription) {
-      apiFetch("/settings/subscription").then(setSubscription).catch(() => {});
+      apiFetch("/settings/subscription").then(setSubscription).catch((e) => { console.error('Settings load error:', e); });
     }
     if (activeSection === "invoices" && invoices.length === 0) {
-      apiFetch("/settings/invoices").then(d => setInvoices(Array.isArray(d) ? d : [])).catch(() => {});
+      apiFetch("/settings/invoices").then(d => setInvoices(Array.isArray(d) ? d : [])).catch((e) => { console.error('Settings load error:', e); });
     }
   }, [activeSection]);
 
   async function handleSave() {
     setSaving(true);
     try {
-      await apiFetch("/settings", { method: "PATCH", body: JSON.stringify({ ...settings, userDisabledModules }) });
+      await apiFetch("/settings", { method: "PATCH", body: JSON.stringify({ ...settings, currency, userDisabledModules }) });
       setSaved(true);
       
       // Dispatch custom event to notify layout sidebar
@@ -170,7 +170,7 @@ export default function SettingsPage() {
         setUserDisabledModules(fresh.userDisabledModules || []);
       }
       setTimeout(() => setSaved(false), 2000);
-    } catch {} finally { setSaving(false); }
+    } catch (e) { console.error('Settings save error:', e); } finally { setSaving(false); }
   }
 
   async function handleUpgrade(plan: string) {
@@ -182,7 +182,7 @@ export default function SettingsPage() {
       setSubscription(sub);
       const acc = await apiFetch("/settings/account");
       setAccount(acc);
-    } catch {} finally { setUpgrading(false); }
+    } catch (e) { console.error('Settings upgrade error:', e); } finally { setUpgrading(false); }
   }
 
   if (loading) return (
@@ -1006,26 +1006,25 @@ export default function SettingsPage() {
                   gap: 16
                 }}>
                   <div>
-                    <h4 style={{ fontSize: 13, fontWeight: 700, marginBottom: 4 }}>System Maintenance Snapshot</h4>
+                    <h4 style={{ fontSize: 13, fontWeight: 700, marginBottom: 4 }}>Export Settings</h4>
                     <p style={{ fontSize: 11.5, color: "var(--text-tertiary)", lineHeight: 1.5 }}>
-                      Compile a compressed snapshot ZIP containing current settings, custom templates, and PostgreSQL database state.
+                      Downloads current settings as JSON (not a database backup).
                     </p>
                   </div>
                   <button 
                     className="btn btn-secondary" 
                     onClick={() => {
-                      alert("Compiling and downloading system configuration backup package...");
                       const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(settings, null, 2));
                       const downloadAnchor = document.createElement('a');
                       downloadAnchor.setAttribute("href", dataStr);
-                      downloadAnchor.setAttribute("download", `qsasset-system-backup-${new Date().toISOString().split('T')[0]}.json`);
+                      downloadAnchor.setAttribute("download", `qsasset-settings-${new Date().toISOString().split('T')[0]}.json`);
                       document.body.appendChild(downloadAnchor);
                       downloadAnchor.click();
                       downloadAnchor.remove();
                     }}
                     style={{ padding: "8px 14px", fontSize: 12, fontWeight: 600 }}
                   >
-                    Export Snapshot
+                    Export Settings
                   </button>
                 </div>
               </div>
@@ -1037,12 +1036,12 @@ export default function SettingsPage() {
               <h2 style={{ fontSize: 16, fontWeight: 700, marginBottom: 20 }}>Integrations</h2>
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
                 {[
-                  { name: "Active Directory", status: "Connected", icon: "🏢" },
-                  { name: "ServiceNow", status: "Not Connected", icon: "🎫" },
-                  { name: "Jira", status: "Not Connected", icon: "📋" },
-                  { name: "Slack", status: settings.slackEnabled ? "Connected" : "Not Connected", icon: "💬" },
-                  { name: "AWS Cloud", status: "Not Connected", icon: "☁️" },
-                  { name: "Azure AD", status: "Not Connected", icon: "🔷" },
+                  { name: "Active Directory", icon: "🏢" },
+                  { name: "ServiceNow", icon: "🎫" },
+                  { name: "Jira", icon: "📋" },
+                  { name: "Slack", icon: "💬" },
+                  { name: "AWS Cloud", icon: "☁️" },
+                  { name: "Azure AD", icon: "🔷" },
                 ].map(i => (
                   <div key={i.name} style={{
                     padding: 14, background: "var(--bg-elevated)", borderRadius: 10,
@@ -1052,11 +1051,13 @@ export default function SettingsPage() {
                       <span style={{ fontSize: 22 }}>{i.icon}</span>
                       <div>
                         <div style={{ fontSize: 13, fontWeight: 600 }}>{i.name}</div>
-                        <span className={`badge ${i.status === "Connected" ? "green" : "gray"}`} style={{ fontSize: 9 }}>{i.status}</span>
+                        <span className="badge gray" style={{ fontSize: 9 }}>Not Configured</span>
                       </div>
                     </div>
-                    <button className="btn btn-secondary" style={{ padding: "4px 10px", fontSize: 11 }}>
-                      {i.status === "Connected" ? "Configure" : "Connect"}
+                    <button className="btn btn-secondary" style={{ padding: "4px 10px", fontSize: 11, opacity: 0.6, cursor: "default" }}
+                      disabled
+                      title={`${i.name} integration is planned for a future release`}>
+                      Coming Soon
                     </button>
                   </div>
                 ))}

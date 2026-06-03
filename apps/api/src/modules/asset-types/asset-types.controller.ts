@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Patch, Body, Param, UseGuards, Request } from '@nestjs/common';
+import { Controller, Get, Post, Patch, Delete, Body, Param, UseGuards, Request } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
@@ -29,7 +29,14 @@ export class AssetTypesController {
   @Patch(':id')
   @Roles('Tenant Admin')
   @ApiOperation({ summary: 'Update an asset type' })
-  async update(@Param('id') id: string, @Body() body: any) {
-    return this.service.update(id, body);
+  async update(@Request() req: any, @Param('id') id: string, @Body() body: any) {
+    return this.service.update(id, req.user.tenantId, body);
+  }
+
+  @Delete(':id')
+  @Roles('Tenant Admin')
+  @ApiOperation({ summary: 'Delete an asset type' })
+  async remove(@Request() req: any, @Param('id') id: string) {
+    return this.service.delete(id, req.user.tenantId);
   }
 }

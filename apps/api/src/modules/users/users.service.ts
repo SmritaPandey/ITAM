@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException, ConflictException, UnauthorizedException } from '@nestjs/common';
 import { PrismaService } from '../../common/database/prisma.service';
 import * as bcrypt from 'bcryptjs';
 
@@ -54,6 +54,11 @@ export class UsersService {
     const role = await this.prisma.role.findUnique({ where: { id: data.roleId } });
     if (!role || role.tenantId !== tenantId) {
       throw new BadRequestException('Invalid role specified');
+    }
+
+    const existingUser = await this.prisma.user.findFirst({ where: { email: data.email, tenantId } });
+    if (existingUser) {
+      throw new ConflictException('A user with this email already exists in this tenant');
     }
 
     const passwordHash = await bcrypt.hash(data.password, 12);
@@ -151,5 +156,33 @@ export class UsersService {
       this.prisma.notification.count({ where: { tenantId, userId, isRead: false } }),
     ]);
     return { assets, openTickets, resolvedTickets, unreadNotifications: notifications };
+  }
+
+  async changePassword(id: string, tenantId: string, newPassword: string, oldPassword?: string, requestingUserRole?: string) {
+    const user = await this.findById(id, tenantId);
+
+    // Admin-initiated resets skip old password verification
+    const isAdminReset = requestingUserRole === 'Tenant Admin';
+    if (!isAdminReset) {
+      if (!oldPassword) {
+        throw new BadRequestException('Current password is required');
+      }
+      // Fetch the password hash (findById uses include so we need the raw record)
+      const userWithHash = await this.prisma.user.findUnique({ where: { id }, select: { passwordHash: true } });
+      if (!userWithHash || !userWithHash.passwordHash) {
+        throw new BadRequestException('Password-based authentication not available for this account');
+      }
+      const isMatch = await bcrypt.compare(oldPassword, userWithHash.passwordHash);
+      if (!isMatch) {
+        throw new UnauthorizedException('Current password is incorrect');
+      }
+    }
+
+    const passwordHash = await bcrypt.hash(newPassword, 12);
+    await this.prisma.user.update({
+      where: { id },
+      data: { passwordHash },
+    });
+    return { message: 'Password updated successfully' };
   }
 }

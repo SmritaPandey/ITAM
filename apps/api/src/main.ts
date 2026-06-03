@@ -7,6 +7,8 @@ import cookieParser from 'cookie-parser';
 import * as express from 'express';
 import { AppModule } from './app.module';
 import { GlobalExceptionFilter } from './common/filters/global-exception.filter';
+import { PrismaExceptionFilter } from './common/filters/prisma-exception.filter';
+import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
 
 async function bootstrap() {
   const logger = new Logger('Bootstrap');
@@ -51,7 +53,7 @@ async function bootstrap() {
   );
 
   // Global exception filter — safe error responses
-  app.useGlobalFilters(new GlobalExceptionFilter());
+  app.useGlobalFilters(new AllExceptionsFilter(), new PrismaExceptionFilter(), new GlobalExceptionFilter());
 
   // Swagger API docs
   const config = new DocumentBuilder()

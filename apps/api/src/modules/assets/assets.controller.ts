@@ -4,6 +4,7 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { AssetsService } from './assets.service';
+import { CreateAssetDto } from './dto/create-asset.dto';
 
 @ApiTags('assets')
 @ApiBearerAuth()
@@ -97,7 +98,7 @@ export class AssetsController {
   @Post()
   @Roles('Tenant Admin', 'IT Admin')
   @ApiOperation({ summary: 'Create a new asset' })
-  async create(@Request() req: any, @Body() body: any) {
+  async create(@Request() req: any, @Body() body: CreateAssetDto) {
     return this.assetsService.create(req.user.tenantId, req.user.sub, body);
   }
 
@@ -154,48 +155,7 @@ export class AssetsController {
   @Roles('Tenant Admin', 'IT Admin')
   @ApiOperation({ summary: 'Calculate asset depreciation (straight-line or declining balance)' })
   async getDepreciation(@Request() req: any, @Param('id') id: string) {
-    const asset = await this.assetsService.findById(id, req.user.tenantId);
-
-    const purchasePrice = asset.purchasePrice ? Number(asset.purchasePrice) : 0;
-    const salvageValue = asset.salvageValue ? Number(asset.salvageValue) : 0;
-    const usefulLifeMonths = asset.usefulLifeMonths || 60; // default 5 years
-    const method = asset.depreciationMethod || 'STRAIGHT_LINE';
-    const procDate = asset.procurementDate || asset.createdAt;
-    const monthsElapsed = Math.max(0, Math.floor((Date.now() - new Date(procDate).getTime()) / (30.44 * 24 * 3600 * 1000)));
-
-    let currentBookValue: number;
-    let monthlyDepreciation: number;
-
-    if (method === 'DECLINING_BALANCE') {
-      const rate = 2 / usefulLifeMonths;
-      currentBookValue = purchasePrice * Math.pow(1 - rate, Math.min(monthsElapsed, usefulLifeMonths));
-      currentBookValue = Math.max(currentBookValue, salvageValue);
-      monthlyDepreciation = currentBookValue * rate;
-    } else {
-      // Straight-line
-      monthlyDepreciation = (purchasePrice - salvageValue) / usefulLifeMonths;
-      const totalDepreciation = monthlyDepreciation * Math.min(monthsElapsed, usefulLifeMonths);
-      currentBookValue = Math.max(purchasePrice - totalDepreciation, salvageValue);
-    }
-
-    const remainingMonths = Math.max(0, usefulLifeMonths - monthsElapsed);
-    const percentDepreciated = purchasePrice > 0 ? ((purchasePrice - currentBookValue) / purchasePrice) * 100 : 0;
-
-    return {
-      assetId: id,
-      assetName: asset.name,
-      purchasePrice,
-      salvageValue,
-      usefulLifeMonths,
-      method,
-      monthsElapsed,
-      remainingMonths,
-      monthlyDepreciation: Math.round(monthlyDepreciation * 100) / 100,
-      currentBookValue: Math.round(currentBookValue * 100) / 100,
-      percentDepreciated: Math.round(percentDepreciated * 10) / 10,
-      projectedEolValue: salvageValue,
-      fullyDepreciated: monthsElapsed >= usefulLifeMonths,
-    };
+    return this.assetsService.calculateDepreciation(id, req.user.tenantId);
   }
 
   // ─── CHECK-IN / CHECK-OUT ──────────────────────────────────────────

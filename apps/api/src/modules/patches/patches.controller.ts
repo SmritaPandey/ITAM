@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Patch as PatchMethod, Body, Param, UseGuards, Request } from '@nestjs/common';
+import { Controller, Get, Post, Patch as PatchMethod, Delete, Body, Param, UseGuards, Request } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
@@ -32,8 +32,8 @@ export class PatchesController {
   @PatchMethod(':id')
   @Roles('Tenant Admin')
   @ApiOperation({ summary: 'Update a patch record' })
-  async update(@Param('id') id: string, @Body() body: any) {
-    return this.service.update(id, body);
+  async update(@Request() req: any, @Param('id') id: string, @Body() body: any) {
+    return this.service.update(id, req.user.tenantId, body);
   }
 
   @Get('compliance')
@@ -83,5 +83,12 @@ export class PatchesController {
   @ApiOperation({ summary: 'Get per-asset deployment status for a patch' })
   async deployments(@Param('id') id: string) {
     return this.service.getDeployments(id);
+  }
+
+  @Delete(':id')
+  @Roles('Tenant Admin')
+  @ApiOperation({ summary: 'Delete a patch record' })
+  async remove(@Request() req: any, @Param('id') id: string) {
+    return this.service.delete(id, req.user.tenantId);
   }
 }

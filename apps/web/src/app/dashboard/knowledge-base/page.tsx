@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useState } from "react";
-import { BookOpen, Search, ThumbsUp, Eye, Tag, Loader2, ArrowLeft } from "lucide-react";
+import { BookOpen, Search, ThumbsUp, Eye, Tag, Loader2, ArrowLeft, Plus, Trash2, X } from "lucide-react";
 import { apiFetch } from "@/lib/api";
 
 const CAT_COLORS: Record<string, { color: string; bg: string; border: string }> = {
@@ -258,6 +258,9 @@ export default function KnowledgeBasePage() {
   const [search, setSearch] = useState("");
   const [catFilter, setCatFilter] = useState("");
   const [loading, setLoading] = useState(true);
+  const [showCreate, setShowCreate] = useState(false);
+  const [createForm, setCreateForm] = useState({ title: "", content: "", category: "General", tags: "" });
+  const [creating, setCreating] = useState(false);
 
   async function load() {
     const params = new URLSearchParams();
@@ -281,6 +284,36 @@ export default function KnowledgeBasePage() {
     if (selected?.id === id) setSelected({ ...selected, helpfulCount: (selected.helpfulCount || 0) + 1 });
   }
 
+  async function handleCreateArticle() {
+    if (!createForm.title.trim() || !createForm.content.trim()) return;
+    setCreating(true);
+    try {
+      const tags = createForm.tags.split(",").map(t => t.trim()).filter(Boolean);
+      await apiFetch("/knowledge-base", {
+        method: "POST",
+        body: JSON.stringify({ title: createForm.title, content: createForm.content, category: createForm.category, tags }),
+      });
+      setShowCreate(false);
+      setCreateForm({ title: "", content: "", category: "General", tags: "" });
+      load();
+    } catch {
+      alert("Failed to create article.");
+    } finally {
+      setCreating(false);
+    }
+  }
+
+  async function handleDeleteArticle(id: string) {
+    if (!confirm("Delete this article?")) return;
+    try {
+      await apiFetch(`/knowledge-base/${id}`, { method: "DELETE" });
+      setSelected(null);
+      load();
+    } catch {
+      alert("Failed to delete article.");
+    }
+  }
+
   if (loading) return (
     <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "60vh", color: "var(--text-tertiary)" }}>
       <Loader2 size={24} style={{ animation: "spin 1s linear infinite" }} />
@@ -295,6 +328,9 @@ export default function KnowledgeBasePage() {
           <h1 className="page-title" style={{ fontSize: 28, fontWeight: 800, letterSpacing: "-0.03em" }}>Knowledge Base</h1>
           <p className="page-subtitle" style={{ color: "var(--text-secondary)" }}>Self-service articles and IT documentation</p>
         </div>
+        <button className="btn btn-primary" onClick={() => setShowCreate(true)} style={{ display: "flex", alignItems: "center", gap: 6, padding: "8px 16px", borderRadius: 10, fontWeight: 600 }}>
+          <Plus size={16} /> Create Article
+        </button>
       </div>
 
       {/* Search + Categories */}
@@ -395,18 +431,30 @@ export default function KnowledgeBasePage() {
           }}>
             <MarkdownRenderer content={selected.content} />
           </div>
-          <div style={{ display: "flex", gap: 8 }}>
-            <button className="btn btn-primary" style={{
-              fontSize: 12,
-              padding: "8px 16px",
-              borderRadius: 6,
-              display: "inline-flex",
-              alignItems: "center",
-              gap: 6
-            }} onClick={() => markHelpful(selected.id)}>
-              <ThumbsUp size={14} /> Was this helpful? ({selected.helpfulCount})
-            </button>
-          </div>
+            <div style={{ display: "flex", gap: 8 }}>
+              <button className="btn btn-primary" style={{
+                fontSize: 12,
+                padding: "8px 16px",
+                borderRadius: 6,
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 6
+              }} onClick={() => markHelpful(selected.id)}>
+                <ThumbsUp size={14} /> Was this helpful? ({selected.helpfulCount})
+              </button>
+              <button className="btn btn-secondary" style={{
+                fontSize: 12,
+                padding: "8px 16px",
+                borderRadius: 6,
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 6,
+                color: "#ef4444",
+                borderColor: "rgba(239,68,68,0.3)",
+              }} onClick={() => handleDeleteArticle(selected.id)}>
+                <Trash2 size={14} /> Delete Article
+              </button>
+            </div>
         </div>
       ) : (
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(320px, 1fr))", gap: 16 }}>
@@ -476,6 +524,61 @@ export default function KnowledgeBasePage() {
             </div>
           ))}
         </div>
+      )}
+
+      {/* Create Article Modal */}
+      {showCreate && (
+        <>
+          <div onClick={() => setShowCreate(false)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.6)", zIndex: 1000, backdropFilter: "blur(8px)" }} />
+          <div style={{
+            position: "fixed", top: "50%", left: "50%", transform: "translate(-50%, -50%)",
+            width: "min(560px, 92vw)", background: "linear-gradient(135deg, #111827 0%, #0c0f1d 100%)",
+            border: "1px solid var(--border-primary)", borderRadius: 18,
+            boxShadow: "0 24px 80px rgba(0,0,0,0.6)", zIndex: 1001, overflow: "hidden",
+          }}>
+            <div style={{ padding: "18px 24px", borderBottom: "1px solid var(--border-primary)", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <h2 style={{ fontSize: 16, fontWeight: 800, margin: 0, color: "var(--text-primary)" }}>Create New Article</h2>
+              <button onClick={() => setShowCreate(false)} style={{
+                background: "var(--bg-elevated)", border: "1px solid var(--border-primary)",
+                borderRadius: 8, width: 28, height: 28, display: "flex", alignItems: "center", justifyContent: "center",
+                color: "var(--text-secondary)", cursor: "pointer"
+              }}><X size={15} /></button>
+            </div>
+            <div style={{ padding: 24, display: "grid", gap: 14 }}>
+              <div>
+                <label style={{ fontSize: 12, fontWeight: 700, color: "var(--text-secondary)", display: "block", marginBottom: 6 }}>Title *</label>
+                <input value={createForm.title} onChange={e => setCreateForm(p => ({ ...p, title: e.target.value }))} placeholder="Article title"
+                  style={{ width: "100%", padding: "10px 14px", borderRadius: 10, background: "var(--bg-input)", border: "1px solid var(--border-primary)", color: "var(--text-primary)", fontSize: 13, outline: "none" }} />
+              </div>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+                <div>
+                  <label style={{ fontSize: 12, fontWeight: 700, color: "var(--text-secondary)", display: "block", marginBottom: 6 }}>Category</label>
+                  <select value={createForm.category} onChange={e => setCreateForm(p => ({ ...p, category: e.target.value }))}
+                    style={{ width: "100%", padding: "10px 14px", borderRadius: 10, background: "var(--bg-input)", border: "1px solid var(--border-primary)", color: "var(--text-primary)", fontSize: 13, fontFamily: "inherit" }}>
+                    {Object.keys(CAT_COLORS).map(cat => <option key={cat} value={cat}>{cat}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label style={{ fontSize: 12, fontWeight: 700, color: "var(--text-secondary)", display: "block", marginBottom: 6 }}>Tags (comma-separated)</label>
+                  <input value={createForm.tags} onChange={e => setCreateForm(p => ({ ...p, tags: e.target.value }))} placeholder="e.g. vpn, network, setup"
+                    style={{ width: "100%", padding: "10px 14px", borderRadius: 10, background: "var(--bg-input)", border: "1px solid var(--border-primary)", color: "var(--text-primary)", fontSize: 13, outline: "none" }} />
+                </div>
+              </div>
+              <div>
+                <label style={{ fontSize: 12, fontWeight: 700, color: "var(--text-secondary)", display: "block", marginBottom: 6 }}>Content * (Markdown supported)</label>
+                <textarea value={createForm.content} onChange={e => setCreateForm(p => ({ ...p, content: e.target.value }))} rows={8} placeholder="Write your article content in Markdown..."
+                  style={{ width: "100%", padding: "10px 14px", borderRadius: 10, background: "var(--bg-input)", border: "1px solid var(--border-primary)", color: "var(--text-primary)", fontSize: 13, outline: "none", resize: "vertical", fontFamily: "monospace" }} />
+              </div>
+              <div style={{ display: "flex", gap: 10, justifyContent: "flex-end", marginTop: 8 }}>
+                <button onClick={() => setShowCreate(false)} className="btn btn-secondary" style={{ borderRadius: 10, fontWeight: 600 }}>Cancel</button>
+                <button onClick={handleCreateArticle} className="btn btn-primary" disabled={creating || !createForm.title.trim() || !createForm.content.trim()}
+                  style={{ display: "flex", alignItems: "center", gap: 8, borderRadius: 10, fontWeight: 600 }}>
+                  {creating ? <><Loader2 size={14} style={{ animation: "spin 1s linear infinite" }} /> Publishing...</> : <><Plus size={15} /> Publish Article</>}
+                </button>
+              </div>
+            </div>
+          </div>
+        </>
       )}
     </>
   );

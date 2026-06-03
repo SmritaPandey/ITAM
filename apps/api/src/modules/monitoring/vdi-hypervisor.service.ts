@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, NotImplementedException } from '@nestjs/common';
 import * as https from 'https';
 import * as http from 'http';
 import { PrismaService } from '../../common/database/prisma.service';
@@ -28,9 +28,9 @@ export interface VmInfo {
   cpu: number;    // vCPUs
   ramMb: number;  // Allocated RAM in MB
   diskGb: number; // Allocated disk in GB
-  cpuUsage: number;  // Current CPU usage %
-  ramUsage: number;  // Current RAM usage %
-  diskUsage: number; // Current disk usage %
+  cpuUsage: number | null;  // Current CPU usage %
+  ramUsage: number | null;  // Current RAM usage %
+  diskUsage: number | null; // Current disk usage %
   uptime?: string;
   ipAddress?: string;
   assignedUser?: string;
@@ -112,9 +112,9 @@ export class VdiHypervisorService {
       cpu: m.virtual_center_data?.num_cpus || 0,
       ramMb: m.virtual_center_data?.memory_mb || 0,
       diskGb: Math.round((m.virtual_center_data?.disk_space_mb || 0) / 1024),
-      cpuUsage: 0, // Horizon doesn't provide real-time usage in this endpoint
-      ramUsage: 0,
-      diskUsage: 0,
+      cpuUsage: null, // Horizon doesn't provide real-time usage in this endpoint
+      ramUsage: null,
+      diskUsage: null,
       ipAddress: m.agent_data?.ip_v4,
       assignedUser: m.user?.name,
     }));
@@ -221,6 +221,8 @@ export class VdiHypervisorService {
         case 'proxmox':
           vms = await this.proxmoxGetVMs(config);
           break;
+        case 'hyper-v':
+          throw new NotImplementedException('Hyper-V integration is not yet available. Supported hypervisors: VMware Horizon, Proxmox VE.');
         default:
           this.logger.warn(`Unsupported hypervisor type: ${config.type}`);
           return { hypervisor: config.type, totalVMs: 0, created: 0, updated: 0, removed: 0 };

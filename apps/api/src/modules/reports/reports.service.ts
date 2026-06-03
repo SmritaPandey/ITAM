@@ -1,9 +1,129 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
+import { Cron, CronExpression } from '@nestjs/schedule';
 import { PrismaService } from '../../common/database/prisma.service';
+import { ReportGeneratorService } from './report-generator.service';
+import { EmailService } from '../notifications/email.service';
 
 @Injectable()
 export class ReportsService {
-  constructor(private prisma: PrismaService) {}
+  private readonly logger = new Logger(ReportsService.name);
+
+  constructor(
+    private prisma: PrismaService,
+    private reportGenerator: ReportGeneratorService,
+    private emailService: EmailService,
+  ) {}
+
+  // ─── Scheduled Report Execution Cron ──────────────────────────
+
+  /**
+   * Runs every hour to find and execute due scheduled reports.
+   * For each due report: generates data, emails recipients if configured,
+   * and advances nextRunAt.
+   */
+  @Cron(CronExpression.EVERY_HOUR)
+  async executeScheduledReports() {
+    const now = new Date();
+
+    const dueReports = await this.prisma.scheduledReport.findMany({
+      where: {
+        isActive: true,
+        nextRunAt: { lte: now },
+      },
+    });
+
+    if (dueReports.length === 0) return;
+
+    this.logger.log(`Executing ${dueReports.length} scheduled report(s)...`);
+
+    for (const schedule of dueReports) {
+      try {
+        // Generate the report using the existing report generator
+        const report = await this.reportGenerator.generate(
+          schedule.tenantId,
+          schedule.reportType,
+          { format: schedule.format },
+        );
+
+        // Attempt email delivery if recipients are configured
+        if (schedule.recipients && schedule.recipients.length > 0) {
+          const csvContent = this.reportGenerator.toCSV(report);
+          const reportData = report as any;
+          await this.emailService.send({
+            to: schedule.recipients,
+            subject: `📊 Scheduled Report: ${schedule.name} — ${now.toLocaleDateString()}`,
+            html: `
+              <h2>${reportData.title || schedule.name}</h2>
+              <p>Your scheduled report <strong>${schedule.name}</strong> has been generated.</p>
+              <p>Report Type: ${schedule.reportType} | Format: ${schedule.format}</p>
+              <p>Generated at: ${now.toISOString()}</p>
+              ${reportData.summary ? `<pre>${JSON.stringify(reportData.summary, null, 2)}</pre>` : ''}
+              <hr/>
+              <p><em>Full report data is attached below in CSV format:</em></p>
+              <pre style="font-size:11px;max-height:400px;overflow:auto">${csvContent.substring(0, 5000)}${csvContent.length > 5000 ? '\n... (truncated)' : ''}</pre>
+            `,
+          });
+          this.logger.log(`Report "${schedule.name}" emailed to ${schedule.recipients.length} recipient(s)`);
+        }
+
+        // Update lastRunAt and calculate nextRunAt
+        const nextRunAt = this.calculateNextRun(schedule.schedule);
+        await this.prisma.scheduledReport.update({
+          where: { id: schedule.id },
+          data: {
+            lastRunAt: now,
+            nextRunAt,
+          },
+        });
+
+        this.logger.log(`Scheduled report "${schedule.name}" executed. Next run: ${nextRunAt.toISOString()}`);
+      } catch (err: any) {
+        // Log and continue — one failure should not block others
+        this.logger.error(`Failed to execute scheduled report "${schedule.name}" (${schedule.id}): ${err.message}`);
+      }
+    }
+  }
+
+  /**
+   * Calculate the next run time from a cron expression.
+   * Simple parser for standard 5-field cron; falls back to +24h for complex expressions.
+   */
+  private calculateNextRun(cronExpr: string): Date {
+    const now = new Date();
+    const parts = cronExpr.split(' ');
+    if (parts.length !== 5) return new Date(now.getTime() + 24 * 60 * 60 * 1000);
+    const [min, hour, dayOfMonth, month, dayOfWeek] = parts;
+    const next = new Date(now);
+    next.setSeconds(0, 0);
+    next.setMinutes(parseInt(min) || 0);
+    next.setHours(parseInt(hour) || 0);
+
+    // Advance to next occurrence
+    if (next <= now) {
+      if (dayOfWeek !== '*' && dayOfMonth === '*') {
+        // Weekly schedule — advance to next matching weekday
+        const targetDay = parseInt(dayOfWeek);
+        if (!isNaN(targetDay)) {
+          do {
+            next.setDate(next.getDate() + 1);
+          } while (next.getDay() !== targetDay);
+        } else {
+          next.setDate(next.getDate() + 7);
+        }
+      } else if (dayOfMonth !== '*') {
+        // Monthly schedule — advance to next month
+        next.setMonth(next.getMonth() + 1);
+        next.setDate(parseInt(dayOfMonth) || 1);
+      } else {
+        // Daily schedule — advance to tomorrow
+        next.setDate(next.getDate() + 1);
+      }
+    }
+
+    return next;
+  }
+
+  // ─── Report Data Methods ──────────────────────────────────────
 
   async getAssetSummary(tenantId: string) {
     const [total, byType, byStatus, byDepartment, totalValue] = await Promise.all([

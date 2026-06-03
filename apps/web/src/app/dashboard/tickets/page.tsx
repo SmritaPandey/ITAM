@@ -1,7 +1,7 @@
 "use client";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Plus, MessageSquare, Shield, Clock, AlertTriangle, CheckCircle2 } from "lucide-react";
+import { Plus, MessageSquare, Shield, Clock, AlertTriangle, CheckCircle2, Search, Trash2, ChevronLeft, ChevronRight } from "lucide-react";
 import CreateTicketPanel from "@/components/CreateTicketPanel";
 import { apiFetch } from "@/lib/api";
 import { PageHelp } from "@/components/HelpSystem";
@@ -23,19 +23,35 @@ function slaCountdown(dueAt: string | null) {
 
 export default function TicketsPage() {
   const router = useRouter();
-  const [tickets, setTickets] = useState<any>({ data: [], total: 0 });
+  const [tickets, setTickets] = useState<any>({ data: [], total: 0, page: 1, totalPages: 1 });
   const [slaStats, setSlaStats] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [showCreate, setShowCreate] = useState(false);
   const [statusFilter, setStatusFilter] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [page, setPage] = useState(1);
+  const [deleting, setDeleting] = useState<string | null>(null);
 
-  function loadTickets() {
+  function loadTickets(p = page) {
     setLoading(true);
+    const params = new URLSearchParams({ page: String(p), limit: "20" });
+    if (searchQuery.trim()) params.set("search", searchQuery.trim());
+    if (statusFilter) params.set("status", statusFilter);
     Promise.all([
-      apiFetch("/tickets?limit=50"),
+      apiFetch(`/tickets?${params}`),
       apiFetch("/tickets/sla/stats"),
     ]).then(([t, s]) => { setTickets(t); setSlaStats(s); })
       .catch(console.error).finally(() => setLoading(false));
+  }
+
+  async function handleDelete(id: string) {
+    if (!confirm("Are you sure you want to delete this ticket? This action cannot be undone.")) return;
+    setDeleting(id);
+    try {
+      await apiFetch(`/tickets/${id}`, { method: "DELETE" });
+      loadTickets(page);
+    } catch { alert("Failed to delete ticket."); }
+    finally { setDeleting(null); }
   }
 
   useEffect(() => { loadTickets(); }, []);
@@ -48,6 +64,17 @@ export default function TicketsPage() {
           <p className="page-subtitle">{tickets.total} tickets • Incidents, Problems, Changes & Service Requests</p>
         </div>
         <button className="btn btn-primary" onClick={() => setShowCreate(true)}><Plus size={14} /> New Ticket</button>
+      </div>
+
+      {/* Search */}
+      <div style={{ marginBottom: 12, display: "flex", gap: 10 }}>
+        <div style={{ flex: 1, display: "flex", alignItems: "center", gap: 8, background: "var(--bg-elevated)", border: "1px solid var(--border-primary)", borderRadius: 10, padding: "8px 14px" }}>
+          <Search size={15} style={{ color: "var(--text-tertiary)" }} />
+          <input value={searchQuery} onChange={e => setSearchQuery(e.target.value)}
+            onKeyDown={e => { if (e.key === "Enter") { setPage(1); loadTickets(1); } }}
+            placeholder="Search tickets by subject, number, or requester..."
+            style={{ width: "100%", background: "none", border: "none", color: "var(--text-primary)", fontSize: 13, fontFamily: "inherit", outline: "none" }} />
+        </div>
       </div>
 
       <PageHelp id="tickets" title="Ticket Management">
@@ -136,6 +163,7 @@ export default function TicketsPage() {
               <th>SLA</th>
               <th>Requester</th>
               <th>Created</th>
+              <th style={{ width: 40 }}></th>
             </tr>
           </thead>
           <tbody>
@@ -174,13 +202,33 @@ export default function TicketsPage() {
                   <td style={{ fontSize: 11, color: "var(--text-tertiary)", whiteSpace: "nowrap" }}>
                     {new Date(t.createdAt).toLocaleDateString()}
                   </td>
+                  <td style={{ textAlign: "center" }}>
+                    <button onClick={e => { e.stopPropagation(); handleDelete(t.id); }}
+                      disabled={deleting === t.id}
+                      style={{ background: "none", border: "none", cursor: "pointer", color: "var(--text-tertiary)", padding: 4, borderRadius: 6, transition: "all 0.15s" }}
+                      onMouseEnter={e => { e.currentTarget.style.color = "#ef4444"; e.currentTarget.style.background = "rgba(239,68,68,0.1)"; }}
+                      onMouseLeave={e => { e.currentTarget.style.color = "var(--text-tertiary)"; e.currentTarget.style.background = "none"; }}>
+                      <Trash2 size={14} />
+                    </button>
+                  </td>
                 </tr>
               );
             })}
           </tbody>
         </table>
       </div>
-      <CreateTicketPanel open={showCreate} onClose={() => setShowCreate(false)} onCreated={loadTickets} />
+
+      {/* Pagination */}
+      {tickets.totalPages > 1 && (
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "12px 20px", marginTop: 8, borderRadius: 12, background: "var(--bg-card)", border: "1px solid var(--border-primary)" }}>
+          <span style={{ fontSize: 12, color: "var(--text-tertiary)" }}>Page {tickets.page || page} of {tickets.totalPages} ({tickets.total} tickets)</span>
+          <div style={{ display: "flex", gap: 8 }}>
+            <button className="btn btn-secondary" disabled={page <= 1} onClick={() => { const p = page - 1; setPage(p); loadTickets(p); }} style={{ padding: "6px 14px", fontSize: 12 }}><ChevronLeft size={14} /> Prev</button>
+            <button className="btn btn-secondary" disabled={page >= tickets.totalPages} onClick={() => { const p = page + 1; setPage(p); loadTickets(p); }} style={{ padding: "6px 14px", fontSize: 12 }}>Next <ChevronRight size={14} /></button>
+          </div>
+        </div>
+      )}
+      <CreateTicketPanel open={showCreate} onClose={() => setShowCreate(false)} onCreated={() => loadTickets(1)} />
     </>
   );
 }

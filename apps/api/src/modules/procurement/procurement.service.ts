@@ -1,12 +1,16 @@
-import { Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException, ConflictException } from '@nestjs/common';
 import { PrismaService } from '../../common/database/prisma.service';
 import { Cron, CronExpression } from '@nestjs/schedule';
+import { NotificationsService } from '../notifications/notifications.service';
 
 @Injectable()
 export class ProcurementService {
   private readonly logger = new Logger(ProcurementService.name);
 
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private notificationService: NotificationsService,
+  ) {}
 
   // ─── VENDORS ─────────────────────────────────────────────────────────────
   async getVendors(tenantId: string) {
@@ -37,6 +41,15 @@ export class ProcurementService {
   }
 
   async deleteVendor(id: string, tenantId: string) {
+    // Cascade guard: prevent deletion if vendor has related contracts or POs
+    const [contractCount, poCount] = await Promise.all([
+      this.prisma.contract.count({ where: { vendorId: id } }),
+      this.prisma.purchaseOrder.count({ where: { vendorId: id } }),
+    ]);
+    if (contractCount > 0 || poCount > 0) {
+      throw new ConflictException('Cannot delete vendor — has related contracts/purchase orders.');
+    }
+
     return this.prisma.vendor.delete({ where: { id, tenantId } });
   }
 
@@ -80,8 +93,8 @@ export class ProcurementService {
         vendorId,
         title: title || name || 'Untitled Contract',
         type: type || 'AMC',
-        startDate: new Date(startDate),
-        endDate: new Date(endDate),
+        startDate: startDate ? new Date(startDate) : new Date(),
+        endDate: endDate ? new Date(endDate) : new Date(Date.now() + 365 * 24 * 60 * 60 * 1000),
         ...(value !== undefined && { value: parseFloat(value) }),
         ...(currency && { currency }),
         ...(autoRenew !== undefined && { autoRenew }),
@@ -97,7 +110,15 @@ export class ProcurementService {
   }
 
   async deleteContract(id: string, tenantId: string) {
-    return this.prisma.contract.delete({ where: { id, tenantId } });
+    // Cascade guard: use try-catch for FK constraint violations
+    try {
+      return await this.prisma.contract.delete({ where: { id, tenantId } });
+    } catch (error: any) {
+      if (error?.code === 'P2003') {
+        throw new ConflictException('Cannot delete contract — has related records.');
+      }
+      throw error;
+    }
   }
 
   async getExpiringContracts(tenantId: string, days = 30) {
@@ -117,9 +138,22 @@ export class ProcurementService {
     return this.prisma.purchaseOrder.findFirst({ where: { id, tenantId }, include: { vendor: true, items: true } });
   }
 
+  private async generatePoNumber(tenantId: string, tx?: any): Promise<string> {
+    // Use last-created PO's number instead of count to reduce race window
+    const client = tx || this.prisma;
+    const last = await client.purchaseOrder.findMany({
+      where: { tenantId },
+      orderBy: { createdAt: 'desc' },
+      take: 1,
+      select: { poNumber: true },
+    });
+    const lastNum = last.length > 0
+      ? parseInt(last[0].poNumber.replace('PO-', ''), 10) || 0
+      : 0;
+    return `PO-${String(lastNum + 1).padStart(5, '0')}`;
+  }
+
   async createPurchaseOrder(tenantId: string, userId: string, data: any) {
-    const count = await this.prisma.purchaseOrder.count({ where: { tenantId } });
-    const poNumber = `PO-${String(count + 1).padStart(5, '0')}`;
     const { items, vendorName, vendorId: rawVendorId, currency, notes } = data;
 
     // Resolve vendorId
@@ -135,31 +169,45 @@ export class ProcurementService {
 
     if (!vendorId) throw new NotFoundException('Vendor not found — provide vendorId or vendorName');
 
-    return this.prisma.$transaction(async (tx) => {
-      const po = await tx.purchaseOrder.create({
-        data: {
-          tenantId,
-          poNumber,
-          vendorId,
-          requestedById: userId,
-          ...(currency && { currency }),
-          ...(notes && { notes }),
-        },
-      });
-      if (items?.length) {
-        await tx.purchaseOrderItem.createMany({
-          data: items.map((item: any) => ({
-            poId: po.id,
-            description: item.description || 'Item',
-            quantity: item.quantity || 1,
-            unitPrice: item.unitPrice || 0,
-            totalPrice: (item.quantity || 1) * (item.unitPrice || 0),
-          })),
+    // Retry loop to handle unique constraint violations from concurrent number generation
+    const MAX_RETRIES = 3;
+    for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
+      try {
+        return await this.prisma.$transaction(async (tx) => {
+          const poNumber = await this.generatePoNumber(tenantId, tx);
+          const po = await tx.purchaseOrder.create({
+            data: {
+              tenantId,
+              poNumber,
+              vendorId,
+              requestedById: userId,
+              ...(currency && { currency }),
+              ...(notes && { notes }),
+            },
+          });
+          if (items?.length) {
+            await tx.purchaseOrderItem.createMany({
+              data: items.map((item: any) => ({
+                poId: po.id,
+                description: item.description || 'Item',
+                quantity: item.quantity || 1,
+                unitPrice: item.unitPrice || 0,
+                totalPrice: (item.quantity || 1) * (item.unitPrice || 0),
+              })),
+            });
+          }
+          const total = items?.reduce((s: number, i: any) => s + (i.quantity || 1) * (i.unitPrice || 0), 0) || 0;
+          return tx.purchaseOrder.update({ where: { id: po.id }, data: { totalAmount: total }, include: { items: true, vendor: true } });
         });
+      } catch (error: any) {
+        // P2002 is Prisma's unique constraint violation error code
+        if (error?.code === 'P2002' && attempt < MAX_RETRIES - 1) {
+          continue;
+        }
+        throw error;
       }
-      const total = items?.reduce((s: number, i: any) => s + (i.quantity || 1) * (i.unitPrice || 0), 0) || 0;
-      return tx.purchaseOrder.update({ where: { id: po.id }, data: { totalAmount: total }, include: { items: true, vendor: true } });
-    });
+    }
+    throw new Error('Failed to generate unique PO number after maximum retries');
   }
 
   async approvePO(id: string, tenantId: string, userId: string) {
@@ -226,5 +274,35 @@ export class ProcurementService {
       select: { id: true, name: true, tenantId: true, warrantyExpiry: true, leaseEndDate: true },
     });
     this.logger.log(`Found ${assets.length} assets with expiring warranty/lease`);
+
+    // Group by tenant and broadcast notifications to admins
+    const byTenant = new Map<string, typeof assets>();
+    for (const asset of assets) {
+      if (!byTenant.has(asset.tenantId)) byTenant.set(asset.tenantId, []);
+      byTenant.get(asset.tenantId)!.push(asset);
+    }
+
+    for (const [tenantId, tenantAssets] of byTenant) {
+      const warrantyExpiring = tenantAssets.filter(a => a.warrantyExpiry);
+      const leaseExpiring = tenantAssets.filter(a => a.leaseEndDate);
+
+      if (warrantyExpiring.length > 0) {
+        await this.notificationService.broadcastToAdmins(tenantId, {
+          title: 'Warranty Expiring Soon',
+          message: `${warrantyExpiring.length} asset(s) have warranties expiring within 30 days: ${warrantyExpiring.slice(0, 3).map(a => a.name).join(', ')}${warrantyExpiring.length > 3 ? '...' : ''}`,
+          type: 'WARNING',
+          module: 'PROCUREMENT',
+        });
+      }
+
+      if (leaseExpiring.length > 0) {
+        await this.notificationService.broadcastToAdmins(tenantId, {
+          title: 'Lease Expiring Soon',
+          message: `${leaseExpiring.length} asset(s) have leases expiring within 30 days: ${leaseExpiring.slice(0, 3).map(a => a.name).join(', ')}${leaseExpiring.length > 3 ? '...' : ''}`,
+          type: 'WARNING',
+          module: 'PROCUREMENT',
+        });
+      }
+    }
   }
 }

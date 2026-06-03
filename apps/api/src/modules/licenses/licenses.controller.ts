@@ -1,9 +1,10 @@
-import { Controller, Get, Post, Patch, Body, Param, Query, UseGuards, Request } from '@nestjs/common';
+import { Controller, Get, Post, Patch, Delete, Body, Param, Query, UseGuards, Request } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { LicensesService } from './licenses.service';
+import { CreateLicenseDto } from './dto/create-license.dto';
 import { ModuleGuard } from '../../common/guards/module.guard';
 import { RequireModule } from '../../common/decorators/require-module.decorator';
 
@@ -39,7 +40,7 @@ export class LicensesController {
   @Post()
   @Roles('Tenant Admin', 'IT Admin')
   @ApiOperation({ summary: 'Create a license' })
-  async create(@Request() req: any, @Body() body: any) {
+  async create(@Request() req: any, @Body() body: CreateLicenseDto) {
     return this.licensesService.create(req.user.tenantId, body);
   }
 
@@ -55,5 +56,12 @@ export class LicensesController {
   @ApiOperation({ summary: 'List license assignments (who is using it)' })
   async getAssignments(@Param('id') id: string) {
     return this.licensesService.getAssignments(id);
+  }
+
+  @Delete(':id')
+  @Roles('Tenant Admin', 'IT Admin')
+  @ApiOperation({ summary: 'Delete a license and its assignments' })
+  async remove(@Request() req: any, @Param('id') id: string) {
+    return this.licensesService.delete(id, req.user.tenantId);
   }
 }

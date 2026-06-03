@@ -359,84 +359,39 @@ export class ScanningService {
       }
     }
 
-    // Default Seeded Findings if DB is empty, ensuring the dashboard looks absolutely incredible
-    if (findings.length === 0) {
-      findings.push(
-        {
-          id: 'seed-telnet-db',
-          title: 'Obsolete Telnet Protocol Service Active',
-          severity: 'CRITICAL',
-          category: 'OPEN_PORT',
-          target: '192.168.1.45:23',
-          detectedAt: new Date(Date.now() - 3600000), // 1 hr ago
-          status: 'ACTIVE',
-          cvss: 9.8,
-          evidence: 'Port 23 (tcp) is open. Banner grab: BSD telnetd 0.17. Transmitting database admin queries in plain text.',
-          remediation: 'Disable the Telnet service immediately. Enforce SSH (port 22) for all command line communications and remote administrative access.',
-        },
-        {
-          id: 'seed-minerd-workstation',
-          title: 'Malicious Process Blocked: minerd.exe',
-          severity: 'CRITICAL',
-          category: 'MALWARE',
-          target: 'DESKTOP-HR-DEPT',
-          detectedAt: new Date(Date.now() - 7200000), // 2 hrs ago
-          status: 'ACTIVE',
-          cvss: 9.6,
-          evidence: "Process 'minerd.exe' (PID: 8412) was initiated by domain user 'temp-admin' and immediately killed by endpoint compliance rule 'No Cryptomining Software'. Command: minerd.exe -o stratum+tcp://monero.pool:3333 -u 44AFF...",
-          remediation: 'Isolate the machine, reset domain user account credentials, and inspect network firewall logs for unauthorized outbound connection attempts to mining pools.',
-        },
-        {
-          id: 'seed-ssl-expired',
-          title: 'Expired SSL/TLS Certificate',
-          severity: 'HIGH',
-          category: 'SSL_RISK',
-          target: 'vpn.internal.corp',
-          detectedAt: new Date(Date.now() - 18000000), // 5 hrs ago
-          status: 'ACTIVE',
-          cvss: 9.0,
-          evidence: 'Certificate expired on 2026-05-15. Current System Time is 2026-05-29. Days remaining: -14.',
-          remediation: 'Renew the SSL/TLS certificate immediately through your certificate authority (CA) and apply it to the VPN gateway.',
-        },
-        {
-          id: 'seed-ssh-outdated',
-          title: 'Outdated & Vulnerable OpenSSH Server',
-          severity: 'HIGH',
-          category: 'OS_SERVICES',
-          target: '10.0.1.88:22',
-          detectedAt: new Date(Date.now() - 25000000),
-          status: 'ACTIVE',
-          cvss: 8.1,
-          evidence: 'Detected OpenSSH 7.4. Server is vulnerable to CVE-2020-15778 (SCP command injection RCE) and has outdated SSH ciphers enabled.',
-          remediation: 'Upgrade the OpenSSH server on the target system to the latest stable release (8.4p1+ or 9.x) via your package manager.',
-        },
-        {
-          id: 'seed-beast-ssl',
-          title: 'Vulnerable to BEAST (SSL/TLS CBC Cipher Weakness)',
-          severity: 'MEDIUM',
-          category: 'SSL_RISK',
-          target: 'billing.internal.corp',
-          detectedAt: new Date(Date.now() - 86400000), // 1 day ago
-          status: 'ACTIVE',
-          cvss: 5.5,
-          evidence: 'Server allows TLS 1.0 connections supporting CBC block cipher suites. Prone to BEAST attack (padding Oracle vulnerability). Grade: C.',
-          remediation: 'Modify Nginx/Apache config to disable TLS 1.0 and TLS 1.1 completely. Enforce TLS 1.2 or TLS 1.3 and secure AEAD-based ciphers like GCM.',
-        },
-        {
-          id: 'seed-unauth-usb',
-          title: 'Unauthorized USB Storage Device Mount',
-          severity: 'MEDIUM',
-          category: 'COMPLIANCE',
-          target: 'DEVELOPER-WS-02',
-          detectedAt: new Date(Date.now() - 172800000), // 2 days ago
-          status: 'ACTIVE',
-          cvss: 5.0,
-          evidence: 'USB storage device mounted: Kingston DataTraveler 3.0 (Capacity: 64GB, Serial: KNG1088421). Mount Point: E:\\',
-          remediation: 'Review endpoint compliance registry policy for USB storage blocks. Educate staff on the risks of unauthorized external media.',
-        }
-      );
+    // No seeded/fallback findings — return only real scan data
+
+    // Apply muted/resolved overrides from tenant settings
+    const overrides = await this.loadFindingOverrides(tenantId);
+    for (const f of findings) {
+      const override = overrides[f.id];
+      if (override) f.status = override;
     }
 
     return findings;
+  }
+
+  async updateFinding(id: string, tenantId: string, status: string) {
+    const overrides = await this.loadFindingOverrides(tenantId);
+    overrides[id] = status;
+    await this.saveFindingOverrides(tenantId, overrides);
+    return { id, status };
+  }
+
+  // ─── Finding Override Persistence Helpers ──────────────────────
+
+  private async loadFindingOverrides(tenantId: string): Promise<Record<string, string>> {
+    const tenant = await this.prisma.tenant.findUnique({ where: { id: tenantId } });
+    const settings = (tenant?.settings as any) || {};
+    return settings.scanFindingOverrides || {};
+  }
+
+  private async saveFindingOverrides(tenantId: string, overrides: Record<string, string>) {
+    const tenant = await this.prisma.tenant.findUnique({ where: { id: tenantId } });
+    const settings = (tenant?.settings as any) || {};
+    await this.prisma.tenant.update({
+      where: { id: tenantId },
+      data: { settings: { ...settings, scanFindingOverrides: overrides } },
+    });
   }
 }

@@ -1,5 +1,6 @@
-import { Controller, Get, Post, Body } from '@nestjs/common';
+import { Controller, Get, Post, Body, ForbiddenException } from '@nestjs/common';
 import { ApiTags, ApiOperation } from '@nestjs/swagger';
+import { Throttle } from '@nestjs/throttler';
 import { SetupService } from './setup.service';
 
 @ApiTags('setup')
@@ -14,6 +15,7 @@ export class SetupController {
   }
 
   @Post('initialize')
+  @Throttle({ default: { limit: 3, ttl: 3600000 } })
   @ApiOperation({ summary: 'Initialize system with first tenant and admin user' })
   async initialize(@Body() body: {
     organizationName: string;
@@ -23,6 +25,10 @@ export class SetupController {
     timezone?: string;
     industry?: string;
   }) {
+    const status = await this.setupService.getStatus();
+    if (status.initialized) {
+      throw new ForbiddenException('System is already initialized');
+    }
     return this.setupService.initialize(body);
   }
 }

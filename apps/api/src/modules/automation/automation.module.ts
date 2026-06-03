@@ -3,8 +3,10 @@ import { AutomationService } from './automation.service';
 import { ItilAutomationService } from './itil-automation.service';
 import { AutomationController } from './automation.controller';
 import { ScriptLibraryController } from './script-library.controller';
+import { NotificationsModule } from '../notifications/notifications.module';
 
 @Module({
+  imports: [NotificationsModule],
   controllers: [AutomationController, ScriptLibraryController],
   providers: [AutomationService, ItilAutomationService],
   exports: [AutomationService, ItilAutomationService],

@@ -403,7 +403,7 @@ function getUsbDevices() {
   const platform = os.platform();
   try {
     if (platform === 'darwin') {
-      const output = execCmd('system_profiler SPUSBDataType -json 2>/dev/null | head -c 5000');
+      const output = execCmd('system_profiler SPUSBDataType -json 2>/dev/null');
       try {
         const data = JSON.parse(output);
         const items = data.SPUSBDataType || [];
@@ -695,11 +695,74 @@ function getListeningPorts() {
   return uniqPorts;
 }
 
+function getSystemHardwareDetails() {
+  const platform = os.platform();
+  const details = {
+    serialNumber: 'Unknown',
+    biosVendor: 'Unknown',
+    biosVersion: 'Unknown',
+    motherboard: 'Unknown',
+    tpmEnabled: false,
+    tpmVersion: 'N/A'
+  };
+
+  try {
+    if (platform === 'win32') {
+      const serialOut = execCmd('wmic bios get serialnumber /format:list');
+      details.serialNumber = serialOut.split('\n').find(l => l.startsWith('SerialNumber='))?.split('=')[1]?.trim() || 'Unknown';
+      const biosVendorOut = execCmd('wmic bios get manufacturer /format:list');
+      details.biosVendor = biosVendorOut.split('\n').find(l => l.startsWith('Manufacturer='))?.split('=')[1]?.trim() || 'Unknown';
+      const biosVerOut = execCmd('wmic bios get name /format:list');
+      details.biosVersion = biosVerOut.split('\n').find(l => l.startsWith('Name='))?.split('=')[1]?.trim() || 'Unknown';
+
+      const boardVendor = execCmd('wmic baseboard get manufacturer /format:list').split('\n').find(l => l.startsWith('Manufacturer='))?.split('=')[1]?.trim() || '';
+      const boardProduct = execCmd('wmic baseboard get product /format:list').split('\n').find(l => l.startsWith('Product='))?.split('=')[1]?.trim() || '';
+      if (boardVendor || boardProduct) {
+        details.motherboard = `${boardVendor} ${boardProduct}`.trim();
+      }
+
+      const tpmOut = execCmd('wmic /namespace:\\\\root\\cimv2\\security\\microsofttpm path Win32_Tpm get IsEnabled_InitialValue,SpecVersion /format:list 2>nul');
+      if (tpmOut.includes('IsEnabled_InitialValue')) {
+        details.tpmEnabled = tpmOut.split('\n').find(l => l.startsWith('IsEnabled_InitialValue='))?.split('=')[1]?.trim() === 'TRUE';
+        details.tpmVersion = tpmOut.split('\n').find(l => l.startsWith('SpecVersion='))?.split('=')[1]?.trim() || 'N/A';
+      }
+    } else if (platform === 'darwin') {
+      const serialOut = execCmd("ioreg -rd1 -c IOPlatformExpertDevice | awk -F'\"' '/IOPlatformSerialNumber/ { print $4 }'");
+      details.serialNumber = serialOut?.trim() || 'Unknown';
+      details.biosVendor = 'Apple Inc.';
+      const chipOut = execCmd('sysctl -n machdep.cpu.brand_string 2>/dev/null || sysctl -n hw.model 2>/dev/null');
+      details.biosVersion = chipOut?.trim() || 'Apple Silicon';
+      details.motherboard = execCmd('sysctl -n hw.model 2>/dev/null')?.trim() || 'Apple Baseboard';
+      details.tpmEnabled = true;
+      details.tpmVersion = 'Secure Enclave';
+    } else {
+      details.serialNumber = execCmd('cat /sys/class/dmi/id/product_serial 2>/dev/null || cat /sys/class/dmi/id/board_serial 2>/dev/null || echo "Unknown"')?.trim();
+      details.biosVendor = execCmd('cat /sys/class/dmi/id/bios_vendor 2>/dev/null || echo "Unknown"')?.trim();
+      details.biosVersion = execCmd('cat /sys/class/dmi/id/bios_version 2>/dev/null || echo "Unknown"')?.trim();
+
+      const boardVendor = execCmd('cat /sys/class/dmi/id/board_vendor 2>/dev/null')?.trim() || '';
+      const boardName = execCmd('cat /sys/class/dmi/id/board_name 2>/dev/null')?.trim() || '';
+      if (boardVendor || boardName) {
+        details.motherboard = `${boardVendor} ${boardName}`.trim();
+      }
+
+      const tpmCheck = execCmd('ls /sys/class/tpm/tpm0 2>/dev/null || ls /dev/tpm0 2>/dev/null');
+      if (tpmCheck) {
+        details.tpmEnabled = true;
+        details.tpmVersion = execCmd('cat /sys/class/tpm/tpm0/device/description 2>/dev/null || echo "2.0"')?.trim() || '2.0';
+      }
+    }
+  } catch {}
+
+  return details;
+}
+
 function collectSystemInfo() {
   const cpus = os.cpus();
   const totalMem = os.totalmem();
   const freeMem = os.freemem();
   const loadAvg = os.loadavg();
+  const hwDetails = getSystemHardwareDetails();
 
   return {
     collectedAt: new Date().toISOString(),
@@ -713,6 +776,12 @@ function collectSystemInfo() {
       usedRamMb: Math.round((totalMem - freeMem) / 1048576),
       ramUsagePercent: Math.round(((totalMem - freeMem) / totalMem) * 100),
       diskDrives: getDiskUsage(),
+      serialNumber: hwDetails.serialNumber,
+      biosVendor: hwDetails.biosVendor,
+      biosVersion: hwDetails.biosVersion,
+      motherboard: hwDetails.motherboard,
+      tpmEnabled: hwDetails.tpmEnabled,
+      tpmVersion: hwDetails.tpmVersion
     },
     operatingSystem: {
       platform: os.platform(),

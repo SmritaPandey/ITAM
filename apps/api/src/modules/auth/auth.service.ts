@@ -1,4 +1,4 @@
-import { Injectable, UnauthorizedException, ForbiddenException } from '@nestjs/common';
+import { Injectable, Logger, UnauthorizedException, ForbiddenException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import * as bcrypt from 'bcryptjs';
@@ -23,6 +23,8 @@ export interface AuthTokens {
 
 @Injectable()
 export class AuthService {
+  private readonly logger = new Logger(AuthService.name);
+
   constructor(
     private usersService: UsersService,
     private jwtService: JwtService,
@@ -326,6 +328,7 @@ export class AuthService {
       );
     } catch (err: any) {
       // Don't fail registration if email sending fails
+      this.logger.error(`Failed to send verification email to ${result.user.email}: ${err.message}`, err.stack);
     }
 
     return {
@@ -572,7 +575,8 @@ export class AuthService {
         token,
       );
     } catch (err: any) {
-      // Just log, don't throw
+      // Don't fail the forgot-password flow if email sending fails
+      this.logger.error(`Failed to send password reset email to ${user.email}: ${err.message}`, err.stack);
     }
 
     return { message: 'If this email is registered in our directory, a recovery link will be sent shortly.' };

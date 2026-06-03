@@ -21,12 +21,24 @@ export default function CCTVPage() {
   const [addForm, setAddForm] = useState({ name: "", ipAddress: "", location: "", cameraType: "IP", resolution: "1080p", rtspUrl: "" });
   const [adding, setAdding] = useState(false);
   const [filter, setFilter] = useState<string>("all");
+  const [searchQuery, setSearchQuery] = useState("");
 
   const { connected, on } = useRealtimeEvents();
 
   const refresh = useCallback(() => {
     apiFetch("/monitoring/cameras").then(setData).catch(console.error).finally(() => setLoading(false));
   }, []);
+
+  async function handleDeleteCamera(id: string) {
+    if (!confirm("Delete this camera?")) return;
+    try {
+      await apiFetch(`/monitoring/devices/${id}`, { method: "DELETE" });
+      setSelectedCam(null);
+      refresh();
+    } catch {
+      alert("Failed to delete camera.");
+    }
+  }
 
   useEffect(() => { refresh(); }, [refresh]);
 
@@ -48,11 +60,17 @@ export default function CCTVPage() {
   }, [selectedCam]);
 
   const cameras = data.data || [];
-  const filtered = filter === "all" ? cameras
+  const statusFiltered = filter === "all" ? cameras
     : filter === "online" ? cameras.filter((c: any) => c.status === "ONLINE")
     : filter === "offline" ? cameras.filter((c: any) => c.status === "OFFLINE")
     : filter === "recording" ? cameras.filter((c: any) => c.config?.recording)
     : cameras;
+  const filtered = statusFiltered.filter((c: any) => {
+    if (!searchQuery) return true;
+    const q = searchQuery.toLowerCase();
+    return c.name?.toLowerCase().includes(q) ||
+           c.ipAddress?.toLowerCase().includes(q);
+  });
 
   async function addCamera() {
     setAdding(true);
@@ -106,6 +124,16 @@ export default function CCTVPage() {
           <button className={`btn ${viewMode === "grid" ? "btn-primary" : "btn-secondary"}`} onClick={() => setViewMode("grid")} style={{ padding: "6px 10px" }}><Grid3X3 size={14} /></button>
           <button className={`btn ${viewMode === "list" ? "btn-primary" : "btn-secondary"}`} onClick={() => setViewMode("list")} style={{ padding: "6px 10px" }}><Eye size={14} /></button>
           <button className="btn btn-primary" onClick={() => setShowAddModal(true)}><Plus size={14} /> Add Camera</button>
+        </div>
+      </div>
+
+      {/* Search Bar */}
+      <div style={{ display: "flex", gap: 10, marginBottom: 16, alignItems: "center" }}>
+        <div style={{ flex: 1, display: "flex", alignItems: "center", gap: 8, background: "var(--bg-elevated)", border: "1px solid var(--border-primary)", borderRadius: 10, padding: "8px 14px" }}>
+          <Search size={15} style={{ color: "var(--text-tertiary)" }} />
+          <input value={searchQuery} onChange={e => setSearchQuery(e.target.value)}
+            placeholder="Search by camera name or IP address..."
+            style={{ width: "100%", background: "none", border: "none", color: "var(--text-primary)", fontSize: 13, fontFamily: "inherit", outline: "none" }} />
         </div>
       </div>
 
@@ -243,6 +271,15 @@ export default function CCTVPage() {
                 <DRow label="Health Score" value={`${selectedCam.metrics?.health || 0}%`} />
                 <DRow label="Last Seen" value={selectedCam.lastSeen ? new Date(selectedCam.lastSeen).toLocaleString() : "Never"} />
               </div>
+
+              {/* Delete Camera */}
+              <button
+                className="btn btn-secondary"
+                style={{ width: "100%", padding: "10px 16px", marginBottom: 20, display: "flex", alignItems: "center", justifyContent: "center", gap: 8, color: "#ef4444", borderColor: "rgba(239,68,68,0.3)", fontSize: 13, fontWeight: 600 }}
+                onClick={() => handleDeleteCamera(selectedCam.id)}
+              >
+                <Trash2 size={14} /> Delete Camera
+              </button>
 
               {/* Events Timeline */}
               <h3 style={{ fontSize: 13, fontWeight: 600, marginBottom: 8, color: "var(--text-primary)" }}>Event History</h3>

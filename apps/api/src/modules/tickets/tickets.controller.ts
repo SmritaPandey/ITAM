@@ -4,6 +4,8 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { TicketsService } from './tickets.service';
+import { CreateTicketDto } from './dto/create-ticket.dto';
+import { CreateSlaPolicyDto } from './dto/create-sla-policy.dto';
 import { SlaService } from './sla.service';
 
 @ApiTags('tickets')
@@ -55,7 +57,7 @@ export class TicketsController {
   @Post()
   @Roles('*')
   @ApiOperation({ summary: 'Create a new ticket / service request' })
-  async create(@Request() req: any, @Body() body: any) {
+  async create(@Request() req: any, @Body() body: CreateTicketDto) {
     const ticket = await this.ticketsService.create(req.user.tenantId, req.user.sub, body);
     // Auto-apply SLA based on priority
     if (ticket?.id && ticket?.priority) {
@@ -109,21 +111,35 @@ export class TicketsController {
   @Post('sla/policies')
   @Roles('Tenant Admin')
   @ApiOperation({ summary: 'Create SLA policy' })
-  async createSlaPolicy(@Request() req: any, @Body() body: any) {
+  async createSlaPolicy(@Request() req: any, @Body() body: CreateSlaPolicyDto) {
     return this.slaService.create(req.user.tenantId, body);
   }
 
   @Patch('sla/policies/:policyId')
   @Roles('Tenant Admin')
   @ApiOperation({ summary: 'Update SLA policy' })
-  async updateSlaPolicy(@Param('policyId') policyId: string, @Body() body: any) {
-    return this.slaService.update(policyId, body);
+  async updateSlaPolicy(@Request() req: any, @Param('policyId') policyId: string, @Body() body: any) {
+    return this.slaService.update(policyId, req.user.tenantId, body);
   }
 
   @Delete('sla/policies/:policyId')
   @Roles('Tenant Admin')
   @ApiOperation({ summary: 'Delete SLA policy' })
-  async deleteSlaPolicy(@Param('policyId') policyId: string) {
-    return this.slaService.delete(policyId);
+  async deleteSlaPolicy(@Request() req: any, @Param('policyId') policyId: string) {
+    return this.slaService.delete(policyId, req.user.tenantId);
+  }
+
+  @Patch(':id')
+  @Roles('Tenant Admin', 'IT Admin')
+  @ApiOperation({ summary: 'Update ticket fields' })
+  async update(@Request() req: any, @Param('id') id: string, @Body() body: any) {
+    return this.ticketsService.update(id, req.user.tenantId, body);
+  }
+
+  @Delete(':id')
+  @Roles('Tenant Admin', 'IT Admin')
+  @ApiOperation({ summary: 'Delete a ticket and its comments/assets' })
+  async remove(@Request() req: any, @Param('id') id: string) {
+    return this.ticketsService.delete(id, req.user.tenantId);
   }
 }

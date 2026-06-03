@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Body, Param, UseGuards, Request } from '@nestjs/common';
+import { Controller, Get, Post, Patch, Body, Param, UseGuards, Request } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
 import { Throttle } from '@nestjs/throttler';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
@@ -60,6 +60,17 @@ export class ScanningController {
   @ApiOperation({ summary: 'Get detailed scan result' })
   async resultDetail(@Param('id') id: string, @Request() req: any) {
     return this.service.getScanDetail(id, req.user.tenantId);
+  }
+
+  @Patch('detected/:id')
+  @Roles('Tenant Admin', 'IT Admin')
+  @ApiOperation({ summary: 'Mute or resolve a detected finding' })
+  async updateFinding(
+    @Param('id') id: string,
+    @Request() req: any,
+    @Body() body: { status: 'MUTED' | 'RESOLVED' },
+  ) {
+    return this.service.updateFinding(id, req.user.tenantId, body.status);
   }
 
   @Post('subnet-audit')

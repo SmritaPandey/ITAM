@@ -79,6 +79,7 @@ model Tenant {
   subscription        Subscription?
   trips               Trip[]
   gpsTelemetries      GpsTelemetry[]
+  serviceCatalogItems ServiceCatalogItem[]
 
   @@map("tenants")
 }
@@ -1663,5 +1664,28 @@ model SystemConfig {
   updatedAt DateTime @updatedAt @map("updated_at")
 
   @@map("system_configs")
+}
+
+// ─── Service Catalog ────────────────────────────────────────────────────────
+model ServiceCatalogItem {
+  id               String   @id @default(uuid()) @db.Uuid
+  tenantId         String   @map("tenant_id") @db.Uuid
+  name             String
+  category         String   @default("General")
+  description      String?  @db.Text
+  sla              String?  // e.g. "5 business days"
+  approvalRequired Boolean  @default(false) @map("approval_required")
+  icon             String   @default("circle")
+  isActive         Boolean  @default(true) @map("is_active")
+  sortOrder        Int      @default(0) @map("sort_order")
+  formFields       Json     @default("[]") @map("form_fields") // Custom form fields for requests
+  createdAt        DateTime @default(now()) @map("created_at")
+  updatedAt        DateTime @updatedAt @map("updated_at")
+
+  tenant           Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@index([tenantId, category])
+  @@map("service_catalog_items")
 }
 

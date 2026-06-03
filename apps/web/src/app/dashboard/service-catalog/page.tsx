@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 import {
   Headphones, Laptop, Shield, Network, Wifi, Printer, HardDrive,
   Wrench, Users, Mail, Loader2, ChevronRight, CheckCircle2, Clock,
-  Search, AlertTriangle, Plus, Monitor, Server, Package, X
+  Search, AlertTriangle, Plus, Monitor, Server, Package, X, Trash2, Edit
 } from "lucide-react";
 import { apiFetch } from "@/lib/api";
 
@@ -44,15 +44,22 @@ export default function ServiceCatalogPage() {
   const [requesting, setRequesting] = useState(false);
   const [success, setSuccess] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [manageMode, setManageMode] = useState(false);
+  const [editModal, setEditModal] = useState<any>(null);
+  const [editForm, setEditForm] = useState({ name: "", description: "", category: "HARDWARE", estimatedDelivery: "", approvalRequired: false });
+  const [saving, setSaving] = useState(false);
 
-  useEffect(() => {
+  function loadCatalog() {
+    setLoading(true);
     apiFetch("/service-catalog").then(data => {
       const items = Array.isArray(data) ? data : (data?.data || []);
       setCatalog(items.length > 0 ? items : DEFAULT_CATALOG);
     }).catch(() => {
       setCatalog(DEFAULT_CATALOG);
     }).finally(() => setLoading(false));
-  }, []);
+  }
+
+  useEffect(() => { loadCatalog(); }, []);
 
   async function submitRequest() {
     if (!requestModal) return;
@@ -69,6 +76,53 @@ export default function ServiceCatalogPage() {
       setError(err?.message || `Failed to submit request for "${requestModal.name}". Please try again.`);
       setRequestModal(null); setRequestNotes("");
     } finally { setRequesting(false); }
+  }
+
+  async function handleSaveItem() {
+    setSaving(true);
+    setError(null);
+    try {
+      if (editModal?.id) {
+        await apiFetch(`/service-catalog/${editModal.id}`, {
+          method: "PATCH",
+          body: JSON.stringify(editForm),
+        });
+        setSuccess(`Service "${editForm.name}" updated.`);
+      } else {
+        await apiFetch("/service-catalog", {
+          method: "POST",
+          body: JSON.stringify(editForm),
+        });
+        setSuccess(`Service "${editForm.name}" created.`);
+      }
+      setEditModal(null);
+      loadCatalog();
+    } catch (err: any) {
+      setError(err?.message || "Failed to save service item.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleDeleteItem(id: string, name: string) {
+    if (!confirm(`Delete service "${name}"?`)) return;
+    try {
+      await apiFetch(`/service-catalog/${id}`, { method: "DELETE" });
+      setSuccess(`Service "${name}" deleted.`);
+      loadCatalog();
+    } catch {
+      alert("Failed to delete service item.");
+    }
+  }
+
+  function openCreateModal() {
+    setEditForm({ name: "", description: "", category: "HARDWARE", estimatedDelivery: "1-2 business days", approvalRequired: false });
+    setEditModal({});
+  }
+
+  function openEditModal(item: any) {
+    setEditForm({ name: item.name, description: item.description, category: item.category, estimatedDelivery: item.estimatedDelivery || "", approvalRequired: !!item.approvalRequired });
+    setEditModal(item);
   }
 
   const categories = [...new Set(catalog.map(c => c.category))];
@@ -91,6 +145,14 @@ export default function ServiceCatalogPage() {
         <div>
           <h1 className="page-title" style={{ fontSize: 24, fontWeight: 800, letterSpacing: "-0.03em" }}>Service Catalog</h1>
           <p className="page-subtitle" style={{ fontSize: 13, color: "var(--text-tertiary)" }}>{catalog.length} professional services configured • Request IT support and provisioning</p>
+        </div>
+        <div style={{ display: "flex", gap: 8 }}>
+          <button className="btn btn-secondary" onClick={() => setManageMode(!manageMode)} style={{ display: "flex", alignItems: "center", gap: 6, padding: "8px 14px", borderRadius: 10, fontWeight: 600 }}>
+            <Edit size={14} /> {manageMode ? "Done" : "Manage"}
+          </button>
+          <button className="btn btn-primary" onClick={openCreateModal} style={{ display: "flex", alignItems: "center", gap: 6, padding: "8px 14px", borderRadius: 10, fontWeight: 600 }}>
+            <Plus size={14} /> New Service
+          </button>
         </div>
       </div>
 
@@ -202,15 +264,27 @@ export default function ServiceCatalogPage() {
                 <span style={{ display: "flex", alignItems: "center", gap: 6, color: "var(--text-secondary)", fontWeight: 500 }}>
                   <Clock size={13} style={{ color: "var(--text-tertiary)" }} /> {item.estimatedDelivery}
                 </span>
-                {item.approvalRequired ? (
-                  <span style={{ display: "flex", alignItems: "center", gap: 5, color: "#fbbf24", fontWeight: 600, background: "rgba(245,158,11,0.06)", padding: "2px 8px", borderRadius: 6, fontSize: 10 }}>
-                    <Shield size={12} /> Approval Required
-                  </span>
-                ) : (
-                  <span style={{ display: "flex", alignItems: "center", gap: 5, color: "#34d399", fontWeight: 600, background: "rgba(16,185,129,0.06)", padding: "2px 8px", borderRadius: 6, fontSize: 10 }}>
-                    <CheckCircle2 size={12} /> Instant Provision
-                  </span>
-                )}
+                <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                  {manageMode && (
+                    <>
+                      <button className="btn btn-secondary" style={{ padding: "3px 8px", fontSize: 10 }} onClick={(e) => { e.stopPropagation(); openEditModal(item); }}>
+                        <Edit size={12} />
+                      </button>
+                      <button className="btn btn-secondary" style={{ padding: "3px 8px", fontSize: 10, color: "#ef4444" }} onClick={(e) => { e.stopPropagation(); handleDeleteItem(item.id, item.name); }}>
+                        <Trash2 size={12} />
+                      </button>
+                    </>
+                  )}
+                  {item.approvalRequired ? (
+                    <span style={{ display: "flex", alignItems: "center", gap: 5, color: "#fbbf24", fontWeight: 600, background: "rgba(245,158,11,0.06)", padding: "2px 8px", borderRadius: 6, fontSize: 10 }}>
+                      <Shield size={12} /> Approval Required
+                    </span>
+                  ) : (
+                    <span style={{ display: "flex", alignItems: "center", gap: 5, color: "#34d399", fontWeight: 600, background: "rgba(16,185,129,0.06)", padding: "2px 8px", borderRadius: 6, fontSize: 10 }}>
+                      <CheckCircle2 size={12} /> Instant Provision
+                    </span>
+                  )}
+                </div>
               </div>
             </div>
           );
@@ -315,6 +389,69 @@ export default function ServiceCatalogPage() {
                   ) : (
                     <><Plus size={15} /> Submit Request</>
                   )}
+                </button>
+              </div>
+            </div>
+          </div>
+        </>
+      )}
+
+      {/* Create/Edit Service Modal */}
+      {editModal && (
+        <>
+          <div onClick={() => setEditModal(null)} style={{
+            position: "fixed", inset: 0, background: "rgba(6, 9, 17, 0.7)", zIndex: 1000,
+            backdropFilter: "blur(12px)", animation: "fadeInBg 0.25s ease-out"
+          }} />
+          <div style={{
+            position: "fixed", top: "50%", left: "50%", transform: "translate(-50%, -50%)",
+            width: "min(500px, 92vw)", background: "linear-gradient(135deg, #111827 0%, #0c0f1d 100%)",
+            border: "1px solid var(--border-primary)", borderRadius: 18,
+            boxShadow: "0 24px 80px rgba(0,0,0,0.6)", zIndex: 1001, overflow: "hidden",
+            animation: "modalZoomIn 0.3s cubic-bezier(0.16, 1, 0.3, 1)"
+          }}>
+            <div style={{ padding: "18px 24px", borderBottom: "1px solid var(--border-primary)", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <h2 style={{ fontSize: 16, fontWeight: 800, margin: 0, color: "var(--text-primary)" }}>{editModal?.id ? "Edit Service" : "Create Service"}</h2>
+              <button onClick={() => setEditModal(null)} className="modal-close-btn" style={{
+                background: "var(--bg-elevated)", border: "1px solid var(--border-primary)",
+                borderRadius: 8, width: 28, height: 28, display: "flex", alignItems: "center", justifyContent: "center",
+                color: "var(--text-secondary)", cursor: "pointer"
+              }}><X size={15} /></button>
+            </div>
+            <div style={{ padding: 24, display: "grid", gap: 14 }}>
+              <div>
+                <label style={{ fontSize: 12, fontWeight: 700, color: "var(--text-secondary)", display: "block", marginBottom: 6 }}>Service Name *</label>
+                <input value={editForm.name} onChange={e => setEditForm(p => ({ ...p, name: e.target.value }))} placeholder="e.g. New Laptop Request"
+                  style={{ width: "100%", padding: "10px 14px", borderRadius: 10, background: "var(--bg-input)", border: "1px solid var(--border-primary)", color: "var(--text-primary)", fontSize: 13, outline: "none" }} />
+              </div>
+              <div>
+                <label style={{ fontSize: 12, fontWeight: 700, color: "var(--text-secondary)", display: "block", marginBottom: 6 }}>Description *</label>
+                <textarea value={editForm.description} onChange={e => setEditForm(p => ({ ...p, description: e.target.value }))} rows={3} placeholder="Describe the service..."
+                  style={{ width: "100%", padding: "10px 14px", borderRadius: 10, background: "var(--bg-input)", border: "1px solid var(--border-primary)", color: "var(--text-primary)", fontSize: 13, outline: "none", resize: "none" }} />
+              </div>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+                <div>
+                  <label style={{ fontSize: 12, fontWeight: 700, color: "var(--text-secondary)", display: "block", marginBottom: 6 }}>Category</label>
+                  <select value={editForm.category} onChange={e => setEditForm(p => ({ ...p, category: e.target.value }))}
+                    style={{ width: "100%", padding: "10px 14px", borderRadius: 10, background: "var(--bg-input)", border: "1px solid var(--border-primary)", color: "var(--text-primary)", fontSize: 13, fontFamily: "inherit" }}>
+                    {Object.keys(CATEGORY_ICONS).map(cat => <option key={cat} value={cat}>{cat}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label style={{ fontSize: 12, fontWeight: 700, color: "var(--text-secondary)", display: "block", marginBottom: 6 }}>Estimated Delivery</label>
+                  <input value={editForm.estimatedDelivery} onChange={e => setEditForm(p => ({ ...p, estimatedDelivery: e.target.value }))} placeholder="e.g. 1-2 business days"
+                    style={{ width: "100%", padding: "10px 14px", borderRadius: 10, background: "var(--bg-input)", border: "1px solid var(--border-primary)", color: "var(--text-primary)", fontSize: 13, outline: "none" }} />
+                </div>
+              </div>
+              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <input type="checkbox" checked={editForm.approvalRequired} onChange={e => setEditForm(p => ({ ...p, approvalRequired: e.target.checked }))} style={{ accentColor: "#f59e0b" }} />
+                <label style={{ fontSize: 12, color: "var(--text-secondary)", fontWeight: 600 }}>Requires Manager Approval</label>
+              </div>
+              <div style={{ display: "flex", gap: 10, justifyContent: "flex-end", marginTop: 8 }}>
+                <button onClick={() => setEditModal(null)} className="btn btn-secondary" style={{ borderRadius: 10, fontWeight: 600 }}>Cancel</button>
+                <button onClick={handleSaveItem} className="btn btn-primary" disabled={saving || !editForm.name.trim()}
+                  style={{ display: "flex", alignItems: "center", gap: 8, borderRadius: 10, fontWeight: 600 }}>
+                  {saving ? <><Loader2 size={14} style={{ animation: "spin 1s linear infinite" }} /> Saving...</> : <><Plus size={15} /> {editModal?.id ? "Save Changes" : "Create Service"}</>}
                 </button>
               </div>
             </div>

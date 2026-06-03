@@ -44,6 +44,13 @@ export class NotificationsController {
     return this.service.markAllRead(req.user.sub);
   }
 
+  @Delete(':id')
+  @Roles('*')
+  @ApiOperation({ summary: 'Delete a notification' })
+  async remove(@Request() req: any, @Param('id') id: string) {
+    return this.service.delete(id, req.user.sub);
+  }
+
   // ─── NOTIFICATION CHANNELS ─────────────────────────────────────────
   @Get('channels')
   @Roles('Tenant Admin')

@@ -5,7 +5,7 @@ import {
   CheckCircle2, XCircle, Loader2, Clock, Eye, Play, ChevronDown,
   AlertTriangle, Server, Search, ShieldAlert, Activity, Ticket, Filter,
   Bug, Usb, Cpu, HardDrive, Skull, AlertOctagon, Info, ExternalLink,
-  AlertCircle, Check, X, ChevronRight
+  AlertCircle, Check, X, ChevronRight, Trash2
 } from "lucide-react";
 import { apiFetch } from "@/lib/api";
 import { PageHelp } from "@/components/HelpSystem";
@@ -42,6 +42,16 @@ export default function ScanningPage() {
   // Ticket creation states
   const [creatingTicket, setCreatingTicket] = useState<string | null>(null);
   const [ticketSuccess, setTicketSuccess] = useState<any>(null);
+
+  async function handleDeleteScan(id: string) {
+    if (!confirm("Delete this scan result?")) return;
+    try {
+      await apiFetch(`/scanning/results/${id}`, { method: "DELETE" });
+      refresh();
+    } catch {
+      alert("Failed to delete scan result.");
+    }
+  }
 
   function refresh() {
     Promise.all([
@@ -131,18 +141,24 @@ export default function ScanningPage() {
     }
   }
 
-  function muteFinding(id: string) {
-    setFindings((prev: any[]) => prev.map((f: any) => f.id === id ? { ...f, status: f.status === "MUTED" ? "ACTIVE" : "MUTED" } : f));
-    if (selectedFinding && selectedFinding.id === id) {
-      setSelectedFinding((prev: any) => ({ ...prev, status: prev.status === "MUTED" ? "ACTIVE" : "MUTED" }));
-    }
+  async function muteFinding(id: string) {
+    try {
+      await apiFetch(`/scanning/detected/${id}`, { method: 'PATCH', body: JSON.stringify({ status: 'MUTED' }) });
+      setFindings((prev: any[]) => prev.map((f: any) => f.id === id ? { ...f, status: 'MUTED' } : f));
+      if (selectedFinding && selectedFinding.id === id) {
+        setSelectedFinding((prev: any) => ({ ...prev, status: 'MUTED' }));
+      }
+    } catch { alert('Failed to mute finding'); }
   }
 
-  function resolveFinding(id: string) {
-    setFindings((prev: any[]) => prev.map((f: any) => f.id === id ? { ...f, status: f.status === "RESOLVED" ? "ACTIVE" : "RESOLVED" } : f));
-    if (selectedFinding && selectedFinding.id === id) {
-      setSelectedFinding((prev: any) => ({ ...prev, status: prev.status === "RESOLVED" ? "ACTIVE" : "RESOLVED" }));
-    }
+  async function resolveFinding(id: string) {
+    try {
+      await apiFetch(`/scanning/detected/${id}`, { method: 'PATCH', body: JSON.stringify({ status: 'RESOLVED' }) });
+      setFindings((prev: any[]) => prev.map((f: any) => f.id === id ? { ...f, status: 'RESOLVED' } : f));
+      if (selectedFinding && selectedFinding.id === id) {
+        setSelectedFinding((prev: any) => ({ ...prev, status: 'RESOLVED' }));
+      }
+    } catch { alert('Failed to resolve finding'); }
   }
 
   if (loading) return (
@@ -336,7 +352,10 @@ export default function ScanningPage() {
                       <td style={{ fontSize: 12, color: "var(--text-secondary)" }}>{s.duration ? `${s.duration.toFixed(1)}s` : "—"}</td>
                       <td style={{ fontSize: 11, color: "var(--text-tertiary)", maxWidth: 200, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{summaryText}</td>
                       <td style={{ fontSize: 11, color: "var(--text-tertiary)" }}>{new Date(s.startedAt).toLocaleString()}</td>
-                      <td><button className="btn btn-secondary" style={{ padding: "3px 8px" }}><Eye size={11} /></button></td>
+                      <td style={{ display: "flex", gap: 4 }}>
+                        <button className="btn btn-secondary" style={{ padding: "3px 8px" }}><Eye size={11} /></button>
+                        <button className="btn btn-secondary" style={{ padding: "3px 8px", color: "#ef4444" }} onClick={(e) => { e.stopPropagation(); handleDeleteScan(s.id); }}><Trash2 size={11} /></button>
+                      </td>
                     </tr>
                   );
                 })}

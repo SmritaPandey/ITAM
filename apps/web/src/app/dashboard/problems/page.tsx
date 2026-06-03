@@ -4,7 +4,7 @@ import { useRouter } from "next/navigation";
 import {
   AlertOctagon, Plus, RefreshCw, Filter, Loader2, X,
   CheckCircle2, AlertTriangle, Eye, BookOpen, Clock,
-  Search, Bug, ShieldAlert, ArrowRight, XCircle, ExternalLink,
+  Search, Bug, ShieldAlert, ArrowRight, XCircle, ExternalLink, Trash2,
 } from "lucide-react";
 import { apiFetch } from "@/lib/api";
 
@@ -61,6 +61,11 @@ export default function ProblemsPage() {
     e.preventDefault(); setSaving(true);
     try { await apiFetch("/problems", { method: "POST", body: JSON.stringify(form) }); setShowCreate(false); setForm({ priority: "MEDIUM" }); load(); } catch(e) { alert(String(e)); }
     setSaving(false);
+  };
+
+  const handleDelete = async (id: string) => {
+    if (!confirm("Delete this problem record? This cannot be undone.")) return;
+    try { await apiFetch(`/problems/${id}`, { method: "DELETE" }); setSelected(null); load(); } catch { alert("Failed to delete."); }
   };
 
   const promoteKE = async (id: string) => {
@@ -333,6 +338,14 @@ export default function ProblemsPage() {
                 <h2 style={{ fontSize: 18, fontWeight: 700, color: "var(--text-primary)", marginTop: 4 }}>{selected.title}</h2>
               </div>
               <button onClick={() => setSelected(null)} style={{ background: "none", border: "none", color: "var(--text-tertiary)", cursor: "pointer" }}><X size={18} /></button>
+            </div>
+
+            {/* Delete action */}
+            <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 12 }}>
+              <button onClick={() => handleDelete(selected.id)}
+                style={{ display: "flex", alignItems: "center", gap: 6, padding: "6px 12px", borderRadius: 8, border: "1px solid rgba(239,68,68,0.3)", background: "rgba(239,68,68,0.08)", color: "#f87171", fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: "inherit" }}>
+                <Trash2 size={13} /> Delete Problem
+              </button>
             </div>
 
             {selected.description && (

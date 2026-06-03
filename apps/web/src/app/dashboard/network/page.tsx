@@ -51,11 +51,48 @@ export default function NetworkPage() {
   const [activeTab, setActiveTab] = useState<"overview" | "topology">("overview");
   const [snmpPolling, setSnmpPolling] = useState(false);
   const [deviceFilter, setDeviceFilter] = useState<string | null>(null);
+  const [aggregatedBandwidth, setAggregatedBandwidth] = useState<any[] | null>(null);
+  const [bandwidthLoading, setBandwidthLoading] = useState(false);
 
   const { connected, on } = useRealtimeEvents();
 
   const refresh = useCallback(() => {
-    apiFetch("/monitoring/network").then(setData).catch(console.error).finally(() => setLoading(false));
+    apiFetch("/monitoring/network").then((netData) => {
+      setData(netData);
+      // Fetch real bandwidth history for SNMP-capable devices
+      const devices = netData.data || [];
+      const snmpDevices = devices.filter((d: any) => d.metrics?.snmpAvailable || d.metrics?.ifInOctets !== undefined);
+      if (snmpDevices.length > 0) {
+        setBandwidthLoading(true);
+        Promise.all(
+          snmpDevices.slice(0, 10).map((d: any) =>
+            apiFetch(`/monitoring/snmp/devices/${d.id}/history?hours=24`).catch(() => [])
+          )
+        ).then((histories) => {
+          const buckets: Record<string, { inbound: number; outbound: number; count: number }> = {};
+          histories.forEach((history: any[]) => {
+            (Array.isArray(history) ? history : []).forEach((m: any) => {
+              const hour = new Date(m.collectedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+              if (!buckets[hour]) buckets[hour] = { inbound: 0, outbound: 0, count: 0 };
+              buckets[hour].inbound += Math.round((m.metrics?.ifInOctets || 0) / 1024 / 1024);
+              buckets[hour].outbound += Math.round((m.metrics?.ifOutOctets || 0) / 1024 / 1024);
+              buckets[hour].count++;
+            });
+          });
+          const chartData = Object.entries(buckets)
+            .map(([time, v]) => ({
+              time,
+              inbound: Math.round(v.inbound / Math.max(v.count, 1)),
+              outbound: Math.round(v.outbound / Math.max(v.count, 1)),
+            }))
+            .sort((a, b) => a.time.localeCompare(b.time));
+          setAggregatedBandwidth(chartData.length > 0 ? chartData : null);
+        }).catch(() => setAggregatedBandwidth(null))
+          .finally(() => setBandwidthLoading(false));
+      } else {
+        setAggregatedBandwidth(null);
+      }
+    }).catch(console.error).finally(() => setLoading(false));
   }, []);
 
   useEffect(() => { refresh(); }, [refresh]);
@@ -80,37 +117,8 @@ export default function NetworkPage() {
 
   const devices = data.data || [];
 
-  // Build real bandwidth chart from device SNMP metrics
-  const bandwidthChart = (() => {
-    // Aggregate interface counters across all devices with SNMP data
-    const snmpDevices = devices.filter((d: any) => d.metrics?.ifInOctets !== undefined);
-    if (snmpDevices.length === 0) {
-      // Fallback: generate from latency/throughput data
-      const base = devices.reduce((s: number, d: any) => s + (d.metrics?.throughput || 0), 0) || 100;
-      return [
-        { time: "00:00", inbound: Math.round(base * 0.3), outbound: Math.round(base * 0.2) },
-        { time: "04:00", inbound: Math.round(base * 0.15), outbound: Math.round(base * 0.1) },
-        { time: "08:00", inbound: Math.round(base * 0.7), outbound: Math.round(base * 0.5) },
-        { time: "12:00", inbound: Math.round(base * 1.0), outbound: Math.round(base * 0.8) },
-        { time: "16:00", inbound: Math.round(base * 0.85), outbound: Math.round(base * 0.65) },
-        { time: "20:00", inbound: Math.round(base * 0.5), outbound: Math.round(base * 0.35) },
-        { time: "Now", inbound: Math.round(base * 0.6), outbound: Math.round(base * 0.45) },
-      ];
-    }
-    // Aggregate total in/out across all SNMP-polled devices
-    const totalIn = snmpDevices.reduce((s: number, d: any) => s + (d.metrics?.ifInOctets || 0), 0);
-    const totalOut = snmpDevices.reduce((s: number, d: any) => s + (d.metrics?.ifOutOctets || 0), 0);
-    const now = new Date();
-    return Array.from({ length: 8 }, (_, i) => {
-      const hour = (now.getHours() - 7 + i + 24) % 24;
-      const factor = [0.2, 0.3, 0.5, 0.8, 1.0, 0.9, 0.7, 0.6][i] || 0.5;
-      return {
-        time: `${String(hour).padStart(2, "0")}:00`,
-        inbound: Math.round((totalIn / 1024 / 1024) * factor),
-        outbound: Math.round((totalOut / 1024 / 1024) * factor),
-      };
-    });
-  })();
+  // Use real aggregated bandwidth data from SNMP history (fetched during refresh)
+  const bandwidthChart = aggregatedBandwidth;
 
   // Average CPU and RAM across SNMP devices
   const avgCpu = (() => {
@@ -202,6 +210,11 @@ export default function NetworkPage() {
           <div><div className="card-title">Network Bandwidth (Live)</div><div className="card-subtitle">Aggregated inbound vs outbound traffic (MB)</div></div>
           <span className="badge green"><Activity size={10} /> {devices.filter((d: any) => d.metrics?.snmpAvailable).length} SNMP</span>
         </div>
+        {bandwidthLoading ? (
+          <div style={{ height: 220, display: "flex", alignItems: "center", justifyContent: "center", color: "var(--text-tertiary)" }}>
+            <Loader2 size={20} style={{ animation: "spin 1s linear infinite" }} />
+          </div>
+        ) : bandwidthChart && bandwidthChart.length > 0 ? (
         <SafeChart height={220}>
           <AreaChart data={bandwidthChart}>
             <defs>
@@ -216,6 +229,13 @@ export default function NetworkPage() {
             <Area type="monotone" dataKey="outbound" stroke="#8b5cf6" fill="url(#outGrad)" strokeWidth={2} name="Outbound (MB)" />
           </AreaChart>
         </SafeChart>
+        ) : (
+          <div style={{ height: 220, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 8, color: "var(--text-tertiary)" }}>
+            <BarChart3 size={28} style={{ opacity: 0.25 }} />
+            <div style={{ fontSize: 13, fontWeight: 500, color: "var(--text-secondary)" }}>No bandwidth history available</div>
+            <div style={{ fontSize: 11 }}>Configure SNMP polling and run <strong>SNMP Poll</strong> to collect time-series data</div>
+          </div>
+        )}
       </div>
 
       {/* Device Table */}

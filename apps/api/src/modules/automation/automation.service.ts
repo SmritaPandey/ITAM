@@ -1,6 +1,7 @@
 import { Injectable, Logger, NotFoundException, OnModuleInit } from '@nestjs/common';
 import { PrismaService } from '../../common/database/prisma.service';
 import { EventBusService, DomainEvent } from '../../common/events/event-bus.service';
+import { EmailService } from '../notifications/email.service';
 
 @Injectable()
 export class AutomationService implements OnModuleInit {
@@ -9,6 +10,7 @@ export class AutomationService implements OnModuleInit {
   constructor(
     private prisma: PrismaService,
     private eventBus: EventBusService,
+    private emailService: EmailService,
   ) {}
 
   /** Subscribe to all domain events and evaluate automation rules */
@@ -139,8 +141,9 @@ export class AutomationService implements OnModuleInit {
         if (payload[key] !== value) return false;
       }
       return true;
-    } catch {
-      return true; // If condition can't be parsed, treat as always-true
+    } catch (err: any) {
+      this.logger.error(`Malformed automation condition — defaulting to false. Condition: ${condition}, Error: ${err.message}`);
+      return false; // Malformed conditions should NOT fire the rule
     }
   }
 
@@ -164,7 +167,7 @@ export class AutomationService implements OnModuleInit {
         await this.actionSendWebhook(event, config);
         break;
       case 'send_email':
-        this.logger.log(`[EMAIL] Would send email to ${config.to || 'admin'}: ${rule.name}`);
+        await this.actionSendEmail(rule, event, config);
         break;
       default:
         this.logger.warn(`Unknown action type: ${rule.actionType}`);
@@ -232,19 +235,57 @@ export class AutomationService implements OnModuleInit {
   private async actionSendWebhook(event: DomainEvent, config: any) {
     if (config.url) {
       try {
-        await fetch(config.url, {
+        const response = await fetch(config.url, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ event: event.type, payload: event.payload, timestamp: event.timestamp }),
         });
+        if (!response.ok) {
+          throw new Error(`Webhook responded with HTTP ${response.status}: ${response.statusText}`);
+        }
         this.logger.log(`Webhook sent to ${config.url}`);
       } catch (err: any) {
         this.logger.error(`Webhook to ${config.url} failed: ${err.message}`);
+        throw err; // Re-throw so parent records execution as FAILED
       }
     }
   }
 
+  private async actionSendEmail(rule: any, event: DomainEvent, config: any) {
+    // Resolve recipients: use config.to, or fall back to tenant admin emails
+    let recipients: string[] = [];
+    if (config.to) {
+      recipients = Array.isArray(config.to) ? config.to : [config.to];
+    } else {
+      const admins = await this.prisma.user.findMany({
+        where: {
+          tenantId: event.tenantId,
+          role: { name: { in: ['Tenant Admin', 'IT Admin'] } },
+          status: 'ACTIVE',
+        },
+        select: { email: true },
+      });
+      recipients = admins.map(a => a.email).filter(Boolean);
+    }
+
+    if (recipients.length === 0) {
+      this.logger.warn(`[EMAIL] No recipients found for rule "${rule.name}"`);
+      return;
+    }
+
+    const subject = config.subject || `[Automation] ${rule.name}`;
+    const body = config.body || `Rule "${rule.name}" triggered by ${event.type}.\n\nPayload: ${JSON.stringify(event.payload, null, 2)}`;
+
+    await this.emailService.send({
+      to: recipients,
+      subject,
+      html: `<pre style="font-family:sans-serif">${body}</pre>`,
+    });
+    this.logger.log(`[EMAIL] Sent to ${recipients.join(', ')}: ${subject}`);
+  }
+
   // ─── CRUD Operations ──────────────────────────────────────────
+
 
   async findAll(tenantId: string, page = 1, limit = 20) {
     const skip = (Number(page) - 1) * Number(limit);

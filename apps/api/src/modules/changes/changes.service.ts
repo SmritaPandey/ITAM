@@ -19,20 +19,53 @@ export class ChangesService {
 
   constructor(private prisma: PrismaService) {}
 
-  async list(tenantId: string, status?: string) {
+  async list(tenantId: string, status?: string, page = 1, limit = 50) {
     const where: any = { tenantId };
     if (status) where.status = status;
-    return this.prisma.changeRequest.findMany({ where, orderBy: { createdAt: 'desc' }, take: 100 });
+    const skip = (page - 1) * limit;
+    const [data, total] = await Promise.all([
+      this.prisma.changeRequest.findMany({ where, orderBy: { createdAt: 'desc' }, skip, take: limit }),
+      this.prisma.changeRequest.count({ where }),
+    ]);
+    return { data, total, page, limit, totalPages: Math.ceil(total / limit) };
   }
 
   async getById(id: string, tenantId: string) {
-    return this.prisma.changeRequest.findFirst({ where: { id, tenantId } });
+    const change = await this.prisma.changeRequest.findFirst({ where: { id, tenantId } });
+    if (!change) throw new NotFoundException('Change request not found');
+    return change;
+  }
+
+  private async generateChangeNumber(tenantId: string): Promise<string> {
+    // Use last-created change request's number instead of count to reduce race window
+    const last = await this.prisma.changeRequest.findMany({
+      where: { tenantId },
+      orderBy: { createdAt: 'desc' },
+      take: 1,
+      select: { changeNumber: true },
+    });
+    const lastNum = last.length > 0
+      ? parseInt(last[0].changeNumber.replace('CHG-', ''), 10) || 0
+      : 0;
+    return `CHG-${String(lastNum + 1).padStart(5, '0')}`;
   }
 
   async create(tenantId: string, userId: string, data: any) {
-    const count = await this.prisma.changeRequest.count({ where: { tenantId } });
-    const changeNumber = `CHG-${String(count + 1).padStart(5, '0')}`;
-    return this.prisma.changeRequest.create({ data: { tenantId, changeNumber, requestedById: userId, ...data } });
+    // Retry loop to handle unique constraint violations from concurrent number generation
+    const MAX_RETRIES = 3;
+    for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
+      try {
+        const changeNumber = await this.generateChangeNumber(tenantId);
+        return await this.prisma.changeRequest.create({ data: { tenantId, changeNumber, requestedById: userId, ...data } });
+      } catch (error: any) {
+        // P2002 is Prisma's unique constraint violation error code
+        if (error?.code === 'P2002' && attempt < MAX_RETRIES - 1) {
+          continue;
+        }
+        throw error;
+      }
+    }
+    throw new Error('Failed to generate unique change number after maximum retries');
   }
 
   async update(id: string, tenantId: string, data: any) {

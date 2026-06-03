@@ -49,8 +49,22 @@ tryRegisterOAuth();
           logger.warn('⚠️  WARNING: JWT_SECRET is not set — using insecure fallback. DO NOT run this configuration in production!');
         }
         const rawExpiry = configService.get<string>('JWT_EXPIRATION') || '4h';
-        // Ensure minimum 1h expiry for production stability (15m causes constant 401s)
-        const expiresIn = rawExpiry === '15m' || rawExpiry === '10m' || rawExpiry === '5m' ? '4h' : rawExpiry;
+        // Ensure minimum 1h expiry for production stability (15m or 900s causes constant 401s)
+        const isShortExpiry = (val: string): boolean => {
+          const str = val.trim().toLowerCase();
+          if (/^\d+$/.test(str)) {
+            return parseInt(str, 10) < 3600;
+          }
+          const match = str.match(/^(\d+)\s*(s|m|h|d|w|y|min|minute|minutes|sec|second|seconds)?$/);
+          if (!match) return false;
+          const num = parseInt(match[1], 10);
+          const unit = match[2];
+          if (!unit) return num < 3600;
+          if (unit.startsWith('s')) return num < 3600;
+          if (unit.startsWith('m')) return num < 60;
+          return false;
+        };
+        const expiresIn = isShortExpiry(rawExpiry) ? '4h' : rawExpiry;
         return {
           secret: secret || 'assetcommand-fallback-jwt-secret',
           signOptions: { expiresIn: expiresIn as any },

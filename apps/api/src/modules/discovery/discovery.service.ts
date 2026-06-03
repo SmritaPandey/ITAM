@@ -1651,7 +1651,8 @@ export class DiscoveryService {
           services: openPorts.length > 0 ? JSON.stringify(openPorts.map((p: any) => p.service)) : null,
           riskScore,
           lastSeenAt: new Date(),
-          enrichmentStatus: 'BASIC',
+          enrichmentStatus: host.enrichmentData ? 'ENRICHED' : 'BASIC',
+          enrichmentData: host.enrichmentData ? (host.enrichmentData as any) : null,
         };
 
         const result = await this.prisma.discoveredDevice.upsert({

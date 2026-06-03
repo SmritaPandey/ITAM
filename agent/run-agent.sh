@@ -9,6 +9,18 @@ echo "║      QS Discovery Agent — Mac/Linux Launcher         ║"
 echo "╚══════════════════════════════════════════════════════╝"
 echo ""
 
+# 🔐 Check for privileges to run deep scan commands
+if [ "$EUID" -ne 0 ]; then
+  echo "🔒 QS Discovery Agent works best with administrative permissions to retrieve deep telemetry"
+  echo "   (like pending software updates, complete listening ports, and hardware serials)."
+  read -p "🚀 Do you want to run the agent with administrator (sudo) privileges? (y/n): " Elevate
+  if [[ "$Elevate" =~ ^[Yy]$ ]]; then
+    exec sudo "$0" "$@"
+  fi
+  echo "⚠️  Running without root privileges. Some telemetry collections (like system updates) will be skipped."
+  echo ""
+fi
+
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
 # 🍏 macOS Gatekeeper Auto-Bypass: Strip quarantine flags recursively so non-technical users can launch without alerts

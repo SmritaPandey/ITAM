@@ -4,6 +4,13 @@
 # ═══════════════════════════════════════════════════════════════
 set -e
 
+# 🔐 Self-elevation: request sudo permissions once during installation
+if [ "$EUID" -ne 0 ]; then
+  echo "🔐 This installer requires administrator privileges to configure the background service."
+  echo "   Please enter your password to authenticate."
+  exec sudo "$0" "$@"
+fi
+
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 AGENT_PATH="${SCRIPT_DIR}/qs-discovery-agent.js"
 OS_TYPE="$(uname -s | tr '[:upper:]' '[:lower:]')"
@@ -26,13 +33,13 @@ if [ ! -f "$NODE_BIN" ]; then
 fi
 
 if [ "$OS_TYPE" = "darwin" ]; then
-  # 🍏 macOS LaunchAgent installation
-  PLIST_DIR="${HOME}/Library/LaunchAgents"
+  # 🍏 macOS LaunchDaemon installation (runs as system root service)
+  PLIST_DIR="/Library/LaunchDaemons"
   PLIST_PATH="${PLIST_DIR}/com.qsasset.discovery.agent.plist"
   
   mkdir -p "${PLIST_DIR}"
   
-  echo "🍏 Generating macOS LaunchAgent plist at ${PLIST_PATH}..."
+  echo "🍏 Generating macOS LaunchDaemon plist at ${PLIST_PATH}..."
   
   cat <<EOF > "${PLIST_PATH}"
 <?xml version="1.0" encoding="UTF-8"?>
@@ -60,7 +67,11 @@ if [ "$OS_TYPE" = "darwin" ]; then
 </plist>
 EOF
 
-  echo "🚀 Loading and starting LaunchAgent..."
+  # LaunchDaemons require root:wheel and 644 permissions
+  chown root:wheel "${PLIST_PATH}"
+  chmod 644 "${PLIST_PATH}"
+
+  echo "🚀 Loading and starting LaunchDaemon..."
   # Unload first if already loaded
   launchctl unload "${PLIST_PATH}" 2>/dev/null || true
   launchctl load "${PLIST_PATH}"
@@ -82,7 +93,7 @@ After=network.target
 
 [Service]
 Type=simple
-User=${USER}
+User=root
 WorkingDirectory=${SCRIPT_DIR}
 ExecStart=${NODE_BIN} ${AGENT_PATH}
 Restart=always

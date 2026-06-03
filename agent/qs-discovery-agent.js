@@ -855,6 +855,80 @@ function getFailedLoginsCount() {
   }
 }
 
+let pendingUpdatesCount = 0;
+let pendingUpdatesList = [];
+
+function startSoftwareUpdatesCheck() {
+  const check = () => {
+    const platform = os.platform();
+    try {
+      if (platform === 'darwin') {
+        exec('softwareupdate -l 2>/dev/null', (err, stdout) => {
+          if (err) return;
+          const updates = [];
+          const lines = stdout.split('\n');
+          for (const line of lines) {
+            if (line.includes('*')) {
+              const name = line.replace(/^\s*\*\s*/, '').trim();
+              updates.push({ name, version: 'N/A' });
+            }
+          }
+          pendingUpdatesCount = updates.length;
+          pendingUpdatesList = updates;
+        });
+      } else if (platform === 'linux') {
+        if (fs.existsSync('/usr/bin/apt-get')) {
+          exec('apt-get -s upgrade 2>/dev/null', (err, stdout) => {
+            if (err) return;
+            const updates = [];
+            const lines = stdout.split('\n');
+            for (const line of lines) {
+              if (line.startsWith('Inst ')) {
+                const parts = line.split(' ');
+                const name = parts[1];
+                const version = parts[2]?.replace('(', '') || 'N/A';
+                updates.push({ name, version });
+              }
+            }
+            pendingUpdatesCount = updates.length;
+            pendingUpdatesList = updates;
+          });
+        } else if (fs.existsSync('/usr/bin/yum')) {
+          exec('yum check-update 2>/dev/null', (err, stdout) => {
+            if (err && err.code !== 100) return;
+            const updates = [];
+            const lines = stdout.split('\n');
+            for (const line of lines) {
+              if (line.trim() === '') continue;
+              if (line.startsWith('Security:')) continue;
+              const parts = line.trim().split(/\s+/);
+              if (parts.length >= 3 && !parts[0].startsWith('Loaded') && !parts[0].startsWith('Obsoleting')) {
+                updates.push({ name: parts[0], version: parts[1] });
+              }
+            }
+            pendingUpdatesCount = updates.length;
+            pendingUpdatesList = updates;
+          });
+        }
+      } else if (platform === 'win32') {
+        const cmd = 'powershell -command "$u = (New-Object -ComObject Microsoft.Update.Session).CreateUpdateSearcher().Search(\'IsInstalled=0 and IsHidden=0\').Updates; $u | Select-Object Title | ConvertTo-Json"';
+        exec(cmd, (err, stdout) => {
+          if (err) return;
+          try {
+            const parsed = JSON.parse(stdout);
+            const items = Array.isArray(parsed) ? parsed : [parsed];
+            const updates = items.filter(u => u && u.Title).map(u => ({ name: u.Title, version: 'N/A' }));
+            pendingUpdatesCount = updates.length;
+            pendingUpdatesList = updates;
+          } catch {}
+        });
+      }
+    } catch {}
+  };
+  check();
+  setInterval(check, 4 * 60 * 60 * 1000);
+}
+
 function getListeningPorts() {
   const platform = os.platform();
   const ports = [];
@@ -1073,6 +1147,10 @@ function collectSystemInfo() {
       openPorts: getListeningPorts(),
     },
     software: getInstalledSoftware(),
+    softwareUpdates: {
+      pendingCount: pendingUpdatesCount,
+      updates: pendingUpdatesList
+    },
     processes: getRunningProcesses(),
     usbDevices: getUsbDevices(),
     services: getRunningServices(),
@@ -1741,11 +1819,27 @@ async function triggerLocalLANScan() {
   } catch {}
 
   // Perform service scan & classification
+  log('info', 'Running SSDP/UPnP discovery sweep...');
+  const ssdpDevices = await discoverSSDP(2000);
+
   for (const host of aliveHosts) {
     const mac = arpEntries[host.ip] || null;
     const openPorts = await scanPorts(host.ip);
-    const classification = classifyDevice(openPorts, mac);
-    log('info', `Discovered Device: [IP: ${host.ip}] [MAC: ${mac || 'unknown'}] [Type: ${classification.deviceType}] [OS: ${classification.osInfo}] [Vendor: ${classification.manufacturer}]`);
+    
+    let ssdpInfo = null;
+    const ssdpDev = ssdpDevices[host.ip];
+    if (ssdpDev && ssdpDev.location) {
+      ssdpInfo = await fetchUPnPDetails(ssdpDev.location);
+    }
+    
+    let httpInfo = null;
+    const webPorts = openPorts.filter(p => [80, 443, 8080, 8443].includes(p.port));
+    if (webPorts.length > 0) {
+      httpInfo = await grabHttpBanner(host.ip, webPorts[0].port);
+    }
+
+    const classification = classifyDevice(openPorts, mac, ssdpInfo, httpInfo);
+    log('info', `Discovered Device: [IP: ${host.ip}] [MAC: ${mac || 'unknown'}] [Type: ${classification.deviceType}] [OS: ${classification.osInfo}] [Vendor: ${classification.manufacturer}] [Model: ${classification.model}]`);
   }
 
   log('success', `Manual LAN scan complete. Swept 254 IPs, found ${aliveHosts.length} devices.`);
@@ -1755,6 +1849,9 @@ async function triggerLocalLANScan() {
 async function main() {
   // Resolve active network interface (UDP outbound lookup + heuristics fallback)
   await resolveActiveNetworkInterface();
+
+  // Start background recurring check for pending system updates
+  startSoftwareUpdatesCheck();
 
   log('info', '╔══════════════════════════════════════════════════════╗');
   log('info', '║       QS Discovery Agent v' + VERSION + '                     ║');
@@ -1857,11 +1954,147 @@ main().catch(err => {
   process.exit(1);
 });
 
-// Heuristic classification based on open ports
-function classifyDevice(openPorts, mac) {
+function discoverSSDP(timeout = 3000) {
+  return new Promise((resolve) => {
+    const dgram = require('dgram');
+    const client = dgram.createSocket('udp4');
+    const devices = {};
+    
+    const message = Buffer.from(
+      'M-SEARCH * HTTP/1.1\r\n' +
+      'HOST: 239.255.255.250:1900\r\n' +
+      'MAN: "ssdp:discover"\r\n' +
+      'MX: 2\r\n' +
+      'ST: ssdp:all\r\n' +
+      '\r\n'
+    );
+    
+    client.on('message', (msg, rinfo) => {
+      const headers = msg.toString();
+      const locationMatch = headers.match(/LOCATION:\s*(https?:\/\/\S+)/i);
+      const usnMatch = headers.match(/USN:\s*(\S+)/i);
+      if (locationMatch) {
+        devices[rinfo.address] = {
+          ip: rinfo.address,
+          location: locationMatch[1],
+          usn: usnMatch ? usnMatch[1] : ''
+        };
+      }
+    });
+    
+    client.on('error', () => {});
+    
+    client.send(message, 0, message.length, 1900, '239.255.255.250', (err) => {
+      if (err) {
+        try { client.close(); } catch {}
+        resolve({});
+      }
+    });
+    
+    setTimeout(() => {
+      try { client.close(); } catch {}
+      resolve(devices);
+    }, timeout);
+  });
+}
+
+function fetchUPnPDetails(url) {
+  return new Promise((resolve) => {
+    const httpLib = url.startsWith('https') ? require('https') : require('http');
+    let resolved = false;
+    
+    const cleanup = () => {
+      resolved = true;
+    };
+
+    const req = httpLib.get(url, { timeout: 2000, rejectUnauthorized: false }, (res) => {
+      let body = '';
+      res.on('data', chunk => {
+        body += chunk;
+        if (body.length > 50000) req.destroy();
+      });
+      res.on('end', () => {
+        if (resolved) return;
+        cleanup();
+        const friendlyName = body.match(/<friendlyName>([^<]+)<\/friendlyName>/i)?.[1] || '';
+        const manufacturer = body.match(/<manufacturer>([^<]+)<\/manufacturer>/i)?.[1] || '';
+        const modelName = body.match(/<modelName>([^<]+)<\/modelName>/i)?.[1] || '';
+        const deviceType = body.match(/<deviceType>urn:schemas-upnp-org:device:([^:]+)/i)?.[1] || '';
+        resolve({ friendlyName, manufacturer, modelName, deviceType });
+      });
+    });
+
+    req.on('error', () => {
+      if (resolved) return;
+      cleanup();
+      resolve(null);
+    });
+
+    req.on('timeout', () => {
+      req.destroy();
+      if (resolved) return;
+      cleanup();
+      resolve(null);
+    });
+  });
+}
+
+function grabHttpBanner(ip, port) {
+  return new Promise((resolve) => {
+    const httpLib = port === 443 || port === 8443 ? require('https') : require('http');
+    const options = {
+      hostname: ip,
+      port: port,
+      path: '/',
+      method: 'GET',
+      headers: { 'User-Agent': 'QS-Discovery-Agent' },
+      timeout: 1500,
+      rejectUnauthorized: false
+    };
+    
+    let resolved = false;
+    const req = httpLib.request(options, (res) => {
+      let body = '';
+      res.on('data', chunk => {
+        body += chunk;
+        if (body.length > 50000) req.destroy();
+      });
+      res.on('end', () => {
+        if (resolved) return;
+        resolved = true;
+        const title = body.match(/<title>([^<]+)<\/title>/i)?.[1]?.trim() || '';
+        const server = res.headers['server'] || '';
+        resolve({ title, server });
+      });
+    });
+    
+    req.on('error', () => {
+      if (resolved) return;
+      resolved = true;
+      resolve(null);
+    });
+    
+    req.on('timeout', () => {
+      req.destroy();
+      if (resolved) return;
+      resolved = true;
+      resolve(null);
+    });
+    
+    req.end();
+  });
+}
+
+// Heuristic classification based on open ports, SSDP, and HTTP banner details
+function classifyDevice(openPorts, mac, ssdpInfo, httpInfo) {
   const portNumbers = new Set(openPorts.map(p => p.port));
   
   let vendorHint = '';
+  let modelHint = '';
+  let deviceType = '';
+  let osGuess = '';
+
+  // 1. MAC OUI lookup
   if (mac) {
     const oui = mac.toUpperCase().replace(/[^0-9A-F]/g, '').substring(0, 6);
     if (['F0DEF1', '00505A', '000C29', '005056'].some(p => oui.startsWith(p))) vendorHint = 'VMware';
@@ -1871,23 +2104,88 @@ function classifyDevice(openPorts, mac) {
     else if (['DCED96', 'DC4F22'].some(p => oui.startsWith(p))) vendorHint = 'Apple';
   }
 
-  const ports = openPorts.map(p => p.service);
-  if (portNumbers.has(631) || portNumbers.has(9100)) {
-    return { deviceType: 'Printer', osInfo: 'Embedded OS', manufacturer: vendorHint || 'Generic Printer' };
+  // 2. SSDP (UPnP) details override (very accurate!)
+  if (ssdpInfo) {
+    if (ssdpInfo.manufacturer) vendorHint = ssdpInfo.manufacturer;
+    if (ssdpInfo.modelName) modelHint = ssdpInfo.modelName;
+    if (ssdpInfo.friendlyName && !modelHint) modelHint = ssdpInfo.friendlyName;
+    if (ssdpInfo.deviceType) {
+      const type = ssdpInfo.deviceType.toLowerCase();
+      if (type.includes('printer')) deviceType = 'Printer';
+      else if (type.includes('router') || type.includes('gateway')) deviceType = 'Network Device';
+      else if (type.includes('media') || type.includes('tv') || type.includes('speaker') || type.includes('player')) deviceType = 'IoT / Media';
+    }
   }
-  if (portNumbers.has(161) && !portNumbers.has(22) && !portNumbers.has(3389)) {
-    return { deviceType: 'Network Device', osInfo: 'Network OS', manufacturer: vendorHint || 'Generic Network Device' };
+
+  // 3. HTTP banner/title clues
+  if (httpInfo) {
+    const title = httpInfo.title || '';
+    const server = httpInfo.server || '';
+
+    // Extract vendor/model from HTML title
+    if (title) {
+      if (/asus/i.test(title)) vendorHint = 'ASUS';
+      if (/netgear/i.test(title)) vendorHint = 'Netgear';
+      if (/linksys/i.test(title)) vendorHint = 'Linksys';
+      if (/tp-link/i.test(title)) vendorHint = 'TP-Link';
+      if (/synology/i.test(title)) { vendorHint = 'Synology'; deviceType = 'Storage / NAS'; }
+      if (/qnap/i.test(title)) { vendorHint = 'QNAP'; deviceType = 'Storage / NAS'; }
+      if (/cups/i.test(title) || /laserjet/i.test(title) || /officejet/i.test(title) || /epson/i.test(title) || /canon/i.test(title)) {
+        deviceType = 'Printer';
+        if (/epson/i.test(title)) vendorHint = 'Epson';
+        if (/canon/i.test(title)) vendorHint = 'Canon';
+        if (/hp/i.test(title)) vendorHint = 'HP';
+      }
+      
+      // Treat title as model name if it's reasonably short
+      if (title.length < 50 && !modelHint) {
+        modelHint = title;
+      }
+    }
+    
+    // HTTP Server header clues
+    if (server) {
+      if (/microsoft-iis/i.test(server)) {
+        osGuess = 'Windows';
+        deviceType = 'Web Server';
+      } else if (/apache|nginx/i.test(server)) {
+        deviceType = 'Web Server';
+      }
+    }
   }
-  if (portNumbers.has(3389)) {
-    return { deviceType: portNumbers.has(135) ? 'Windows Server' : 'Windows Workstation', osInfo: 'Windows', manufacturer: vendorHint || 'Generic PC' };
+
+  // 4. Fallback port-based classification
+  if (!deviceType) {
+    if (portNumbers.has(631) || portNumbers.has(9100)) {
+      deviceType = 'Printer';
+    } else if (portNumbers.has(161) && !portNumbers.has(22) && !portNumbers.has(3389)) {
+      deviceType = 'Network Device';
+    } else if (portNumbers.has(3389)) {
+      deviceType = portNumbers.has(135) ? 'Windows Server' : 'Windows Workstation';
+      osGuess = 'Windows';
+    } else if (portNumbers.has(22) && !portNumbers.has(3389)) {
+      deviceType = portNumbers.has(80) || portNumbers.has(443) ? 'Linux Server' : 'Linux Workstation';
+      osGuess = 'Linux/Unix';
+    } else if (portNumbers.has(80) || portNumbers.has(443) || portNumbers.has(8080)) {
+      deviceType = 'Web Server';
+    } else {
+      deviceType = vendorHint ? `${vendorHint} Device` : 'Unknown';
+    }
   }
-  if (portNumbers.has(22) && !portNumbers.has(3389)) {
-    return { deviceType: portNumbers.has(80) || portNumbers.has(443) ? 'Linux Server' : 'Linux Workstation', osInfo: 'Linux/Unix', manufacturer: vendorHint || 'Generic Linux PC' };
+
+  if (!osGuess) {
+    if (deviceType.startsWith('Windows')) osGuess = 'Windows';
+    else if (deviceType.startsWith('Linux') || deviceType === 'Web Server') osGuess = 'Linux/Unix';
+    else if (deviceType === 'Printer' || deviceType === 'Network Device') osGuess = 'Embedded OS';
+    else osGuess = 'Unknown';
   }
-  if (portNumbers.has(80) || portNumbers.has(443) || portNumbers.has(8080)) {
-    return { deviceType: 'Web Server', osInfo: 'Unknown', manufacturer: vendorHint || 'Generic Web Server' };
-  }
-  return { deviceType: vendorHint ? `${vendorHint} Device` : 'Unknown', osInfo: 'Unknown', manufacturer: vendorHint || 'Generic' };
+
+  return {
+    deviceType,
+    osInfo: osGuess,
+    manufacturer: vendorHint || 'Generic',
+    model: modelHint || 'Generic Model'
+  };
 }
 
 // TCP Port Probe
@@ -2017,21 +2315,79 @@ async function runLANScan(scanJobId, subnet, scanType, portRange) {
     }
   } catch {}
 
+  // Phase 2.5: Active SSDP / UPnP Discovery Sweep (2s)
+  log('info', 'LAN Scan: Running SSDP/UPnP discovery sweep...');
+  const ssdpDevices = await discoverSSDP(2000);
+  log('info', `LAN Scan: SSDP sweep found ${Object.keys(ssdpDevices).length} active UPnP endpoints.`);
+
   // Phase 3: Perform service scan & classification
   const discoveredDevices = [];
   for (const host of aliveHosts) {
     const mac = arpEntries[host.ip] || null;
     const openPorts = await scanPorts(host.ip);
-    const classification = classifyDevice(openPorts, mac);
+    
+    // Check if we have SSDP info for this host
+    let ssdpInfo = null;
+    const ssdpDev = ssdpDevices[host.ip];
+    if (ssdpDev && ssdpDev.location) {
+      log('info', `LAN Scan: Querying UPnP device details at ${ssdpDev.location}...`);
+      ssdpInfo = await fetchUPnPDetails(ssdpDev.location);
+    }
+    
+    // Grab HTTP title/banner if web ports are open
+    let httpInfo = null;
+    const webPorts = openPorts.filter(p => [80, 443, 8080, 8443].includes(p.port));
+    if (webPorts.length > 0) {
+      const targetPort = webPorts[0].port;
+      log('info', `LAN Scan: Grabbing HTTP banner from ${host.ip}:${targetPort}...`);
+      httpInfo = await grabHttpBanner(host.ip, targetPort);
+    }
+    
+    const classification = classifyDevice(openPorts, mac, ssdpInfo, httpInfo);
+    
+    // Build rich enrichmentData object matching standard formatting for UI display
+    const enrichmentData = {
+      collectedAt: new Date().toISOString(),
+      method: 'AGENT_LAN_SCAN',
+      dataQuality: openPorts.length > 0 ? 'GOOD' : 'LIMITED',
+      hardware: {
+        detectedType: classification.deviceType,
+        manufacturer: classification.manufacturer,
+        model: classification.model,
+        macPrefix: mac ? mac.substring(0, 8).toUpperCase() : null,
+      },
+      operatingSystem: {
+        osGuess: classification.osInfo,
+        name: classification.osInfo,
+        hostname: host.hostname || (ssdpInfo && ssdpInfo.friendlyName) || '',
+      },
+      network: {
+        ipAddress: host.ip,
+        macAddress: mac,
+        openPorts: openPorts.map(p => ({
+          port: p.port,
+          service: p.service,
+          protocol: 'TCP',
+          risk: [21, 23, 25, 445, 3389].includes(p.port) ? 'HIGH' :
+                [80, 8080, 8443].includes(p.port) ? 'MEDIUM' : 'LOW',
+        })),
+        services: openPorts.map(p => p.service),
+      },
+      security: {
+        riskScore: openPorts.length * 15,
+        riskLevel: openPorts.length >= 4 ? 'HIGH' : openPorts.length >= 2 ? 'MEDIUM' : 'LOW',
+      }
+    };
     
     discoveredDevices.push({
       ip: host.ip,
       mac,
-      hostname: host.hostname || null,
+      hostname: host.hostname || (ssdpInfo && ssdpInfo.friendlyName) || null,
       openPorts,
       deviceType: classification.deviceType,
       manufacturer: classification.manufacturer,
       osInfo: classification.osInfo,
+      enrichmentData
     });
   }
 

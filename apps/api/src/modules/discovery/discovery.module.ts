@@ -4,14 +4,16 @@ import { DiscoveryController } from './discovery.controller';
 import { CredentialVaultService } from './credential-vault.service';
 import { ScanSchedulerService } from './scan-scheduler.service';
 import { ComplianceModule } from '../compliance/compliance.module';
+import { AuthModule } from '../auth/auth.module';
 import { SnmpScanner } from '../../common/scanners/snmp.scanner';
 
 @Module({
-  imports: [ComplianceModule],
+  imports: [ComplianceModule, AuthModule],
   controllers: [DiscoveryController],
   providers: [DiscoveryService, CredentialVaultService, ScanSchedulerService, SnmpScanner],
   exports: [DiscoveryService, CredentialVaultService],
 })
 export class DiscoveryModule {}
+
 
 

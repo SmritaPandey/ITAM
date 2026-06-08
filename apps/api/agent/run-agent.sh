@@ -9,7 +9,47 @@ echo "║      QS Discovery Agent — Mac/Linux Launcher         ║"
 echo "╚══════════════════════════════════════════════════════╝"
 echo ""
 
-# 🔐 Check for privileges to run deep scan commands
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+
+# 🍏 macOS Gatekeeper Auto-Bypass: Strip quarantine flags recursively so non-technical users can launch without alerts
+if [ "$(uname -s)" = "Darwin" ]; then
+  xattr -dr com.apple.quarantine "$SCRIPT_DIR" 2>/dev/null || true
+fi
+
+# Check if the persistent background service is already installed
+SERVICE_INSTALLED=0
+if [ "$(uname -s)" = "Darwin" ]; then
+  if [ -f "/Library/LaunchDaemons/com.qsasset.discovery.agent.plist" ]; then
+    SERVICE_INSTALLED=1
+  fi
+elif [ "$(uname -s)" = "Linux" ]; then
+  if [ -f "/etc/systemd/system/qsasset-agent.service" ]; then
+    SERVICE_INSTALLED=1
+  fi
+fi
+
+if [ "$SERVICE_INSTALLED" -eq 1 ]; then
+  echo "⚠️  A background service daemon for QS Discovery Agent is already configured on this machine."
+  echo "    Running another instance interactively will cause port conflicts and duplicate reporting."
+  read -p "❓ Do you still want to run another instance interactively? (y/n): " ContinueInteractive
+  if [[ ! "$ContinueInteractive" =~ ^[Yy]$ ]]; then
+    echo "👋 Exiting launcher. The background service is already running active scans."
+    exit 0
+  fi
+  echo ""
+else
+  # Offer to install the persistent background service once
+  echo "💡 Tip: To run the agent silently in the background on boot, we can configure it as a persistent service."
+  echo "   This will ask for administrator credentials exactly once during this setup."
+  read -p "⚙️  Do you want to install and start the background service now? (y/n): " InstallService
+  if [[ "$InstallService" =~ ^[Yy]$ ]]; then
+    chmod +x "${SCRIPT_DIR}/install-service.sh"
+    exec sudo "${SCRIPT_DIR}/install-service.sh"
+  fi
+  echo ""
+fi
+
+# 🔐 Check for privileges to run deep scan commands if running interactively
 if [ "$EUID" -ne 0 ]; then
   echo "🔒 QS Discovery Agent works best with administrative permissions to retrieve deep telemetry"
   echo "   (like pending software updates, complete listening ports, and hardware serials)."
@@ -19,13 +59,6 @@ if [ "$EUID" -ne 0 ]; then
   fi
   echo "⚠️  Running without root privileges. Some telemetry collections (like system updates) will be skipped."
   echo ""
-fi
-
-SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-
-# 🍏 macOS Gatekeeper Auto-Bypass: Strip quarantine flags recursively so non-technical users can launch without alerts
-if [ "$(uname -s)" = "Darwin" ]; then
-  xattr -dr com.apple.quarantine "$SCRIPT_DIR" 2>/dev/null || true
 fi
 
 # Function to ensure Node.js is present (system-wide or portable local)

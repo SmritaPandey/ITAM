@@ -609,4 +609,20 @@ export class AuthService {
 
     return { message: 'Password has been reset successfully. You can now log in.' };
   }
+
+  /**
+   * Generates a long-lived 10-year persistent JWT token for discovery agents
+   */
+  generateAgentToken(tenantId: string, email: string): string {
+    const payload: JwtPayload = {
+      sub: 'agent-session',
+      email: email,
+      tenantId: tenantId,
+      role: 'Tenant Admin',
+      permissions: ['admin:full'],
+      isSuperAdmin: false,
+    };
+    return this.jwtService.sign(payload, { expiresIn: '3650d' });
+  }
 }
+

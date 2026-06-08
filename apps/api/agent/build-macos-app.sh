@@ -74,6 +74,7 @@ EOF
 # Copy agent files directly inside the self-contained application bundle
 cp "${SCRIPT_DIR}/qs-discovery-agent.js" "${MAC_OS_DIR}/"
 cp "${SCRIPT_DIR}/run-agent.sh" "${MAC_OS_DIR}/"
+cp "${SCRIPT_DIR}/Status Dashboard.html" "${MAC_OS_DIR}/"
 chmod +x "${MAC_OS_DIR}/run-agent.sh"
 
 # Create launcher script

@@ -65,17 +65,24 @@ fetch(url, {
     try { if (process.platform !== 'win32') fs.chmodSync(configPath, 0o600); } catch {}
     console.log(`📦 Wrote local config.json to: ${configPath}`);
     
-    // Restart launch agent on Mac
+    // Restart launch agent / daemon on Mac
     try {
-      const plistPath = path.join(process.env.HOME, 'Library/LaunchAgents/com.qsasset.discovery.agent.plist');
+      const plistPath = path.join(process.env.HOME || '', 'Library/LaunchAgents/com.qsasset.discovery.agent.plist');
+      const daemonPath = '/Library/LaunchDaemons/com.qsasset.discovery.agent.plist';
       if (fs.existsSync(plistPath)) {
         console.log('🚀 Restarting macOS LaunchAgent to apply config...');
         execSync(`launchctl unload "${plistPath}" 2>/dev/null || true`);
         execSync(`launchctl load "${plistPath}"`);
-        console.log('✅ Service restarted successfully and running silently in the background!');
+        console.log('✅ LaunchAgent restarted successfully!');
+      }
+      if (fs.existsSync(daemonPath)) {
+        console.log('🚀 Restarting macOS LaunchDaemon to apply config...');
+        execSync(`sudo launchctl unload "${daemonPath}" 2>/dev/null || launchctl unload "${daemonPath}" 2>/dev/null || true`);
+        execSync(`sudo launchctl load "${daemonPath}" || launchctl load "${daemonPath}"`);
+        console.log('✅ LaunchDaemon restarted successfully!');
       }
     } catch (err) {
-      console.log('⚠️ Could not auto-restart launchctl daemon. Restart manually.');
+      console.log('⚠️ Could not auto-restart launchctl daemon/agent. Restart manually.');
     }
   })
   .catch((err) => {

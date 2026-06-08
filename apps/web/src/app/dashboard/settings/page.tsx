@@ -871,9 +871,9 @@ export default function SettingsPage() {
                           <span style={{ fontSize: 12, fontWeight: 700, color: "var(--text-primary)" }}>macOS</span>
                         </div>
                         <div style={{ fontSize: 11, color: "var(--text-tertiary)", lineHeight: 1.6 }}>
-                          <strong style={{ color: "var(--text-secondary)" }}>LaunchAgent</strong><br />
-                          Installed at <code style={{ fontSize: 10, padding: "1px 4px", borderRadius: 4, background: "rgba(6,182,212,0.1)", color: "#06b6d4" }}>~/Library/LaunchAgents/</code><br />
-                          No sudo required. Persists across reboots and user logins.
+                          <strong style={{ color: "var(--text-secondary)" }}>LaunchDaemon</strong><br />
+                          Requires <code style={{ fontSize: 10, padding: "1px 4px", borderRadius: 4, background: "rgba(239,68,68,0.1)", color: "#ef4444" }}>sudo</code> to install at <code style={{ fontSize: 10, padding: "1px 4px", borderRadius: 4, background: "rgba(6,182,212,0.1)", color: "#06b6d4" }}>/Library/LaunchDaemons/</code>.<br />
+                          Runs as root for complete ports & updates telemetry.
                         </div>
                       </div>
 

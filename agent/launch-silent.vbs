@@ -1,5 +1,6 @@
 Set WshShell = CreateObject("WScript.Shell")
 Set FSO = CreateObject("Scripting.FileSystemObject")
-SCRIPT_DIR = FSO.GetParentFolderName(WScript.ScriptPosition)
+SCRIPT_DIR = FSO.GetParentFolderName(WScript.ScriptFullName)
 WshShell.CurrentDirectory = SCRIPT_DIR
-WshShell.Run "cmd.exe /c run-agent.bat", 0, False
+WshShell.Run "cmd.exe /c run-agent.bat --silent", 0, False
+

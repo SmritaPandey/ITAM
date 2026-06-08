@@ -57,6 +57,7 @@ const SILENT_MODE = args.includes('--silent') || process.env.QS_AGENT_SILENT ===
 let tokenFromFile = '';
 let configEmail = '';
 let configPassword = '';
+let agentId = ''; // Declared early for config loading
 const configPath = path.join(__dirname, 'config.json');
 
 if (fs.existsSync(configPath)) {
@@ -66,6 +67,7 @@ if (fs.existsSync(configPath)) {
     if (config.token) tokenFromFile = config.token;
     if (config.email) configEmail = config.email;
     if (config.password) configPassword = config.password;
+    if (config.agentId) agentId = config.agentId;
     log('info', '📦 Loaded local config.json successfully');
     try { if (process.platform !== 'win32') fs.chmodSync(configPath, 0o600); } catch {}
   } catch (e) {
@@ -85,7 +87,6 @@ if (!tokenFromFile && (!USER || !PASS)) {
 }
 
 let accessToken = '';
-let agentId = '';
 
 if (process.argv.includes('--insecure')) {
   process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
@@ -146,19 +147,23 @@ function isTokenExpired(token) {
   }
 }
 
-function saveTokenToConfig(newToken) {
+function saveToConfig(key, value) {
   try {
     let config = {};
     if (fs.existsSync(configPath)) {
       config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
     }
-    config.token = newToken;
+    config[key] = value;
     fs.writeFileSync(configPath, JSON.stringify(config, null, 2), 'utf8');
     try { if (process.platform !== 'win32') fs.chmodSync(configPath, 0o600); } catch {}
-    log('info', '📦 Refreshed token saved to config.json');
   } catch (e) {
-    log('error', `Failed to save refreshed token: ${e.message}`);
+    log('error', `Failed to save ${key} to config: ${e.message}`);
   }
+}
+
+function saveTokenToConfig(newToken) {
+  saveToConfig('token', newToken);
+  log('info', '📦 Refreshed token saved to config.json');
 }
 
 // ─── Login ──────────────────────────────────────────────────
@@ -552,7 +557,7 @@ function getRunningServices() {
         return { name: parts[0]?.replace('.service', ''), status: 'running' };
       }).filter(s => s.name && !s.name.startsWith('●'));
     } else if (platform === 'win32') {
-      return execCmd('sc query type= service state= all 2>nul | findstr SERVICE_NAME STATE').split('\n')
+      return execCmd('sc query type= service state= all 2>nul | findstr "SERVICE_NAME STATE"').split('\n')
         .reduce((acc, line, i, arr) => {
           if (line.includes('SERVICE_NAME') && arr[i+1]) {
             acc.push({ name: line.split(':')[1]?.trim(), status: arr[i+1].includes('RUNNING') ? 'running' : 'stopped' });
@@ -788,7 +793,7 @@ function getActiveShellUsers() {
   const active = new Set();
   try {
     if (platform === 'win32') {
-      const output = execCmd('query user');
+      const output = execCmd('query user 2>nul');
       const lines = output.split('\n').slice(1);
       for (const line of lines) {
         const parts = line.trim().split(/\s+/);
@@ -1171,7 +1176,8 @@ function checkServiceInstalled() {
   try {
     if (os.platform() === 'darwin') {
       const plistPath = path.join(process.env.HOME || '~', 'Library/LaunchAgents/com.qsasset.discovery.agent.plist');
-      return fs.existsSync(plistPath);
+      const daemonPath = '/Library/LaunchDaemons/com.qsasset.discovery.agent.plist';
+      return fs.existsSync(plistPath) || fs.existsSync(daemonPath);
     } else if (os.platform() === 'linux') {
       try {
         execSync('systemctl is-enabled qsasset-agent 2>/dev/null', { stdio: 'pipe', timeout: 3000 });
@@ -1195,6 +1201,7 @@ function checkServiceInstalled() {
 async function registerAgent() {
   const systemInfo = collectSystemInfo();
   const body = {
+    ...(agentId ? { id: agentId } : {}),
     hostname: os.hostname(),
     platform: os.platform(),
     agentVersion: VERSION,
@@ -1208,6 +1215,7 @@ async function registerAgent() {
 
   if (res.status === 200 || res.status === 201) {
     agentId = res.data.id;
+    saveToConfig('agentId', agentId);
     log('success', `Agent registered successfully. ID: ${agentId}`);
     return true;
   }
@@ -1217,9 +1225,11 @@ async function registerAgent() {
     log('info', '🔑 Registration returned 401 — token expired. Re-authenticating...');
     const loggedIn = await loginWithCredentials();
     if (loggedIn) {
+      // Re-build body since accessToken might have changed
       const retryRes = await request('POST', '/discovery/agents/register', body);
       if (retryRes.status === 200 || retryRes.status === 201) {
         agentId = retryRes.data.id;
+        saveToConfig('agentId', agentId);
         log('success', `Agent registered successfully after re-auth. ID: ${agentId}`);
         return true;
       }
@@ -1539,12 +1549,26 @@ async function sendHeartbeat() {
             try {
               if (os.platform() === 'darwin') {
                 const plistPath = path.join(process.env.HOME || '~', 'Library/LaunchAgents/com.qsasset.discovery.agent.plist');
+                const daemonPath = '/Library/LaunchDaemons/com.qsasset.discovery.agent.plist';
+                let removed = false;
                 if (fs.existsSync(plistPath)) {
                   execSync(`launchctl unload "${plistPath}" 2>/dev/null || true`, { timeout: 5000 });
                   fs.unlinkSync(plistPath);
                   log('success', 'macOS LaunchAgent removed. Agent will no longer start on boot.');
-                } else {
-                  log('info', 'No LaunchAgent plist found — service not installed.');
+                  removed = true;
+                }
+                if (fs.existsSync(daemonPath)) {
+                  execSync(`sudo launchctl unload "${daemonPath}" 2>/dev/null || launchctl unload "${daemonPath}" 2>/dev/null || true`, { timeout: 5000 });
+                  try {
+                    fs.unlinkSync(daemonPath);
+                  } catch (e) {
+                    execSync(`sudo rm -f "${daemonPath}" 2>/dev/null || true`, { timeout: 5000 });
+                  }
+                  log('success', 'macOS LaunchDaemon removed. Agent will no longer start on boot.');
+                  removed = true;
+                }
+                if (!removed) {
+                  log('info', 'No LaunchAgent or LaunchDaemon plist found — service not installed.');
                 }
               } else if (os.platform() === 'linux') {
                 try {
@@ -1656,8 +1680,15 @@ function startStatusServer() {
           res.end('Error loading status dashboard HTML. Please verify that "Status Dashboard.html" is in the same directory as the agent.');
           return;
         }
+        let processedHtml = html;
+        if (accessToken) {
+          processedHtml = processedHtml.replace(
+            "const API_URL = 'http://localhost:49152/api';",
+            `const API_URL = 'http://localhost:49152/api'; const accessToken = '${accessToken}';`
+          );
+        }
         res.writeHead(200, { 'Content-Type': 'text/html' });
-        res.end(html);
+        res.end(processedHtml);
       });
       return;
     }

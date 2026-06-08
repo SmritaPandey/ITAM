@@ -23,6 +23,7 @@ import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { DiscoveryService } from './discovery.service';
 import { CredentialVaultService } from './credential-vault.service';
+import { AuthService } from '../auth/auth.service';
 import { ModuleGuard } from '../../common/guards/module.guard';
 import { RequireModule } from '../../common/decorators/require-module.decorator';
 
@@ -35,7 +36,9 @@ export class DiscoveryController {
   constructor(
     private discoveryService: DiscoveryService,
     private credentialVault: CredentialVaultService,
+    private authService: AuthService,
   ) {}
+
 
   // ─── Subnet Detection ────────────────────────────────────────
 
@@ -283,9 +286,6 @@ export class DiscoveryController {
       'Download the lightweight Node.js discovery agent as a zip package',
   })
   async downloadAgent(@Request() req: any, @Res() res: any) {
-    const authHeader = req.headers.authorization;
-    const token = authHeader && authHeader.split(' ')[1];
-
     const host =
       req.headers['x-forwarded-host'] || req.headers.host || 'localhost:4100';
     const protocol = req.headers['x-forwarded-proto'] || req.protocol || 'http';
@@ -296,9 +296,12 @@ export class DiscoveryController {
     // Pass the downloader's email so the agent config includes credential-based re-auth
     const userEmail = req.user?.email || '';
 
+    // Generate a persistent 10-year JWT token for the agent enrollment
+    const agentToken = this.authService.generateAgentToken(req.user.tenantId, userEmail);
+
     const buffer = this.discoveryService.getAgentZipPackage(
       serverUrl,
-      token || undefined,
+      agentToken,
       userEmail || undefined,
     );
     res.set({

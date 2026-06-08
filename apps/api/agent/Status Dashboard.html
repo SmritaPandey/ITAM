@@ -1206,9 +1206,13 @@
       
       appendLog('Control', 'Requesting local network discovery sweep immediately...', 'info');
       try {
+        const headers = { 'Content-Type': 'application/json' };
+        if (typeof accessToken !== 'undefined' && accessToken) {
+          headers['Authorization'] = 'Bearer ' + accessToken;
+        }
         const res = await fetch(`${API_URL}/control`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: headers,
           body: JSON.stringify({ action: 'TRIGGER_SCAN' }),
           mode: 'cors'
         });
@@ -1234,9 +1238,13 @@
       
       appendLog('Control', 'Registering agent as a silent continuous background service...', 'info');
       try {
+        const headers = { 'Content-Type': 'application/json' };
+        if (typeof accessToken !== 'undefined' && accessToken) {
+          headers['Authorization'] = 'Bearer ' + accessToken;
+        }
         const res = await fetch(`${API_URL}/control`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: headers,
           body: JSON.stringify({ action: 'INSTALL_SERVICE' }),
           mode: 'cors'
         });

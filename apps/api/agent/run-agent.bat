@@ -1,4 +1,5 @@
 @echo off
+setlocal EnableDelayedExpansion
 :: ═══════════════════════════════════════════════════════════════
 :: QS Discovery Agent — Windows Launcher (Zero-Dependency Wizard Mode)
 :: ═══════════════════════════════════════════════════════════════
@@ -63,7 +64,43 @@ if exist "%~dp0.node\node.exe" (
   exit /b 1
 )
 
+set SILENT=false
+for %%a in (%*) do (
+  if "%%a"=="--silent" set SILENT=true
+)
+
 :run
+if "!SILENT!"=="true" (
+  if exist "%~dp0config.json" (
+    %NODE_BIN% "%~dp0qs-discovery-agent.js" --silent
+    exit /b !errorlevel!
+  )
+)
+
+:: Check if the persistent background task QSDiscoveryAgent is already registered in Task Scheduler
+schtasks /query /tn "QSDiscoveryAgent" >nul 2>nul
+if !errorlevel! equ 0 (
+    echo ⚠️  A background service daemon for QS Discovery Agent is already registered on this machine.
+    echo    Running another instance interactively will cause port conflicts and duplicate reporting.
+    set /p ContinueInteractive="❓ Do you still want to run another instance interactively? (y/n): "
+    if /i not "!ContinueInteractive!"=="y" (
+        echo 👋 Exiting launcher. The background service is already running active scans.
+        exit /b 0
+    )
+    echo.
+) else (
+    :: Offer to install the persistent background service once
+    echo 💡 Tip: To run the agent silently in the background on boot, we can configure it as a persistent service.
+    echo    This will ask for administrator credentials exactly once during this setup.
+    set /p InstallService="⚙️  Do you want to install and start the background service now? (y/n): "
+    if /i "!InstallService!"=="y" (
+        echo 🚀 Requesting administrator elevation to install the background service...
+        powershell -Command "Start-Process '%~dp0install-service.bat' -Verb RunAs"
+        exit /b 0
+    )
+    echo.
+)
+
 if exist "%~dp0config.json" (
   echo 🚀 Launching pre-configured QS Discovery Agent...
   echo.

@@ -1256,10 +1256,24 @@ export class DiscoveryService {
   }
 
   async registerAgent(tenantId: string, data: {
+    id?: string;
     hostname: string; platform: string; agentVersion: string;
     ipAddress: string; macAddress?: string; systemInfo?: any;
   }) {
-    // Check for existing agent by hostname + IP
+    // 1. Check for existing agent by ID first if provided
+    if (data.id) {
+      const existingById = await this.prisma.agent.findFirst({
+        where: { id: data.id, tenantId },
+      });
+      if (existingById) {
+        return this.prisma.agent.update({
+          where: { id: existingById.id },
+          data: { ...data, lastHeartbeat: new Date(), status: 'ONLINE' },
+        });
+      }
+    }
+
+    // 2. Check for existing agent by hostname + IP (legacy / fallback)
     const existing = await this.prisma.agent.findFirst({
       where: { tenantId, hostname: data.hostname, ipAddress: data.ipAddress },
     });
@@ -1646,6 +1660,7 @@ export class DiscoveryService {
           hostname: host.hostname || null,
           manufacturer: host.manufacturer || null,
           deviceType: deviceType,
+          osGuess: host.osInfo || null,
           osInfo: host.osInfo || null,
           openPorts: openPorts.length > 0 ? JSON.stringify(openPorts) : null,
           services: openPorts.length > 0 ? JSON.stringify(openPorts.map((p: any) => p.service)) : null,

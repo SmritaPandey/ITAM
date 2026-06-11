@@ -22,7 +22,16 @@ if not exist "%CORE_DIR%" set CORE_DIR=%~dp0
 
 :: Check for launch-silent.vbs
 if not exist "%CORE_DIR%\launch-silent.vbs" (
-    echo ❌ Core launch-silent.vbs file not found.
+    echo.
+    echo  ❌ ERROR: Core files are missing!
+    echo  ══════════════════════════════════════════════════════════════
+    echo  Did you run this script directly from the ZIP archive without extracting it?
+    echo  Windows requires the ZIP folder to be extracted for scripts to work properly.
+    echo.
+    echo  👉 PLEASE EXTRACT the ZIP folder completely to a directory of your choice,
+    echo     then double-click 'Install Service.bat' or 'Start Agent.bat' from the extracted folder.
+    echo  ══════════════════════════════════════════════════════════════
+    echo.
     pause
     exit /b 1
 )

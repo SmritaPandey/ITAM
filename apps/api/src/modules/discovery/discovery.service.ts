@@ -2192,22 +2192,28 @@ export class DiscoveryService {
       if (fs.existsSync(filePath)) zip.addLocalFile(filePath, 'bin');
     }
 
-    // Windows Helpers (Legacy and neat core folder)
+    // Windows Helpers (neat core folder containing all hidden dependencies)
     const winFiles = ['Start Agent.bat', 'install-service.bat', 'run-agent.bat', 'qs-discovery-agent.js', 'launch-silent.vbs', 'Status Dashboard.html'];
     for (const file of winFiles) {
       const filePath = path.join(agentDir, file);
       if (fs.existsSync(filePath)) {
         const destName = file === 'install-service.bat' ? 'Install Service.bat' : file;
-        zip.addLocalFile(filePath, 'win', destName);
         zip.addLocalFile(filePath, 'core', destName);
       }
     }
 
     // Root-level items for easy double-clicking
-    const rootFiles = ['Status Dashboard.html', 'README.md', 'Start Agent.bat'];
-    for (const file of rootFiles) {
-      const filePath = path.join(agentDir, file);
-      if (fs.existsSync(filePath)) zip.addLocalFile(filePath, '');
+    const rootFiles = [
+      { name: 'Status Dashboard.html' },
+      { name: 'README.md' },
+      { name: 'Start Agent.bat' },
+      { name: 'install-service.bat', destName: 'Install Service.bat' }
+    ];
+    for (const item of rootFiles) {
+      const filePath = path.join(agentDir, item.name);
+      if (fs.existsSync(filePath)) {
+        zip.addLocalFile(filePath, '', item.destName || item.name);
+      }
     }
 
     // macOS Application Bundle (Legacy and root-level launcher)
@@ -2231,7 +2237,6 @@ export class DiscoveryService {
         }
         const configBuffer = Buffer.from(JSON.stringify(configObj, null, 2), 'utf-8');
         zip.addFile('bin/config.json', configBuffer);
-        zip.addFile('win/config.json', configBuffer);
         zip.addFile('core/config.json', configBuffer);
         zip.addFile('mac/QS-Discovery-Agent.app/Contents/MacOS/config.json', configBuffer);
         zip.addFile('QS-Discovery-Agent.app/Contents/MacOS/config.json', configBuffer);

@@ -10,6 +10,22 @@ echo  ║      QS Discovery Agent - Windows Launcher           ║
 echo  ╚══════════════════════════════════════════════════════╝
 echo.
 
+:: Check if qs-discovery-agent.js exists
+if not exist "%~dp0qs-discovery-agent.js" (
+    echo.
+    echo  ❌ ERROR: Core files are missing!
+    echo  ══════════════════════════════════════════════════════════════
+    echo  Did you run this script directly from the ZIP archive without extracting it?
+    echo  Windows requires the ZIP folder to be extracted for scripts to work properly.
+    echo.
+    echo  👉 PLEASE EXTRACT the ZIP folder completely to a directory of your choice,
+    echo     then double-click 'Start Agent.bat' or 'Install Service.bat' from the extracted folder.
+    echo  ══════════════════════════════════════════════════════════════
+    echo.
+    pause
+    exit /b 1
+)
+
 :: Check for system Node.js
 where node >nul 2>nul
 if %errorlevel% equ 0 (

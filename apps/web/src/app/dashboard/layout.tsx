@@ -11,9 +11,11 @@ import {
 } from "lucide-react";
 
 import { apiFetch, safeFetch, getToken } from "@/lib/api";
+import { useRealtimeEvents } from "@/lib/useRealtimeEvents";
 import { WalkthroughProvider } from "@/components/HelpSystem";
 import { LogoIcon } from "@/components/Logo";
 import { useTheme } from "@/components/ThemeProvider";
+import AiCopilot from "@/components/AiCopilot";
 
 const nameToModuleKeyMap: Record<string, string> = {
   "Dashboard": "DASHBOARD",
@@ -422,13 +424,41 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     safeFetch("/tickets?limit=1").then(d => setTicketCount(d?.total || 0));
 
     // Fetch real notifications
+    refreshNotifications();
+  }, [router]);
+
+  // Notification refresh helper
+  function refreshNotifications() {
     safeFetch("/notifications?limit=10").then(d => {
       if (d) {
         setNotifications(d.data || []);
         setUnreadCount(d.unread || 0);
       }
     });
-  }, [router]);
+  }
+
+  // WebSocket: real-time notifications & agent heartbeat
+  const { on: onWsEvent, connected: wsConnected } = useRealtimeEvents();
+
+  useEffect(() => {
+    const cleanups = [
+      // Auto-refresh notifications on new notification event
+      onWsEvent('notification', () => {
+        refreshNotifications();
+      }),
+      // Also catch domain events whose type contains 'notification'
+      onWsEvent('domain_event', (data: any) => {
+        if (data?.type?.includes('notification')) {
+          refreshNotifications();
+        }
+      }),
+      // Agent heartbeat — dispatch custom event so child pages can react
+      onWsEvent('agent_heartbeat', (data: any) => {
+        window.dispatchEvent(new CustomEvent('agent-heartbeat', { detail: data }));
+      }),
+    ];
+    return () => cleanups.forEach(c => c());
+  }, [onWsEvent]);
 
   // Close mobile sidebar on navigation
   useEffect(() => {
@@ -900,7 +930,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                     <>
                       <div style={{ padding: "8px 8px 4px", fontSize: 10, color: "var(--text-tertiary)", textTransform: "uppercase", letterSpacing: 1 }}>Assets</div>
                       {searchResults.assets.map((a: any) => (
-                        <button key={a.id} onClick={() => { router.push(`/dashboard/assets`); setShowSearch(false); setSearchQuery(""); }}
+                        <button key={a.id} onClick={() => { router.push(`/dashboard/assets/${a.id}`); setShowSearch(false); setSearchQuery(""); }}
                           style={{
                             width: "100%", padding: "8px 12px", background: "none", border: "none",
                             display: "flex", alignItems: "center", gap: 10, borderRadius: 8,
@@ -917,7 +947,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                     <>
                       <div style={{ padding: "8px 8px 4px", fontSize: 10, color: "var(--text-tertiary)", textTransform: "uppercase", letterSpacing: 1 }}>Tickets</div>
                       {searchResults.tickets.map((t: any) => (
-                        <button key={t.id} onClick={() => { router.push(`/dashboard/tickets`); setShowSearch(false); setSearchQuery(""); }}
+                        <button key={t.id} onClick={() => { router.push(`/dashboard/tickets/${t.id}`); setShowSearch(false); setSearchQuery(""); }}
                           style={{
                             width: "100%", padding: "8px 12px", background: "none", border: "none",
                             display: "flex", alignItems: "center", gap: 10, borderRadius: 8,
@@ -954,6 +984,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         </>
       )}
     </div>
+    <AiCopilot />
     </WalkthroughProvider>
   );
 }

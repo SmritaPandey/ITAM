@@ -8,6 +8,7 @@ import {
   AlertCircle, Check, X, ChevronRight, Trash2
 } from "lucide-react";
 import { apiFetch } from "@/lib/api";
+import { useRealtimeEvents } from "@/lib/useRealtimeEvents";
 import { PageHelp } from "@/components/HelpSystem";
 
 const SCAN_ICONS: Record<string, any> = { NMAP: Scan, SNMP: Router, SSH: Terminal, ARP: Wifi, TRACEROUTE: Globe, SSL: Lock };
@@ -79,6 +80,23 @@ export default function ScanningPage() {
     refresh();
     loadFindings();
   }, []);
+
+  // WebSocket: auto-refresh on scan progress and completion
+  const { on: onWsEvent } = useRealtimeEvents();
+  useEffect(() => {
+    const cleanups = [
+      onWsEvent('scan_progress', (data: any) => {
+        // Update scan status in real-time
+        if (data?.status === 'COMPLETED' || data?.status === 'FAILED') {
+          refresh();
+          loadFindings();
+        } else {
+          refresh();
+        }
+      }),
+    ];
+    return () => cleanups.forEach(c => c());
+  }, [onWsEvent]);
 
   async function runScan() {
     if (!target.trim()) return;

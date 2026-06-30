@@ -1,4 +1,5 @@
 import { Injectable, Logger, NotFoundException, OnModuleInit } from '@nestjs/common';
+import * as crypto from 'crypto';
 import { PrismaService } from '../../common/database/prisma.service';
 import { EventBusService, DomainEvent } from '../../common/events/event-bus.service';
 import { EmailService } from '../notifications/email.service';
@@ -107,11 +108,34 @@ export class AutomationService implements OnModuleInit {
           });
           if (chainedRule) {
             this.logger.log(`Chaining to rule "${chainedRule.name}"`);
-            await this.executeAction(chainedRule, event);
-            await this.prisma.automationRule.update({
-              where: { id: chainedRule.id },
-              data: { runCount: { increment: 1 }, lastRunAt: new Date() },
-            });
+            try {
+              await this.executeAction(chainedRule, event);
+              await this.prisma.$transaction([
+                this.prisma.automationExecution.create({
+                  data: {
+                    ruleId: chainedRule.id,
+                    input: event.payload as any,
+                    output: { status: 'success', action: chainedRule.actionType, chainedFrom: rule.id },
+                    status: 'SUCCESS',
+                  },
+                }),
+                this.prisma.automationRule.update({
+                  where: { id: chainedRule.id },
+                  data: { runCount: { increment: 1 }, lastRunAt: new Date(), lastTriggeredAt: new Date() },
+                }),
+              ]);
+              this.logger.log(`Chained rule "${chainedRule.name}" executed: ${chainedRule.actionType}`);
+            } catch (chainErr: any) {
+              await this.prisma.automationExecution.create({
+                data: {
+                  ruleId: chainedRule.id,
+                  input: event.payload as any,
+                  output: { status: 'failed', error: chainErr.message, chainedFrom: rule.id },
+                  status: 'FAILED',
+                },
+              });
+              this.logger.error(`Chained rule "${chainedRule.name}" failed: ${chainErr.message}`);
+            }
           }
         }
       } catch (err: any) {
@@ -207,8 +231,8 @@ export class AutomationService implements OnModuleInit {
     });
     if (!admin) return;
 
-    const ticketCount = await this.prisma.ticket.count({ where: { tenantId: event.tenantId } });
-    const ticketNumber = `AUTO-${String(ticketCount + 1).padStart(5, '0')}`;
+    const uniqueSuffix = crypto.randomUUID().split('-')[0].toUpperCase();
+    const ticketNumber = `AUTO-${uniqueSuffix}`;
 
     await this.prisma.ticket.create({
       data: {

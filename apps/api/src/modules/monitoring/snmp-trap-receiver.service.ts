@@ -354,10 +354,12 @@ export class SnmpTrapReceiverService implements OnModuleInit, OnModuleDestroy {
     return { cleared: count };
   }
 
-  // ─── File-based persistence ───────────────────────────────────────
+  /** Maximum trap file size before rotation (10 MB) */
+  private readonly maxTrapFileBytes = 10 * 1024 * 1024;
 
   /**
    * Append a single trap as a JSON line to the persistence file.
+   * Rotates the file if it exceeds 10 MB.
    */
   private appendTrapToFile(trap: ParsedTrap) {
     try {
@@ -365,6 +367,18 @@ export class SnmpTrapReceiverService implements OnModuleInit, OnModuleDestroy {
       if (!fs.existsSync(dir)) {
         fs.mkdirSync(dir, { recursive: true });
       }
+
+      // Rotate if file exceeds max size
+      if (fs.existsSync(this.trapFilePath)) {
+        const stats = fs.statSync(this.trapFilePath);
+        if (stats.size >= this.maxTrapFileBytes) {
+          const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+          const rotatedPath = this.trapFilePath.replace('.jsonl', `-${timestamp}.jsonl`);
+          fs.renameSync(this.trapFilePath, rotatedPath);
+          this.logger.log(`Rotated trap file to ${path.basename(rotatedPath)} (${(stats.size / (1024 * 1024)).toFixed(1)} MB)`);
+        }
+      }
+
       fs.appendFileSync(this.trapFilePath, JSON.stringify(trap) + '\n');
     } catch (err: any) {
       this.logger.warn(`Failed to persist trap to file: ${err.message}`);

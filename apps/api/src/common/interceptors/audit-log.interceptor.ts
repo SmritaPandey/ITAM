@@ -27,6 +27,9 @@ export class AuditLogInterceptor implements NestInterceptor {
             const user = request.user;
             if (!user) return;
 
+            const actorId = user.sub || user.id;
+            if (!actorId) return;
+
             const action = this.getAction(method, url);
             const resourceType = this.getResourceType(url);
             const resourceId = this.getEntityId(url);
@@ -41,7 +44,7 @@ export class AuditLogInterceptor implements NestInterceptor {
 
             const prevHash = lastLog?.hash || 'GENESIS';
             const payload = JSON.stringify({
-              prevHash, tenantId: user.tenantId, actorId: user.sub,
+              prevHash, tenantId: user.tenantId, actorId,
               action, resourceType, resourceId, timestamp: new Date().toISOString(),
             });
             const hash = crypto.createHash('sha256').update(payload).digest('hex');
@@ -49,7 +52,7 @@ export class AuditLogInterceptor implements NestInterceptor {
             await this.prisma.auditLog.create({
               data: {
                 tenant: { connect: { id: user.tenantId } },
-                actor: { connect: { id: user.sub } },
+                actor: { connect: { id: actorId } },
                 action,
                 resourceType,
                 resourceId,

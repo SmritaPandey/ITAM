@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { Plus, MessageSquare, Shield, Clock, AlertTriangle, CheckCircle2, Search, Trash2, ChevronLeft, ChevronRight } from "lucide-react";
 import CreateTicketPanel from "@/components/CreateTicketPanel";
 import { apiFetch } from "@/lib/api";
+import { useRealtimeEvents } from "@/lib/useRealtimeEvents";
 import { PageHelp } from "@/components/HelpSystem";
 
 const PRIORITY_BADGE: Record<string, string> = { CRITICAL: "red", HIGH: "amber", MEDIUM: "blue", LOW: "gray" };
@@ -55,6 +56,16 @@ export default function TicketsPage() {
   }
 
   useEffect(() => { loadTickets(); }, []);
+
+  // WebSocket: auto-refresh when tickets are created or updated
+  const { on: onWsEvent } = useRealtimeEvents();
+  useEffect(() => {
+    const cleanups = [
+      onWsEvent('ticket.created', () => loadTickets(page)),
+      onWsEvent('ticket.updated', () => loadTickets(page)),
+    ];
+    return () => cleanups.forEach(c => c());
+  }, [onWsEvent, page]);
 
   return (
     <>

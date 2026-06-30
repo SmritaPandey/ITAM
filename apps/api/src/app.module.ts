@@ -36,6 +36,7 @@ import { WebSocketModule } from './common/websocket/websocket.module';
 import { ContactModule } from './modules/contact/contact.module';
 import { AdminModule } from './modules/admin/admin.module';
 import { AnalyticsModule } from './modules/analytics/analytics.module';
+import { AiModule } from './modules/ai/ai.module';
 
 @Module({
   imports: [
@@ -90,6 +91,9 @@ import { AnalyticsModule } from './modules/analytics/analytics.module';
 
     // Analytics (first-party, consent-gated)
     AnalyticsModule,
+
+    // AI Engine (Gemma 4)
+    AiModule,
 
     // Real-time WebSocket
     WebSocketModule,

@@ -15,6 +15,7 @@ import {
 import { apiFetch } from "@/lib/api";
 import SafeChart from "@/components/SafeChart";
 import { QuickStart, Tip } from "@/components/HelpSystem";
+import AiInsightCard from "@/components/AiInsightCard";
 
 // Color palette for charts
 const CHART_COLORS = ["#06b6d4", "#8b5cf6", "#3b82f6", "#10b981", "#f59e0b", "#ef4444", "#ec4899"];
@@ -213,6 +214,13 @@ export default function DashboardPage() {
         <StatCard icon={<Monitor size={22} />} iconClass="blue" label="IT Assets" value={typeData.reduce((a: number, t: any) => a + t.count, 0)} href="/dashboard/it-assets" />
         <StatCard icon={<Ticket size={22} />} iconClass="purple" label="Open Tickets" value={tickets.length} href="/dashboard/tickets" />
         <StatCard icon={<Shield size={22} />} iconClass="green" label="Patch Compliance" value={patchCompliancePct} href="/dashboard/patches" />
+      </div>
+
+      {/* AI Insights */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: 16, marginBottom: 20 }}>
+        <AiInsightCard title="Risk Analysis" type="risk" />
+        <AiInsightCard title="Compliance Status" type="compliance" />
+        <AiInsightCard title="Patch Priority" type="patches" />
       </div>
 
       {/* Charts Row 1 */}

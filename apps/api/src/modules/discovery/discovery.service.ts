@@ -1594,6 +1594,61 @@ export class DiscoveryService {
       this.logger.log(`Delegated scan job ${pendingScan.id} to agent ${agent.hostname}`);
     }
 
+    // Queue any pending SNMP scan jobs for this tenant to the agent
+    const pendingSnmpScan = await this.prisma.scanJob.findFirst({
+      where: { tenantId, status: 'PENDING', scanType: 'SNMP_DISCOVERY' },
+      orderBy: { createdAt: 'asc' },
+    });
+
+    if (pendingSnmpScan) {
+      const communities = await this.getSnmpCommunities(tenantId);
+      actions.push({
+        type: 'SNMP_SCAN',
+        scanJobId: pendingSnmpScan.id,
+        subnet: pendingSnmpScan.subnet,
+        communities,
+      });
+
+      await this.prisma.scanJob.update({
+        where: { id: pendingSnmpScan.id },
+        data: { status: 'RUNNING', startedAt: new Date() },
+      });
+
+      this.logger.log(`Delegated SNMP scan job ${pendingSnmpScan.id} to agent ${agent.hostname}`);
+    }
+
+    // Queue any pending script executions for this agent
+    const pendingScripts = await this.prisma.scanResult.findMany({
+      where: {
+        tenantId,
+        scanType: 'SCRIPT_EXECUTION',
+        status: 'QUEUED',
+        summary: { path: ['agentId'], equals: id },
+      },
+      take: 5,
+    });
+
+    for (const exec of pendingScripts) {
+      const summary = exec.summary as any;
+      actions.push({
+        type: 'EXECUTE_SCRIPT',
+        executionId: exec.id,
+        scriptId: summary?.scriptId,
+        scriptName: summary?.scriptName,
+        scriptContent: exec.rawOutput,
+        platform: summary?.platform || 'BASH',
+        parameters: summary?.parameters || {},
+        timeoutSeconds: summary?.timeoutSeconds || 300,
+      });
+
+      await this.prisma.scanResult.update({
+        where: { id: exec.id },
+        data: { status: 'DISPATCHED' },
+      });
+
+      this.logger.log(`Dispatched script "${summary?.scriptName}" (${exec.id}) to agent ${agent.hostname}`);
+    }
+
     // Check if tenant has agentStartOnBoot enabled — push INSTALL_SERVICE to agents that haven't installed yet
     try {
       const tenant = await this.prisma.tenant.findUnique({
@@ -1651,14 +1706,55 @@ export class DiscoveryService {
         const mac = host.mac || null;
         const existingAssetId = assetByIp.get(host.ip);
         const openPorts = host.openPorts || [];
-        const deviceType = host.deviceType || 'Unknown';
+        let deviceType = host.deviceType || 'Unknown';
+        let hostname = host.hostname || null;
+        let manufacturer = host.manufacturer || null;
         const riskScore = calculateRiskScore(openPorts, host.hostname, deviceType);
+
+        // Handle SNMP results from agent
+        let enrichmentData = host.enrichmentData ? (host.enrichmentData as any) : null;
+        let enrichmentStatus = host.enrichmentData ? 'ENRICHED' : 'BASIC';
+
+        if (host.snmpResults && (host.snmpResults.sysDescr || host.snmpResults.sysName)) {
+          const snmpClassification = this.classifyDeviceFromSnmp(
+            host.snmpResults.sysDescr || '',
+            mac || undefined,
+          );
+          deviceType = snmpClassification.deviceType || deviceType;
+          manufacturer = snmpClassification.manufacturer || manufacturer;
+          if (host.snmpResults.sysName) {
+            hostname = host.snmpResults.sysName;
+          }
+          enrichmentStatus = 'ENRICHED';
+          enrichmentData = {
+            collectedAt: new Date().toISOString(),
+            method: 'SNMP',
+            hardware: {
+              manufacturer: snmpClassification.manufacturer,
+              model: snmpClassification.model,
+              cpuLoad: host.snmpResults.cpuLoad || null,
+              memoryPercent: host.snmpResults.memoryPercent || null,
+            },
+            operatingSystem: {
+              name: snmpClassification.osGuess,
+              osGuess: snmpClassification.osGuess,
+              hostname: host.snmpResults.sysName,
+              uptime: host.snmpResults.sysUpTime ? Math.floor(host.snmpResults.sysUpTime / 100) : null,
+            },
+            network: {
+              sysName: host.snmpResults.sysName,
+              sysLocation: host.snmpResults.sysLocation,
+              sysContact: host.snmpResults.sysContact,
+              interfaces: host.snmpResults.interfaces || [],
+            },
+          };
+        }
 
         const deviceData = {
           scanJobId: scanJobId,
           macAddress: mac || null,
-          hostname: host.hostname || null,
-          manufacturer: host.manufacturer || null,
+          hostname,
+          manufacturer,
           deviceType: deviceType,
           osGuess: host.osInfo || null,
           osInfo: host.osInfo || null,
@@ -1666,8 +1762,8 @@ export class DiscoveryService {
           services: openPorts.length > 0 ? JSON.stringify(openPorts.map((p: any) => p.service)) : null,
           riskScore,
           lastSeenAt: new Date(),
-          enrichmentStatus: host.enrichmentData ? 'ENRICHED' : 'BASIC',
-          enrichmentData: host.enrichmentData ? (host.enrichmentData as any) : null,
+          enrichmentStatus,
+          enrichmentData: enrichmentData ? (enrichmentData as any) : null,
         };
 
         const result = await this.prisma.discoveredDevice.upsert({

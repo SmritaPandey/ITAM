@@ -1,0 +1,42 @@
+FROM nvidia/cuda:12.4.1-devel-ubuntu22.04
+
+LABEL maintainer="AssetCommand ITAM"
+LABEL description="Fine-tuning environment for Gemma 4 ITAM model"
+
+# System dependencies
+RUN apt-get update && apt-get install -y \
+    python3 python3-pip python3-venv git curl \
+    && rm -rf /var/lib/apt/lists/*
+
+# Create venv
+RUN python3 -m venv /opt/venv
+ENV PATH="/opt/venv/bin:$PATH"
+
+# Install PyTorch with CUDA support
+RUN pip install --no-cache-dir \
+    torch==2.5.1 \
+    --index-url https://download.pytorch.org/whl/cu124
+
+# Install training dependencies
+RUN pip install --no-cache-dir \
+    transformers>=4.46.0 \
+    trl>=0.12.0 \
+    peft>=0.13.0 \
+    datasets>=3.0.0 \
+    bitsandbytes>=0.44.0 \
+    accelerate>=1.0.0 \
+    sentencepiece \
+    protobuf
+
+# Install Unsloth for 2x faster training
+RUN pip install --no-cache-dir "unsloth[cu124-torch251] @ git+https://github.com/unslothai/unsloth.git"
+
+WORKDIR /workspace
+
+# Copy training script
+COPY fine-tune.py /workspace/fine-tune.py
+COPY examples/ /workspace/examples/
+
+# Default: run fine-tuning
+ENTRYPOINT ["python", "fine-tune.py"]
+CMD ["--data", "/data/training-data.jsonl", "--output", "/data/itam-gemma4-12b", "--merge"]

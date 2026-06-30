@@ -19,8 +19,16 @@ export class KnowledgeBaseController {
   @ApiOperation({ summary: 'Search/list knowledge base articles' })
   @ApiQuery({ name: 'search', required: false })
   @ApiQuery({ name: 'category', required: false })
-  async findAll(@Request() req: any, @Query('search') search?: string, @Query('category') category?: string) {
-    return this.kbService.findAll(req.user.tenantId, search, category);
+  @ApiQuery({ name: 'page', required: false, type: Number })
+  @ApiQuery({ name: 'limit', required: false, type: Number })
+  async findAll(
+    @Request() req: any,
+    @Query('search') search?: string,
+    @Query('category') category?: string,
+    @Query('page') page = 1,
+    @Query('limit') limit = 20,
+  ) {
+    return this.kbService.findAll(req.user.tenantId, search, category, page, limit);
   }
 
   @Get(':id')

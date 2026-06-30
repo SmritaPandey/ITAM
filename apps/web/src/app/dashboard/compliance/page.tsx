@@ -7,6 +7,7 @@ import {
   UserX, AlertOctagon, Skull, Terminal, FileText, Check, X, ShieldAlert, Key
 } from "lucide-react";
 import { apiFetch } from "@/lib/api";
+import { useRealtimeEvents } from "@/lib/useRealtimeEvents";
 import { PageHelp } from "@/components/HelpSystem";
 
 const SEVERITY_COLORS: Record<string, { bg: string; text: string; badge: string }> = {
@@ -76,6 +77,15 @@ export default function CompliancePage() {
   }, [statusFilter]);
 
   useEffect(() => { refresh(); }, [refresh]);
+
+  // WebSocket: auto-refresh when compliance changes are detected
+  const { on: onWsEvent } = useRealtimeEvents();
+  useEffect(() => {
+    const cleanups = [
+      onWsEvent('compliance.change_detected', () => refresh()),
+    ];
+    return () => cleanups.forEach(c => c());
+  }, [onWsEvent, refresh]);
 
   async function seedPolicies() {
     await apiFetch("/compliance/policies/seed", { method: "POST" });

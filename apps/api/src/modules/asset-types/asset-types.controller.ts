@@ -19,6 +19,13 @@ export class AssetTypesController {
     return this.service.findAll(req.user.tenantId);
   }
 
+  @Get(':id')
+  @Roles('*')
+  @ApiOperation({ summary: 'Get a single asset type by ID' })
+  async findById(@Request() req: any, @Param('id') id: string) {
+    return this.service.findById(id, req.user.tenantId);
+  }
+
   @Post()
   @Roles('Tenant Admin')
   @ApiOperation({ summary: 'Create a new asset type' })

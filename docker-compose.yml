@@ -45,3 +45,24 @@ services:
       MEILI_MASTER_KEY: assetcommand_dev_key
     volumes:
       - ./docker-data/meilisearch:/meili_data
+
+  # AI Model Server (CPU mode — for development without GPU)
+  # Uses Ollama for easy model management. Pull models with:
+  #   docker exec assetcommand-ollama ollama pull gemma3:12b
+  # For smaller machines, use a quantized model:
+  #   docker exec assetcommand-ollama ollama pull gemma3:4b
+  ollama:
+    image: ollama/ollama:latest
+    container_name: assetcommand-ollama
+    restart: unless-stopped
+    ports:
+      - "11434:11434"
+    volumes:
+      - ./docker-data/ollama:/root/.ollama
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:11434/api/tags"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    profiles:
+      - ai

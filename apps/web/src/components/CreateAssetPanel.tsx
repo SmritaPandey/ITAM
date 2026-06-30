@@ -23,13 +23,12 @@ export default function CreateAssetPanel({ open, onClose, onCreated }: CreateAss
   const [error, setError] = useState("");
 
   useEffect(() => {
-    // Load asset types
-    apiFetch("/assets?limit=1")
-      .then(d => {
-        const types = (d.data || []).map((a: any) => a.assetType).filter(Boolean);
-        const unique = Array.from(new Map(types.map((t: any) => [t.id, t])).values()) as any[];
-        setAssetTypes(unique);
-        if (unique.length > 0) setAssetTypeId(unique[0].id);
+    // Load asset types from dedicated endpoint
+    apiFetch("/asset-types")
+      .then(types => {
+        const list = Array.isArray(types) ? types : types.data || [];
+        setAssetTypes(list);
+        if (list.length > 0) setAssetTypeId(list[0].id);
       }).catch(() => {});
   }, [open]);
 

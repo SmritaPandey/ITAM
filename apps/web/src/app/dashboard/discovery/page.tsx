@@ -8,6 +8,7 @@ import {
   Terminal
 } from "lucide-react";
 import { apiFetch, getToken, getApiBase } from "@/lib/api";
+import { useRealtimeEvents } from "@/lib/useRealtimeEvents";
 import { PageHelp, Tip } from "@/components/HelpSystem";
 
 const SCAN_TYPES = [
@@ -145,6 +146,46 @@ export default function DiscoveryPage() {
   }, [agents, wizardStep, pairedAgent]);
 
   useEffect(() => { refresh(); }, [refresh]);
+
+  // WebSocket: real-time scan progress, device discovery, and agent heartbeat
+  const { on: onWsEvent } = useRealtimeEvents();
+  useEffect(() => {
+    const cleanups = [
+      // Update scan progress bar in real-time
+      onWsEvent('scan_progress', (data: any) => {
+        if (data?.scanId) {
+          setScans(prev => prev.map(s =>
+            s.id === data.scanId ? { ...s, status: data.status, progress: data.progress } : s
+          ));
+          // Full refresh on completion
+          if (data?.status === 'COMPLETED' || data?.status === 'FAILED') {
+            refresh();
+          }
+        }
+      }),
+      // Add newly discovered device to pending list without manual refresh
+      onWsEvent('discovery.device_discovered', (data: any) => {
+        if (data?.payload?.device || data?.device) {
+          const device = data?.payload?.device || data?.device;
+          setPending(prev => {
+            if (prev.some(p => p.id === device.id)) return prev;
+            return [device, ...prev];
+          });
+        } else {
+          refresh();
+        }
+      }),
+      // Update agent status indicators in real-time
+      onWsEvent('agent_heartbeat', (data: any) => {
+        if (data?.agentId) {
+          setAgents(prev => prev.map(a =>
+            a.id === data.agentId ? { ...a, status: 'ONLINE', lastHeartbeat: data.timestamp || new Date().toISOString() } : a
+          ));
+        }
+      }),
+    ];
+    return () => cleanups.forEach(c => c());
+  }, [onWsEvent, refresh]);
 
   // Poll for running scans
   useEffect(() => {

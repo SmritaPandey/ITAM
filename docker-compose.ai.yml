@@ -1,0 +1,71 @@
+## AI Model Server (Gemma 4 via vLLM)
+## Usage:
+##   GPU mode:  docker compose -f docker-compose.yml -f docker-compose.ai.yml up -d
+##   CPU mode:  docker compose up -d  (uses Ollama in main compose)
+
+services:
+  vllm:
+    image: vllm/vllm-openai:latest
+    container_name: assetcommand-vllm
+    runtime: nvidia
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./docker-data/huggingface:/root/.cache/huggingface
+    environment:
+      - HF_TOKEN=${HF_TOKEN:-}
+      - VLLM_ATTENTION_BACKEND=FLASHINFER
+    command: >
+      --model ${AI_MODEL:-google/gemma-4-12b-it}
+      --max-model-len ${AI_MAX_CONTEXT:-4096}
+      --gpu-memory-utilization 0.90
+      --dtype bfloat16
+      --trust-remote-code
+      --enable-auto-tool-choice
+      --tool-call-parser hermes
+      --host 0.0.0.0
+      --port 8000
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 120s
+    restart: unless-stopped
+
+  # Optional: vLLM with quantized model for smaller GPUs (16GB VRAM)
+  # Uncomment and use instead of the above if you have a 16GB GPU
+  # vllm-quantized:
+  #   image: vllm/vllm-openai:latest
+  #   container_name: assetcommand-vllm-q4
+  #   runtime: nvidia
+  #   deploy:
+  #     resources:
+  #       reservations:
+  #         devices:
+  #           - driver: nvidia
+  #             count: 1
+  #             capabilities: [gpu]
+  #   ports:
+  #     - "8000:8000"
+  #   volumes:
+  #     - ./docker-data/huggingface:/root/.cache/huggingface
+  #   environment:
+  #     - HF_TOKEN=${HF_TOKEN:-}
+  #   command: >
+  #     --model google/gemma-4-12b-it
+  #     --quantization awq
+  #     --max-model-len 4096
+  #     --gpu-memory-utilization 0.95
+  #     --dtype float16
+  #     --trust-remote-code
+  #     --host 0.0.0.0
+  #     --port 8000
+  #   restart: unless-stopped

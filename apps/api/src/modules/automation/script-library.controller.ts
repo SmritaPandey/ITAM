@@ -59,6 +59,9 @@ export class ScriptLibraryController {
   @Roles('Tenant Admin')
   @ApiOperation({ summary: 'Approve a script for execution (security gate)' })
   async approve(@Request() req: any, @Param('id') id: string) {
+    await this.prisma.scriptLibrary.findFirstOrThrow({
+      where: { id, tenantId: req.user.tenantId },
+    });
     return this.prisma.scriptLibrary.update({
       where: { id },
       data: {
@@ -73,6 +76,9 @@ export class ScriptLibraryController {
   @Roles('Tenant Admin')
   @ApiOperation({ summary: 'Reject a script' })
   async reject(@Request() req: any, @Param('id') id: string) {
+    await this.prisma.scriptLibrary.findFirstOrThrow({
+      where: { id, tenantId: req.user.tenantId },
+    });
     return this.prisma.scriptLibrary.update({
       where: { id },
       data: { approvalStatus: 'REJECTED' },
@@ -157,6 +163,9 @@ export class ScriptLibraryController {
   @Roles('Tenant Admin')
   @ApiOperation({ summary: 'Update script content (resets approval)' })
   async update(@Request() req: any, @Param('id') id: string, @Body() body: any) {
+    await this.prisma.scriptLibrary.findFirstOrThrow({
+      where: { id, tenantId: req.user.tenantId },
+    });
     return this.prisma.scriptLibrary.update({
       where: { id },
       data: {
@@ -170,6 +179,9 @@ export class ScriptLibraryController {
   @Roles('Tenant Admin')
   @ApiOperation({ summary: 'Delete a script from the library' })
   async delete(@Request() req: any, @Param('id') id: string) {
+    await this.prisma.scriptLibrary.findFirstOrThrow({
+      where: { id, tenantId: req.user.tenantId },
+    });
     await this.prisma.scriptLibrary.delete({ where: { id } });
     return { deleted: true };
   }

@@ -2132,14 +2132,116 @@ function classifyDevice(openPorts, mac, ssdpInfo, httpInfo) {
   let osGuess = '';
 
   // 1. MAC OUI lookup
-  if (mac) {
-    const oui = mac.toUpperCase().replace(/[^0-9A-F]/g, '').substring(0, 6);
-    if (['F0DEF1', '00505A', '000C29', '005056'].some(p => oui.startsWith(p))) vendorHint = 'VMware';
-    else if (['B8AEED', '3C22FB', 'A4C3F0', '001B44'].some(p => oui.startsWith(p))) vendorHint = 'HP';
-    else if (['0023EA', '0050BA'].some(p => oui.startsWith(p))) vendorHint = 'Cisco';
-    else if (['00155D'].some(p => oui.startsWith(p))) vendorHint = 'Microsoft Hyper-V';
-    else if (['DCED96', 'DC4F22'].some(p => oui.startsWith(p))) vendorHint = 'Apple';
-  }
+    // Comprehensive MAC OUI vendor database (top 200+ manufacturers)
+    const OUI_DB = {
+      '00:50:56': 'VMware', '00:0C:29': 'VMware', '00:05:69': 'VMware',
+      '00:1C:14': 'VMware', '00:0F:4B': 'VMware',
+      '00:15:5D': 'Microsoft Hyper-V', '00:1D:D8': 'Microsoft',
+      '00:03:FF': 'Microsoft',
+      'AC:DE:48': 'Apple', '00:1F:F3': 'Apple', '00:25:00': 'Apple',
+      'A8:20:66': 'Apple', '3C:22:FB': 'Apple', '00:17:F2': 'Apple',
+      '00:1E:C2': 'Apple', '00:26:08': 'Apple', '00:26:BB': 'Apple',
+      '70:56:81': 'Apple', '04:F7:E4': 'Apple', '28:6A:BA': 'Apple',
+      'F0:18:98': 'Apple', 'F4:5C:89': 'Apple',
+      '00:18:FE': 'HP', '00:1A:4B': 'HP', '00:25:B3': 'HP',
+      '3C:D9:2B': 'HP', '00:1E:0B': 'HP', '00:17:A4': 'HP',
+      '00:14:38': 'HP', '00:12:79': 'HP', '00:0B:CD': 'HP',
+      '2C:44:FD': 'HP', '94:57:A5': 'HP', 'B4:B5:2F': 'HP',
+      'EC:B1:D7': 'HP', '80:CE:62': 'HP', 'A0:D3:C1': 'HP',
+      '00:00:0C': 'Cisco', '00:0D:BC': 'Cisco', '00:14:69': 'Cisco',
+      '00:1A:A1': 'Cisco', '00:24:C4': 'Cisco', '00:26:0B': 'Cisco',
+      '00:1B:0D': 'Cisco', '00:1E:BD': 'Cisco', '00:22:55': 'Cisco',
+      'F8:C2:88': 'Cisco', '68:86:A7': 'Cisco', '7C:0E:CE': 'Cisco',
+      'BC:16:65': 'Cisco', 'F4:CF:E2': 'Cisco', 'FC:5B:39': 'Cisco',
+      '00:1B:78': 'Juniper', '00:05:85': 'Juniper', '00:12:1E': 'Juniper',
+      '00:17:CB': 'Juniper', '00:24:DC': 'Juniper', '00:26:88': 'Juniper',
+      'F0:1C:2D': 'Juniper', '2C:6B:F5': 'Juniper',
+      '00:0B:86': 'Aruba', '00:1A:1E': 'Aruba', '00:24:6C': 'Aruba',
+      '24:DE:C6': 'Aruba', '6C:F3:7F': 'Aruba', 'AC:A3:1E': 'Aruba',
+      'D8:C7:C8': 'Aruba',
+      '00:18:0A': 'Meraki', '0C:8D:DB': 'Meraki', '00:18:74': 'Meraki',
+      'E0:55:3D': 'Meraki', '68:3A:1E': 'Meraki',
+      '00:15:6D': 'Ubiquiti', '04:18:D6': 'Ubiquiti', '24:A4:3C': 'Ubiquiti',
+      '44:D9:E7': 'Ubiquiti', '68:72:51': 'Ubiquiti', '74:83:C2': 'Ubiquiti',
+      '78:8A:20': 'Ubiquiti', '80:2A:A8': 'Ubiquiti', 'B4:FB:E4': 'Ubiquiti',
+      'DC:9F:DB': 'Ubiquiti', 'E0:63:DA': 'Ubiquiti', 'F0:9F:C2': 'Ubiquiti',
+      'FC:EC:DA': 'Ubiquiti',
+      '00:1E:C9': 'Dell', '00:14:22': 'Dell', '00:08:74': 'Dell',
+      '00:06:5B': 'Dell', '00:1A:A0': 'Dell', '00:21:9B': 'Dell',
+      '00:23:AE': 'Dell', '00:25:64': 'Dell', '14:FE:B5': 'Dell',
+      '18:03:73': 'Dell', '18:66:DA': 'Dell', '24:B6:FD': 'Dell',
+      '34:17:EB': 'Dell', '44:A8:42': 'Dell', '54:9F:35': 'Dell',
+      'B0:83:FE': 'Dell', 'B8:2A:72': 'Dell', 'D4:81:D7': 'Dell',
+      'F8:BC:12': 'Dell', 'F8:DB:88': 'Dell',
+      '00:06:1B': 'Lenovo', '00:09:2D': 'Lenovo', '00:1A:6B': 'Lenovo',
+      '70:5A:0F': 'Lenovo', '98:E7:43': 'Lenovo', 'E8:6A:64': 'Lenovo',
+      'F0:4D:A2': 'Lenovo', '54:EE:75': 'Lenovo', '7C:7A:91': 'Lenovo',
+      '8C:EC:4B': 'Lenovo',
+      '00:07:E9': 'Intel', '00:13:20': 'Intel', '00:15:17': 'Intel',
+      '00:1B:21': 'Intel', '00:1E:64': 'Intel', '00:1E:67': 'Intel',
+      '00:22:FA': 'Intel', '3C:97:0E': 'Intel', '48:21:0B': 'Intel',
+      '68:05:CA': 'Intel', '7C:5C:F8': 'Intel', 'A4:C4:94': 'Intel',
+      'B4:96:91': 'Intel', 'F8:63:3F': 'Intel',
+      '00:23:CD': 'TP-Link', '10:FE:ED': 'TP-Link', '14:CC:20': 'TP-Link',
+      '30:B5:C2': 'TP-Link', '50:C7:BF': 'TP-Link', '54:C8:0F': 'TP-Link',
+      '60:E3:27': 'TP-Link', '64:66:B3': 'TP-Link', '94:D9:B3': 'TP-Link',
+      'B0:4E:26': 'TP-Link', 'C0:25:E9': 'TP-Link', 'EC:08:6B': 'TP-Link',
+      'F4:F2:6D': 'TP-Link',
+      '00:14:6C': 'Netgear', '00:1B:2F': 'Netgear', '00:1E:2A': 'Netgear',
+      '00:1F:33': 'Netgear', '00:22:3F': 'Netgear', '00:24:B2': 'Netgear',
+      '00:26:F2': 'Netgear', '20:0C:C8': 'Netgear', '28:C6:8E': 'Netgear',
+      '44:94:FC': 'Netgear', '6C:B0:CE': 'Netgear', 'A0:21:B7': 'Netgear',
+      'C4:3D:C7': 'Netgear', 'E0:46:9A': 'Netgear',
+      '00:13:10': 'ASUS', '00:1A:92': 'ASUS', '1C:87:2C': 'ASUS',
+      '2C:56:DC': 'ASUS', '30:85:A9': 'ASUS', '50:46:5D': 'ASUS',
+      'AC:22:0B': 'ASUS', 'BC:EE:7B': 'ASUS', 'E0:3F:49': 'ASUS',
+      'F4:6D:04': 'ASUS',
+      '00:1C:F0': 'Synology', '00:11:32': 'Synology',
+      '00:08:9B': 'QNAP', '24:5E:BE': 'QNAP',
+      '00:09:0F': 'Fortinet', '00:60:6E': 'Fortinet', '70:4C:A5': 'Fortinet',
+      '90:6C:AC': 'Fortinet', 'E8:1C:BA': 'Fortinet',
+      '00:1B:17': 'Palo Alto', '00:86:9C': 'Palo Alto',
+      'B4:0C:25': 'Palo Alto',
+      '00:1F:45': 'SonicWall', '00:17:C5': 'SonicWall',
+      'C0:EA:E4': 'SonicWall',
+      '00:04:96': 'Ruckus', '74:91:1A': 'Ruckus', 'EC:8C:A2': 'Ruckus',
+      '00:1C:B3': 'MikroTik', '4C:5E:0C': 'MikroTik', '6C:3B:6B': 'MikroTik',
+      'B8:69:F4': 'MikroTik', 'CC:2D:E0': 'MikroTik', 'D4:CA:6D': 'MikroTik',
+      'E4:8D:8C': 'MikroTik',
+      '00:1D:AA': 'Samsung', '00:24:54': 'Samsung', '00:26:37': 'Samsung',
+      '08:D4:2B': 'Samsung', '10:D5:42': 'Samsung', '30:96:FB': 'Samsung',
+      '50:01:BB': 'Samsung', '6C:F3:73': 'Samsung', '84:25:DB': 'Samsung',
+      '8C:77:12': 'Samsung', 'C4:73:1E': 'Samsung', 'E4:7C:F9': 'Samsung',
+      '00:10:49': 'WatchGuard', '00:90:7F': 'WatchGuard',
+      '00:1A:8C': 'Sophos', '00:1A:8D': 'Sophos', 'B4:0F:3B': 'Sophos',
+      '00:24:01': 'D-Link', '1C:7E:E5': 'D-Link', '28:10:7B': 'D-Link',
+      '34:08:04': 'D-Link', 'B8:A3:86': 'D-Link', 'C8:BE:19': 'D-Link',
+      'CC:B2:55': 'D-Link', 'F0:7D:68': 'D-Link',
+      '00:E0:4C': 'Realtek', '00:E0:67': 'Realtek', '52:54:00': 'QEMU/KVM',
+      '08:00:27': 'VirtualBox', '0A:00:27': 'VirtualBox',
+      '00:16:3E': 'Xen', '00:25:90': 'Super Micro',
+      '00:30:48': 'Supermicro', 'AC:1F:6B': 'Supermicro',
+      '00:1A:2B': 'Ayecom', '00:17:88': 'Philips Hue',
+      'B8:27:EB': 'Raspberry Pi', 'DC:A6:32': 'Raspberry Pi',
+      'E4:5F:01': 'Raspberry Pi',
+      '00:1D:C9': 'GainSpan', '18:B4:30': 'Nest', '64:16:66': 'Nest',
+      '00:17:C8': 'Kyocera', '00:C0:EE': 'Kyocera',
+      '00:00:48': 'Xerox', '00:00:AA': 'Xerox',
+      '00:00:74': 'Ricoh', '00:26:73': 'Ricoh',
+      '00:0E:7F': 'Epson', '00:1B:4C': 'Dahua', '3C:EF:8C': 'Dahua',
+      '44:47:CC': 'Hikvision', 'C0:56:E3': 'Hikvision',
+      '28:57:BE': 'Hangzhou Hikvision',
+      '00:80:F0': 'Panasonic', '00:0A:E4': 'Panasonic',
+      '60:02:B4': 'Honeywell', 'CC:6D:A0': 'Honeywell',
+      '00:21:6A': 'Intel AMT', '00:0E:0C': 'Intel AMT',
+      '00:A0:C9': 'Intel PRO', '00:AA:00': 'Intel',
+      '00:30:67': 'Biostar', '00:26:2D': 'Wistron',
+      '70:B3:D5': 'IEEE Registered', // Commonly used by IoT devices
+    };
+    if (mac) {
+      const prefix = mac.substring(0, 8).toUpperCase();
+      vendorHint = OUI_DB[prefix] || null;
+    }
 
   // 2. SSDP (UPnP) details override (very accurate!)
   if (ssdpInfo) {
@@ -2225,6 +2327,289 @@ function classifyDevice(openPorts, mac, ssdpInfo, httpInfo) {
   };
 }
 
+// ─── SNMP Scanning (v1/v2c via raw UDP) ──────────────────────
+function snmpEncodeTLV(tag, value) {
+  const len = value.length;
+  if (len < 128) return Buffer.concat([Buffer.from([tag, len]), value]);
+  if (len < 256) return Buffer.concat([Buffer.from([tag, 0x81, len]), value]);
+  return Buffer.concat([Buffer.from([tag, 0x82, (len >> 8) & 0xff, len & 0xff]), value]);
+}
+
+function snmpEncodeOID(oid) {
+  const parts = oid.split('.').map(Number);
+  const bytes = [40 * parts[0] + parts[1]];
+  for (let i = 2; i < parts.length; i++) {
+    let val = parts[i];
+    if (val < 128) { bytes.push(val); }
+    else {
+      const encoded = [];
+      while (val > 0) { encoded.unshift(val & 0x7f); val >>= 7; }
+      for (let j = 0; j < encoded.length - 1; j++) encoded[j] |= 0x80;
+      bytes.push(...encoded);
+    }
+  }
+  return snmpEncodeTLV(0x06, Buffer.from(bytes));
+}
+
+function snmpEncodeInteger(val) {
+  if (val === 0) return snmpEncodeTLV(0x02, Buffer.from([0]));
+  const bytes = [];
+  let v = val;
+  while (v > 0) { bytes.unshift(v & 0xff); v >>= 8; }
+  if (bytes[0] & 0x80) bytes.unshift(0);
+  return snmpEncodeTLV(0x02, Buffer.from(bytes));
+}
+
+function snmpEncodeString(str) {
+  return snmpEncodeTLV(0x04, Buffer.from(str, 'utf8'));
+}
+
+function snmpBuildGetRequest(community, oids, requestId) {
+  const varbinds = oids.map(oid => {
+    const oidBuf = snmpEncodeOID(oid);
+    const nullVal = Buffer.from([0x05, 0x00]);
+    return snmpEncodeTLV(0x30, Buffer.concat([oidBuf, nullVal]));
+  });
+  const varbindList = snmpEncodeTLV(0x30, Buffer.concat(varbinds));
+  const reqIdBuf = snmpEncodeInteger(requestId);
+  const errorStatus = snmpEncodeInteger(0);
+  const errorIndex = snmpEncodeInteger(0);
+  const pdu = snmpEncodeTLV(0xa0, Buffer.concat([reqIdBuf, errorStatus, errorIndex, varbindList]));
+  const versionBuf = snmpEncodeInteger(1); // SNMPv2c
+  const communityBuf = snmpEncodeString(community);
+  return snmpEncodeTLV(0x30, Buffer.concat([versionBuf, communityBuf, pdu]));
+}
+
+function snmpBuildGetNextRequest(community, oid, requestId) {
+  const oidBuf = snmpEncodeOID(oid);
+  const nullVal = Buffer.from([0x05, 0x00]);
+  const varbind = snmpEncodeTLV(0x30, Buffer.concat([oidBuf, nullVal]));
+  const varbindList = snmpEncodeTLV(0x30, varbind);
+  const reqIdBuf = snmpEncodeInteger(requestId);
+  const errorStatus = snmpEncodeInteger(0);
+  const errorIndex = snmpEncodeInteger(0);
+  const pdu = snmpEncodeTLV(0xa1, Buffer.concat([reqIdBuf, errorStatus, errorIndex, varbindList]));
+  const versionBuf = snmpEncodeInteger(1);
+  const communityBuf = snmpEncodeString(community);
+  return snmpEncodeTLV(0x30, Buffer.concat([versionBuf, communityBuf, pdu]));
+}
+
+function snmpDecodeTLV(buffer, offset) {
+  if (offset >= buffer.length) return null;
+  const tag = buffer[offset];
+  let len = buffer[offset + 1];
+  let headerLen = 2;
+  if (len & 0x80) {
+    const numBytes = len & 0x7f;
+    len = 0;
+    for (let i = 0; i < numBytes; i++) { len = (len << 8) | buffer[offset + 2 + i]; }
+    headerLen = 2 + numBytes;
+  }
+  const value = buffer.slice(offset + headerLen, offset + headerLen + len);
+  return { tag, len, value, totalLen: headerLen + len };
+}
+
+function snmpDecodeOID(buffer) {
+  const parts = [Math.floor(buffer[0] / 40), buffer[0] % 40];
+  let val = 0;
+  for (let i = 1; i < buffer.length; i++) {
+    val = (val << 7) | (buffer[i] & 0x7f);
+    if (!(buffer[i] & 0x80)) { parts.push(val); val = 0; }
+  }
+  return parts.join('.');
+}
+
+function snmpDecodeValue(tag, buffer) {
+  if (tag === 0x04) return buffer.toString('utf8');
+  if (tag === 0x06) return snmpDecodeOID(buffer);
+  if (tag === 0x02) {
+    let val = 0;
+    for (let i = 0; i < buffer.length; i++) val = (val << 8) | buffer[i];
+    return val;
+  }
+  if (tag === 0x41) { // Counter
+    let val = 0;
+    for (let i = 0; i < buffer.length; i++) val = (val << 8) | buffer[i];
+    return val;
+  }
+  if (tag === 0x42) { // Gauge
+    let val = 0;
+    for (let i = 0; i < buffer.length; i++) val = (val << 8) | buffer[i];
+    return val;
+  }
+  if (tag === 0x43) { // TimeTicks
+    let val = 0;
+    for (let i = 0; i < buffer.length; i++) val = (val << 8) | buffer[i];
+    return val;
+  }
+  if (tag === 0x40) return Array.from(buffer).join('.'); // IpAddress
+  return buffer.toString('hex');
+}
+
+function snmpParseResponse(buffer) {
+  try {
+    const msg = snmpDecodeTLV(buffer, 0);
+    if (!msg || msg.tag !== 0x30) return null;
+    let offset = 0;
+    const version = snmpDecodeTLV(msg.value, offset);
+    offset += version.totalLen;
+    const community = snmpDecodeTLV(msg.value, offset);
+    offset += community.totalLen;
+    const pdu = snmpDecodeTLV(msg.value, offset);
+    if (!pdu) return null;
+    let pduOffset = 0;
+    const reqId = snmpDecodeTLV(pdu.value, pduOffset); pduOffset += reqId.totalLen;
+    const errorStat = snmpDecodeTLV(pdu.value, pduOffset); pduOffset += errorStat.totalLen;
+    const errorIdx = snmpDecodeTLV(pdu.value, pduOffset); pduOffset += errorIdx.totalLen;
+    const varbindList = snmpDecodeTLV(pdu.value, pduOffset);
+    if (!varbindList) return null;
+    const results = [];
+    let vbOffset = 0;
+    while (vbOffset < varbindList.value.length) {
+      const varbind = snmpDecodeTLV(varbindList.value, vbOffset);
+      if (!varbind) break;
+      let innerOff = 0;
+      const oidTlv = snmpDecodeTLV(varbind.value, innerOff);
+      innerOff += oidTlv.totalLen;
+      const valTlv = snmpDecodeTLV(varbind.value, innerOff);
+      const oid = snmpDecodeOID(oidTlv.value);
+      const value = snmpDecodeValue(valTlv.tag, valTlv.value);
+      results.push({ oid, value, type: valTlv.tag });
+      vbOffset += varbind.totalLen;
+    }
+    return { results, errorStatus: snmpDecodeValue(0x02, errorStat.value) };
+  } catch (e) { return null; }
+}
+
+function snmpGet(host, port, community, oids, timeout = 3000) {
+  const dgram = require('dgram');
+  return new Promise((resolve) => {
+    const reqId = Math.floor(Math.random() * 2147483647);
+    const packet = snmpBuildGetRequest(community, oids, reqId);
+    const socket = dgram.createSocket('udp4');
+    const timer = setTimeout(() => { socket.close(); resolve(null); }, timeout);
+    socket.on('message', (msg) => {
+      clearTimeout(timer);
+      const parsed = snmpParseResponse(msg);
+      socket.close();
+      resolve(parsed);
+    });
+    socket.on('error', () => { clearTimeout(timer); socket.close(); resolve(null); });
+    socket.send(packet, 0, packet.length, port, host);
+  });
+}
+
+function snmpWalk(host, port, community, baseOid, timeout = 5000, maxIterations = 100) {
+  const dgram = require('dgram');
+  return new Promise(async (resolve) => {
+    const results = [];
+    let currentOid = baseOid;
+    let iterations = 0;
+    while (iterations < maxIterations) {
+      iterations++;
+      const response = await new Promise((res) => {
+        const reqId = Math.floor(Math.random() * 2147483647);
+        const packet = snmpBuildGetNextRequest(community, currentOid, reqId);
+        const socket = dgram.createSocket('udp4');
+        const timer = setTimeout(() => { socket.close(); res(null); }, timeout);
+        socket.on('message', (msg) => {
+          clearTimeout(timer);
+          const parsed = snmpParseResponse(msg);
+          socket.close();
+          res(parsed);
+        });
+        socket.on('error', () => { clearTimeout(timer); socket.close(); res(null); });
+        socket.send(packet, 0, packet.length, port, host);
+      });
+      if (!response || !response.results || response.results.length === 0) break;
+      const result = response.results[0];
+      // Check if OID is still under the base OID subtree
+      if (!result.oid.startsWith(baseOid + '.') && result.oid !== baseOid) break;
+      // End of MIB view
+      if (result.type === 0x82 || result.type === 0x81) break;
+      results.push(result);
+      currentOid = result.oid;
+    }
+    resolve(results);
+  });
+}
+
+async function performSNMPScan(target, community, port) {
+  const snmpPort = port || 161;
+  const comm = community || 'public';
+  log('info', `🔍 SNMP scanning ${target}:${snmpPort} with community "${comm}"...`);
+  
+  // Standard system MIB OIDs
+  const SYSTEM_OIDS = [
+    '1.3.6.1.2.1.1.1.0',  // sysDescr
+    '1.3.6.1.2.1.1.2.0',  // sysObjectID
+    '1.3.6.1.2.1.1.3.0',  // sysUpTime
+    '1.3.6.1.2.1.1.4.0',  // sysContact
+    '1.3.6.1.2.1.1.5.0',  // sysName
+    '1.3.6.1.2.1.1.6.0',  // sysLocation
+  ];
+  
+  const systemInfo = await snmpGet(target, snmpPort, comm, SYSTEM_OIDS);
+  if (!systemInfo || !systemInfo.results || systemInfo.results.length === 0) {
+    log('warn', `SNMP scan of ${target}: No response (device may not support SNMP or community string incorrect)`);
+    return { success: false, host: target, error: 'No SNMP response' };
+  }
+  
+  const sysData = {};
+  const OID_NAMES = {
+    '1.3.6.1.2.1.1.1.0': 'sysDescr',
+    '1.3.6.1.2.1.1.2.0': 'sysObjectID',
+    '1.3.6.1.2.1.1.3.0': 'sysUpTime',
+    '1.3.6.1.2.1.1.4.0': 'sysContact',
+    '1.3.6.1.2.1.1.5.0': 'sysName',
+    '1.3.6.1.2.1.1.6.0': 'sysLocation',
+  };
+  for (const r of systemInfo.results) {
+    const name = OID_NAMES[r.oid];
+    if (name) sysData[name] = r.value;
+  }
+  
+  // Walk interface table for interface count and names
+  log('info', `SNMP: Walking interface table on ${target}...`);
+  const ifDescrWalk = await snmpWalk(target, snmpPort, comm, '1.3.6.1.2.1.2.2.1.2', 3000, 50);
+  const ifStatusWalk = await snmpWalk(target, snmpPort, comm, '1.3.6.1.2.1.2.2.1.8', 3000, 50);
+  const ifSpeedWalk = await snmpWalk(target, snmpPort, comm, '1.3.6.1.2.1.2.2.1.5', 3000, 50);
+  
+  const interfaces = ifDescrWalk.map((iface, idx) => ({
+    name: iface.value,
+    status: ifStatusWalk[idx] ? (ifStatusWalk[idx].value === 1 ? 'up' : 'down') : 'unknown',
+    speed: ifSpeedWalk[idx] ? ifSpeedWalk[idx].value : 0,
+  }));
+  
+  // Format uptime
+  let uptimeStr = '';
+  if (sysData.sysUpTime) {
+    const totalSecs = Math.floor(sysData.sysUpTime / 100);
+    const days = Math.floor(totalSecs / 86400);
+    const hours = Math.floor((totalSecs % 86400) / 3600);
+    const mins = Math.floor((totalSecs % 3600) / 60);
+    uptimeStr = `${days}d ${hours}h ${mins}m`;
+  }
+  
+  log('success', `SNMP scan of ${target} complete: ${sysData.sysName || 'Unknown'} — ${interfaces.length} interfaces found`);
+  
+  return {
+    success: true,
+    host: target,
+    systemInfo: {
+      sysDescr: sysData.sysDescr || '',
+      sysObjectID: sysData.sysObjectID || '',
+      sysUpTime: uptimeStr,
+      sysUpTimeRaw: sysData.sysUpTime || 0,
+      sysContact: sysData.sysContact || '',
+      sysName: sysData.sysName || '',
+      sysLocation: sysData.sysLocation || '',
+    },
+    interfaces,
+    interfaceCount: interfaces.length,
+  };
+}
+
 // TCP Port Probe
 function probePort(ip, port, timeout = 1000) {
   const net = require('net');
@@ -2238,13 +2623,45 @@ function probePort(ip, port, timeout = 1000) {
   });
 }
 
+// Parse port range specification into array of port numbers
+function parsePortRange(portRange) {
+  if (!portRange) return null;
+  if (Array.isArray(portRange)) return portRange;
+  const ports = new Set();
+  const parts = String(portRange).split(',').map(s => s.trim());
+  for (const part of parts) {
+    const range = part.match(/^(\d+)-(\d+)$/);
+    if (range) {
+      const start = Math.max(1, parseInt(range[1], 10));
+      const end = Math.min(65535, parseInt(range[2], 10));
+      for (let p = start; p <= end; p++) ports.add(p);
+    } else {
+      const p = parseInt(part, 10);
+      if (p >= 1 && p <= 65535) ports.add(p);
+    }
+  }
+  return ports.size > 0 ? Array.from(ports).sort((a, b) => a - b) : null;
+}
+
 // Scan ports of a single active host
-async function scanPorts(ip) {
-  const SERVICE_PORTS = [22, 80, 135, 139, 161, 443, 445, 631, 3306, 3389, 5432, 5900, 8080, 8443, 9100];
+async function scanPorts(ip, customPorts) {
+  const DEFAULT_SERVICE_PORTS = [22, 80, 135, 139, 161, 443, 445, 631, 3306, 3389, 5432, 5900, 8080, 8443, 9100];
+  const EXTENDED_PORTS = [20, 21, 22, 23, 25, 53, 67, 68, 69, 80, 110, 111, 119, 123, 135, 137, 138, 139, 143, 161, 162, 179, 389, 443, 445, 465, 514, 515, 587, 631, 636, 993, 995, 1080, 1433, 1521, 1723, 2049, 2082, 2083, 2086, 2087, 3306, 3389, 4443, 5060, 5432, 5631, 5900, 5901, 6379, 8000, 8008, 8080, 8443, 8888, 9090, 9100, 9200, 9443, 10000, 11211, 27017, 27018, 49152];
+  const SERVICE_PORTS = customPorts || DEFAULT_SERVICE_PORTS;
   const PORT_SERVICE_MAP = {
-    22: 'SSH', 80: 'HTTP', 135: 'RPC', 139: 'NetBIOS', 161: 'SNMP',
-    443: 'HTTPS', 445: 'SMB', 631: 'IPP/Printer', 3306: 'MySQL', 3389: 'RDP',
-    5432: 'PostgreSQL', 5900: 'VNC', 8080: 'HTTP-Alt', 8443: 'HTTPS-Alt', 9100: 'JetDirect',
+    20: 'FTP-Data', 21: 'FTP', 22: 'SSH', 23: 'Telnet', 25: 'SMTP', 53: 'DNS',
+    67: 'DHCP', 68: 'DHCP', 69: 'TFTP', 80: 'HTTP', 110: 'POP3', 111: 'RPC',
+    119: 'NNTP', 123: 'NTP', 135: 'RPC', 137: 'NetBIOS', 138: 'NetBIOS', 139: 'NetBIOS',
+    143: 'IMAP', 161: 'SNMP', 162: 'SNMP-Trap', 179: 'BGP', 389: 'LDAP',
+    443: 'HTTPS', 445: 'SMB', 465: 'SMTPS', 514: 'Syslog', 515: 'LPD',
+    587: 'SMTP-Sub', 631: 'IPP/Printer', 636: 'LDAPS', 993: 'IMAPS', 995: 'POP3S',
+    1080: 'SOCKS', 1433: 'MSSQL', 1521: 'Oracle', 1723: 'PPTP', 2049: 'NFS',
+    3306: 'MySQL', 3389: 'RDP', 4443: 'HTTPS-Alt', 5060: 'SIP',
+    5432: 'PostgreSQL', 5631: 'pcAnywhere', 5900: 'VNC', 5901: 'VNC',
+    6379: 'Redis', 8000: 'HTTP-Alt', 8008: 'HTTP-Alt', 8080: 'HTTP-Proxy',
+    8443: 'HTTPS-Alt', 8888: 'HTTP-Alt', 9090: 'Prometheus', 9100: 'JetDirect',
+    9200: 'Elasticsearch', 9443: 'HTTPS-Alt', 10000: 'Webmin',
+    11211: 'Memcached', 27017: 'MongoDB', 27018: 'MongoDB', 49152: 'Dynamic',
   };
 
   const openPorts = [];

@@ -10,6 +10,11 @@ echo  ║      QS Discovery Agent - Windows Launcher           ║
 echo  ╚══════════════════════════════════════════════════════╝
 echo.
 
+set SILENT=false
+for %%a in (%*) do (
+  if "%%a"=="--silent" set SILENT=true
+)
+
 :: Check if qs-discovery-agent.js exists
 if not exist "%~dp0qs-discovery-agent.js" (
     echo.
@@ -78,11 +83,6 @@ if exist "%~dp0.node\node.exe" (
   echo ❌ Extraction failed or binary not found.
   pause
   exit /b 1
-)
-
-set SILENT=false
-for %%a in (%*) do (
-  if "%%a"=="--silent" set SILENT=true
 )
 
 :run

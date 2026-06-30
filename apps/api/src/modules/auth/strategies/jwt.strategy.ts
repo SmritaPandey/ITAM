@@ -30,10 +30,24 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
   }
 
   async validate(payload: JwtPayload) {
-    const user = await this.prisma.user.findFirst({
-      where: { id: payload.sub, deletedAt: null },
-      include: { role: true },
-    });
+    let user;
+    if (payload.sub === 'agent-session') {
+      // For agent-session tokens, look up user by email and tenantId
+      user = await this.prisma.user.findFirst({
+        where: { email: payload.email, tenantId: payload.tenantId, deletedAt: null },
+        include: { role: true },
+      });
+    } else {
+      // Validate UUID format first to prevent database driver errors
+      const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+      if (!uuidRegex.test(payload.sub)) {
+        throw new UnauthorizedException('Invalid user ID format');
+      }
+      user = await this.prisma.user.findFirst({
+        where: { id: payload.sub, deletedAt: null },
+        include: { role: true },
+      });
+    }
 
     if (!user || user.status !== 'ACTIVE') {
       throw new UnauthorizedException('User is not active or has been deleted');

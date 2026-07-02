@@ -1,47 +1,42 @@
 #!/bin/bash
 # ═══════════════════════════════════════════════════════════════
-# QS Discovery Agent — Persistent Background Service Installer
+# QS Discovery Agent — Background Service Installer
+# ═══════════════════════════════════════════════════════════════
+# Installs the agent as a persistent background service.
+# Requires root/sudo. Called automatically by run-agent.sh.
 # ═══════════════════════════════════════════════════════════════
 set -e
 
-# 🔐 Self-elevation: request sudo permissions once during installation
 if [ "$EUID" -ne 0 ]; then
-  echo "🔐 This installer requires administrator privileges to configure the background service."
-  echo "   Please enter your password to authenticate."
-  exec sudo "$0" "$@"
+  echo "  🔐 Administrator permissions required."
+  echo "  Run with: sudo ./install-service.sh"
+  exit 1
 fi
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 AGENT_PATH="${SCRIPT_DIR}/qs-discovery-agent.js"
 OS_TYPE="$(uname -s | tr '[:upper:]' '[:lower:]')"
 
-echo "⚙️  Installing QS Discovery Agent as a persistent background service..."
-echo ""
-
-# Find active node binary path
+# Find Node.js
 if command -v node &>/dev/null; then
   NODE_BIN="$(command -v node)"
-else
+elif [ -x "${SCRIPT_DIR}/.node/bin/node" ]; then
   NODE_BIN="${SCRIPT_DIR}/.node/bin/node"
+else
+  echo "  ❌ Node.js not found. Run './run-agent.sh' first to set up the runtime."
+  exit 1
 fi
 
-if [ ! -f "$NODE_BIN" ]; then
-  echo "⚙️  Initializing runtime environment first..."
-  # Run launcher in background just to let it bootstrap Node if missing
-  chmod +x "${SCRIPT_DIR}/run-agent.sh"
-  NODE_BIN="${SCRIPT_DIR}/.node/bin/node"
-fi
+echo ""
+echo "  ╔══════════════════════════════════════════════╗"
+echo "  ║     Installing Background Service            ║"
+echo "  ╚══════════════════════════════════════════════╝"
+echo ""
 
 if [ "$OS_TYPE" = "darwin" ]; then
-  # 🍏 macOS LaunchDaemon installation (runs as system root service)
-  PLIST_DIR="/Library/LaunchDaemons"
-  PLIST_PATH="${PLIST_DIR}/com.qsasset.discovery.agent.plist"
-  
-  mkdir -p "${PLIST_DIR}"
-  
-  echo "🍏 Generating macOS LaunchDaemon plist at ${PLIST_PATH}..."
-  
-  cat <<EOF > "${PLIST_PATH}"
+  PLIST_PATH="/Library/LaunchDaemons/com.qsasset.discovery.agent.plist"
+
+  cat <<EOF > "$PLIST_PATH"
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
@@ -67,28 +62,21 @@ if [ "$OS_TYPE" = "darwin" ]; then
 </plist>
 EOF
 
-  # LaunchDaemons require root:wheel and 644 permissions
-  chown root:wheel "${PLIST_PATH}"
-  chmod 644 "${PLIST_PATH}"
+  chown root:wheel "$PLIST_PATH"
+  chmod 644 "$PLIST_PATH"
+  launchctl unload "$PLIST_PATH" 2>/dev/null || true
+  launchctl load "$PLIST_PATH"
 
-  echo "🚀 Loading and starting LaunchDaemon..."
-  # Unload first if already loaded
-  launchctl unload "${PLIST_PATH}" 2>/dev/null || true
-  launchctl load "${PLIST_PATH}"
-  
-  echo "✅ LaunchAgent installed and loaded successfully!"
-  echo "📡 The agent will run silently in the background and start automatically on login."
-  echo "📂 Service logs are located at: ${SCRIPT_DIR}/agent-service.log"
+  echo "  ✅ Background service installed and started!"
+  echo "  📡 Agent runs silently and starts automatically on boot."
+  echo "  📂 Logs: ${SCRIPT_DIR}/agent-service.log"
 
 elif [ "$OS_TYPE" = "linux" ]; then
-  # 🐧 Linux systemd installation
   SERVICE_PATH="/etc/systemd/system/qsasset-agent.service"
-  
-  echo "🐧 Installing systemd service daemon (requires sudo permissions)..."
-  
-  sudo bash -c "cat <<EOF > ${SERVICE_PATH}
+
+  cat <<EOF > "$SERVICE_PATH"
 [Unit]
-Description=QS Asset Discovery & Telemetry Agent
+Description=QS Asset Discovery Agent
 After=network.target
 
 [Service]
@@ -103,17 +91,16 @@ StandardError=append:${SCRIPT_DIR}/agent-service-error.log
 
 [Install]
 WantedBy=multi-user.target
-EOF"
+EOF
 
-  echo "🚀 Enabling and starting systemd service..."
-  sudo systemctl daemon-reload
-  sudo systemctl enable qsasset-agent
-  sudo systemctl start qsasset-agent
-  
-  echo "✅ systemd service installed and started successfully!"
-  echo "📡 The agent will run in the background and start automatically on boot."
-  echo "📂 Service logs are located at: ${SCRIPT_DIR}/agent-service.log"
+  systemctl daemon-reload
+  systemctl enable qsasset-agent
+  systemctl start qsasset-agent
+
+  echo "  ✅ Background service installed and started!"
+  echo "  📡 Agent runs silently and starts automatically on boot."
+  echo "  📂 Logs: ${SCRIPT_DIR}/agent-service.log"
 else
-  echo "❌ Unsupported operating system: ${OS_TYPE}"
+  echo "  ❌ Unsupported operating system: ${OS_TYPE}"
   exit 1
 fi

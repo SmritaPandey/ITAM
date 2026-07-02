@@ -25,6 +25,12 @@ export interface AuthTokens {
 export class AuthService {
   private readonly logger = new Logger(AuthService.name);
 
+  // Brute-force protection: track failed login attempts
+  private loginAttempts: Map<string, { count: number; lastAttempt: number; lockedUntil: number }> = new Map();
+  private readonly MAX_LOGIN_ATTEMPTS = 5;
+  private readonly LOCKOUT_DURATION_MS = 15 * 60 * 1000; // 15 minutes
+  private readonly ATTEMPT_WINDOW_MS = 15 * 60 * 1000; // 15 minute window
+
   constructor(
     private usersService: UsersService,
     private jwtService: JwtService,
@@ -34,12 +40,26 @@ export class AuthService {
   ) {}
 
   async validateUser(email: string, password: string): Promise<any> {
+    const normalizedEmail = email.toLowerCase().trim();
+    // Check if account is locked
+    const attempts = this.loginAttempts.get(normalizedEmail);
+    if (attempts && attempts.lockedUntil > Date.now()) {
+      const remainingMinutes = Math.ceil((attempts.lockedUntil - Date.now()) / 60000);
+      this.logger.warn(`Blocked login attempt for locked account: ${normalizedEmail}`);
+      throw new UnauthorizedException(
+        `Account temporarily locked due to too many failed attempts. Try again in ${remainingMinutes} minute(s).`
+      );
+    }
+
     const user = await this.usersService.findByEmail(email);
     if (!user || !user.passwordHash) {
+      this.trackFailedLogin(normalizedEmail);
       throw new UnauthorizedException('Invalid credentials');
     }
     const isValid = await bcrypt.compare(password, user.passwordHash);
     if (!isValid) {
+      // Track failed attempt
+      this.trackFailedLogin(normalizedEmail);
       throw new UnauthorizedException('Invalid credentials');
     }
     if (user.status !== 'ACTIVE') {
@@ -49,7 +69,26 @@ export class AuthService {
     if (user.emailVerified === false) {
       throw new ForbiddenException('Please verify your email before signing in. Check your inbox for the verification link.');
     }
+    // Successful login — clear failed attempts
+    this.loginAttempts.delete(normalizedEmail);
+
     return user;
+  }
+
+  private trackFailedLogin(email: string): void {
+    const now = Date.now();
+    const existing = this.loginAttempts.get(email);
+    
+    if (existing && (now - existing.lastAttempt) < this.ATTEMPT_WINDOW_MS) {
+      existing.count++;
+      existing.lastAttempt = now;
+      if (existing.count >= this.MAX_LOGIN_ATTEMPTS) {
+        existing.lockedUntil = now + this.LOCKOUT_DURATION_MS;
+        this.logger.warn(`Account locked for ${email} after ${existing.count} failed attempts`);
+      }
+    } else {
+      this.loginAttempts.set(email, { count: 1, lastAttempt: now, lockedUntil: 0 });
+    }
   }
 
   async login(user: any, ip?: string, userAgent?: string): Promise<AuthTokens> {
@@ -613,9 +652,9 @@ export class AuthService {
   /**
    * Generates a long-lived 10-year persistent JWT token for discovery agents
    */
-  generateAgentToken(tenantId: string, email: string): string {
+  generateAgentToken(tenantId: string, email: string, userId?: string): string {
     const payload: JwtPayload = {
-      sub: 'agent-session',
+      sub: userId || 'agent-session',
       email: email,
       tenantId: tenantId,
       role: 'Tenant Admin',

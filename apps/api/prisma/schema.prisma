@@ -979,6 +979,16 @@ model Patch {
   lastScanAt      DateTime? @map("last_scan_at")
   scanSource      String?   @map("scan_source")          // MANUAL, AGENT, SCHEDULED
   scanOutput      Json      @default("{}") @map("scan_output")
+  // Scheduled deployment window
+  scheduledAt     DateTime? @map("scheduled_at")        // When to deploy
+  maintenanceEnd  DateTime? @map("maintenance_end")     // End of maintenance window
+  recurring       String?                                // null, 'weekly', 'monthly'
+  cronExpression  String?   @map("cron_expression")     // e.g. '0 2 * * 0' for Sunday 2AM
+  autoApprove     Boolean   @default(false) @map("auto_approve")
+  // Rollback support
+  rollbackAvailable Boolean @default(false) @map("rollback_available")
+  rollbackData      Json?   @map("rollback_data")        // Pre-patch state snapshot
+  rolledBackAt      DateTime? @map("rolled_back_at")
   createdAt       DateTime @default(now()) @map("created_at")
   updatedAt       DateTime @updatedAt @map("updated_at")
 
@@ -999,6 +1009,7 @@ model PatchDeployment {
   status      String    @default("PENDING")    // PENDING, DEPLOYING, DEPLOYED, FAILED
   output      String?   @db.Text
   deployedAt  DateTime? @map("deployed_at")
+  preState    Json?     @map("pre_state")   // Pre-patch state for rollback
   createdAt   DateTime  @default(now()) @map("created_at")
   updatedAt   DateTime  @updatedAt @map("updated_at")
 

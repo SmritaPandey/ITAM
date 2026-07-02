@@ -64,7 +64,7 @@ cat <<EOF > "${CONTENTS_DIR}/Info.plist"
     <key>CFBundlePackageType</key>
     <string>APPL</string>
     <key>CFBundleShortVersionString</key>
-    <string>1.1.0</string>
+    <string>2.0.0</string>
     <key>LSBackgroundOnly</key>
     <true/>
 </dict>
@@ -75,6 +75,8 @@ EOF
 cp "${SCRIPT_DIR}/qs-discovery-agent.js" "${MAC_OS_DIR}/"
 cp "${SCRIPT_DIR}/run-agent.sh" "${MAC_OS_DIR}/"
 cp "${SCRIPT_DIR}/Status Dashboard.html" "${MAC_OS_DIR}/"
+[ -f "${SCRIPT_DIR}/setup.html" ] && cp "${SCRIPT_DIR}/setup.html" "${MAC_OS_DIR}/"
+[ -f "${SCRIPT_DIR}/QuickStart.txt" ] && cp "${SCRIPT_DIR}/QuickStart.txt" "${MAC_OS_DIR}/"
 chmod +x "${MAC_OS_DIR}/run-agent.sh"
 
 # Create launcher script

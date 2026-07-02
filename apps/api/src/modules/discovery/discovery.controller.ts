@@ -26,6 +26,7 @@ import { CredentialVaultService } from './credential-vault.service';
 import { AuthService } from '../auth/auth.service';
 import { ModuleGuard } from '../../common/guards/module.guard';
 import { RequireModule } from '../../common/decorators/require-module.decorator';
+import { SkipThrottle } from '@nestjs/throttler';
 
 @ApiTags('discovery')
 @ApiBearerAuth()
@@ -109,6 +110,7 @@ export class DiscoveryController {
     return this.discoveryService.deleteScan(id, req.user.tenantId);
   }
 
+  @SkipThrottle()
   @Post('scans/:id/results')
   @Roles('Tenant Admin', 'IT Admin')
   @ApiOperation({ summary: 'Submit scan results from discovery agent' })
@@ -297,7 +299,7 @@ export class DiscoveryController {
     const userEmail = req.user?.email || '';
 
     // Generate a persistent 10-year JWT token for the agent enrollment
-    const agentToken = this.authService.generateAgentToken(req.user.tenantId, userEmail);
+    const agentToken = this.authService.generateAgentToken(req.user.tenantId, userEmail, req.user.sub);
 
     const buffer = this.discoveryService.getAgentZipPackage(
       serverUrl,
@@ -326,6 +328,7 @@ export class DiscoveryController {
     return this.discoveryService.deleteAgent(id, req.user.tenantId);
   }
 
+  @SkipThrottle()
   @Post('agents/register')
   @Roles('Tenant Admin', 'IT Admin')
   @ApiOperation({ summary: 'Register / re-register a discovery agent' })
@@ -354,6 +357,40 @@ export class DiscoveryController {
     return this.discoveryService.deployRemoteAgent(req.user.tenantId, req.user.sub, body.targetIp, body.credentialId);
   }
 
+  @Post('agents/deploy-remote/bulk')
+  @Roles('Tenant Admin')
+  @ApiOperation({ summary: 'Bulk push-deploy discovery agents to multiple LAN hosts concurrently' })
+  async bulkDeployRemoteAgent(
+    @Request() req: any,
+    @Body() body: { targets: Array<{ ip: string; credentialId?: string }>; defaultCredentialId?: string },
+  ) {
+    const results = await Promise.allSettled(
+      body.targets.map(t =>
+        this.discoveryService.deployRemoteAgent(
+          req.user.tenantId,
+          req.user.sub,
+          t.ip,
+          t.credentialId || body.defaultCredentialId || '',
+        ),
+      ),
+    );
+
+    const summary = results.map((r, i) => ({
+      ip: body.targets[i].ip,
+      status: r.status === 'fulfilled' ? (r.value as any).status : 'FAILED',
+      logs: r.status === 'fulfilled' ? (r.value as any).logs : [],
+      error: r.status === 'rejected' ? (r as PromiseRejectedResult).reason?.message : undefined,
+    }));
+
+    return {
+      total: body.targets.length,
+      succeeded: summary.filter(s => s.status === 'SUCCESS').length,
+      failed: summary.filter(s => s.status !== 'SUCCESS').length,
+      results: summary,
+    };
+  }
+
+  @SkipThrottle()
   @Post('agents/:id/heartbeat')
   @Roles('Tenant Admin', 'IT Admin')
   @ApiOperation({ summary: 'Agent heartbeat — confirm alive + push data' })
@@ -363,6 +400,33 @@ export class DiscoveryController {
     @Body() body?: { systemInfo?: any },
   ) {
     return this.discoveryService.agentHeartbeat(id, req.user.tenantId, body);
+  }
+
+  // ─── Remote Command Execution ──────────────────────────────────
+
+  @Post('agents/:agentId/remote-command')
+  @Roles('Tenant Admin')
+  @ApiOperation({ summary: 'Send a remote command to an agent for execution' })
+  async remoteCommand(
+    @Request() req: any,
+    @Param('agentId') agentId: string,
+    @Body() body: { command: string; timeout?: number },
+  ) {
+    return this.discoveryService.queueRemoteCommand(req.user.tenantId, agentId, body);
+  }
+
+  @SkipThrottle()
+  @Post('agents/command-result')
+  @ApiOperation({ summary: 'Receive command execution result from agent' })
+  async commandResult(@Request() req: any, @Body() body: any) {
+    return this.discoveryService.storeCommandResult(body);
+  }
+
+  @Get('agents/:agentId/command-history')
+  @Roles('Tenant Admin', 'IT Admin')
+  @ApiOperation({ summary: 'Get command execution history for an agent' })
+  async commandHistory(@Param('agentId') agentId: string) {
+    return this.discoveryService.getCommandHistory(agentId);
   }
 
   // ─── Scheduled Scans ──────────────────────────────────────────
@@ -412,5 +476,22 @@ export class DiscoveryController {
   @ApiOperation({ summary: 'Delete scheduled scan' })
   async deleteSchedule(@Request() req: any, @Param('id') id: string) {
     return this.discoveryService.deleteSchedule(id, req.user.tenantId);
+  }
+
+  // ─── Agent Version Check ──────────────────────────────────────
+
+  @Get('agents/version/latest')
+  @ApiOperation({ summary: 'Get latest agent version info' })
+  async getLatestAgentVersion() {
+    return {
+      version: '2.0.0',
+      releaseDate: '2026-07-01',
+      changelog: 'Enterprise v2: +Network Shares, +Printers, +Scheduled Tasks, +Docker/VM, +Bluetooth, +AD/Domain, +Patch History, +WiFi, +Display/Environment, +Security Hardening',
+      downloadUrls: {
+        darwin: '/discovery/agents/download?platform=darwin',
+        win32: '/discovery/agents/download?platform=win32',
+        linux: '/discovery/agents/download?platform=linux',
+      },
+    };
   }
 }

@@ -18,7 +18,7 @@ const http = require('http');
 const fs = require('fs');
 const path = require('path');
 
-const VERSION = '1.1.0';
+const VERSION = '2.0.0';
 
 // ─── Logging & Local Log Buffer API ───────────────────────────
 const localLogs = [];
@@ -1105,6 +1105,847 @@ function getSystemHardwareDetails() {
   return details;
 }
 
+// ─── Startup Programs / Login Items ─────────────────────────────────
+function getStartupPrograms() {
+  const items = [];
+  try {
+    if (os.platform() === 'darwin') {
+      // System LaunchDaemons
+      ['/Library/LaunchDaemons', '/Library/LaunchAgents'].forEach(dir => {
+        try {
+          if (fs.existsSync(dir)) {
+            fs.readdirSync(dir).filter(f => f.endsWith('.plist')).forEach(f => {
+              items.push({ name: f.replace('.plist', ''), path: path.join(dir, f), type: 'LaunchDaemon', enabled: true });
+            });
+          }
+        } catch {}
+      });
+      // User LaunchAgents
+      const userAgentsDir = path.join(os.homedir(), 'Library/LaunchAgents');
+      try {
+        if (fs.existsSync(userAgentsDir)) {
+          fs.readdirSync(userAgentsDir).filter(f => f.endsWith('.plist')).forEach(f => {
+            items.push({ name: f.replace('.plist', ''), path: path.join(userAgentsDir, f), type: 'UserLaunchAgent', enabled: true });
+          });
+        }
+      } catch {}
+      // Login Items via osascript
+      try {
+        const loginItems = execCmd('osascript -e \'tell application "System Events" to get the name of every login item\' 2>/dev/null');
+        if (loginItems) {
+          loginItems.split(', ').filter(Boolean).forEach(name => {
+            items.push({ name: name.trim(), path: '', type: 'LoginItem', enabled: true });
+          });
+        }
+      } catch {}
+    } else if (os.platform() === 'win32') {
+      // Registry Run keys
+      ['HKLM\\\\SOFTWARE\\\\Microsoft\\\\Windows\\\\CurrentVersion\\\\Run',
+       'HKCU\\\\SOFTWARE\\\\Microsoft\\\\Windows\\\\CurrentVersion\\\\Run'].forEach(regKey => {
+        try {
+          const out = execCmd(`reg query "${regKey}" 2>nul`);
+          if (out) {
+            out.split('\n').filter(l => l.includes('REG_SZ') || l.includes('REG_EXPAND_SZ')).forEach(line => {
+              const parts = line.trim().split(/\s{2,}/);
+              if (parts.length >= 3) {
+                items.push({ name: parts[0], path: parts.slice(2).join(' '), type: regKey.startsWith('HKLM') ? 'HKLM_Run' : 'HKCU_Run', enabled: true });
+              }
+            });
+          }
+        } catch {}
+      });
+      // Startup folder
+      try {
+        const startupDir = execCmd('echo %APPDATA%\\\\Microsoft\\\\Windows\\\\Start Menu\\\\Programs\\\\Startup')?.trim();
+        if (startupDir && fs.existsSync(startupDir)) {
+          fs.readdirSync(startupDir).forEach(f => {
+            items.push({ name: f, path: path.join(startupDir, f), type: 'StartupFolder', enabled: true });
+          });
+        }
+      } catch {}
+    } else {
+      // Linux — systemd enabled units + autostart
+      try {
+        const enabled = execCmd('systemctl list-unit-files --state=enabled --type=service --no-pager --plain 2>/dev/null');
+        if (enabled) {
+          enabled.split('\n').filter(l => l.includes('.service')).slice(0, 50).forEach(line => {
+            const name = line.split(/\s+/)[0];
+            if (name) items.push({ name, path: '', type: 'systemd_enabled', enabled: true });
+          });
+        }
+      } catch {}
+      // XDG autostart
+      const autostartDir = path.join(os.homedir(), '.config/autostart');
+      try {
+        if (fs.existsSync(autostartDir)) {
+          fs.readdirSync(autostartDir).filter(f => f.endsWith('.desktop')).forEach(f => {
+            items.push({ name: f.replace('.desktop', ''), path: path.join(autostartDir, f), type: 'XDG_autostart', enabled: true });
+          });
+        }
+      } catch {}
+    }
+  } catch {}
+  return items;
+}
+
+// ─── Screen Lock / Password Policy ──────────────────────────────────
+function getScreenLockPolicy() {
+  const policy = { screenLockEnabled: false, idleTimeSeconds: 0, passwordRequired: false, minPasswordLength: 0 };
+  try {
+    if (os.platform() === 'darwin') {
+      // Check screensaver idle time
+      try {
+        const idle = execCmd('defaults -currentHost read com.apple.screensaver idleTime 2>/dev/null');
+        if (idle) {
+          policy.idleTimeSeconds = parseInt(idle.trim(), 10) || 0;
+          policy.screenLockEnabled = policy.idleTimeSeconds > 0;
+        }
+      } catch {}
+      // Check if screen lock on screensaver is enabled
+      try {
+        const askForPass = execCmd('defaults read com.apple.screensaver askForPassword 2>/dev/null');
+        policy.passwordRequired = askForPass?.trim() === '1';
+        if (policy.passwordRequired) policy.screenLockEnabled = true;
+      } catch {}
+    } else if (os.platform() === 'win32') {
+      // Check screen saver timeout
+      try {
+        const timeout = execCmd('reg query "HKCU\\\\Control Panel\\\\Desktop" /v ScreenSaveTimeOut 2>nul');
+        if (timeout) {
+          const match = timeout.match(/ScreenSaveTimeOut\s+REG_SZ\s+(\d+)/);
+          if (match) {
+            policy.idleTimeSeconds = parseInt(match[1], 10) || 0;
+            policy.screenLockEnabled = policy.idleTimeSeconds > 0;
+          }
+        }
+      } catch {}
+      // Password policy
+      try {
+        const netAccounts = execCmd('net accounts 2>nul');
+        if (netAccounts) {
+          const lenMatch = netAccounts.match(/Minimum password length:\s*(\d+)/i);
+          if (lenMatch) policy.minPasswordLength = parseInt(lenMatch[1], 10);
+          policy.passwordRequired = policy.minPasswordLength > 0;
+        }
+      } catch {}
+    } else {
+      // Linux — check for screen lock
+      try {
+        const gsettings = execCmd('gsettings get org.gnome.desktop.screensaver lock-enabled 2>/dev/null');
+        policy.screenLockEnabled = gsettings?.trim() === 'true';
+      } catch {}
+      try {
+        const idleDelay = execCmd('gsettings get org.gnome.desktop.session idle-delay 2>/dev/null');
+        const match = idleDelay?.match(/uint32\s+(\d+)/);
+        if (match) policy.idleTimeSeconds = parseInt(match[1], 10);
+      } catch {}
+      // Password policy from login.defs
+      try {
+        if (fs.existsSync('/etc/login.defs')) {
+          const defs = fs.readFileSync('/etc/login.defs', 'utf8');
+          const lenMatch = defs.match(/^PASS_MIN_LEN\s+(\d+)/m);
+          if (lenMatch) policy.minPasswordLength = parseInt(lenMatch[1], 10);
+          policy.passwordRequired = policy.minPasswordLength > 0;
+        }
+      } catch {}
+    }
+  } catch {}
+  return policy;
+}
+
+// ─── Browser Extensions Inventory ───────────────────────────────────
+function getBrowserExtensions() {
+  const extensions = [];
+  const homeDir = os.homedir();
+
+  // Helper to read Chrome-based extension manifests
+  function scanChromeProfile(browserName, profileBase) {
+    try {
+      if (!fs.existsSync(profileBase)) return;
+      const profiles = fs.readdirSync(profileBase).filter(d => d === 'Default' || d.startsWith('Profile'));
+      for (const profile of profiles) {
+        const extDir = path.join(profileBase, profile, 'Extensions');
+        if (!fs.existsSync(extDir)) continue;
+        try {
+          const extIds = fs.readdirSync(extDir);
+          for (const extId of extIds.slice(0, 100)) {
+            try {
+              const versionDirs = fs.readdirSync(path.join(extDir, extId)).filter(d => !d.startsWith('.'));
+              const latestVersion = versionDirs[versionDirs.length - 1];
+              if (!latestVersion) continue;
+              const manifestPath = path.join(extDir, extId, latestVersion, 'manifest.json');
+              if (fs.existsSync(manifestPath)) {
+                const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
+                extensions.push({
+                  id: extId, name: manifest.name || extId, version: manifest.version || '',
+                  browser: browserName, profile, description: (manifest.description || '').slice(0, 100),
+                });
+              }
+            } catch {}
+          }
+        } catch {}
+      }
+    } catch {}
+  }
+
+  try {
+    if (os.platform() === 'darwin') {
+      scanChromeProfile('Chrome', path.join(homeDir, 'Library/Application Support/Google/Chrome'));
+      scanChromeProfile('Edge', path.join(homeDir, 'Library/Application Support/Microsoft Edge'));
+      scanChromeProfile('Brave', path.join(homeDir, 'Library/Application Support/BraveSoftware/Brave-Browser'));
+      // Safari
+      try {
+        const safariExts = execCmd('pluginkit -mAvvv -p com.apple.Safari.extension 2>/dev/null');
+        if (safariExts) {
+          safariExts.split('\n').filter(l => l.includes('(')).forEach(line => {
+            const match = line.match(/^\s+(.+?)\(([^)]+)\)/);
+            if (match) extensions.push({ id: match[2], name: match[1].trim(), version: '', browser: 'Safari', profile: '', description: '' });
+          });
+        }
+      } catch {}
+      // Firefox
+      try {
+        const ffDir = path.join(homeDir, 'Library/Application Support/Firefox/Profiles');
+        if (fs.existsSync(ffDir)) {
+          for (const prof of fs.readdirSync(ffDir)) {
+            const extJson = path.join(ffDir, prof, 'extensions.json');
+            if (fs.existsSync(extJson)) {
+              const data = JSON.parse(fs.readFileSync(extJson, 'utf8'));
+              (data.addons || []).filter(a => a.type === 'extension' && a.active).forEach(a => {
+                extensions.push({ id: a.id, name: a.defaultLocale?.name || a.id, version: a.version || '', browser: 'Firefox', profile: prof, description: '' });
+              });
+            }
+          }
+        }
+      } catch {}
+    } else if (os.platform() === 'win32') {
+      const localAppData = process.env.LOCALAPPDATA || path.join(homeDir, 'AppData/Local');
+      scanChromeProfile('Chrome', path.join(localAppData, 'Google/Chrome/User Data'));
+      scanChromeProfile('Edge', path.join(localAppData, 'Microsoft/Edge/User Data'));
+      scanChromeProfile('Brave', path.join(localAppData, 'BraveSoftware/Brave-Browser/User Data'));
+      // Firefox
+      try {
+        const ffDir = path.join(process.env.APPDATA || '', 'Mozilla/Firefox/Profiles');
+        if (fs.existsSync(ffDir)) {
+          for (const prof of fs.readdirSync(ffDir)) {
+            const extJson = path.join(ffDir, prof, 'extensions.json');
+            if (fs.existsSync(extJson)) {
+              const data = JSON.parse(fs.readFileSync(extJson, 'utf8'));
+              (data.addons || []).filter(a => a.type === 'extension' && a.active).forEach(a => {
+                extensions.push({ id: a.id, name: a.defaultLocale?.name || a.id, version: a.version || '', browser: 'Firefox', profile: prof, description: '' });
+              });
+            }
+          }
+        }
+      } catch {}
+    } else {
+      // Linux
+      scanChromeProfile('Chrome', path.join(homeDir, '.config/google-chrome'));
+      scanChromeProfile('Chromium', path.join(homeDir, '.config/chromium'));
+      scanChromeProfile('Edge', path.join(homeDir, '.config/microsoft-edge'));
+      scanChromeProfile('Brave', path.join(homeDir, '.config/BraveSoftware/Brave-Browser'));
+      // Firefox
+      try {
+        const ffDir = path.join(homeDir, '.mozilla/firefox');
+        if (fs.existsSync(ffDir)) {
+          for (const prof of fs.readdirSync(ffDir)) {
+            const extJson = path.join(ffDir, prof, 'extensions.json');
+            if (fs.existsSync(extJson)) {
+              const data = JSON.parse(fs.readFileSync(extJson, 'utf8'));
+              (data.addons || []).filter(a => a.type === 'extension' && a.active).forEach(a => {
+                extensions.push({ id: a.id, name: a.defaultLocale?.name || a.id, version: a.version || '', browser: 'Firefox', profile: prof, description: '' });
+              });
+            }
+          }
+        }
+      } catch {}
+    }
+  } catch {}
+  // Filter out internal Chrome extensions (like __MSG_)
+  return extensions.filter(e => e.name && !e.name.startsWith('__MSG_'));
+}
+
+// ─── External USB Volume Mount Detection ────────────────────────────
+function getExternalMounts() {
+  const mounts = [];
+  try {
+    if (os.platform() === 'darwin') {
+      const out = execCmd('diskutil list external 2>/dev/null');
+      if (out) {
+        const diskBlocks = out.split(/(?=\/dev\/disk)/);
+        for (const block of diskBlocks) {
+          const diskMatch = block.match(/^(\/dev\/disk\d+)/);
+          if (!diskMatch) continue;
+          // Get volume info
+          try {
+            const info = execCmd(`diskutil info ${diskMatch[1]}s1 2>/dev/null`);
+            if (info) {
+              const nameMatch = info.match(/Volume Name:\s+(.+)/);
+              const mountMatch = info.match(/Mount Point:\s+(.+)/);
+              const sizeMatch = info.match(/Disk Size:\s+(.+)/);
+              const fsMatch = info.match(/Type \(Bundle\):\s+(.+)/) || info.match(/File System Personality:\s+(.+)/);
+              mounts.push({
+                device: diskMatch[1], name: nameMatch?.[1]?.trim() || '',
+                mountPoint: mountMatch?.[1]?.trim() || '', size: sizeMatch?.[1]?.trim() || '',
+                filesystem: fsMatch?.[1]?.trim() || '', type: 'external'
+              });
+            }
+          } catch {}
+        }
+      }
+      // Also check /Volumes for anything not the boot drive
+      try {
+        const volumes = fs.readdirSync('/Volumes').filter(v => v !== 'Macintosh HD' && v !== 'Macintosh HD - Data');
+        for (const vol of volumes) {
+          if (!mounts.some(m => m.name === vol)) {
+            mounts.push({ device: '', name: vol, mountPoint: `/Volumes/${vol}`, size: '', filesystem: '', type: 'external' });
+          }
+        }
+      } catch {}
+    } else if (os.platform() === 'win32') {
+      try {
+        const out = execCmd('powershell -Command "Get-Volume | Where-Object {$_.DriveType -eq \'Removable\'} | Select-Object DriveLetter,FileSystemLabel,Size,FileSystem | ConvertTo-Json" 2>nul');
+        if (out) {
+          const vols = JSON.parse(out.startsWith('[') ? out : `[${out}]`);
+          for (const v of vols) {
+            if (v.DriveLetter) {
+              mounts.push({
+                device: `${v.DriveLetter}:`, name: v.FileSystemLabel || '',
+                mountPoint: `${v.DriveLetter}:\\`, size: v.Size ? `${Math.round(v.Size / 1073741824)}GB` : '',
+                filesystem: v.FileSystem || '', type: 'removable'
+              });
+            }
+          }
+        }
+      } catch {}
+    } else {
+      // Linux
+      try {
+        const out = execCmd('lsblk -o NAME,MOUNTPOINT,TRAN,SIZE,FSTYPE -J 2>/dev/null');
+        if (out) {
+          const data = JSON.parse(out);
+          function walkDevices(devices, transport) {
+            for (const d of devices || []) {
+              const tran = d.tran || transport;
+              if (tran === 'usb' && d.mountpoint) {
+                mounts.push({
+                  device: `/dev/${d.name}`, name: d.name, mountPoint: d.mountpoint,
+                  size: d.size || '', filesystem: d.fstype || '', type: 'usb'
+                });
+              }
+              if (d.children) walkDevices(d.children, tran);
+            }
+          }
+          walkDevices(data.blockdevices, null);
+        }
+      } catch {}
+    }
+  } catch {}
+  return mounts;
+}
+
+// ─── Certificate Store Monitoring ───────────────────────────────────
+function getCertificateStore() {
+  const result = { trustedRootCount: 0, platform: os.platform(), checkedAt: new Date().toISOString() };
+  try {
+    if (os.platform() === 'darwin') {
+      // Count system root certificates
+      try {
+        const count = execCmd('security find-certificate -a /System/Library/Keychains/SystemRootCertificates.keychain 2>/dev/null | grep -c "keychain:"');
+        result.trustedRootCount = parseInt(count?.trim(), 10) || 0;
+      } catch {}
+      // If 0, try alternative
+      if (result.trustedRootCount === 0) {
+        try {
+          const count = execCmd('security dump-keychain /System/Library/Keychains/SystemRootCertificates.keychain 2>/dev/null | grep -c "^keychain:"');
+          result.trustedRootCount = parseInt(count?.trim(), 10) || 0;
+        } catch {}
+      }
+    } else if (os.platform() === 'win32') {
+      try {
+        const out = execCmd('certutil -store Root 2>nul');
+        if (out) {
+          const matches = out.match(/================ Certificate \d+ ================/g);
+          result.trustedRootCount = matches ? matches.length : 0;
+        }
+      } catch {}
+    } else {
+      // Linux — count certs in /etc/ssl/certs
+      try {
+        const certDir = '/etc/ssl/certs';
+        if (fs.existsSync(certDir)) {
+          result.trustedRootCount = fs.readdirSync(certDir).filter(f => f.endsWith('.pem') || f.endsWith('.crt')).length;
+        }
+      } catch {}
+    }
+  } catch {}
+  return result;
+}
+
+// ─── Network Shares & SMB/NFS Exposure ──────────────────────────────
+function getNetworkShares() {
+  const platform = os.platform();
+  const shares = [];
+  try {
+    if (platform === 'darwin') {
+      const output = execCmd('sharing -l 2>/dev/null');
+      if (output) {
+        const blocks = output.split(/\n(?=name:)/);
+        for (const block of blocks) {
+          const name = block.match(/name:\s*(.*)/)?.[1]?.trim();
+          const path = block.match(/path:\s*(.*)/)?.[1]?.trim();
+          const smb = block.includes('smb') || block.includes('afp');
+          if (name) shares.push({ name, path: path || '', protocol: smb ? 'SMB' : 'AFP', shared: true });
+        }
+      }
+    } else if (platform === 'win32') {
+      const output = execCmd('net share 2>nul');
+      if (output) {
+        const lines = output.split('\n').filter(l => l.trim() && !l.includes('---') && !l.includes('Share name') && !l.includes('The command'));
+        for (const line of lines) {
+          const parts = line.trim().split(/\s{2,}/);
+          if (parts.length >= 2 && parts[0]) {
+            shares.push({ name: parts[0], path: parts[1] || '', protocol: 'SMB', shared: true });
+          }
+        }
+      }
+    } else {
+      // Linux — check /etc/samba/smb.conf and /etc/exports
+      if (fs.existsSync('/etc/samba/smb.conf')) {
+        const smb = execCmd('grep -E "^\\[|path\\s*=" /etc/samba/smb.conf 2>/dev/null');
+        if (smb) {
+          let currentShare = null;
+          for (const line of smb.split('\n')) {
+            const shareMatch = line.match(/^\[(.+)\]/);
+            if (shareMatch && shareMatch[1] !== 'global') {
+              currentShare = shareMatch[1];
+            }
+            const pathMatch = line.match(/path\s*=\s*(.*)/);
+            if (pathMatch && currentShare) {
+              shares.push({ name: currentShare, path: pathMatch[1].trim(), protocol: 'SMB', shared: true });
+              currentShare = null;
+            }
+          }
+        }
+      }
+      if (fs.existsSync('/etc/exports')) {
+        const nfs = execCmd('cat /etc/exports 2>/dev/null');
+        if (nfs) {
+          for (const line of nfs.split('\n')) {
+            if (line.trim() && !line.startsWith('#')) {
+              const parts = line.trim().split(/\s+/);
+              shares.push({ name: path.basename(parts[0]), path: parts[0], protocol: 'NFS', shared: true });
+            }
+          }
+        }
+      }
+    }
+  } catch {}
+  return shares;
+}
+
+// ─── Shared / Network Printers ──────────────────────────────────────
+function getSharedPrinters() {
+  const platform = os.platform();
+  const printers = [];
+  try {
+    if (platform === 'darwin') {
+      const output = execCmd('lpstat -p -d 2>/dev/null');
+      if (output) {
+        for (const line of output.split('\n')) {
+          const match = line.match(/printer\s+(\S+)\s+/);
+          if (match) {
+            const isDefault = output.includes(`system default destination: ${match[1]}`);
+            printers.push({ name: match[1], status: line.includes('idle') ? 'idle' : 'active', isDefault, isNetwork: false });
+          }
+        }
+      }
+      // Check for network printers
+      const cupsOutput = execCmd('lpstat -v 2>/dev/null');
+      if (cupsOutput) {
+        for (const line of cupsOutput.split('\n')) {
+          const match = line.match(/device for (\S+):\s*(.*)/);
+          if (match) {
+            const existing = printers.find(p => p.name === match[1]);
+            const uri = match[2];
+            const isNetwork = uri.includes('ipp://') || uri.includes('smb://') || uri.includes('lpd://') || uri.includes('socket://');
+            if (existing) { existing.uri = uri; existing.isNetwork = isNetwork; }
+            else printers.push({ name: match[1], status: 'unknown', isDefault: false, uri, isNetwork });
+          }
+        }
+      }
+    } else if (platform === 'win32') {
+      const output = execCmd('powershell -command "Get-Printer | Select-Object Name, PortName, DriverName, Shared, PrinterStatus | ConvertTo-Json" 2>nul');
+      if (output) {
+        try {
+          const parsed = JSON.parse(output);
+          const items = Array.isArray(parsed) ? parsed : [parsed];
+          for (const p of items) {
+            if (p.Name) {
+              printers.push({
+                name: p.Name, driver: p.DriverName || '', shared: p.Shared || false,
+                port: p.PortName || '', status: p.PrinterStatus === 0 ? 'idle' : 'active',
+                isNetwork: (p.PortName || '').includes('_') || (p.PortName || '').includes('.'),
+              });
+            }
+          }
+        } catch {}
+      }
+    } else {
+      const output = execCmd('lpstat -p 2>/dev/null');
+      if (output) {
+        for (const line of output.split('\n')) {
+          const match = line.match(/printer\s+(\S+)\s+/);
+          if (match) printers.push({ name: match[1], status: line.includes('idle') ? 'idle' : 'active', isDefault: false, isNetwork: false });
+        }
+      }
+    }
+  } catch {}
+  return printers;
+}
+
+// ─── Scheduled Tasks / Cron Jobs ────────────────────────────────────
+function getScheduledTasks() {
+  const platform = os.platform();
+  const tasks = [];
+  try {
+    if (platform === 'darwin' || platform === 'linux') {
+      // User crontab
+      const crontab = execCmd('crontab -l 2>/dev/null');
+      if (crontab) {
+        for (const line of crontab.split('\n')) {
+          if (line.trim() && !line.startsWith('#')) {
+            tasks.push({ name: line.trim().substring(0, 80), type: 'cron', user: os.userInfo().username, schedule: line.trim().split(/\s+/).slice(0, 5).join(' ') });
+          }
+        }
+      }
+      // LaunchAgents/LaunchDaemons (macOS)
+      if (platform === 'darwin') {
+        const agents = execCmd('launchctl list 2>/dev/null');
+        if (agents) {
+          for (const line of agents.split('\n').slice(1)) {
+            const parts = line.trim().split(/\t/);
+            if (parts.length >= 3 && parts[2] && !parts[2].startsWith('com.apple.')) {
+              tasks.push({ name: parts[2], type: 'launchd', pid: parts[0] === '-' ? null : parts[0], status: parts[0] === '-' ? 'inactive' : 'running' });
+            }
+          }
+        }
+      }
+      // Systemd timers (Linux)
+      if (platform === 'linux') {
+        const timers = execCmd('systemctl list-timers --no-pager --plain 2>/dev/null');
+        if (timers) {
+          for (const line of timers.split('\n').slice(1)) {
+            const parts = line.trim().split(/\s+/);
+            if (parts.length >= 5) {
+              tasks.push({ name: parts[parts.length - 1], type: 'systemd-timer', nextRun: parts.slice(0, 3).join(' ') });
+            }
+          }
+        }
+      }
+    } else if (platform === 'win32') {
+      const output = execCmd('schtasks /query /fo csv /nh 2>nul');
+      if (output) {
+        for (const line of output.split('\n').slice(0, 50)) {
+          const parts = line.split(',').map(p => p.replace(/"/g, ''));
+          if (parts.length >= 3 && parts[0] && !parts[0].includes('\\Microsoft\\')) {
+            tasks.push({ name: parts[0], nextRun: parts[1], status: parts[2], type: 'schtask' });
+          }
+        }
+      }
+    }
+  } catch {}
+  return tasks.slice(0, 100);
+}
+
+// ─── Docker Containers & Virtual Machines ───────────────────────────
+function getContainersAndVMs() {
+  const result = { containers: [], vms: [], dockerInstalled: false, dockerRunning: false };
+  try {
+    // Docker containers
+    const dockerVersion = execCmd('docker --version 2>/dev/null 2>nul');
+    if (dockerVersion) {
+      result.dockerInstalled = true;
+      const containers = execCmd('docker ps -a --format "{{.ID}}|{{.Names}}|{{.Image}}|{{.Status}}|{{.Ports}}" 2>/dev/null 2>nul');
+      if (containers) {
+        result.dockerRunning = true;
+        for (const line of containers.split('\n')) {
+          if (!line.trim()) continue;
+          const [id, name, image, status, ports] = line.split('|');
+          result.containers.push({
+            id: id?.substring(0, 12), name, image, status,
+            ports: ports || '', running: (status || '').toLowerCase().includes('up'),
+          });
+        }
+      }
+    }
+    // VirtualBox VMs
+    const vboxVms = execCmd('VBoxManage list vms 2>/dev/null 2>nul');
+    if (vboxVms) {
+      for (const line of vboxVms.split('\n')) {
+        const match = line.match(/"(.+)"\s+\{(.+)\}/);
+        if (match) result.vms.push({ name: match[1], id: match[2], hypervisor: 'VirtualBox' });
+      }
+    }
+    // Check if running inside a VM
+    const platform = os.platform();
+    if (platform === 'darwin') {
+      const hwModel = execCmd('sysctl -n hw.model 2>/dev/null');
+      if (hwModel && hwModel.includes('Virtual')) result.isVirtualMachine = true;
+    } else if (platform === 'linux') {
+      const virt = execCmd('systemd-detect-virt 2>/dev/null');
+      if (virt && virt.trim() !== 'none') {
+        result.isVirtualMachine = true;
+        result.hypervisor = virt.trim();
+      }
+    } else if (platform === 'win32') {
+      const model = execCmd('wmic computersystem get model 2>nul');
+      if (model && (model.includes('Virtual') || model.includes('VMware') || model.includes('Hyper-V'))) {
+        result.isVirtualMachine = true;
+      }
+    }
+  } catch {}
+  return result;
+}
+
+// ─── Bluetooth Devices ──────────────────────────────────────────────
+function getBluetoothDevices() {
+  const platform = os.platform();
+  const devices = [];
+  try {
+    if (platform === 'darwin') {
+      const output = execCmd('system_profiler SPBluetoothDataType -json 2>/dev/null');
+      if (output) {
+        try {
+          const data = JSON.parse(output);
+          const btData = data.SPBluetoothDataType?.[0];
+          // Connected devices
+          const connected = btData?.device_connected || btData?.devices_connected || [];
+          for (const devGroup of (Array.isArray(connected) ? connected : [connected])) {
+            if (typeof devGroup === 'object') {
+              for (const [name, info] of Object.entries(devGroup)) {
+                devices.push({
+                  name, type: info?.device_minorType || 'Unknown',
+                  connected: true, address: info?.device_address || '',
+                });
+              }
+            }
+          }
+        } catch {}
+      }
+    } else if (platform === 'linux') {
+      const output = execCmd('bluetoothctl devices 2>/dev/null');
+      if (output) {
+        for (const line of output.split('\n')) {
+          const match = line.match(/Device\s+(\S+)\s+(.*)/);
+          if (match) devices.push({ name: match[2], address: match[1], connected: false, type: 'Unknown' });
+        }
+      }
+    } else if (platform === 'win32') {
+      const output = execCmd('powershell -command "Get-PnpDevice -Class Bluetooth | Select-Object FriendlyName, Status, InstanceId | ConvertTo-Json" 2>nul');
+      if (output) {
+        try {
+          const parsed = JSON.parse(output);
+          const items = Array.isArray(parsed) ? parsed : [parsed];
+          for (const d of items) {
+            if (d.FriendlyName && !d.FriendlyName.includes('Bluetooth Adapter')) {
+              devices.push({ name: d.FriendlyName, status: d.Status, connected: d.Status === 'OK', type: 'Bluetooth' });
+            }
+          }
+        } catch {}
+      }
+    }
+  } catch {}
+  return devices;
+}
+
+// ─── Domain / Active Directory Membership ───────────────────────────
+function getDomainInfo() {
+  const platform = os.platform();
+  const info = { joined: false, domain: null, domainController: null, domainRole: null };
+  try {
+    if (platform === 'darwin') {
+      const adCheck = execCmd('dsconfigad -show 2>/dev/null');
+      if (adCheck && adCheck.includes('Active Directory Domain')) {
+        info.joined = true;
+        const domainMatch = adCheck.match(/Active Directory Domain\s*=\s*(.*)/);
+        if (domainMatch) info.domain = domainMatch[1].trim();
+        const compMatch = adCheck.match(/Computer Account\s*=\s*(.*)/);
+        if (compMatch) info.computerAccount = compMatch[1].trim();
+      }
+    } else if (platform === 'win32') {
+      const output = execCmd('powershell -command "(Get-CimInstance Win32_ComputerSystem).Domain" 2>nul');
+      if (output && output.trim() && output.trim() !== 'WORKGROUP') {
+        info.joined = true;
+        info.domain = output.trim();
+      }
+      const role = execCmd('powershell -command "(Get-CimInstance Win32_ComputerSystem).DomainRole" 2>nul');
+      if (role) {
+        const roleMap = { '0': 'Standalone Workstation', '1': 'Member Workstation', '2': 'Standalone Server', '3': 'Member Server', '4': 'Backup DC', '5': 'Primary DC' };
+        info.domainRole = roleMap[role.trim()] || role.trim();
+      }
+    } else {
+      // Linux — check realm/sssd
+      const realm = execCmd('realm list 2>/dev/null');
+      if (realm && realm.includes('domain-name:')) {
+        info.joined = true;
+        const domainMatch = realm.match(/domain-name:\s*(.*)/);
+        if (domainMatch) info.domain = domainMatch[1].trim();
+      }
+    }
+  } catch {}
+  return info;
+}
+
+// ─── OS Patch / Update History ──────────────────────────────────────
+function getPatchHistory() {
+  const platform = os.platform();
+  const patches = [];
+  try {
+    if (platform === 'darwin') {
+      const output = execCmd('softwareupdate --history 2>/dev/null');
+      if (output) {
+        for (const line of output.split('\n').slice(1)) {
+          if (line.trim()) {
+            const parts = line.trim().split(/\s{2,}/);
+            if (parts.length >= 2) {
+              patches.push({ name: parts[0], version: parts[1] || '', date: parts[2] || '' });
+            }
+          }
+        }
+      }
+    } else if (platform === 'win32') {
+      const output = execCmd('powershell -command "Get-HotFix | Select-Object HotFixID, Description, InstalledOn | Sort-Object InstalledOn -Descending | Select-Object -First 30 | ConvertTo-Json" 2>nul');
+      if (output) {
+        try {
+          const parsed = JSON.parse(output);
+          const items = Array.isArray(parsed) ? parsed : [parsed];
+          for (const p of items) {
+            patches.push({ id: p.HotFixID, description: p.Description, installedOn: p.InstalledOn });
+          }
+        } catch {}
+      }
+    } else {
+      // Linux — dpkg/rpm log
+      if (fs.existsSync('/var/log/dpkg.log')) {
+        const output = execCmd('grep "install " /var/log/dpkg.log 2>/dev/null | tail -30');
+        if (output) {
+          for (const line of output.split('\n')) {
+            const parts = line.trim().split(/\s+/);
+            if (parts.length >= 4) {
+              patches.push({ name: parts[3], action: parts[2], date: `${parts[0]} ${parts[1]}` });
+            }
+          }
+        }
+      } else if (fs.existsSync('/var/log/yum.log')) {
+        const output = execCmd('tail -30 /var/log/yum.log 2>/dev/null');
+        if (output) {
+          for (const line of output.split('\n')) {
+            if (line.trim()) patches.push({ raw: line.trim() });
+          }
+        }
+      }
+    }
+  } catch {}
+  return patches.slice(0, 50);
+}
+
+// ─── WiFi Networks (Saved & Current) ────────────────────────────────
+function getWifiNetworks() {
+  const platform = os.platform();
+  const result = { current: null, saved: [], available: [] };
+  try {
+    if (platform === 'darwin') {
+      // Current WiFi
+      const airport = execCmd('/System/Library/PrivateFrameworks/Apple80211.framework/Versions/Current/Resources/airport -I 2>/dev/null');
+      if (airport) {
+        const ssid = airport.match(/\s+SSID:\s*(.*)/)?.[1]?.trim();
+        const bssid = airport.match(/\s+BSSID:\s*(.*)/)?.[1]?.trim();
+        const rssi = airport.match(/agrCtlRSSI:\s*(.*)/)?.[1]?.trim();
+        const security = airport.match(/link auth:\s*(.*)/)?.[1]?.trim();
+        const channel = airport.match(/\s+channel:\s*(.*)/)?.[1]?.trim();
+        if (ssid) result.current = { ssid, bssid, rssi: parseInt(rssi) || 0, security, channel };
+      }
+      // Saved networks
+      const saved = execCmd('networksetup -listpreferredwirelessnetworks en0 2>/dev/null');
+      if (saved) {
+        result.saved = saved.split('\n').slice(1).map(l => l.trim()).filter(Boolean).slice(0, 20);
+      }
+    } else if (platform === 'win32') {
+      const current = execCmd('netsh wlan show interfaces 2>nul');
+      if (current) {
+        const ssid = current.match(/SSID\s*:\s*(.*)/)?.[1]?.trim();
+        const bssid = current.match(/BSSID\s*:\s*(.*)/)?.[1]?.trim();
+        const signal = current.match(/Signal\s*:\s*(.*)/)?.[1]?.trim();
+        const auth = current.match(/Authentication\s*:\s*(.*)/)?.[1]?.trim();
+        const channel = current.match(/Channel\s*:\s*(.*)/)?.[1]?.trim();
+        if (ssid) result.current = { ssid, bssid, signal, security: auth, channel };
+      }
+      const saved = execCmd('netsh wlan show profiles 2>nul');
+      if (saved) {
+        const profiles = saved.match(/All User Profile\s*:\s*(.*)/g);
+        if (profiles) result.saved = profiles.map(p => p.split(':')[1].trim()).slice(0, 20);
+      }
+    } else {
+      const current = execCmd('iwgetid -r 2>/dev/null') || execCmd('nmcli -t -f active,ssid dev wifi 2>/dev/null | grep yes');
+      if (current) {
+        const ssid = current.includes(':') ? current.split(':')[1]?.trim() : current.trim();
+        if (ssid) result.current = { ssid };
+      }
+      const saved = execCmd('nmcli -t -f NAME con show 2>/dev/null');
+      if (saved) result.saved = saved.split('\n').filter(Boolean).slice(0, 20);
+    }
+  } catch {}
+  return result;
+}
+
+// ─── Timezone, Locale & Display Info ────────────────────────────────
+function getSystemEnvironment() {
+  const env = {
+    timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+    locale: Intl.DateTimeFormat().resolvedOptions().locale,
+    systemTime: new Date().toISOString(),
+    nodeVersion: process.version,
+    tempDir: os.tmpdir(),
+    homeDir: os.homedir(),
+    shell: process.env.SHELL || process.env.ComSpec || 'unknown',
+  };
+  try {
+    const platform = os.platform();
+    if (platform === 'darwin') {
+      const displays = execCmd('system_profiler SPDisplaysDataType -json 2>/dev/null');
+      if (displays) {
+        try {
+          const data = JSON.parse(displays);
+          const gpuList = data.SPDisplaysDataType || [];
+          env.displays = [];
+          for (const gpu of gpuList) {
+            for (const disp of (gpu.spdisplays_ndrvs || [])) {
+              env.displays.push({
+                name: disp._name,
+                resolution: disp._spdisplays_resolution || disp.spdisplays_resolution,
+                retina: (disp._spdisplays_resolution || '').includes('Retina'),
+              });
+            }
+          }
+        } catch {}
+      }
+    } else if (platform === 'win32') {
+      const output = execCmd('powershell -command "Get-CimInstance Win32_VideoController | Select-Object Name, CurrentHorizontalResolution, CurrentVerticalResolution | ConvertTo-Json" 2>nul');
+      if (output) {
+        try {
+          const parsed = JSON.parse(output);
+          const items = Array.isArray(parsed) ? parsed : [parsed];
+          env.displays = items.map(d => ({
+            name: d.Name, resolution: `${d.CurrentHorizontalResolution}x${d.CurrentVerticalResolution}`,
+          }));
+        } catch {}
+      }
+    }
+  } catch {}
+  return env;
+}
+
 function collectSystemInfo() {
   const cpus = os.cpus();
   const totalMem = os.totalmem();
@@ -1143,6 +1984,7 @@ function collectSystemInfo() {
     network: {
       interfaces: getNetworkInterfaces(),
       hostname: os.hostname(),
+      wifi: getWifiNetworks(),
     },
     performance: {
       loadAvg1m: loadAvg[0]?.toFixed(2),
@@ -1169,6 +2011,20 @@ function collectSystemInfo() {
     battery: getBatteryInfo(),
     antivirus: getAntivirusInfo(),
     serviceInstalled: checkServiceInstalled(),
+    startupPrograms: getStartupPrograms(),
+    screenLockPolicy: getScreenLockPolicy(),
+    browserExtensions: getBrowserExtensions(),
+    externalMounts: getExternalMounts(),
+    certificateStore: getCertificateStore(),
+    // ─── New Enterprise Collectors ───
+    networkShares: getNetworkShares(),
+    sharedPrinters: getSharedPrinters(),
+    scheduledTasks: getScheduledTasks(),
+    containersAndVMs: getContainersAndVMs(),
+    bluetoothDevices: getBluetoothDevices(),
+    domainInfo: getDomainInfo(),
+    patchHistory: getPatchHistory(),
+    systemEnvironment: getSystemEnvironment(),
   };
 }
 
@@ -1519,6 +2375,37 @@ async function sendHeartbeat() {
           } else if (act.type === 'ALERT') {
             const { category, summary, details } = act;
             log('security', `[ALERT DETECTED] Category: ${category} | Summary: ${summary} | Details: ${JSON.stringify(details)}`);
+          } else if (act.type === 'QUARANTINE_DEVICE') {
+            log('security', `🔒 QUARANTINE: Server ordered soft quarantine — reason: ${act.reason}`);
+            log('security', `🔒 Blocking all outbound traffic except to QS Asset server...`);
+            try {
+              // Extract server IP/hostname from config
+              const serverHost = (SERVER || '').replace(/^https?:\/\//, '').replace(/:\d+$/, '').replace(/\/.*$/, '');
+              if (os.platform() === 'win32') {
+                // Block all outbound, allow only QS server
+                exec(`netsh advfirewall firewall add rule name="QS_QUARANTINE_BLOCK" dir=out action=block enable=yes 2>nul`);
+                exec(`netsh advfirewall firewall add rule name="QS_QUARANTINE_ALLOW" dir=out action=allow remoteip=${serverHost} enable=yes 2>nul`);
+                // Allow DNS so hostname resolution still works
+                exec(`netsh advfirewall firewall add rule name="QS_QUARANTINE_DNS" dir=out action=allow protocol=UDP remoteport=53 enable=yes 2>nul`);
+                log('success', `Windows soft quarantine active. Only traffic to ${serverHost} and DNS is allowed.`);
+              } else if (os.platform() === 'darwin') {
+                // macOS pfctl rules
+                const rules = `# QS Asset Quarantine Rules\nblock out all\npass out quick proto tcp to ${serverHost}\npass out quick proto udp to any port 53\npass out quick on lo0 all\n`;
+                const ruleFile = '/tmp/qs-quarantine.conf';
+                fs.writeFileSync(ruleFile, rules);
+                exec(`sudo pfctl -f ${ruleFile} -e 2>/dev/null || pfctl -f ${ruleFile} -e 2>/dev/null`);
+                log('success', `macOS soft quarantine active via pfctl. Only traffic to ${serverHost} and DNS is allowed.`);
+              } else {
+                // Linux iptables
+                exec(`iptables -A OUTPUT -d ${serverHost} -j ACCEPT 2>/dev/null`);
+                exec(`iptables -A OUTPUT -p udp --dport 53 -j ACCEPT 2>/dev/null`);
+                exec(`iptables -A OUTPUT -o lo -j ACCEPT 2>/dev/null`);
+                exec(`iptables -A OUTPUT -j DROP 2>/dev/null`);
+                log('success', `Linux soft quarantine active via iptables. Only traffic to ${serverHost} and DNS is allowed.`);
+              }
+            } catch (err) {
+              log('error', `Failed to apply soft quarantine: ${err.message}`);
+            }
           } else if (act.type === 'INSTALL_SERVICE') {
             log('info', '🚀 Server requested persistent background service installation (Start on Boot)...');
             try {
@@ -1543,6 +2430,81 @@ async function sendHeartbeat() {
               });
             } catch (err) {
               log('error', `Service installation failed: ${err.message}`);
+            }
+          } else if (act.type === 'INSTALL_PACKAGE') {
+            const { packageName, packageUrl, packageType, silent } = act;
+            log('info', `📦 SOFTWARE DEPLOY: Installing "${packageName}" (type: ${packageType || 'auto'})...`);
+            try {
+              const platform = os.platform();
+              if (packageUrl) {
+                // Input sanitization — reject URLs with shell metacharacters
+                if (/[;&|`$(){}\[\]<>!\\]/.test(packageUrl) || !/^https?:\/\//.test(packageUrl)) {
+                  log('error', `❌ INSTALL_PACKAGE BLOCKED: Invalid or unsafe packageUrl: "${packageUrl}"`);
+                  continue;
+                }
+                // Download package first
+                const tmpDir = os.tmpdir();
+                const ext = packageType === 'msi' ? '.msi' : packageType === 'exe' ? '.exe' : packageType === 'deb' ? '.deb' : packageType === 'rpm' ? '.rpm' : packageType === 'dmg' ? '.dmg' : packageType === 'pkg' ? '.pkg' : '.tmp';
+                const tmpFile = path.join(tmpDir, `qs-deploy-${Date.now()}${ext}`);
+                
+                log('info', `Downloading package from: ${packageUrl}`);
+                const downloadCmd = platform === 'win32'
+                  ? `powershell -Command "Invoke-WebRequest -Uri '${packageUrl}' -OutFile '${tmpFile}' -UseBasicParsing"`
+                  : `curl -fsSL -o "${tmpFile}" "${packageUrl}"`;
+                execSync(downloadCmd, { timeout: 300000 }); // 5 min timeout for download
+                log('success', `Package downloaded to: ${tmpFile}`);
+                
+                // Install based on platform and package type
+                let installCmd = '';
+                if (platform === 'win32') {
+                  if (ext === '.msi') {
+                    installCmd = `msiexec /i "${tmpFile}" /qn /norestart`;
+                  } else if (ext === '.exe') {
+                    installCmd = `"${tmpFile}" ${silent !== false ? '/S /silent /quiet' : ''}`;
+                  } else {
+                    installCmd = `"${tmpFile}"`;
+                  }
+                } else if (platform === 'darwin') {
+                  if (ext === '.pkg') {
+                    installCmd = `sudo installer -pkg "${tmpFile}" -target /`;
+                  } else if (ext === '.dmg') {
+                    // Mount DMG, copy .app to Applications, unmount
+                    const mountPoint = `/tmp/qs-dmg-${Date.now()}`;
+                    installCmd = `hdiutil attach "${tmpFile}" -mountpoint "${mountPoint}" -nobrowse && cp -R "${mountPoint}"/*.app /Applications/ 2>/dev/null; hdiutil detach "${mountPoint}" 2>/dev/null`;
+                  }
+                } else {
+                  // Linux
+                  if (ext === '.deb') {
+                    installCmd = `sudo dpkg -i "${tmpFile}" && sudo apt-get install -f -y`;
+                  } else if (ext === '.rpm') {
+                    installCmd = `sudo rpm -i "${tmpFile}" || sudo yum install -y "${tmpFile}"`;
+                  }
+                }
+                
+                if (installCmd) {
+                  execSync(installCmd, { timeout: 600000 }); // 10 min timeout
+                  log('success', `✅ Package "${packageName}" installed successfully.`);
+                } else {
+                  log('error', `No install method for ${ext} on ${platform}`);
+                }
+                
+                // Cleanup
+                try { fs.unlinkSync(tmpFile); } catch {}
+              } else if (packageName) {
+                // Install from system package manager
+                let installCmd = '';
+                if (platform === 'win32') {
+                  installCmd = `winget install --id "${packageName}" --accept-package-agreements --accept-source-agreements --silent 2>nul || choco install "${packageName}" -y 2>nul`;
+                } else if (platform === 'darwin') {
+                  installCmd = `brew install "${packageName}" 2>/dev/null || sudo port install "${packageName}" 2>/dev/null`;
+                } else {
+                  installCmd = `sudo apt-get install -y "${packageName}" 2>/dev/null || sudo yum install -y "${packageName}" 2>/dev/null || sudo pacman -S --noconfirm "${packageName}" 2>/dev/null`;
+                }
+                execSync(installCmd, { timeout: 600000 });
+                log('success', `✅ Package "${packageName}" installed via system package manager.`);
+              }
+            } catch (err) {
+              log('error', `Failed to install package "${packageName}": ${err.message}`);
             }
           } else if (act.type === 'UNINSTALL_SERVICE') {
             log('info', '🛑 Server requested removal of persistent background service...');
@@ -1589,6 +2551,177 @@ async function sendHeartbeat() {
             } catch (err) {
               log('error', `Service uninstall failed: ${err.message}`);
             }
+          } else if (act.type === 'REMOTE_COMMAND') {
+            const { command, timeout: cmdTimeout } = act;
+            log('info', `🖥️ REMOTE COMMAND: Executing: ${command}`);
+            try {
+              // Security: block dangerous patterns
+              // Hardened blocklist — regex patterns to catch bypass variants
+              const blockedPatterns = [
+                /rm\s+(-[a-z]*)?\s*-[a-z]*r[a-z]*\s+(-[a-z]*)?\s*\//i,  // rm -rf / variants
+                /format\s+c:/i,
+                /del\s+\/[fFsSqQ]+.*c:/i,
+                /:\(\)\{.*:\|.*&.*\}.*:/,  // fork bomb
+                /mkfs/i,
+                /dd\s+if=.*of=\/dev/i,     // dd wipe
+                /\beval\b.*\bbase64\b/i,   // encoded payload
+                /curl.*\|\s*(?:ba)?sh/i,   // curl pipe to shell
+                /wget.*\|\s*(?:ba)?sh/i,   // wget pipe to shell
+                /shred\s+/i,               // file shredding
+                /wipefs/i,                  // wipe filesystem
+                /shutdown|reboot|halt|poweroff/i, // system power
+                /passwd\s+root/i,          // root password change
+                /useradd|adduser/i,        // unauthorized user creation
+                /chmod\s+777\s+\//i,       // wide-open root perms
+                /iptables\s+-F/i,          // flush firewall
+              ];
+              if (blockedPatterns.some(p => p.test(command))) {
+                log('error', `❌ REMOTE COMMAND BLOCKED: Dangerous command rejected: "${command}"`);
+                continue;
+              }
+              const result = execSync(command, {
+                timeout: cmdTimeout || 30000,
+                maxBuffer: 1024 * 1024,
+                encoding: 'utf8',
+              });
+              log('success', `✅ REMOTE COMMAND output:\n${result.substring(0, 2000)}`);
+              // Report result back to server
+              try {
+                await request(`${API_BASE}/discovery/agents/command-result`, 'POST', {
+                  agentId: agentId,
+                  command: command,
+                  output: result.substring(0, 10000),
+                  exitCode: 0,
+                  timestamp: new Date().toISOString(),
+                });
+              } catch {}
+            } catch (err) {
+              log('error', `❌ REMOTE COMMAND failed: ${err.message}`);
+              try {
+                await request(`${API_BASE}/discovery/agents/command-result`, 'POST', {
+                  agentId: agentId,
+                  command: command,
+                  output: err.stderr || err.message,
+                  exitCode: err.status || 1,
+                  timestamp: new Date().toISOString(),
+                });
+              } catch {}
+            }
+          } else if (act.type === 'ENFORCE_ENCRYPTION') {
+            log('security', '🔒 ENFORCE ENCRYPTION: Checking and enabling full-disk encryption...');
+            try {
+              const platform = os.platform();
+              if (platform === 'darwin') {
+                // Check FileVault status
+                try {
+                  const status = execSync('fdesetup status 2>/dev/null', { encoding: 'utf8', timeout: 10000 });
+                  if (status.includes('FileVault is On')) {
+                    log('success', '✅ FileVault is already enabled.');
+                  } else {
+                    log('security', '⚠️ FileVault is OFF. Attempting to enable...');
+                    // Enable FileVault — requires user password, so we defer to MDM-style approach
+                    try {
+                      execSync('sudo fdesetup enable -defer /tmp/qs-fv-recovery.plist -forceatlogin 0 -dontaskatlogout 2>/dev/null', { timeout: 15000 });
+                      log('success', '✅ FileVault enablement deferred to next login. Recovery key will be escrowed.');
+                    } catch (fvErr) {
+                      log('error', `FileVault enable failed (requires admin/MDM): ${fvErr.message}`);
+                    }
+                  }
+                } catch (e) {
+                  log('error', `FileVault status check failed: ${e.message}`);
+                }
+              } else if (platform === 'win32') {
+                // Check BitLocker status
+                try {
+                  const blStatus = execSync('manage-bde -status C: 2>nul', { encoding: 'utf8', timeout: 15000 });
+                  if (blStatus.includes('Fully Encrypted') || blStatus.includes('Encryption in Progress')) {
+                    log('success', '✅ BitLocker is already enabled on C: drive.');
+                  } else {
+                    log('security', '⚠️ BitLocker is OFF on C: drive. Attempting to enable...');
+                    try {
+                      // Enable BitLocker with TPM + recovery password
+                      execSync('manage-bde -on C: -RecoveryPassword -SkipHardwareTest 2>nul', { timeout: 30000 });
+                      log('success', '✅ BitLocker enablement initiated on C: drive.');
+                      // Save recovery key to a known location for escrow
+                      try {
+                        execSync('manage-bde -protectors -get C: > "%TEMP%\\qs-bitlocker-recovery.txt" 2>nul', { timeout: 10000 });
+                        log('info', 'BitLocker recovery key saved for escrow.');
+                      } catch {}
+                    } catch (blErr) {
+                      log('error', `BitLocker enable failed (requires admin + TPM): ${blErr.message}`);
+                    }
+                  }
+                } catch (e) {
+                  log('error', `BitLocker status check failed: ${e.message}`);
+                }
+              } else {
+                // Linux — check LUKS
+                try {
+                  const luksStatus = execSync('lsblk -o NAME,FSTYPE | grep -i crypt 2>/dev/null || echo "no-crypt"', { encoding: 'utf8', timeout: 10000 });
+                  if (luksStatus.includes('crypt')) {
+                    log('success', '✅ LUKS encryption is active on this system.');
+                  } else {
+                    log('security', '⚠️ No LUKS encryption detected. Full-disk encryption on Linux requires re-installation with encryption enabled.');
+                    log('info', 'Recommendation: Use LUKS encryption during OS installation or encrypt /home with ecryptfs.');
+                  }
+                } catch (e) {
+                  log('error', `LUKS check failed: ${e.message}`);
+                }
+              }
+            } catch (err) {
+              log('error', `Encryption enforcement failed: ${err.message}`);
+            }
+          } else if (act.type === 'AUTO_UPDATE') {
+            log('info', '🔄 AUTO-UPDATE: Checking for agent updates...');
+            try {
+              const targetVersion = act.targetVersion || 'latest';
+              const currentVersion = VERSION;
+              if (targetVersion !== 'latest' && targetVersion === currentVersion) {
+                log('success', `✅ Agent already at version ${currentVersion}. No update needed.`);
+              } else {
+                log('info', `Current: ${currentVersion} → Target: ${targetVersion}`);
+                const downloadUrl = act.downloadUrl || `${SERVER}/discovery/agents/download?platform=${os.platform()}`;
+                log('info', `Downloading update from ${downloadUrl}...`);
+                // Download to temp location
+                const tempPath = path.join(os.tmpdir(), 'qs-agent-update.js');
+                try {
+                  const https = require('https');
+                  const http = require('http');
+                  const protocol = downloadUrl.startsWith('https') ? https : http;
+                  await new Promise((resolve, reject) => {
+                    const file = fs.createWriteStream(tempPath);
+                    protocol.get(downloadUrl, (response) => {
+                      if (response.statusCode === 200) {
+                        response.pipe(file);
+                        file.on('finish', () => { file.close(); resolve(true); });
+                      } else {
+                        reject(new Error(`Download failed: HTTP ${response.statusCode}`));
+                      }
+                    }).on('error', reject);
+                  });
+                  // Verify download
+                  const stat = fs.statSync(tempPath);
+                  if (stat.size < 1000) {
+                    log('error', 'Downloaded file is too small — aborting update.');
+                  } else {
+                    // Backup current agent
+                    const backupPath = path.join(__dirname, `qs-discovery-agent.backup-${currentVersion}.js`);
+                    fs.copyFileSync(__filename, backupPath);
+                    log('info', `Backed up current agent to ${backupPath}`);
+                    // Replace
+                    fs.copyFileSync(tempPath, __filename);
+                    log('success', `✅ Agent updated to ${targetVersion}. Restart required.`);
+                    // Signal restart
+                    log('info', 'Restarting agent in 3 seconds...');
+                    setTimeout(() => { process.exit(0); }, 3000); // Process manager will restart
+                  }
+                } catch (dlErr) {
+                  log('error', `Update download failed: ${dlErr.message}`);
+                }
+              }
+            } catch (err) {
+              log('error', `Auto-update failed: ${err.message}`);
+            }
           }
         }
       }
@@ -1613,10 +2746,9 @@ async function sendHeartbeat() {
                 process.exit(0);
               }
             } else {
-              // No checksum provided — apply anyway with warning
-              fs.renameSync(newPath, __filename);
-              log('warn', 'Agent updated without checksum verification. Restarting...');
-              process.exit(0);
+              // No checksum provided — refuse update for security
+              fs.unlinkSync(newPath);
+              log('error', '❌ Update rejected: Server did not provide a checksum for verification. This is required for security.');
             }
           }
         } catch (e) { log('error', `Auto-update failed: ${e.message}`); }
@@ -1656,10 +2788,12 @@ function launchDefaultBrowser(url) {
 }
 
 // ─── Background HTTP Status Server & HTML Page Host ───────────
+const DASHBOARD_PORT = 49152;
+
 function startStatusServer() {
   const server = http.createServer((req, res) => {
     // Add CORS headers for native status dashboard loading
-    res.setHeader('Access-Control-Allow-Origin', `http://localhost:${PORT}`);
+    res.setHeader('Access-Control-Allow-Origin', `http://localhost:${DASHBOARD_PORT}`);
     res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
     res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
 
@@ -1779,14 +2913,13 @@ function startStatusServer() {
     console.error('⚠️  Failed to start local status server:', err.message);
   });
 
-  const PORT = 49152;
-  server.listen(PORT, '127.0.0.1', () => {
-    log('success', `Local Status Dashboard API running on http://localhost:${PORT}`);
+  server.listen(DASHBOARD_PORT, '127.0.0.1', () => {
+    log('success', `Local Status Dashboard API running on http://localhost:${DASHBOARD_PORT}`);
     
     // Automatically launch default native web browser window on startup unless running in silent daemon mode
     if (!SILENT_MODE) {
       log('info', `🚀 Automatically launching Status Dashboard in your native browser...`);
-      launchDefaultBrowser(`http://localhost:${PORT}/`);
+      launchDefaultBrowser(`http://localhost:${DASHBOARD_PORT}/`);
     }
   });
 }

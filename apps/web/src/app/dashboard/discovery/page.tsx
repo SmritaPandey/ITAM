@@ -65,6 +65,12 @@ export default function DiscoveryPage() {
   const [deployingAgent, setDeployingAgent] = useState(false);
   const [remoteLogs, setRemoteLogs] = useState<string[]>([]);
 
+  // Bulk agent deploy states
+  const [showBulkDeployModal, setShowBulkDeployModal] = useState(false);
+  const [bulkDeployCredId, setBulkDeployCredId] = useState("");
+  const [bulkDeploying, setBulkDeploying] = useState(false);
+  const [bulkDeployResults, setBulkDeployResults] = useState<any>(null);
+
   // Merge and side-by-side comparison drawer states
   const [reviewDevice, setReviewDevice] = useState<any>(null);
   const [matchingAssets, setMatchingAssets] = useState<any[]>([]);
@@ -375,6 +381,28 @@ export default function DiscoveryPage() {
       setRemoteLogs(prev => [...prev, `[${new Date().toLocaleTimeString()}] ❌ API Network Error: ${err.message || err}`]);
     } finally {
       setDeployingAgent(false);
+    }
+  }
+
+  async function triggerBulkDeploy() {
+    const selectedIps = pending
+      .filter((d: any) => selectedDevices.has(d.id) && d.ipAddress)
+      .map((d: any) => ({ ip: d.ipAddress }));
+    if (selectedIps.length === 0) { alert("No valid IP addresses in selected devices."); return; }
+
+    setBulkDeploying(true);
+    setBulkDeployResults(null);
+    try {
+      const response = await apiFetch("/discovery/agents/deploy-remote/bulk", {
+        method: "POST",
+        body: JSON.stringify({ targets: selectedIps, defaultCredentialId: bulkDeployCredId || undefined }),
+      });
+      setBulkDeployResults(response);
+      await refresh();
+    } catch (err: any) {
+      setBulkDeployResults({ total: selectedIps.length, succeeded: 0, failed: selectedIps.length, error: err.message });
+    } finally {
+      setBulkDeploying(false);
     }
   }
 
@@ -777,6 +805,15 @@ export default function DiscoveryPage() {
                 <button className="btn btn-secondary" style={{ padding: "6px 14px", fontSize: 11 }}
                   disabled={selectedDevices.size === 0} onClick={bulkIgnore}>
                   <EyeOff size={12} /> Ignore Selected
+                </button>
+                <button className="btn btn-secondary" style={{
+                  padding: "6px 14px", fontSize: 11, color: "var(--brand-400)", borderColor: "rgba(6,182,212,0.3)",
+                  display: "flex", alignItems: "center", gap: 4,
+                  background: selectedDevices.size > 0 ? "rgba(6,182,212,0.08)" : undefined
+                }}
+                  disabled={selectedDevices.size === 0}
+                  onClick={() => { setBulkDeployResults(null); setShowBulkDeployModal(true); }}>
+                  <Server size={12} /> Push Agent to Selected ({selectedDevices.size})
                 </button>
                 <select
                   value={pendingFilter}
@@ -2779,6 +2816,110 @@ export default function DiscoveryPage() {
                     <CheckCircle2 size={13} />
                   )}
                   Approve & Create New
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+      {/* ── Bulk Deploy Modal ─────────────────────────────────── */}
+      {showBulkDeployModal && (
+        <div style={{
+          position: "fixed", inset: 0, zIndex: 9999,
+          background: "rgba(0,0,0,0.6)", backdropFilter: "blur(6px)",
+          display: "flex", alignItems: "center", justifyContent: "center",
+          padding: 24
+        }} onClick={() => !bulkDeploying && setShowBulkDeployModal(false)}>
+          <div onClick={e => e.stopPropagation()} style={{
+            background: "var(--bg-card)", border: "1px solid var(--border-primary)",
+            borderRadius: 16, width: "100%", maxWidth: 600, maxHeight: "80vh",
+            overflow: "auto", padding: 28, boxShadow: "0 20px 60px rgba(0,0,0,0.4)"
+          }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 20 }}>
+              <div style={{
+                width: 40, height: 40, borderRadius: 12,
+                background: "linear-gradient(135deg, rgba(6,182,212,0.15) 0%, rgba(139,92,246,0.1) 100%)",
+                border: "1px solid rgba(6,182,212,0.25)", display: "flex", alignItems: "center", justifyContent: "center"
+              }}>
+                <Server size={20} style={{ color: "var(--brand-400)" }} />
+              </div>
+              <div>
+                <h3 style={{ fontSize: 16, fontWeight: 700, color: "var(--text-primary)" }}>Push Agent to {selectedDevices.size} Device{selectedDevices.size !== 1 ? "s" : ""}</h3>
+                <p style={{ fontSize: 11, color: "var(--text-tertiary)", marginTop: 2 }}>Deploy via SSH to selected network devices</p>
+              </div>
+            </div>
+            <div style={{
+              background: "rgba(0,0,0,0.15)", borderRadius: 10, padding: 12,
+              marginBottom: 16, border: "1px solid var(--border-primary)", maxHeight: 180, overflow: "auto"
+            }}>
+              <div style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", color: "var(--text-tertiary)", marginBottom: 8, letterSpacing: "0.05em" }}>
+                Target Devices
+              </div>
+              {pending.filter((d: any) => selectedDevices.has(d.id)).map((d: any) => (
+                <div key={d.id} style={{
+                  display: "flex", alignItems: "center", gap: 8, padding: "6px 0",
+                  borderBottom: "1px solid rgba(255,255,255,0.03)", fontSize: 12
+                }}>
+                  <span style={{ fontFamily: "monospace", color: "var(--brand-400)", fontWeight: 600 }}>{d.ipAddress || "—"}</span>
+                  <span style={{ color: "var(--text-tertiary)" }}>{d.hostname || d.macAddress || ""}</span>
+                  <span className="badge cyan" style={{ fontSize: 9, marginLeft: "auto" }}>{d.deviceType || "Unknown"}</span>
+                  {bulkDeployResults?.results && (() => {
+                    const r = bulkDeployResults.results.find((x: any) => x.ip === d.ipAddress);
+                    if (!r) return null;
+                    return r.status === "SUCCESS"
+                      ? <CheckCircle2 size={14} style={{ color: "#34d399" }} />
+                      : <XCircle size={14} style={{ color: "#f87171" }} />;
+                  })()}
+                </div>
+              ))}
+            </div>
+            {!bulkDeployResults && (
+              <div style={{ marginBottom: 20 }}>
+                <label style={{ display: "block", fontSize: 11, fontWeight: 700, textTransform: "uppercase", color: "var(--text-secondary)", marginBottom: 8 }}>
+                  SSH Credentials
+                </label>
+                <select value={bulkDeployCredId} onChange={e => setBulkDeployCredId(e.target.value)} disabled={bulkDeploying}
+                  style={{ width: "100%", padding: "10px 12px", background: "rgba(0,0,0,0.2)", border: "1px solid var(--border-primary)", borderRadius: 8, fontSize: 12, color: "#fff", outline: "none" }}>
+                  <option value="">— Use default SSH Keys / Public Auth —</option>
+                  {credentials.filter((c: any) => c.type && (c.type.startsWith("SSH") || c.type.includes("KEY"))).map((c: any) => (
+                    <option key={c.id} value={c.id}>{c.name} ({c.type})</option>
+                  ))}
+                </select>
+                <p style={{ fontSize: 10, color: "var(--text-tertiary)", marginTop: 6 }}>
+                  These credentials will be used for all selected devices. Add credentials in the Credentials tab first.
+                </p>
+              </div>
+            )}
+            {bulkDeployResults && (
+              <div style={{
+                background: bulkDeployResults.failed === 0 ? "rgba(52,211,153,0.08)" : "rgba(248,113,113,0.08)",
+                border: `1px solid ${bulkDeployResults.failed === 0 ? "rgba(52,211,153,0.2)" : "rgba(248,113,113,0.2)"}`,
+                borderRadius: 10, padding: 16, marginBottom: 16, textAlign: "center"
+              }}>
+                <div style={{ fontSize: 28, fontWeight: 800, color: bulkDeployResults.failed === 0 ? "#34d399" : "#f87171" }}>
+                  {bulkDeployResults.succeeded}/{bulkDeployResults.total}
+                </div>
+                <div style={{ fontSize: 12, color: "var(--text-secondary)", marginTop: 4 }}>
+                  {bulkDeployResults.failed === 0 ? "All agents deployed successfully!" : `${bulkDeployResults.succeeded} succeeded, ${bulkDeployResults.failed} failed`}
+                </div>
+                {bulkDeployResults.error && <div style={{ fontSize: 11, color: "#f87171", marginTop: 8 }}>{bulkDeployResults.error}</div>}
+              </div>
+            )}
+            <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
+              <button className="btn btn-secondary" style={{ padding: "10px 20px", fontSize: 12 }}
+                onClick={() => setShowBulkDeployModal(false)} disabled={bulkDeploying}>
+                {bulkDeployResults ? "Close" : "Cancel"}
+              </button>
+              {!bulkDeployResults && (
+                <button className="btn btn-primary" style={{
+                  padding: "10px 24px", fontSize: 12, fontWeight: 700,
+                  background: "linear-gradient(135deg, var(--brand-500) 0%, #06b6d4 100%)",
+                  border: "none", display: "flex", alignItems: "center", gap: 8,
+                  boxShadow: "0 4px 12px rgba(6,182,212,0.2)"
+                }} onClick={triggerBulkDeploy} disabled={bulkDeploying}>
+                  {bulkDeploying
+                    ? <><Loader2 size={14} style={{ animation: "spin 1s linear infinite" }} /> Deploying...</>
+                    : <><Server size={14} /> Deploy to {selectedDevices.size} Device{selectedDevices.size !== 1 ? "s" : ""}</>}
                 </button>
               )}
             </div>

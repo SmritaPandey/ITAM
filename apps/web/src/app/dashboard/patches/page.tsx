@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import {
   Shield, CheckCircle2, XCircle, Clock, AlertTriangle, Download,
   Play, Search, Eye, RefreshCw, Loader2, Scan, Rocket, BarChart3,
+  Calendar, RotateCcw, CalendarClock, Timer,
 } from "lucide-react";
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
@@ -25,12 +26,19 @@ export default function PatchesPage() {
   const [scanResult, setScanResult] = useState<any>(null);
   const [deploying, setDeploying] = useState(false);
   const [complianceTimeline, setComplianceTimeline] = useState<any[]>([]);
+  const [scheduleModal, setScheduleModal] = useState<any>(null);
+  const [schedDate, setSchedDate] = useState("");
+  const [schedEnd, setSchedEnd] = useState("");
+  const [schedRecurring, setSchedRecurring] = useState("");
+  const [rollingBack, setRollingBack] = useState(false);
+  const [upcomingSchedules, setUpcomingSchedules] = useState<any[]>([]);
 
   function refresh() {
     apiFetch("/patches").then(setApiData).catch(console.error).finally(() => setLoading(false));
     apiFetch("/patches/compliance/history").then(d => {
       setComplianceTimeline(d.timeline || []);
     }).catch(() => {});
+    apiFetch("/patches/schedules/upcoming").then(setUpcomingSchedules).catch(() => {});
   }
   useEffect(() => { refresh(); }, []);
 
@@ -79,6 +87,41 @@ export default function PatchesPage() {
       setScanResult({ error: "Deploy all failed" });
     } finally {
       setDeploying(false);
+    }
+  }
+
+  async function schedulePatch(id: string) {
+    if (!schedDate) return;
+    try {
+      await apiFetch(`/patches/${id}/schedule`, {
+        method: "POST",
+        body: JSON.stringify({
+          scheduledAt: schedDate,
+          maintenanceEnd: schedEnd || undefined,
+          recurring: schedRecurring || undefined,
+        }),
+      });
+      setScheduleModal(null);
+      setSchedDate(""); setSchedEnd(""); setSchedRecurring("");
+      setScanResult({ message: "Patch scheduled successfully" });
+      refresh();
+    } catch {
+      setScanResult({ error: "Failed to schedule patch" });
+    }
+  }
+
+  async function rollbackPatch(id: string) {
+    if (!confirm("Are you sure you want to rollback this patch? Agents will reverse the installation on next heartbeat.")) return;
+    setRollingBack(true);
+    try {
+      await apiFetch(`/patches/${id}/rollback`, { method: "POST" });
+      setSelectedPatch(null);
+      setScanResult({ message: "Patch rollback queued — agents will reverse on next heartbeat" });
+      refresh();
+    } catch {
+      setScanResult({ error: "Rollback failed" });
+    } finally {
+      setRollingBack(false);
     }
   }
 
@@ -254,17 +297,108 @@ export default function PatchesPage() {
                 <Row label="Scan Source" value={selectedPatch.scanSource || "Manual"} />
                 <Row label="Last Scan" value={selectedPatch.lastScanAt ? new Date(selectedPatch.lastScanAt).toLocaleString() : "Never"} />
                 <Row label="Deployed Date" value={selectedPatch.deployedDate ? new Date(selectedPatch.deployedDate).toLocaleDateString() : "Not deployed"} />
+                {selectedPatch.scheduledAt && <Row label="Scheduled For" value={new Date(selectedPatch.scheduledAt).toLocaleString()} />}
+                {selectedPatch.maintenanceEnd && <Row label="Window Ends" value={new Date(selectedPatch.maintenanceEnd).toLocaleString()} />}
+                {selectedPatch.rolledBackAt && <Row label="Rolled Back" value={new Date(selectedPatch.rolledBackAt).toLocaleString()} />}
               </div>
-              {selectedPatch.status !== "Deployed" && (
-                <button className="btn btn-primary" style={{ width: "100%", marginTop: 20 }} onClick={() => deployPatch(selectedPatch.id)}>
-                  <Play size={14} /> Deploy Now
-                </button>
-              )}
+
+              {/* Action Buttons */}
+              <div style={{ display: "grid", gap: 8, marginTop: 20 }}>
+                {selectedPatch.status !== "Deployed" && selectedPatch.status !== "Scheduled" && (
+                  <button className="btn btn-primary" style={{ width: "100%" }} onClick={() => deployPatch(selectedPatch.id)}>
+                    <Play size={14} /> Deploy Now
+                  </button>
+                )}
+                {selectedPatch.status !== "Deployed" && selectedPatch.status !== "Scheduled" && (
+                  <button className="btn btn-secondary" style={{ width: "100%" }} onClick={() => { setScheduleModal(selectedPatch); setSelectedPatch(null); }}>
+                    <CalendarClock size={14} /> Schedule Deployment Window
+                  </button>
+                )}
+                {(selectedPatch.status === "Deployed" || selectedPatch.status === "PENDING_DEPLOYMENT") && (
+                  <button className="btn btn-secondary" style={{ width: "100%", color: "#f59e0b", borderColor: "rgba(245,158,11,0.3)" }} onClick={() => rollbackPatch(selectedPatch.id)} disabled={rollingBack}>
+                    {rollingBack ? <><Loader2 size={14} style={{ animation: "spin 1s linear infinite" }} /> Rolling back...</> : <><RotateCcw size={14} /> Rollback Patch</>}
+                  </button>
+                )}
+              </div>
             </div>
           </div>
           <style>{`@keyframes slideIn { from { transform: translateX(100%); } to { transform: translateX(0); } }`}</style>
         </>
       )}
+      {/* Schedule Deployment Window Modal */}
+      {scheduleModal && (
+        <>
+          <div onClick={() => setScheduleModal(null)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", zIndex: 1000, backdropFilter: "blur(4px)" }} />
+          <div style={{ position: "fixed", top: "50%", left: "50%", transform: "translate(-50%, -50%)", width: 460, background: "var(--bg-card)", zIndex: 1001, borderRadius: 12, border: "1px solid var(--border-primary)", padding: 24, animation: "fadeIn 0.2s ease-out" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
+              <div>
+                <h2 style={{ fontSize: 16, fontWeight: 700, margin: 0 }}><CalendarClock size={18} style={{ verticalAlign: "middle", marginRight: 8 }} />Schedule Deployment</h2>
+                <p style={{ fontSize: 11, color: "var(--text-tertiary)", margin: "4px 0 0" }}>{scheduleModal.patchId} — {scheduleModal.title}</p>
+              </div>
+              <button onClick={() => setScheduleModal(null)} className="btn btn-secondary" style={{ padding: "4px 8px" }}>✕</button>
+            </div>
+
+            <div style={{ display: "grid", gap: 14 }}>
+              <div>
+                <label style={{ fontSize: 12, fontWeight: 600, color: "var(--text-secondary)", display: "block", marginBottom: 6 }}>Deploy At *</label>
+                <input type="datetime-local" value={schedDate} onChange={e => setSchedDate(e.target.value)}
+                  style={{ width: "100%", padding: "8px 12px", borderRadius: 8, border: "1px solid var(--border-primary)", background: "var(--bg-elevated)", color: "var(--text-primary)", fontSize: 13 }} />
+              </div>
+
+              <div>
+                <label style={{ fontSize: 12, fontWeight: 600, color: "var(--text-secondary)", display: "block", marginBottom: 6 }}>Maintenance Window Ends</label>
+                <input type="datetime-local" value={schedEnd} onChange={e => setSchedEnd(e.target.value)}
+                  style={{ width: "100%", padding: "8px 12px", borderRadius: 8, border: "1px solid var(--border-primary)", background: "var(--bg-elevated)", color: "var(--text-primary)", fontSize: 13 }} />
+                <p style={{ fontSize: 10, color: "var(--text-tertiary)", margin: "4px 0 0" }}>If the patch misses this window, it will be marked as Failed</p>
+              </div>
+
+              <div>
+                <label style={{ fontSize: 12, fontWeight: 600, color: "var(--text-secondary)", display: "block", marginBottom: 6 }}>Recurring</label>
+                <select value={schedRecurring} onChange={e => setSchedRecurring(e.target.value)}
+                  style={{ width: "100%", padding: "8px 12px", borderRadius: 8, border: "1px solid var(--border-primary)", background: "var(--bg-elevated)", color: "var(--text-primary)", fontSize: 13 }}>
+                  <option value="">One-time deployment</option>
+                  <option value="weekly">Weekly (same day & time)</option>
+                  <option value="monthly">Monthly (same date & time)</option>
+                </select>
+              </div>
+
+              <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
+                <button className="btn btn-secondary" style={{ flex: 1 }} onClick={() => setScheduleModal(null)}>Cancel</button>
+                <button className="btn btn-primary" style={{ flex: 1 }} disabled={!schedDate} onClick={() => schedulePatch(scheduleModal.id)}>
+                  <Calendar size={14} /> Schedule
+                </button>
+              </div>
+            </div>
+          </div>
+          <style>{`@keyframes fadeIn { from { opacity: 0; transform: translate(-50%, -48%); } to { opacity: 1; transform: translate(-50%, -50%); } }`}</style>
+        </>
+      )}
+
+      {/* Upcoming Scheduled Deployments */}
+      {upcomingSchedules.length > 0 && (
+        <div className="card" style={{ marginTop: 16, padding: 16 }}>
+          <h3 style={{ fontSize: 13, fontWeight: 700, margin: "0 0 12px", display: "flex", alignItems: "center", gap: 6 }}>
+            <Timer size={14} style={{ color: "var(--brand-400)" }} /> Upcoming Scheduled Deployments ({upcomingSchedules.length})
+          </h3>
+          <div style={{ display: "grid", gap: 8 }}>
+            {upcomingSchedules.slice(0, 5).map((s: any) => (
+              <div key={s.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 12px", borderRadius: 8, background: "var(--bg-elevated)", border: "1px solid var(--border-primary)" }}>
+                <div>
+                  <span style={{ fontSize: 12, fontWeight: 600 }}>{s.patchId}</span>
+                  <span style={{ fontSize: 11, color: "var(--text-tertiary)", marginLeft: 8 }}>{s.title}</span>
+                </div>
+                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  <span className="badge cyan" style={{ fontSize: 10 }}>
+                    <Clock size={10} /> {new Date(s.scheduledAt).toLocaleString()}
+                  </span>
+                  {s.recurring && <span className="badge purple" style={{ fontSize: 10 }}>{s.recurring}</span>}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
     </>
   );

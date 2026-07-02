@@ -136,4 +136,19 @@ export class ComplianceController {
   }) {
     return this.complianceService.agentlessBatchScan(req.user.tenantId, body);
   }
+
+  // ─── CIS Benchmark Assessment ──────────────────────────────
+  @Post('cis-benchmark/assess/:agentId')
+  @Roles('Tenant Admin', 'IT Admin')
+  @ApiOperation({ summary: 'Run CIS Benchmark compliance assessment on a specific agent' })
+  async assessCisBenchmark(@Request() req: any, @Param('agentId') agentId: string) {
+    return this.complianceService.assessCisBenchmark(req.user.tenantId, agentId);
+  }
+
+  @Get('cis-benchmark/report')
+  @Roles('Tenant Admin', 'IT Admin')
+  @ApiOperation({ summary: 'Get CIS Benchmark compliance report across all agents' })
+  async cisBenchmarkReport(@Request() req: any) {
+    return this.complianceService.getCisBenchmarkReport(req.user.tenantId);
+  }
 }

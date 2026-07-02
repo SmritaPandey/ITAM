@@ -42,7 +42,7 @@ const ACTION_LABELS: Record<string, string> = {
 };
 
 export default function CompliancePage() {
-  const [tab, setTab] = useState<"overview" | "changes" | "policies" | "agentless">("overview");
+  const [tab, setTab] = useState<"overview" | "changes" | "policies" | "agentless" | "cis-benchmark">("overview");
   const [dashboard, setDashboard] = useState<any>(null);
   const [changes, setChanges] = useState<any>({ data: [], total: 0 });
   const [policies, setPolicies] = useState<any[]>([]);
@@ -61,6 +61,8 @@ export default function CompliancePage() {
   const [scanResult, setScanResult] = useState<any>(null);
   const [credentials, setCredentials] = useState<any[]>([]);
   const [selectedCred, setSelectedCred] = useState("");
+  const [cisReport, setCisReport] = useState<any>(null);
+  const [cisLoading, setCisLoading] = useState(false);
 
   const refresh = useCallback(async () => {
     try {
@@ -170,12 +172,12 @@ export default function CompliancePage() {
 
       {/* Tabs */}
       <div style={{ display: "flex", gap: 4, marginBottom: 16 }}>
-        {(["overview", "changes", "policies", "agentless"] as const).map(t => (
+        {(["overview", "changes", "policies", "agentless", "cis-benchmark"] as const).map(t => (
           <button key={t} onClick={() => setTab(t)}
             className={`btn ${tab === t ? "btn-primary" : "btn-secondary"}`}
             style={{ fontSize: 12, padding: "6px 16px", textTransform: "capitalize" }}>
-            {t === "overview" ? <Activity size={12} /> : t === "changes" ? <Eye size={12} /> : t === "agentless" ? <Scan size={12} /> : <Shield size={12} />}
-            {t === "agentless" ? "Agentless Scan" : t}
+            {t === "overview" ? <Activity size={12} /> : t === "changes" ? <Eye size={12} /> : t === "agentless" ? <Scan size={12} /> : t === "cis-benchmark" ? <ShieldAlert size={12} /> : <Shield size={12} />}
+            {t === "agentless" ? "Agentless Scan" : t === "cis-benchmark" ? "CIS Benchmark" : t}
           </button>
         ))}
       </div>
@@ -974,6 +976,105 @@ export default function CompliancePage() {
                   <span style={{ color: "#ef4444", fontWeight: 600 }}>Scan failed: {scanResult.error}</span>
                 </div>
               )}
+            </div>
+          )}
+        </>
+      )}
+
+      {/* CIS BENCHMARK TAB */}
+      {tab === "cis-benchmark" && (
+        <>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
+            <div>
+              <h2 style={{ fontSize: 16, fontWeight: 700, margin: 0 }}>CIS Benchmark Compliance</h2>
+              <p style={{ fontSize: 11, color: "var(--text-tertiary)", margin: "4px 0 0" }}>Assess endpoints against CIS security benchmarks (encryption, firewall, screen lock, ports, AV)</p>
+            </div>
+            <button className="btn btn-primary" disabled={cisLoading} onClick={async () => {
+              setCisLoading(true);
+              try {
+                const report = await apiFetch("/compliance/cis-benchmark/report");
+                setCisReport(report);
+              } catch (e: any) { console.error(e); }
+              finally { setCisLoading(false); }
+            }}>
+              {cisLoading ? <><Loader2 size={14} style={{ animation: "spin 1s linear infinite" }} /> Assessing...</> : <><ShieldAlert size={14} /> Run Assessment</>}
+            </button>
+          </div>
+
+          {cisReport ? (
+            <>
+              {/* Summary cards */}
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 12, marginBottom: 20 }}>
+                <div className="stat-card" style={{ borderLeft: `3px solid ${cisReport.averageScore >= 80 ? '#10b981' : cisReport.averageScore >= 50 ? '#f59e0b' : '#ef4444'}` }}>
+                  <div style={{ fontSize: 28, fontWeight: 800 }}>{cisReport.averageScore}%</div>
+                  <div style={{ fontSize: 11, color: "var(--text-tertiary)" }}>Average Score</div>
+                </div>
+                <div className="stat-card">
+                  <div style={{ fontSize: 28, fontWeight: 800 }}>{cisReport.totalAgents}</div>
+                  <div style={{ fontSize: 11, color: "var(--text-tertiary)" }}>Agents Assessed</div>
+                </div>
+                <div className="stat-card" style={{ borderLeft: "3px solid #10b981" }}>
+                  <div style={{ fontSize: 28, fontWeight: 800, color: "#10b981" }}>
+                    {cisReport.agents?.reduce((s: number, a: any) => s + (a.summary?.pass || 0), 0)}
+                  </div>
+                  <div style={{ fontSize: 11, color: "var(--text-tertiary)" }}>Total Checks Passed</div>
+                </div>
+                <div className="stat-card" style={{ borderLeft: "3px solid #ef4444" }}>
+                  <div style={{ fontSize: 28, fontWeight: 800, color: "#ef4444" }}>
+                    {cisReport.agents?.reduce((s: number, a: any) => s + (a.summary?.fail || 0), 0)}
+                  </div>
+                  <div style={{ fontSize: 11, color: "var(--text-tertiary)" }}>Total Checks Failed</div>
+                </div>
+              </div>
+
+              {/* Per-agent results */}
+              <div style={{ display: "grid", gap: 12 }}>
+                {cisReport.agents?.map((agent: any) => (
+                  <div key={agent.agentId} className="card" style={{ padding: 16 }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                        <div style={{
+                          width: 40, height: 40, borderRadius: 8,
+                          background: agent.score >= 80 ? 'rgba(16,185,129,0.12)' : agent.score >= 50 ? 'rgba(245,158,11,0.12)' : 'rgba(239,68,68,0.12)',
+                          display: "flex", alignItems: "center", justifyContent: "center",
+                          color: agent.score >= 80 ? '#10b981' : agent.score >= 50 ? '#f59e0b' : '#ef4444',
+                          fontWeight: 800, fontSize: 14,
+                        }}>
+                          {agent.score}%
+                        </div>
+                        <div>
+                          <div style={{ fontWeight: 700, fontSize: 13 }}>{agent.hostname || agent.agentId.slice(0, 8)}</div>
+                          <div style={{ fontSize: 10, color: "var(--text-tertiary)" }}>
+                            {agent.summary.pass} pass · {agent.summary.fail} fail · {agent.summary.warn} warn
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))", gap: 6 }}>
+                      {agent.checks?.map((check: any) => (
+                        <div key={check.id} style={{
+                          padding: "6px 10px", borderRadius: 6, fontSize: 11,
+                          background: check.status === 'PASS' ? 'rgba(16,185,129,0.06)' : check.status === 'FAIL' ? 'rgba(239,68,68,0.06)' : 'rgba(245,158,11,0.06)',
+                          border: `1px solid ${check.status === 'PASS' ? 'rgba(16,185,129,0.15)' : check.status === 'FAIL' ? 'rgba(239,68,68,0.15)' : 'rgba(245,158,11,0.15)'}`,
+                          display: "flex", alignItems: "center", gap: 6,
+                        }}>
+                          {check.status === 'PASS' ? <CheckCircle2 size={12} style={{ color: '#10b981', flexShrink: 0 }} /> :
+                           check.status === 'FAIL' ? <XCircle size={12} style={{ color: '#ef4444', flexShrink: 0 }} /> :
+                           <AlertTriangle size={12} style={{ color: '#f59e0b', flexShrink: 0 }} />}
+                          <span style={{ fontWeight: 600 }}>{check.id}</span>
+                          <span style={{ color: "var(--text-tertiary)" }}>{check.name}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </>
+          ) : (
+            <div className="card" style={{ padding: 40, textAlign: "center", color: "var(--text-tertiary)" }}>
+              <ShieldAlert size={36} style={{ opacity: 0.2, marginBottom: 8 }} />
+              <p style={{ fontSize: 14, fontWeight: 500 }}>No assessment yet</p>
+              <p style={{ fontSize: 12 }}>Click "Run Assessment" to evaluate all online agents against CIS Benchmarks</p>
             </div>
           )}
         </>

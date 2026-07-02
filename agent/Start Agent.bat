@@ -1,23 +1,39 @@
 @echo off
 :: ═══════════════════════════════════════════════════════════════
-:: QS Discovery Agent — Silent Quick-Launcher
+:: QS Discovery Agent — Quick Start (Windows)
 :: ═══════════════════════════════════════════════════════════════
+:: Double-click this file to start the agent.
+:: First time? It will open the setup wizard automatically.
+:: ═══════════════════════════════════════════════════════════════
+
 set CORE_DIR=%~dp0core
 if not exist "%CORE_DIR%" set CORE_DIR=%~dp0
 
-if exist "%CORE_DIR%\launch-silent.vbs" (
-    wscript.exe "%CORE_DIR%\launch-silent.vbs"
-    exit
-) else (
+:: Check if agent files exist (user might be running from inside ZIP)
+if not exist "%CORE_DIR%\qs-discovery-agent.js" (
     echo.
-    echo  ❌ ERROR: Core files are missing!
-    echo  ══════════════════════════════════════════════════════════════
-    echo  Did you run this script directly from the ZIP archive without extracting it?
-    echo  Windows requires the ZIP folder to be extracted for scripts to work properly.
+    echo   ❌ Agent files not found!
     echo.
-    echo  👉 PLEASE EXTRACT the ZIP folder completely to a directory of your choice,
-    echo     then double-click 'Start Agent.bat' or 'Install Service.bat' from the extracted folder.
-    echo  ══════════════════════════════════════════════════════════════
+    echo   If you downloaded a ZIP file, please:
+    echo   1. Right-click the ZIP file
+    echo   2. Click "Extract All..."
+    echo   3. Open the extracted folder
+    echo   4. Double-click "Start Agent.bat" again
     echo.
     pause
+    exit /b 1
 )
+
+:: If config exists, launch silently in background
+if exist "%CORE_DIR%\config.json" (
+    if exist "%CORE_DIR%\launch-silent.vbs" (
+        wscript.exe "%CORE_DIR%\launch-silent.vbs"
+        exit
+    ) else (
+        call "%CORE_DIR%\run-agent.bat"
+        exit /b
+    )
+)
+
+:: No config — run the interactive launcher which will open setup.html
+call "%CORE_DIR%\run-agent.bat"

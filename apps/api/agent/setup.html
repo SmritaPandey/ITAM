@@ -1,0 +1,1197 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>QS Discovery Agent — Setup Wizard</title>
+    <meta name="description" content="Configure the QS Discovery Agent to connect to your QS Asset Management server.">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <style>
+        /* ── Reset & Base ─────────────────────────────────── */
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+        :root {
+            --bg-deep: #080c14;
+            --bg-surface: rgba(15, 23, 42, 0.65);
+            --bg-card: rgba(30, 41, 70, 0.45);
+            --border-glass: rgba(100, 160, 255, 0.12);
+            --border-glass-hover: rgba(100, 180, 255, 0.25);
+            --accent-cyan: #22d3ee;
+            --accent-blue: #3b82f6;
+            --accent-purple: #a855f7;
+            --accent-gradient: linear-gradient(135deg, #22d3ee, #3b82f6, #a855f7);
+            --accent-gradient-h: linear-gradient(135deg, #22d3ee 0%, #3b82f6 50%, #a855f7 100%);
+            --text-primary: #f1f5f9;
+            --text-secondary: #94a3b8;
+            --text-muted: #64748b;
+            --success: #34d399;
+            --error: #f87171;
+            --warning: #fbbf24;
+            --radius: 16px;
+            --radius-sm: 10px;
+            --radius-xs: 6px;
+            --shadow-glow: 0 0 60px rgba(56, 130, 246, 0.08);
+            --transition-fast: 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+            --transition-smooth: 0.45s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        html { font-size: 16px; }
+
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            background: var(--bg-deep);
+            color: var(--text-primary);
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 2rem 1rem;
+            overflow-x: hidden;
+            -webkit-font-smoothing: antialiased;
+        }
+
+        /* ── Animated background ──────────────────────────── */
+        body::before {
+            content: '';
+            position: fixed;
+            inset: 0;
+            background:
+                radial-gradient(ellipse 800px 600px at 20% 20%, rgba(34, 211, 238, 0.06) 0%, transparent 70%),
+                radial-gradient(ellipse 600px 500px at 80% 80%, rgba(168, 85, 247, 0.06) 0%, transparent 70%),
+                radial-gradient(ellipse 500px 400px at 50% 50%, rgba(59, 130, 246, 0.04) 0%, transparent 70%);
+            pointer-events: none;
+            z-index: 0;
+            animation: bgPulse 12s ease-in-out infinite alternate;
+        }
+
+        @keyframes bgPulse {
+            0%   { opacity: 0.7; transform: scale(1); }
+            100% { opacity: 1;   transform: scale(1.05); }
+        }
+
+        /* ── Grid texture ─────────────────────────────────── */
+        body::after {
+            content: '';
+            position: fixed;
+            inset: 0;
+            background-image:
+                linear-gradient(rgba(100, 160, 255, 0.03) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(100, 160, 255, 0.03) 1px, transparent 1px);
+            background-size: 60px 60px;
+            pointer-events: none;
+            z-index: 0;
+        }
+
+        /* ── Main container ───────────────────────────────── */
+        .wizard-wrapper {
+            position: relative;
+            z-index: 1;
+            width: 100%;
+            max-width: 520px;
+        }
+
+        /* ── Header / Logo ────────────────────────────────── */
+        .header {
+            text-align: center;
+            margin-bottom: 2rem;
+        }
+
+        .logo-container {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            margin-bottom: 1rem;
+            position: relative;
+        }
+
+        /* Animated shield icon */
+        .shield-icon {
+            width: 64px;
+            height: 64px;
+            position: relative;
+            filter: drop-shadow(0 0 20px rgba(34, 211, 238, 0.3));
+            animation: shieldFloat 4s ease-in-out infinite;
+        }
+
+        @keyframes shieldFloat {
+            0%, 100% { transform: translateY(0); }
+            50%      { transform: translateY(-6px); }
+        }
+
+        .shield-icon .shield-body {
+            fill: none;
+            stroke: url(#shieldGrad);
+            stroke-width: 2;
+        }
+
+        .shield-icon .shield-check {
+            stroke: var(--accent-cyan);
+            stroke-width: 2.5;
+            stroke-linecap: round;
+            stroke-linejoin: round;
+            fill: none;
+            stroke-dasharray: 24;
+            stroke-dashoffset: 24;
+            animation: drawCheck 1.2s 0.5s ease forwards;
+        }
+
+        @keyframes drawCheck {
+            to { stroke-dashoffset: 0; }
+        }
+
+        /* Pulse ring behind shield */
+        .logo-container::before {
+            content: '';
+            position: absolute;
+            width: 80px;
+            height: 80px;
+            border-radius: 50%;
+            background: radial-gradient(circle, rgba(34, 211, 238, 0.12) 0%, transparent 70%);
+            animation: pulseRing 3s ease-in-out infinite;
+        }
+
+        @keyframes pulseRing {
+            0%, 100% { transform: scale(1);   opacity: 0.6; }
+            50%      { transform: scale(1.4); opacity: 0; }
+        }
+
+        .header h1 {
+            font-size: 1.5rem;
+            font-weight: 700;
+            letter-spacing: -0.02em;
+            background: var(--accent-gradient);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .header .subtitle {
+            font-size: 0.875rem;
+            color: var(--text-secondary);
+            margin-top: 0.25rem;
+            font-weight: 400;
+        }
+
+        .version-badge {
+            display: inline-flex;
+            align-items: center;
+            margin-top: 0.75rem;
+            padding: 0.2rem 0.65rem;
+            font-size: 0.7rem;
+            font-weight: 600;
+            letter-spacing: 0.04em;
+            border-radius: 999px;
+            background: rgba(34, 211, 238, 0.1);
+            color: var(--accent-cyan);
+            border: 1px solid rgba(34, 211, 238, 0.2);
+        }
+
+        /* ── Progress bar ─────────────────────────────────── */
+        .progress-section {
+            margin-bottom: 1.5rem;
+        }
+
+        .progress-steps {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0;
+            margin-bottom: 0.75rem;
+        }
+
+        .progress-step {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            font-size: 0.75rem;
+            font-weight: 500;
+            color: var(--text-muted);
+            transition: color var(--transition-smooth);
+        }
+
+        .progress-step.active  { color: var(--accent-cyan); }
+        .progress-step.done    { color: var(--success); }
+
+        .step-dot {
+            width: 28px;
+            height: 28px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.75rem;
+            font-weight: 700;
+            background: var(--bg-card);
+            border: 2px solid var(--text-muted);
+            transition: all var(--transition-smooth);
+            position: relative;
+        }
+
+        .progress-step.active .step-dot {
+            border-color: var(--accent-cyan);
+            background: rgba(34, 211, 238, 0.12);
+            color: var(--accent-cyan);
+            box-shadow: 0 0 16px rgba(34, 211, 238, 0.25);
+        }
+
+        .progress-step.done .step-dot {
+            border-color: var(--success);
+            background: rgba(52, 211, 153, 0.15);
+            color: var(--success);
+        }
+
+        .step-connector {
+            width: 48px;
+            height: 2px;
+            background: var(--text-muted);
+            opacity: 0.3;
+            margin: 0 0.4rem;
+            border-radius: 2px;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .step-connector::after {
+            content: '';
+            position: absolute;
+            left: 0; top: 0; bottom: 0;
+            width: 0%;
+            background: var(--accent-gradient);
+            border-radius: 2px;
+            transition: width var(--transition-smooth);
+        }
+
+        .step-connector.filled::after { width: 100%; }
+
+        .progress-bar-track {
+            width: 100%;
+            height: 3px;
+            background: rgba(100, 160, 255, 0.08);
+            border-radius: 3px;
+            overflow: hidden;
+        }
+
+        .progress-bar-fill {
+            height: 100%;
+            background: var(--accent-gradient);
+            border-radius: 3px;
+            width: 33.33%;
+            transition: width var(--transition-smooth);
+        }
+
+        /* ── Card ──────────────────────────────────────────── */
+        .card {
+            background: var(--bg-surface);
+            border: 1px solid var(--border-glass);
+            border-radius: var(--radius);
+            backdrop-filter: blur(24px) saturate(1.4);
+            -webkit-backdrop-filter: blur(24px) saturate(1.4);
+            box-shadow: var(--shadow-glow), 0 8px 32px rgba(0, 0, 0, 0.3);
+            padding: 2rem;
+            position: relative;
+            overflow: hidden;
+        }
+
+        /* shimmer top edge */
+        .card::before {
+            content: '';
+            position: absolute;
+            top: 0; left: 0; right: 0;
+            height: 1px;
+            background: linear-gradient(90deg, transparent, rgba(34, 211, 238, 0.3), rgba(168, 85, 247, 0.3), transparent);
+        }
+
+        .card-title {
+            font-size: 1.125rem;
+            font-weight: 700;
+            margin-bottom: 0.25rem;
+        }
+
+        .card-desc {
+            font-size: 0.8rem;
+            color: var(--text-secondary);
+            margin-bottom: 1.5rem;
+            line-height: 1.5;
+        }
+
+        /* ── Steps container ──────────────────────────────── */
+        .steps-viewport {
+            position: relative;
+            overflow: hidden;
+        }
+
+        .step-panel {
+            display: none;
+            animation: fadeSlideIn 0.45s ease forwards;
+        }
+
+        .step-panel.active {
+            display: block;
+        }
+
+        @keyframes fadeSlideIn {
+            from { opacity: 0; transform: translateY(16px); }
+            to   { opacity: 1; transform: translateY(0); }
+        }
+
+        /* ── Form elements ────────────────────────────────── */
+        .form-group {
+            margin-bottom: 1.25rem;
+        }
+
+        .form-label {
+            display: block;
+            font-size: 0.8rem;
+            font-weight: 600;
+            color: var(--text-secondary);
+            margin-bottom: 0.4rem;
+            letter-spacing: 0.01em;
+        }
+
+        .input-wrapper {
+            position: relative;
+        }
+
+        .form-input {
+            width: 100%;
+            padding: 0.7rem 0.9rem;
+            font-family: inherit;
+            font-size: 0.875rem;
+            color: var(--text-primary);
+            background: rgba(15, 23, 42, 0.6);
+            border: 1px solid var(--border-glass);
+            border-radius: var(--radius-sm);
+            outline: none;
+            transition: all var(--transition-fast);
+        }
+
+        .form-input::placeholder {
+            color: var(--text-muted);
+        }
+
+        .form-input:focus {
+            border-color: var(--accent-blue);
+            box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15), 0 0 20px rgba(59, 130, 246, 0.06);
+        }
+
+        .form-input.error {
+            border-color: var(--error);
+            box-shadow: 0 0 0 3px rgba(248, 113, 113, 0.12);
+        }
+
+        .form-hint {
+            font-size: 0.72rem;
+            color: var(--text-muted);
+            margin-top: 0.35rem;
+            line-height: 1.45;
+        }
+
+        .form-error {
+            font-size: 0.72rem;
+            color: var(--error);
+            margin-top: 0.3rem;
+            display: none;
+        }
+
+        .form-error.visible {
+            display: block;
+            animation: fadeSlideIn 0.25s ease;
+        }
+
+        .url-preview {
+            margin-top: 0.5rem;
+            padding: 0.4rem 0.7rem;
+            font-size: 0.72rem;
+            font-family: 'SF Mono', 'Fira Code', monospace;
+            color: var(--accent-cyan);
+            background: rgba(34, 211, 238, 0.06);
+            border-radius: var(--radius-xs);
+            border: 1px solid rgba(34, 211, 238, 0.1);
+            word-break: break-all;
+            transition: opacity var(--transition-fast);
+        }
+
+        /* password toggle */
+        .pw-toggle {
+            position: absolute;
+            right: 0.7rem;
+            top: 50%;
+            transform: translateY(-50%);
+            background: none;
+            border: none;
+            color: var(--text-muted);
+            cursor: pointer;
+            padding: 4px;
+            display: flex;
+            align-items: center;
+            transition: color var(--transition-fast);
+        }
+
+        .pw-toggle:hover { color: var(--text-primary); }
+
+        .pw-toggle svg { width: 18px; height: 18px; }
+
+        /* ── Buttons ──────────────────────────────────────── */
+        .btn-row {
+            display: flex;
+            gap: 0.75rem;
+            margin-top: 1.5rem;
+        }
+
+        .btn {
+            flex: 1;
+            padding: 0.7rem 1.2rem;
+            font-family: inherit;
+            font-size: 0.85rem;
+            font-weight: 600;
+            border-radius: var(--radius-sm);
+            border: none;
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.5rem;
+            transition: all var(--transition-fast);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .btn::after {
+            content: '';
+            position: absolute;
+            inset: 0;
+            background: rgba(255, 255, 255, 0);
+            transition: background var(--transition-fast);
+        }
+
+        .btn:hover::after  { background: rgba(255, 255, 255, 0.06); }
+        .btn:active::after { background: rgba(255, 255, 255, 0.02); }
+
+        .btn:active { transform: scale(0.97); }
+
+        .btn-primary {
+            background: var(--accent-gradient);
+            color: #0f172a;
+            box-shadow: 0 4px 20px rgba(59, 130, 246, 0.25);
+        }
+
+        .btn-primary:hover {
+            box-shadow: 0 6px 28px rgba(59, 130, 246, 0.35);
+            transform: translateY(-1px);
+        }
+
+        .btn-primary:active { transform: translateY(0) scale(0.97); }
+
+        .btn-primary:disabled {
+            opacity: 0.4;
+            cursor: not-allowed;
+            box-shadow: none;
+            transform: none;
+        }
+
+        .btn-primary:disabled::after { display: none; }
+
+        .btn-secondary {
+            background: var(--bg-card);
+            color: var(--text-secondary);
+            border: 1px solid var(--border-glass);
+        }
+
+        .btn-secondary:hover {
+            border-color: var(--border-glass-hover);
+            color: var(--text-primary);
+        }
+
+        .btn-test {
+            background: rgba(34, 211, 238, 0.1);
+            color: var(--accent-cyan);
+            border: 1px solid rgba(34, 211, 238, 0.2);
+        }
+
+        .btn-test:hover {
+            background: rgba(34, 211, 238, 0.18);
+            border-color: rgba(34, 211, 238, 0.35);
+            box-shadow: 0 4px 20px rgba(34, 211, 238, 0.12);
+            transform: translateY(-1px);
+        }
+
+        .btn-test:active { transform: translateY(0) scale(0.97); }
+
+        .btn-save {
+            background: rgba(52, 211, 153, 0.12);
+            color: var(--success);
+            border: 1px solid rgba(52, 211, 153, 0.2);
+        }
+
+        .btn-save:hover {
+            background: rgba(52, 211, 153, 0.2);
+            border-color: rgba(52, 211, 153, 0.35);
+            box-shadow: 0 4px 20px rgba(52, 211, 153, 0.12);
+            transform: translateY(-1px);
+        }
+
+        .btn-save:disabled {
+            opacity: 0.35;
+            cursor: not-allowed;
+            transform: none;
+            box-shadow: none;
+        }
+
+        .btn-save:disabled:hover { background: rgba(52, 211, 153, 0.12); border-color: rgba(52, 211, 153, 0.2); }
+
+        /* ── Spinner ──────────────────────────────────────── */
+        .spinner {
+            width: 18px;
+            height: 18px;
+            border: 2px solid transparent;
+            border-top-color: currentColor;
+            border-radius: 50%;
+            animation: spin 0.6s linear infinite;
+            display: none;
+        }
+
+        .spinner.visible { display: inline-block; }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        /* ── Status messages ──────────────────────────────── */
+        .status-msg {
+            display: none;
+            align-items: flex-start;
+            gap: 0.6rem;
+            padding: 0.75rem 1rem;
+            border-radius: var(--radius-sm);
+            font-size: 0.8rem;
+            line-height: 1.5;
+            margin-top: 1rem;
+            animation: fadeSlideIn 0.35s ease;
+        }
+
+        .status-msg.visible {
+            display: flex;
+        }
+
+        .status-msg.success {
+            background: rgba(52, 211, 153, 0.08);
+            border: 1px solid rgba(52, 211, 153, 0.2);
+            color: var(--success);
+        }
+
+        .status-msg.error {
+            background: rgba(248, 113, 113, 0.08);
+            border: 1px solid rgba(248, 113, 113, 0.2);
+            color: var(--error);
+        }
+
+        .status-icon {
+            flex-shrink: 0;
+            width: 20px;
+            height: 20px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .status-icon svg { width: 18px; height: 18px; }
+
+        .checkmark-circle {
+            stroke-dasharray: 50;
+            stroke-dashoffset: 50;
+            animation: drawCircle 0.5s ease forwards;
+        }
+
+        .checkmark-tick {
+            stroke-dasharray: 20;
+            stroke-dashoffset: 20;
+            animation: drawCheck 0.35s 0.35s ease forwards;
+        }
+
+        .x-line {
+            stroke-dasharray: 14;
+            stroke-dashoffset: 14;
+            animation: drawCheck 0.3s 0.15s ease forwards;
+        }
+
+        @keyframes drawCircle {
+            to { stroke-dashoffset: 0; }
+        }
+
+        /* ── Post-save instructions ───────────────────────── */
+        .post-save {
+            display: none;
+            margin-top: 1.25rem;
+            animation: fadeSlideIn 0.45s ease;
+        }
+
+        .post-save.visible { display: block; }
+
+        .post-save h4 {
+            font-size: 0.85rem;
+            font-weight: 700;
+            margin-bottom: 0.75rem;
+            color: var(--text-primary);
+        }
+
+        .platform-card {
+            padding: 0.7rem 0.9rem;
+            background: rgba(15, 23, 42, 0.5);
+            border: 1px solid var(--border-glass);
+            border-radius: var(--radius-sm);
+            margin-bottom: 0.5rem;
+        }
+
+        .platform-card .platform-name {
+            font-size: 0.75rem;
+            font-weight: 700;
+            color: var(--accent-cyan);
+            margin-bottom: 0.25rem;
+            display: flex;
+            align-items: center;
+            gap: 0.4rem;
+        }
+
+        .platform-card .platform-inst {
+            font-size: 0.72rem;
+            color: var(--text-secondary);
+            line-height: 1.5;
+        }
+
+        .platform-card code {
+            background: rgba(34, 211, 238, 0.08);
+            padding: 0.1rem 0.35rem;
+            border-radius: 4px;
+            font-size: 0.7rem;
+            color: var(--accent-cyan);
+        }
+
+        .security-note {
+            margin-top: 1rem;
+            display: flex;
+            align-items: flex-start;
+            gap: 0.5rem;
+            font-size: 0.72rem;
+            color: var(--warning);
+            background: rgba(251, 191, 36, 0.06);
+            border: 1px solid rgba(251, 191, 36, 0.15);
+            border-radius: var(--radius-sm);
+            padding: 0.6rem 0.8rem;
+            line-height: 1.45;
+        }
+
+        .security-note svg { flex-shrink: 0; width: 16px; height: 16px; margin-top: 1px; }
+
+        /* ── Footer ───────────────────────────────────────── */
+        .footer {
+            text-align: center;
+            margin-top: 2rem;
+            font-size: 0.72rem;
+            color: var(--text-muted);
+            letter-spacing: 0.02em;
+        }
+
+        /* ── Responsive ───────────────────────────────────── */
+        @media (max-width: 560px) {
+            .card { padding: 1.5rem 1.25rem; }
+            .step-connector { width: 28px; }
+            .btn-row { flex-direction: column; }
+            .btn { flex: auto; }
+            .progress-step span { display: none; }
+        }
+    </style>
+</head>
+<body>
+
+<!-- ═══════════════════════════════════════════════════════ -->
+<!--  SVG Defs (shield gradient)                            -->
+<!-- ═══════════════════════════════════════════════════════ -->
+<svg width="0" height="0" style="position:absolute">
+    <defs>
+        <linearGradient id="shieldGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%"   stop-color="#22d3ee"/>
+            <stop offset="50%"  stop-color="#3b82f6"/>
+            <stop offset="100%" stop-color="#a855f7"/>
+        </linearGradient>
+    </defs>
+</svg>
+
+<div class="wizard-wrapper">
+
+    <!-- ── Header ─────────────────────────────────────── -->
+    <header class="header">
+        <div class="logo-container">
+            <svg class="shield-icon" viewBox="0 0 40 44" xmlns="http://www.w3.org/2000/svg">
+                <path class="shield-body" d="M20 2 L36 10 L36 24 C36 33 28 40 20 42 C12 40 4 33 4 24 L4 10 Z"/>
+                <polyline class="shield-check" points="13,22 18,27 27,17"/>
+            </svg>
+        </div>
+        <h1>QS Discovery Agent</h1>
+        <p class="subtitle">Setup Wizard</p>
+        <span class="version-badge">v1.1.0</span>
+    </header>
+
+    <!-- ── Progress ───────────────────────────────────── -->
+    <div class="progress-section">
+        <div class="progress-steps">
+            <div class="progress-step active" id="prog-1">
+                <div class="step-dot">1</div>
+                <span>Server</span>
+            </div>
+            <div class="step-connector" id="conn-1"></div>
+            <div class="progress-step" id="prog-2">
+                <div class="step-dot">2</div>
+                <span>Login</span>
+            </div>
+            <div class="step-connector" id="conn-2"></div>
+            <div class="progress-step" id="prog-3">
+                <div class="step-dot">3</div>
+                <span>Connect</span>
+            </div>
+        </div>
+        <div class="progress-bar-track">
+            <div class="progress-bar-fill" id="progressFill"></div>
+        </div>
+    </div>
+
+    <!-- ── Card ───────────────────────────────────────── -->
+    <div class="card">
+        <div class="steps-viewport">
+
+            <!-- STEP 1 ─ Server Connection ────────────── -->
+            <div class="step-panel active" id="step-1">
+                <h2 class="card-title">Server Connection</h2>
+                <p class="card-desc">Connect the discovery agent to your QS Asset server.</p>
+
+                <div style="background:rgba(34,211,238,0.08);border:1px solid rgba(34,211,238,0.2);border-radius:10px;padding:0.75rem 1rem;margin-bottom:1.25rem;font-size:0.82rem;color:#94a3b8;line-height:1.5">
+                    💡 <strong style="color:#22d3ee">Tip:</strong> If you downloaded this agent from the QS Asset dashboard, the configuration is already set up. Just close this page and double-click the agent app — it's ready to go!
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="serverAddress">Server Address</label>
+                    <input
+                        type="text"
+                        class="form-input"
+                        id="serverAddress"
+                        value="api-production-fe27.up.railway.app"
+                        placeholder="e.g., 192.168.1.50 or your-company.railway.app"
+                        autocomplete="off"
+                        spellcheck="false"
+                    >
+                    <p class="form-hint">Your QS Asset server address — this is pre-filled with the default server</p>
+                    <p class="form-error" id="serverError">Please enter a valid server address</p>
+                    <div class="url-preview" id="urlPreview" style="display:none"></div>
+                </div>
+
+                <div class="btn-row">
+                    <button class="btn btn-primary" id="btnNext1" onclick="goToStep(2)">
+                        Next
+                        <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+                    </button>
+                </div>
+            </div>
+
+            <!-- STEP 2 ─ Login Credentials ────────────── -->
+            <div class="step-panel" id="step-2">
+                <h2 class="card-title">Login Credentials</h2>
+                <p class="card-desc">Use your QS Asset admin account credentials.</p>
+
+                <div class="form-group">
+                    <label class="form-label" for="emailInput">Email Address</label>
+                    <input
+                        type="email"
+                        class="form-input"
+                        id="emailInput"
+                        placeholder="admin@company.com"
+                        autocomplete="email"
+                    >
+                    <p class="form-error" id="emailError">Please enter a valid email address</p>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="passwordInput">Password</label>
+                    <div class="input-wrapper">
+                        <input
+                            type="password"
+                            class="form-input"
+                            id="passwordInput"
+                            placeholder="Enter your password"
+                            autocomplete="current-password"
+                            style="padding-right: 2.8rem"
+                        >
+                        <button type="button" class="pw-toggle" id="pwToggle" onclick="togglePassword()" aria-label="Toggle password visibility">
+                            <!-- eye icon -->
+                            <svg id="eyeIcon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8S1 12 1 12z"/>
+                                <circle cx="12" cy="12" r="3"/>
+                            </svg>
+                            <!-- eye-off icon (hidden) -->
+                            <svg id="eyeOffIcon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:none">
+                                <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94"/>
+                                <path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19"/>
+                                <path d="M14.12 14.12a3 3 0 1 1-4.24-4.24"/>
+                                <line x1="1" y1="1" x2="23" y2="23"/>
+                            </svg>
+                        </button>
+                    </div>
+                    <p class="form-error" id="passwordError">Password cannot be empty</p>
+                </div>
+
+                <div class="btn-row">
+                    <button class="btn btn-secondary" onclick="goToStep(1)">
+                        <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><path d="M19 12H5M11 18l-6-6 6-6"/></svg>
+                        Back
+                    </button>
+                    <button class="btn btn-primary" id="btnNext2" onclick="goToStep(3)">
+                        Next
+                        <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+                    </button>
+                </div>
+            </div>
+
+            <!-- STEP 3 ─ Test & Save ──────────────────── -->
+            <div class="step-panel" id="step-3">
+                <h2 class="card-title">Test &amp; Save</h2>
+                <p class="card-desc">Verify the connection and download your configuration file.</p>
+
+                <div class="btn-row" style="margin-top:0">
+                    <button class="btn btn-test" id="btnTest" onclick="testConnection()">
+                        <span class="spinner" id="testSpinner"></span>
+                        <svg id="testBoltIcon" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+                        <span id="testBtnLabel">Test Connection</span>
+                    </button>
+                </div>
+
+                <!-- success / error status -->
+                <div class="status-msg success" id="statusSuccess">
+                    <span class="status-icon">
+                        <svg viewBox="0 0 24 24" fill="none">
+                            <circle class="checkmark-circle" cx="12" cy="12" r="10" stroke="#34d399" stroke-width="2"/>
+                            <polyline class="checkmark-tick" points="8,12.5 11,15.5 16.5,9.5" stroke="#34d399" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+                        </svg>
+                    </span>
+                    <span>Connected successfully! Your server is reachable.</span>
+                </div>
+
+                <div class="status-msg error" id="statusError">
+                    <span class="status-icon">
+                        <svg viewBox="0 0 24 24" fill="none">
+                            <circle cx="12" cy="12" r="10" stroke="#f87171" stroke-width="2" class="checkmark-circle"/>
+                            <line class="x-line" x1="9" y1="9" x2="15" y2="15" stroke="#f87171" stroke-width="2.5" stroke-linecap="round"/>
+                            <line class="x-line" x1="15" y1="9" x2="9" y2="15" stroke="#f87171" stroke-width="2.5" stroke-linecap="round"/>
+                        </svg>
+                    </span>
+                    <span id="errorText">Connection failed.</span>
+                </div>
+
+                <div class="btn-row">
+                    <button class="btn btn-secondary" onclick="goToStep(2)">
+                        <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><path d="M19 12H5M11 18l-6-6 6-6"/></svg>
+                        Back
+                    </button>
+                    <button class="btn btn-save" id="btnSave" onclick="saveConfig()" disabled>
+                        <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                        Save Configuration
+                    </button>
+                </div>
+
+                <!-- Post-save instructions -->
+                <div class="post-save" id="postSave">
+                    <h4>✨ Almost there! Next steps:</h4>
+
+                    <div class="platform-card">
+                        <div class="platform-name">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M18.71 19.5c-.83 1.24-1.71 2.45-3.05 2.47-1.34.03-1.77-.79-3.29-.79-1.53 0-2 .77-3.27.82-1.31.05-2.3-1.32-3.14-2.53C4.25 17 2.94 12.45 4.7 9.39c.87-1.52 2.43-2.48 4.12-2.51 1.28-.02 2.5.87 3.29.87.78 0 2.26-1.07 3.8-.91.65.03 2.47.26 3.64 1.98-.09.06-2.17 1.28-2.15 3.81.03 3.02 2.65 4.03 2.68 4.04-.03.07-.42 1.44-1.38 2.83"/><path d="M13 3.5c.73-.83 1.94-1.46 2.94-1.5.13 1.17-.34 2.35-1.04 3.19-.69.85-1.83 1.51-2.95 1.42-.15-1.15.41-2.35 1.05-3.11"/></svg>
+                            macOS
+                        </div>
+                        <div class="platform-inst">
+                            Place <code>config.json</code> in the same folder as <code>QS-Discovery-Agent.app</code>, then double-click the app.
+                        </div>
+                    </div>
+
+                    <div class="platform-card">
+                        <div class="platform-name">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M3 5.5L1.5 20h4.5l.5-3h3l.5 3h4.5L13 5.5H3zm4.5 9H6l1-6h.5l1 6zM17 5.5l-.8 4.8h2.6L17 5.5zm-1.5 7.2l-.5 3h-1l.8-4.8h2.6l-.8 4.8h-1l-.5-3h-.6zM20.5 20h-4.4l.5-3h3.4l.5 3zM16.6 3l-.3 1.5h4.4l.3-1.5h-4.4z"/></svg>
+                            Windows
+                        </div>
+                        <div class="platform-inst">
+                            Place <code>config.json</code> in the same folder as <code>Start Agent.bat</code>, then double-click <code>Start Agent.bat</code>.
+                        </div>
+                    </div>
+
+                    <div class="platform-card">
+                        <div class="platform-name">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M12.5 2C8.42 2 5.11 5.08 4.74 9.01L2 12l2.74 2.99C5.11 18.92 8.42 22 12.5 22s7.39-3.08 7.76-6.99L23 12l-2.74-3.01C19.89 5.08 16.58 2 12.5 2z"/></svg>
+                            Linux
+                        </div>
+                        <div class="platform-inst">
+                            Place <code>config.json</code> in the agent folder and run: <code>./run-agent.sh</code>
+                        </div>
+                    </div>
+
+                    <div class="security-note">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+                            <line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
+                        </svg>
+                        <span>The <strong>config.json</strong> file contains your credentials. Keep it secure and do not share it.</span>
+                    </div>
+                </div>
+            </div>
+
+        </div><!-- /steps-viewport -->
+    </div><!-- /card -->
+
+    <!-- ── Footer ─────────────────────────────────────── -->
+    <footer class="footer">QS Asset Management Platform</footer>
+
+</div><!-- /wizard-wrapper -->
+
+<script>
+(function () {
+    'use strict';
+
+    /* ── State ────────────────────────────────────────── */
+    let currentStep = 1;
+    let authToken = null;
+
+    const serverInput   = document.getElementById('serverAddress');
+    const emailInput    = document.getElementById('emailInput');
+    const passwordInput = document.getElementById('passwordInput');
+    const urlPreview    = document.getElementById('urlPreview');
+
+    /* ── Auto-detect server from current page URL ─────── */
+    (function autoDetect() {
+        const host = window.location.hostname;
+        // If served from a live server, use that server address
+        if (host && host !== 'localhost' && host !== '127.0.0.1' && host !== '' && !host.startsWith('file')) {
+            serverInput.value = host;
+        }
+        // Always update the preview (shows the pre-filled default or auto-detected host)
+        updateUrlPreview();
+    })();
+
+    /* ── URL construction logic ───────────────────────── */
+    function buildBaseUrl(raw) {
+        raw = raw.trim();
+        if (!raw) return '';
+
+        // If it's already a full URL, use it as-is
+        if (/^https?:\/\//i.test(raw)) {
+            return raw.replace(/\/+$/, '');
+        }
+
+        // Check if it looks like an IP address (with optional port)
+        const isIP = /^(\d{1,3}\.){3}\d{1,3}(:\d+)?$/.test(raw) ||
+                     raw === 'localhost' ||
+                     raw.startsWith('localhost:');
+
+        if (isIP) {
+            // If it already has a port, just add http
+            if (/:(\d+)$/.test(raw)) {
+                return 'http://' + raw;
+            }
+            return 'http://' + raw + ':4100';
+        }
+
+        // It's a domain name — use https, no port
+        return 'https://' + raw;
+    }
+
+    function buildLoginUrl(raw) {
+        const base = buildBaseUrl(raw);
+        if (!base) return '';
+        return base + '/api/v1/auth/login';
+    }
+
+    function updateUrlPreview() {
+        const val = serverInput.value.trim();
+        if (val) {
+            urlPreview.style.display = 'block';
+            urlPreview.textContent = '→ ' + buildLoginUrl(val);
+        } else {
+            urlPreview.style.display = 'none';
+        }
+    }
+
+    serverInput.addEventListener('input', updateUrlPreview);
+
+    /* ── Password toggle ──────────────────────────────── */
+    window.togglePassword = function () {
+        const isPassword = passwordInput.type === 'password';
+        passwordInput.type = isPassword ? 'text' : 'password';
+        document.getElementById('eyeIcon').style.display    = isPassword ? 'none'  : 'block';
+        document.getElementById('eyeOffIcon').style.display = isPassword ? 'block' : 'none';
+    };
+
+    /* ── Validation ───────────────────────────────────── */
+    function clearErrors() {
+        document.querySelectorAll('.form-input').forEach(el => el.classList.remove('error'));
+        document.querySelectorAll('.form-error').forEach(el => el.classList.remove('visible'));
+    }
+
+    function showError(inputId, errorId) {
+        document.getElementById(inputId).classList.add('error');
+        document.getElementById(errorId).classList.add('visible');
+    }
+
+    function validateStep(step) {
+        clearErrors();
+        if (step === 1) {
+            if (!serverInput.value.trim()) {
+                showError('serverAddress', 'serverError');
+                return false;
+            }
+        } else if (step === 2) {
+            let ok = true;
+            const email = emailInput.value.trim();
+            if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+                showError('emailInput', 'emailError');
+                ok = false;
+            }
+            if (!passwordInput.value) {
+                showError('passwordInput', 'passwordError');
+                ok = false;
+            }
+            return ok;
+        }
+        return true;
+    }
+
+    /* ── Step navigation ──────────────────────────────── */
+    window.goToStep = function (step) {
+        // Validate current before moving forward
+        if (step > currentStep && !validateStep(currentStep)) return;
+
+        currentStep = step;
+        clearErrors();
+
+        // Reset test state when going back to step 3
+        if (step === 3) {
+            resetTestState();
+        }
+
+        // Show the right panel
+        document.querySelectorAll('.step-panel').forEach((p, i) => {
+            p.classList.toggle('active', i + 1 === step);
+        });
+
+        // Update progress dots
+        for (let i = 1; i <= 3; i++) {
+            const el = document.getElementById('prog-' + i);
+            el.classList.remove('active', 'done');
+            if (i < step) el.classList.add('done');
+            else if (i === step) el.classList.add('active');
+        }
+
+        // Update connectors
+        document.getElementById('conn-1').classList.toggle('filled', step > 1);
+        document.getElementById('conn-2').classList.toggle('filled', step > 2);
+
+        // Update progress bar
+        const pct = step === 1 ? 33.33 : step === 2 ? 66.66 : 100;
+        document.getElementById('progressFill').style.width = pct + '%';
+    };
+
+    /* ── Test Connection ──────────────────────────────── */
+    function resetTestState() {
+        document.getElementById('statusSuccess').classList.remove('visible');
+        document.getElementById('statusError').classList.remove('visible');
+        document.getElementById('btnSave').disabled = true;
+        document.getElementById('postSave').classList.remove('visible');
+        authToken = null;
+    }
+
+    window.testConnection = async function () {
+        resetTestState();
+
+        const btn      = document.getElementById('btnTest');
+        const spinner  = document.getElementById('testSpinner');
+        const boltIcon = document.getElementById('testBoltIcon');
+        const label    = document.getElementById('testBtnLabel');
+
+        btn.disabled = true;
+        spinner.classList.add('visible');
+        boltIcon.style.display = 'none';
+        label.textContent = 'Testing…';
+
+        const loginUrl = buildLoginUrl(serverInput.value);
+
+        try {
+            const resp = await fetch(loginUrl, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    email: emailInput.value.trim(),
+                    password: passwordInput.value
+                })
+            });
+
+            if (resp.ok) {
+                const data = await resp.json();
+                authToken = data.token || data.access_token || data.accessToken || '';
+                document.getElementById('statusSuccess').classList.add('visible');
+                document.getElementById('btnSave').disabled = false;
+            } else {
+                let msg = 'Connection failed (HTTP ' + resp.status + ')';
+                try {
+                    const errData = await resp.json();
+                    if (errData.message) msg = errData.message;
+                    else if (errData.error) msg = errData.error;
+                } catch (_) {}
+                document.getElementById('errorText').textContent = msg;
+                document.getElementById('statusError').classList.add('visible');
+            }
+        } catch (err) {
+            let msg = 'Connection failed: ';
+            if (err.message && err.message.includes('Failed to fetch')) {
+                msg += 'Could not reach the server. This may be a CORS issue — ensure the server allows requests from this origin, or try opening this wizard from the server itself.';
+            } else {
+                msg += err.message || 'Unknown error';
+            }
+            document.getElementById('errorText').textContent = msg;
+            document.getElementById('statusError').classList.add('visible');
+        } finally {
+            btn.disabled = false;
+            spinner.classList.remove('visible');
+            boltIcon.style.display = '';
+            label.textContent = 'Test Connection';
+        }
+    };
+
+    /* ── Save Configuration ───────────────────────────── */
+    window.saveConfig = function () {
+        const config = {
+            server: buildBaseUrl(serverInput.value),
+            token: authToken || '',
+            email: emailInput.value.trim(),
+            password: passwordInput.value
+        };
+
+        const blob = new Blob([JSON.stringify(config, null, 2)], { type: 'application/json' });
+        const url  = URL.createObjectURL(blob);
+        const a    = document.createElement('a');
+        a.href     = url;
+        a.download = 'config.json';
+        document.body.appendChild(a);
+        a.click();
+        setTimeout(() => {
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        }, 100);
+
+        document.getElementById('postSave').classList.add('visible');
+    };
+
+    /* ── Allow Enter key to advance ───────────────────── */
+    serverInput.addEventListener('keydown', e => { if (e.key === 'Enter') goToStep(2); });
+    passwordInput.addEventListener('keydown', e => { if (e.key === 'Enter') goToStep(3); });
+    emailInput.addEventListener('keydown', e => { if (e.key === 'Enter') document.getElementById('passwordInput').focus(); });
+
+})();
+</script>
+</body>
+</html>

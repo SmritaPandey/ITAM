@@ -745,4 +745,204 @@ export class PatchesService {
     this.logger.log(`Agent patch report processed: ${created} created, ${updated} updated`);
     return { agentId, created, updated, total: patches.length };
   }
+
+  // ─── SCHEDULED PATCH WINDOWS ────────────────────────────────────
+  async schedulePatch(id: string, tenantId: string, body: {
+    scheduledAt: string;
+    maintenanceEnd?: string;
+    recurring?: string;
+    cronExpression?: string;
+    autoApprove?: boolean;
+  }) {
+    const patch = await this.prisma.patch.findFirst({ where: { id, tenantId } });
+    if (!patch) throw new NotFoundException('Patch not found');
+
+    const scheduledAt = new Date(body.scheduledAt);
+    if (scheduledAt < new Date()) {
+      throw new Error('Scheduled time must be in the future');
+    }
+
+    return this.prisma.patch.update({
+      where: { id },
+      data: {
+        status: 'Scheduled',
+        scheduledAt,
+        maintenanceEnd: body.maintenanceEnd ? new Date(body.maintenanceEnd) : null,
+        recurring: body.recurring || null,
+        cronExpression: body.cronExpression || null,
+        autoApprove: body.autoApprove ?? false,
+      },
+    });
+  }
+
+  async getUpcomingSchedules(tenantId: string) {
+    return this.prisma.patch.findMany({
+      where: {
+        tenantId,
+        status: 'Scheduled',
+        scheduledAt: { not: null },
+      },
+      orderBy: { scheduledAt: 'asc' },
+    });
+  }
+
+  /**
+   * Cron job: Check for patches whose scheduled window has arrived.
+   * Runs every 5 minutes. If a scheduled patch's `scheduledAt` has passed,
+   * auto-deploy it (same as calling deploy()).
+   */
+  @Cron('*/5 * * * *')
+  async processScheduledPatches() {
+    const now = new Date();
+    const duePatches = await this.prisma.patch.findMany({
+      where: {
+        status: 'Scheduled',
+        scheduledAt: { lte: now },
+      },
+    });
+
+    for (const patch of duePatches) {
+      // Check maintenance window — skip if current time is past the window
+      if (patch.maintenanceEnd && now > patch.maintenanceEnd) {
+        this.logger.warn(`Patch ${patch.patchId} missed its maintenance window (ended ${patch.maintenanceEnd.toISOString()}). Marking as Failed.`);
+        await this.prisma.patch.update({
+          where: { id: patch.id },
+          data: { status: 'Failed', notes: `Missed maintenance window (ended ${patch.maintenanceEnd.toISOString()})` },
+        });
+        continue;
+      }
+
+      this.logger.log(`Scheduled patch ${patch.patchId} is due — auto-deploying...`);
+      try {
+        await this.deploy(patch.id, patch.tenantId);
+      } catch (err: any) {
+        this.logger.error(`Failed to auto-deploy scheduled patch ${patch.patchId}: ${err.message}`);
+      }
+    }
+  }
+
+  // ─── PATCH ROLLBACK ─────────────────────────────────────────────
+  async rollbackPatch(id: string, tenantId: string) {
+    const patch = await this.prisma.patch.findFirst({
+      where: { id, tenantId },
+      include: { deployments: true },
+    });
+    if (!patch) throw new NotFoundException('Patch not found');
+    if (patch.status !== 'Deployed' && patch.status !== 'PENDING_DEPLOYMENT') {
+      throw new Error('Only deployed patches can be rolled back');
+    }
+
+    // Mark patch as rolled back
+    await this.prisma.patch.update({
+      where: { id },
+      data: {
+        status: 'Pending',
+        rolledBackAt: new Date(),
+        rollbackAvailable: false,
+        notes: `Rolled back at ${new Date().toISOString()}. Previous status: ${patch.status}`,
+      },
+    });
+
+    // Reset deployment records so agents pick up the rollback action
+    await this.prisma.patchDeployment.updateMany({
+      where: { patchId: id, tenantId },
+      data: { status: 'ROLLBACK_QUEUED' },
+    });
+
+    this.eventBus.emitAssetEvent(tenantId, 'patch_rolled_back', {
+      patchId: patch.patchId,
+      title: patch.title,
+      timestamp: new Date(),
+    });
+
+    this.logger.log(`Patch ${patch.patchId} rolled back — agents will reverse on next heartbeat`);
+    return { success: true, message: `Patch ${patch.patchId} rollback queued` };
+  }
+
+  // ─── SOFTWARE DEPLOYMENT ──────────────────────────────────────────
+  async deploySoftware(tenantId: string, body: {
+    packageName: string;
+    packageUrl?: string;
+    packageType?: string;  // msi, exe, deb, rpm, pkg, dmg
+    targetAssetIds?: string[];  // specific assets, or all if empty
+    silent?: boolean;
+  }) {
+    const { packageName, packageUrl, packageType, targetAssetIds, silent } = body;
+    
+    // Find target agents
+    const whereClause: any = { tenantId, deletedAt: null, agentId: { not: null }, status: 'ACTIVE' };
+    if (targetAssetIds?.length) {
+      whereClause.id = { in: targetAssetIds };
+    }
+    const assets = await this.prisma.asset.findMany({
+      where: whereClause,
+      select: { id: true, name: true, agentId: true },
+    });
+
+    // Create a patch record to track the deployment
+    const patch = await this.prisma.patch.create({
+      data: {
+        tenantId,
+        patchId: `SW-${packageName.replace(/[^a-zA-Z0-9]/g, '-').toUpperCase()}-${Date.now().toString(36)}`,
+        title: `Software Install: ${packageName}`,
+        severity: 'Low',
+        status: 'PENDING_DEPLOYMENT',
+        category: 'Software Deployment',
+        affectedAssets: assets.length,
+        scanSource: 'MANUAL',
+      },
+    });
+
+    // Queue deployment for each target asset
+    for (const asset of assets) {
+      await this.prisma.patchDeployment.create({
+        data: {
+          tenantId,
+          patchId: patch.id,
+          assetId: asset.id,
+          status: 'QUEUED',
+          output: JSON.stringify({ action: 'INSTALL_PACKAGE', packageName, packageUrl, packageType, silent: silent ?? true }),
+        },
+      });
+    }
+
+    this.logger.log(`Software deployment queued: "${packageName}" → ${assets.length} endpoints`);
+    return { success: true, patchId: patch.id, targetCount: assets.length, packageName };
+  }
+
+  /**
+   * Built-in 3rd-party software catalog — common enterprise apps
+   * with their package identifiers across platforms.
+   */
+  getSoftwareCatalog() {
+    return {
+      catalog: [
+        { name: 'Google Chrome', category: 'Browser', winget: 'Google.Chrome', brew: 'google-chrome', apt: 'google-chrome-stable', msiUrl: 'https://dl.google.com/tag/s/dl/chrome/install/googlechromestandaloneenterprise64.msi' },
+        { name: 'Mozilla Firefox', category: 'Browser', winget: 'Mozilla.Firefox', brew: 'firefox', apt: 'firefox' },
+        { name: 'Microsoft Edge', category: 'Browser', winget: 'Microsoft.Edge', brew: 'microsoft-edge' },
+        { name: '7-Zip', category: 'Utility', winget: '7zip.7zip', brew: 'p7zip', apt: 'p7zip-full' },
+        { name: 'VLC Media Player', category: 'Media', winget: 'VideoLAN.VLC', brew: 'vlc', apt: 'vlc' },
+        { name: 'Visual Studio Code', category: 'Development', winget: 'Microsoft.VisualStudioCode', brew: 'visual-studio-code', apt: 'code' },
+        { name: 'Slack', category: 'Communication', winget: 'SlackTechnologies.Slack', brew: 'slack', snap: 'slack' },
+        { name: 'Zoom', category: 'Communication', winget: 'Zoom.Zoom', brew: 'zoom' },
+        { name: 'Microsoft Teams', category: 'Communication', winget: 'Microsoft.Teams', brew: 'microsoft-teams' },
+        { name: 'Notepad++', category: 'Development', winget: 'Notepad++.Notepad++' },
+        { name: 'PuTTY', category: 'Utility', winget: 'PuTTY.PuTTY', brew: 'putty', apt: 'putty' },
+        { name: 'WinSCP', category: 'Utility', winget: 'WinSCP.WinSCP' },
+        { name: 'FileZilla', category: 'Utility', winget: 'TimKosse.FileZilla.Client', brew: 'filezilla', apt: 'filezilla' },
+        { name: 'Git', category: 'Development', winget: 'Git.Git', brew: 'git', apt: 'git' },
+        { name: 'Node.js (LTS)', category: 'Development', winget: 'OpenJS.NodeJS.LTS', brew: 'node', apt: 'nodejs' },
+        { name: 'Python 3', category: 'Development', winget: 'Python.Python.3.12', brew: 'python3', apt: 'python3' },
+        { name: 'Adobe Acrobat Reader', category: 'Productivity', winget: 'Adobe.Acrobat.Reader.64-bit' },
+        { name: 'LibreOffice', category: 'Productivity', winget: 'TheDocumentFoundation.LibreOffice', brew: 'libreoffice', apt: 'libreoffice' },
+        { name: 'KeePassXC', category: 'Security', winget: 'KeePassXCTeam.KeePassXC', brew: 'keepassxc', apt: 'keepassxc' },
+        { name: 'Bitwarden', category: 'Security', winget: 'Bitwarden.Bitwarden', brew: 'bitwarden', snap: 'bitwarden' },
+        { name: 'WireGuard', category: 'Security', winget: 'WireGuard.WireGuard', brew: 'wireguard-tools', apt: 'wireguard' },
+        { name: 'OpenVPN', category: 'Security', winget: 'OpenVPNTechnologies.OpenVPN', brew: 'openvpn', apt: 'openvpn' },
+        { name: 'Malwarebytes', category: 'Security', winget: 'Malwarebytes.Malwarebytes' },
+        { name: 'TeamViewer', category: 'Remote Access', winget: 'TeamViewer.TeamViewer', brew: 'teamviewer' },
+        { name: 'AnyDesk', category: 'Remote Access', winget: 'AnyDesk.AnyDesk', apt: 'anydesk' },
+      ],
+    };
+  }
 }

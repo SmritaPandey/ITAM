@@ -3,6 +3,7 @@ import { Cron, CronExpression } from '@nestjs/schedule';
 import { PrismaService } from '../../common/database/prisma.service';
 import { EventBusService } from '../../common/events/event-bus.service';
 import { ComplianceService } from '../compliance/compliance.service';
+import { AlertsService } from '../alerts/alerts.service';
 import { exec } from 'child_process';
 import { promisify } from 'util';
 import * as os from 'os';
@@ -60,6 +61,7 @@ export class DiscoveryService {
     private complianceService: ComplianceService,
     private credentialVault: CredentialVaultService,
     private snmpScanner: SnmpScanner,
+    private alertsService: AlertsService,
   ) {}
 
   /**
@@ -1303,8 +1305,9 @@ export class DiscoveryService {
     });
 
     // Warn if agent version is outdated
-    if (data?.version && data.version !== '1.1.0') {
-      this.logger.warn(`Agent ${agent.hostname} is running outdated version ${data.version} (latest: 1.1.0)`);
+    const LATEST_AGENT_VERSION = '2.0.0';
+    if (data?.version && data.version < LATEST_AGENT_VERSION) {
+      this.logger.warn(`Agent ${agent.hostname} is running outdated version ${data.version} (latest: ${LATEST_AGENT_VERSION})`);
     }
 
     // Run compliance change detection and sync systemInfo snapshot directly to CMDB Asset tables
@@ -1313,6 +1316,15 @@ export class DiscoveryService {
         await this.complianceService.processHeartbeat(tenantId, id, agent, data.systemInfo);
       } catch (err) {
         this.logger.warn(`Compliance check failed for agent ${agent.hostname}: ${err.message}`);
+      }
+
+      // Evaluate security alert rules against agent telemetry
+      try {
+        await this.alertsService.evaluateHeartbeat(
+          tenantId, id, data.systemInfo, agent.hostname,
+        );
+      } catch (err) {
+        this.logger.warn(`Alert evaluation failed for agent ${agent.hostname}: ${err.message}`);
       }
 
       // --- Live CMDB Asset Synchronization ---
@@ -1559,6 +1571,20 @@ export class DiscoveryService {
           deviceName: val?.name || 'Storage Drive',
           serialNumber: val?.serial || '',
           mountPoint: val?.mount || '',
+        };
+      } else if (threat.category === 'CERTIFICATE_CHANGE' || threat.category === 'PERSISTENCE_CHANGE') {
+        if (threat.severity === 'CRITICAL') {
+          return {
+            type: 'QUARANTINE_DEVICE',
+            reason: threat.summary,
+            allowServerOnly: true,
+          };
+        }
+        return {
+          type: 'ALERT',
+          category: threat.category,
+          summary: threat.summary,
+          details: val,
         };
       } else {
         return {
@@ -2282,14 +2308,14 @@ export class DiscoveryService {
     // 1. Structure: /bin (Unix), /win (Windows), /mac (macOS .app), /core (clean background core), and root (premium native quick-launchers)
     
     // Unix Helpers
-    const unixFiles = ['install-service.sh', 'run-agent.sh', 'qs-discovery-agent.js', 'README.md', 'Status Dashboard.html'];
+    const unixFiles = ['install-service.sh', 'run-agent.sh', 'qs-discovery-agent.js', 'setup.html', 'QuickStart.txt', 'README.md', 'Status Dashboard.html'];
     for (const file of unixFiles) {
       const filePath = path.join(agentDir, file);
       if (fs.existsSync(filePath)) zip.addLocalFile(filePath, 'bin');
     }
 
     // Windows Helpers (neat core folder containing all hidden dependencies)
-    const winFiles = ['Start Agent.bat', 'install-service.bat', 'run-agent.bat', 'qs-discovery-agent.js', 'launch-silent.vbs', 'Status Dashboard.html'];
+    const winFiles = ['Start Agent.bat', 'install-service.bat', 'run-agent.bat', 'qs-discovery-agent.js', 'launch-silent.vbs', 'setup.html', 'QuickStart.txt', 'Status Dashboard.html'];
     for (const file of winFiles) {
       const filePath = path.join(agentDir, file);
       if (fs.existsSync(filePath)) {
@@ -2300,6 +2326,8 @@ export class DiscoveryService {
 
     // Root-level items for easy double-clicking
     const rootFiles = [
+      { name: 'setup.html' },
+      { name: 'QuickStart.txt' },
       { name: 'Status Dashboard.html' },
       { name: 'README.md' },
       { name: 'Start Agent.bat' },
@@ -2332,6 +2360,7 @@ export class DiscoveryService {
           // fall back to pair-local.js if the token fully expires.
         }
         const configBuffer = Buffer.from(JSON.stringify(configObj, null, 2), 'utf-8');
+        zip.addFile('config.json', configBuffer);
         zip.addFile('bin/config.json', configBuffer);
         zip.addFile('core/config.json', configBuffer);
         zip.addFile('mac/QS-Discovery-Agent.app/Contents/MacOS/config.json', configBuffer);
@@ -2693,5 +2722,96 @@ export class DiscoveryService {
       if (deviceType === 'Unknown') recs.push('Consider running a full agent-based scan for deeper analysis');
     }
     return recs;
+  }
+
+  // ─── REMOTE COMMAND EXECUTION ─────────────────────────────────────
+  async queueRemoteCommand(tenantId: string, agentId: string, body: { command: string; timeout?: number }) {
+    const agent = await this.prisma.agent.findFirst({ where: { id: agentId, tenantId } });
+    if (!agent) throw new NotFoundException('Agent not found');
+    
+    // Security: block dangerous commands
+    const blocked = ['rm -rf /', 'format c:', 'del /f /s /q c:', 'mkfs', ':(){:|:&};:'];
+    if (blocked.some(b => body.command.toLowerCase().includes(b))) {
+      throw new Error('Command blocked by security policy');
+    }
+
+    // Store the command as a pending action in the agent's systemInfo
+    const systemInfo = (agent.systemInfo as any) || {};
+    const pendingCommands = systemInfo._pendingCommands || [];
+    const cmdRecord = {
+      id: `cmd-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      command: body.command,
+      timeout: body.timeout || 30000,
+      queuedAt: new Date().toISOString(),
+      status: 'QUEUED',
+    };
+    pendingCommands.push(cmdRecord);
+    
+    await this.prisma.agent.update({
+      where: { id: agentId },
+      data: { systemInfo: { ...systemInfo, _pendingCommands: pendingCommands } },
+    });
+
+    // Also store in audit log
+    try {
+      await this.prisma.auditLog.create({
+        data: {
+          tenantId,
+          action: 'REMOTE_COMMAND_QUEUED',
+          resourceType: 'Agent',
+          resourceId: agentId,
+          metadata: { command: body.command, cmdId: cmdRecord.id } as any,
+          module: 'discovery',
+        },
+      });
+    } catch {}
+
+    this.logger.log(`Remote command queued for agent ${agentId}: "${body.command}"`);
+    return { success: true, commandId: cmdRecord.id, message: 'Command queued. Agent will execute on next heartbeat.' };
+  }
+
+  async storeCommandResult(body: {
+    agentId: string;
+    command: string;
+    output: string;
+    exitCode: number;
+    timestamp: string;
+  }) {
+    const agent = await this.prisma.agent.findFirst({ where: { id: body.agentId } });
+    if (!agent) return { received: false };
+    
+    const systemInfo = (agent.systemInfo as any) || {};
+    const commandHistory = systemInfo._commandHistory || [];
+    commandHistory.push({
+      command: body.command,
+      output: body.output?.substring(0, 10000),
+      exitCode: body.exitCode,
+      executedAt: body.timestamp,
+    });
+    // Keep only last 50 commands
+    if (commandHistory.length > 50) commandHistory.splice(0, commandHistory.length - 50);
+    
+    // Remove from pending
+    const pendingCommands = (systemInfo._pendingCommands || []).filter(
+      (c: any) => c.command !== body.command
+    );
+    
+    await this.prisma.agent.update({
+      where: { id: agent.id },
+      data: { systemInfo: { ...systemInfo, _commandHistory: commandHistory, _pendingCommands: pendingCommands } },
+    });
+    
+    this.logger.log(`Command result received from agent ${body.agentId}: exit=${body.exitCode}`);
+    return { received: true };
+  }
+
+  async getCommandHistory(agentId: string) {
+    const agent = await this.prisma.agent.findFirst({ where: { id: agentId } });
+    if (!agent) throw new NotFoundException('Agent not found');
+    const systemInfo = (agent.systemInfo as any) || {};
+    return {
+      history: systemInfo._commandHistory || [],
+      pending: systemInfo._pendingCommands || [],
+    };
   }
 }

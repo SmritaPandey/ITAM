@@ -91,4 +91,39 @@ export class PatchesController {
   async remove(@Request() req: any, @Param('id') id: string) {
     return this.service.delete(id, req.user.tenantId);
   }
+
+  @Post(':id/schedule')
+  @Roles('Tenant Admin')
+  @ApiOperation({ summary: 'Schedule a patch deployment in a maintenance window' })
+  async schedule(@Param('id') id: string, @Request() req: any, @Body() body: any) {
+    return this.service.schedulePatch(id, req.user.tenantId, body);
+  }
+
+  @Post(':id/rollback')
+  @Roles('Tenant Admin')
+  @ApiOperation({ summary: 'Rollback a deployed patch to previous state' })
+  async rollback(@Param('id') id: string, @Request() req: any) {
+    return this.service.rollbackPatch(id, req.user.tenantId);
+  }
+
+  @Get('schedules/upcoming')
+  @Roles('Tenant Admin', 'IT Admin')
+  @ApiOperation({ summary: 'Get upcoming scheduled patch deployments' })
+  async upcomingSchedules(@Request() req: any) {
+    return this.service.getUpcomingSchedules(req.user.tenantId);
+  }
+
+  @Post('software/deploy')
+  @Roles('Tenant Admin')
+  @ApiOperation({ summary: 'Deploy a software package to agents' })
+  async deploySoftware(@Request() req: any, @Body() body: any) {
+    return this.service.deploySoftware(req.user.tenantId, body);
+  }
+
+  @Get('software/catalog')
+  @Roles('Tenant Admin', 'IT Admin')
+  @ApiOperation({ summary: 'Get the 3rd-party software catalog' })
+  async softwareCatalog() {
+    return this.service.getSoftwareCatalog();
+  }
 }

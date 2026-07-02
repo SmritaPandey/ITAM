@@ -7,7 +7,7 @@ import {
   BarChart3, Zap, Users, Building2, Package, LogOut, User,
   AlertTriangle, CheckCircle2, Info, Clock, X, Radar, Key, FileText, BookOpen,
   Headphones, UserCircle, Wrench, Scan, ShoppingCart, GitBranch, AlertOctagon,
-  Sun, Moon, Menu, Lock, CheckCircle
+  Sun, Moon, Menu, Lock, CheckCircle, Terminal, Download
 } from "lucide-react";
 
 import { apiFetch, safeFetch, getToken } from "@/lib/api";
@@ -303,6 +303,8 @@ const navSections = [
       { name: "Work Orders", icon: Wrench, href: "/dashboard/work-orders", badge: null },
       { name: "Discovery", icon: Radar, href: "/dashboard/discovery", badge: null },
       { name: "Patch Mgmt", icon: Shield, href: "/dashboard/patches", badge: null },
+      { name: "Software Deploy", icon: Download, href: "/dashboard/software-deploy", badge: null },
+      { name: "Remote Terminal", icon: Terminal, href: "/dashboard/remote-terminal", badge: null },
       { name: "Network (NMS)", icon: Network, href: "/dashboard/network", badge: null },
       { name: "Security Scan", icon: Scan, href: "/dashboard/scanning", badge: null },
       { name: "Compliance", icon: ShieldCheck, href: "/dashboard/compliance", badge: null },
@@ -317,6 +319,8 @@ const navSections = [
       { name: "Fleet / GPS", icon: Truck, href: "/dashboard/fleet", badge: null },
       { name: "CCTV", icon: Camera, href: "/dashboard/cctv", badge: null },
       { name: "VDI", icon: MonitorPlay, href: "/dashboard/vdi", badge: null },
+      { name: "NAC", icon: Lock, href: "/dashboard/nac", badge: null },
+      { name: "Alerts", icon: Bell, href: "/dashboard/alerts", badge: null },
     ],
   },
   {

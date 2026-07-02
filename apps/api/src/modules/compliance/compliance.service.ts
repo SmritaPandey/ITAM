@@ -16,6 +16,7 @@ const ALGORITHM = 'aes-256-cbc';
 interface ChangeDetection {
   category: string;
   changeType: string;
+  severity?: string;
   summary: string;
   previousValue: any;
   newValue: any;
@@ -345,6 +346,70 @@ export class ComplianceService {
           },
         });
       }
+    }
+
+    // Startup program changes — detect persistence
+    const prevStartup = prev?.startupPrograms || [];
+    const currStartup = curr?.startupPrograms || [];
+    const newStartup = currStartup.filter((s: any) => !prevStartup.some((p: any) => p.name === s.name && p.path === s.path));
+    if (newStartup.length > 0) {
+      changes.push({ category: 'PERSISTENCE_CHANGE', changeType: 'STARTUP_ITEM_ADDED', severity: 'WARNING',
+        summary: `${newStartup.length} new startup program(s) detected: ${newStartup.map((s: any) => s.name).join(', ')}`,
+        previousValue: JSON.stringify(prevStartup.map((s: any) => s.name)), newValue: JSON.stringify(newStartup) });
+    }
+    const removedStartup = prevStartup.filter((s: any) => !currStartup.some((c: any) => c.name === s.name && c.path === s.path));
+    if (removedStartup.length > 0) {
+      changes.push({ category: 'PERSISTENCE_CHANGE', changeType: 'STARTUP_ITEM_REMOVED', severity: 'INFO',
+        summary: `${removedStartup.length} startup program(s) removed: ${removedStartup.map((s: any) => s.name).join(', ')}`,
+        previousValue: JSON.stringify(removedStartup.map((s: any) => s.name)), newValue: JSON.stringify(currStartup.map((s: any) => s.name)) });
+    }
+
+    // Screen lock / password policy degradation
+    const prevPolicy = prev?.screenLockPolicy || {} as any;
+    const currPolicy = curr?.screenLockPolicy || {} as any;
+    if (prevPolicy.screenLockEnabled && !currPolicy.screenLockEnabled) {
+      changes.push({ category: 'POLICY_VIOLATION', changeType: 'SCREEN_LOCK_DISABLED', severity: 'CRITICAL',
+        summary: 'Screen lock has been DISABLED on this endpoint',
+        previousValue: JSON.stringify(prevPolicy), newValue: JSON.stringify(currPolicy) });
+    }
+    if (currPolicy.idleTimeSeconds && prevPolicy.idleTimeSeconds && currPolicy.idleTimeSeconds > prevPolicy.idleTimeSeconds * 2) {
+      changes.push({ category: 'POLICY_VIOLATION', changeType: 'SCREEN_LOCK_TIMEOUT_INCREASED', severity: 'WARNING',
+        summary: `Screen lock idle timeout increased from ${prevPolicy.idleTimeSeconds}s to ${currPolicy.idleTimeSeconds}s`,
+        previousValue: String(prevPolicy.idleTimeSeconds), newValue: String(currPolicy.idleTimeSeconds) });
+    }
+
+    // Browser extension changes
+    const prevExts = prev?.browserExtensions || [];
+    const currExts = curr?.browserExtensions || [];
+    const newExts = currExts.filter((e: any) => !prevExts.some((p: any) => p.id === e.id && p.browser === e.browser));
+    if (newExts.length > 0) {
+      changes.push({ category: 'SOFTWARE_CHANGE', changeType: 'BROWSER_EXTENSION_INSTALLED', severity: 'WARNING',
+        summary: `${newExts.length} new browser extension(s) installed: ${newExts.map((e: any) => `${e.name} (${e.browser})`).join(', ')}`,
+        previousValue: JSON.stringify(prevExts.map((e: any) => e.name)), newValue: JSON.stringify(newExts) });
+    }
+
+    // USB volume mount changes
+    const prevMounts = prev?.externalMounts || [];
+    const currMounts = curr?.externalMounts || [];
+    const newMounts = currMounts.filter((m: any) => !prevMounts.some((p: any) => p.mountPoint === m.mountPoint && p.device === m.device));
+    if (newMounts.length > 0) {
+      changes.push({ category: 'USB_MOUNT', changeType: 'EXTERNAL_VOLUME_MOUNTED', severity: 'WARNING',
+        summary: `${newMounts.length} external volume(s) mounted: ${newMounts.map((m: any) => m.mountPoint || m.device).join(', ')}`,
+        previousValue: JSON.stringify(prevMounts.map((m: any) => m.mountPoint)), newValue: JSON.stringify(newMounts) });
+    }
+
+    // Certificate store changes — detect rogue CA injection
+    const prevCerts = prev?.certificateStore || {} as any;
+    const currCerts = curr?.certificateStore || {} as any;
+    if (prevCerts.trustedRootCount && currCerts.trustedRootCount && currCerts.trustedRootCount > prevCerts.trustedRootCount) {
+      changes.push({ category: 'CERTIFICATE_CHANGE', changeType: 'ROOT_CERT_ADDED', severity: 'CRITICAL',
+        summary: `Trusted root certificate count increased from ${prevCerts.trustedRootCount} to ${currCerts.trustedRootCount} — possible rogue CA injection`,
+        previousValue: String(prevCerts.trustedRootCount), newValue: String(currCerts.trustedRootCount) });
+    }
+    if (prevCerts.trustedRootCount && currCerts.trustedRootCount && currCerts.trustedRootCount < prevCerts.trustedRootCount) {
+      changes.push({ category: 'CERTIFICATE_CHANGE', changeType: 'ROOT_CERT_REMOVED', severity: 'WARNING',
+        summary: `Trusted root certificate count decreased from ${prevCerts.trustedRootCount} to ${currCerts.trustedRootCount}`,
+        previousValue: String(prevCerts.trustedRootCount), newValue: String(currCerts.trustedRootCount) });
     }
 
     return changes;
@@ -864,6 +929,115 @@ export class ComplianceService {
         },
         scope: {},
       },
+      // ─── CIS BENCHMARK TEMPLATES ────────────────────────────────
+      {
+        name: 'CIS: Disk Encryption Required',
+        description: 'CIS 1.1.1 — Ensure BitLocker (Windows) or FileVault (macOS) is enabled on all endpoints',
+        category: 'POLICY_VIOLATION',
+        severity: 'CRITICAL',
+        action: 'ENFORCE',
+        matchPattern: { cisBenchmark: '1.1.1', checkField: 'diskEncryption.enabled', expectedValue: true },
+        scope: {},
+      },
+      {
+        name: 'CIS: Firewall Enabled',
+        description: 'CIS 3.5.1 — Ensure host-based firewall is enabled (Windows Firewall / macOS ALF / Linux ufw)',
+        category: 'POLICY_VIOLATION',
+        severity: 'CRITICAL',
+        action: 'ENFORCE',
+        matchPattern: { cisBenchmark: '3.5.1', checkField: 'firewallStatus.enabled', expectedValue: true },
+        scope: {},
+      },
+      {
+        name: 'CIS: Auto-Updates Enabled',
+        description: 'CIS 1.5.3 — Ensure automatic OS updates are enabled',
+        category: 'POLICY_VIOLATION',
+        severity: 'WARNING',
+        action: 'ALERT_ONLY',
+        matchPattern: { cisBenchmark: '1.5.3', checkField: 'pendingUpdates.autoUpdateEnabled', expectedValue: true },
+        scope: {},
+      },
+      {
+        name: 'CIS: Screen Lock Timeout ≤ 15 min',
+        description: 'CIS 1.4.1 — Ensure screen lock activates within 15 minutes of inactivity',
+        category: 'POLICY_VIOLATION',
+        severity: 'WARNING',
+        action: 'REQUIRE_APPROVAL',
+        matchPattern: { cisBenchmark: '1.4.1', checkField: 'screenLockPolicy.idleTimeSeconds', maxValue: 900 },
+        scope: {},
+      },
+      {
+        name: 'CIS: No Guest Accounts',
+        description: 'CIS 5.6.1 — Ensure guest account is disabled',
+        category: 'UNAUTHORIZED_ACCESS',
+        severity: 'WARNING',
+        action: 'REQUIRE_APPROVAL',
+        matchPattern: { cisBenchmark: '5.6.1', checkField: 'userAccounts', blockedUsers: ['guest', 'Guest'] },
+        scope: {},
+      },
+      {
+        name: 'CIS: Remote Desktop Disabled',
+        description: 'CIS 2.2.2 — Ensure Remote Desktop (RDP) is disabled unless explicitly required',
+        category: 'PORT_CHANGE',
+        severity: 'WARNING',
+        action: 'ALERT_ONLY',
+        matchPattern: { cisBenchmark: '2.2.2', blockedPorts: [3389] },
+        scope: {},
+      },
+      {
+        name: 'CIS: SSH Root Login Disabled',
+        description: 'CIS 5.2.8 — Ensure SSH root login is disabled',
+        category: 'POLICY_VIOLATION',
+        severity: 'CRITICAL',
+        action: 'REQUIRE_APPROVAL',
+        matchPattern: { cisBenchmark: '5.2.8', checkField: 'sshConfig.permitRootLogin', expectedValue: false },
+        scope: {},
+      },
+      {
+        name: 'CIS: Antivirus Active',
+        description: 'CIS 1.1.2 — Ensure endpoint antivirus/antimalware is installed and running',
+        category: 'POLICY_VIOLATION',
+        severity: 'CRITICAL',
+        action: 'ALERT_ONLY',
+        matchPattern: { cisBenchmark: '1.1.2', checkField: 'antivirusStatus.active', expectedValue: true },
+        scope: {},
+      },
+      {
+        name: 'CIS: USB Storage Policy',
+        description: 'CIS 1.7.1 — Control removable media (USB storage) access policy',
+        category: 'USB_DEVICE',
+        severity: 'WARNING',
+        action: 'BLOCK_USB',
+        matchPattern: { cisBenchmark: '1.7.1', blockAll: false, requireApproval: true },
+        scope: {},
+      },
+      {
+        name: 'CIS: Password Complexity',
+        description: 'CIS 5.3.1 — Ensure password length minimum of 14 characters and complexity requirements',
+        category: 'POLICY_VIOLATION',
+        severity: 'WARNING',
+        action: 'ALERT_ONLY',
+        matchPattern: { cisBenchmark: '5.3.1', checkField: 'passwordPolicy.minLength', minValue: 14 },
+        scope: {},
+      },
+      {
+        name: 'CIS: Audit Logging Enabled',
+        description: 'CIS 4.1.1 — Ensure audit logging is enabled on the endpoint',
+        category: 'POLICY_VIOLATION',
+        severity: 'WARNING',
+        action: 'ALERT_ONLY',
+        matchPattern: { cisBenchmark: '4.1.1', checkField: 'auditLogging.enabled', expectedValue: true },
+        scope: {},
+      },
+      {
+        name: 'CIS: No Unauthorized Listening Ports',
+        description: 'CIS 2.1.1 — Ensure only approved services are listening on network ports',
+        category: 'PORT_CHANGE',
+        severity: 'WARNING',
+        action: 'REQUIRE_APPROVAL',
+        matchPattern: { cisBenchmark: '2.1.1', approvedPorts: [22, 53, 80, 443, 8080] },
+        scope: {},
+      },
     ];
   }
 
@@ -1064,6 +1238,152 @@ export class ComplianceService {
       successful: results.filter(r => r.success).length,
       failed: results.filter(r => !r.success).length,
       results,
+    };
+  }
+
+  // ─── CIS BENCHMARK ASSESSMENT ───────────────────────────────
+  async assessCisBenchmark(tenantId: string, agentId: string) {
+    const agent = await this.prisma.agent.findFirst({
+      where: { id: agentId, tenantId },
+    });
+    if (!agent) throw new NotFoundException('Agent not found');
+    const raw = (agent.systemInfo as any) || {};
+    // Normalize agent telemetry paths to expected CIS field names
+    const info = {
+      ...raw,
+      diskEncryption: raw.diskEncryption || {
+        enabled: raw.security?.encryptionEnabled || false,
+        method: raw.security?.encryptionMethod || null,
+      },
+      firewallStatus: raw.firewallStatus || {
+        enabled: raw.security?.firewallEnabled || false,
+      },
+      antivirusStatus: raw.antivirusStatus || {
+        installed: raw.antivirus?.installed || false,
+        active: raw.antivirus?.active || false,
+        name: raw.antivirus?.name || raw.antivirus?.product || null,
+      },
+      userAccounts: raw.userAccounts || raw.security?.users || [],
+      listeningPorts: raw.listeningPorts || raw.security?.openPorts || [],
+      pendingUpdates: raw.pendingUpdates || {
+        count: raw.softwareUpdates?.pendingCount || 0,
+        autoUpdateEnabled: raw.softwareUpdates?.autoUpdateEnabled ?? null,
+      },
+    };
+    const checks: any[] = [];
+
+    // CIS 1.1.1 — Disk Encryption
+    const diskEnc = info.diskEncryption || {};
+    checks.push({
+      id: 'CIS-1.1.1', name: 'Disk Encryption',
+      status: diskEnc.enabled ? 'PASS' : 'FAIL',
+      detail: diskEnc.enabled ? `Encrypted (${diskEnc.method || 'Unknown'})` : 'Disk encryption is NOT enabled',
+      severity: 'CRITICAL',
+    });
+
+    // CIS 3.5.1 — Firewall Enabled
+    const fw = info.firewallStatus || {};
+    checks.push({
+      id: 'CIS-3.5.1', name: 'Firewall Enabled',
+      status: fw.enabled ? 'PASS' : 'FAIL',
+      detail: fw.enabled ? 'Firewall is active' : 'Firewall is DISABLED',
+      severity: 'CRITICAL',
+    });
+
+    // CIS 1.4.1 — Screen Lock Timeout
+    const sl = info.screenLockPolicy || {};
+    const slTimeout = sl.idleTimeSeconds || 0;
+    checks.push({
+      id: 'CIS-1.4.1', name: 'Screen Lock ≤ 15 min',
+      status: sl.screenLockEnabled && slTimeout > 0 && slTimeout <= 900 ? 'PASS' : 'FAIL',
+      detail: sl.screenLockEnabled ? `Timeout: ${slTimeout}s (${Math.round(slTimeout / 60)} min)` : 'Screen lock disabled',
+      severity: 'WARNING',
+    });
+
+    // CIS 1.1.2 — Antivirus Active
+    const av = info.antivirusStatus || {};
+    checks.push({
+      id: 'CIS-1.1.2', name: 'Antivirus Active',
+      status: av.installed && av.active ? 'PASS' : av.installed ? 'WARNING' : 'FAIL',
+      detail: av.installed ? (av.active ? `${av.name || 'AV'} is active` : `${av.name || 'AV'} installed but not active`) : 'No antivirus detected',
+      severity: 'CRITICAL',
+    });
+
+    // CIS 5.6.1 — No Guest Accounts
+    const users = info.userAccounts || [];
+    const guestUsers = users.filter((u: any) => ['guest', 'Guest', 'GUEST'].includes(u.name || u.username));
+    checks.push({
+      id: 'CIS-5.6.1', name: 'No Guest Accounts',
+      status: guestUsers.length === 0 ? 'PASS' : 'FAIL',
+      detail: guestUsers.length === 0 ? 'No guest accounts found' : `${guestUsers.length} guest account(s) found`,
+      severity: 'WARNING',
+    });
+
+    // CIS 2.2.2 — RDP Disabled
+    const ports = info.listeningPorts || [];
+    const rdpOpen = ports.some((p: any) => p.port === 3389);
+    checks.push({
+      id: 'CIS-2.2.2', name: 'RDP Disabled',
+      status: rdpOpen ? 'FAIL' : 'PASS',
+      detail: rdpOpen ? 'Port 3389 (RDP) is open' : 'RDP is not listening',
+      severity: 'WARNING',
+    });
+
+    // CIS 2.1.1 — Unauthorized Ports
+    const approvedPorts = [22, 53, 80, 443, 4100, 8080, 8443, 3000, 5432];
+    const unauthorizedPorts = ports.filter((p: any) => !approvedPorts.includes(p.port));
+    checks.push({
+      id: 'CIS-2.1.1', name: 'No Unauthorized Ports',
+      status: unauthorizedPorts.length === 0 ? 'PASS' : 'WARNING',
+      detail: unauthorizedPorts.length === 0 ? 'All ports approved' : `${unauthorizedPorts.length} unapproved port(s): ${unauthorizedPorts.map((p: any) => p.port).join(', ')}`,
+      severity: 'WARNING',
+    });
+
+    // CIS 1.5.3 — Auto-Updates
+    const updates = info.pendingUpdates || {};
+    checks.push({
+      id: 'CIS-1.5.3', name: 'Auto-Updates Enabled',
+      status: updates.autoUpdateEnabled ? 'PASS' : 'WARNING',
+      detail: updates.autoUpdateEnabled ? 'Automatic updates are enabled' : 'Auto-updates may be disabled',
+      severity: 'WARNING',
+    });
+
+    const pass = checks.filter(c => c.status === 'PASS').length;
+    const fail = checks.filter(c => c.status === 'FAIL').length;
+    const warn = checks.filter(c => c.status === 'WARNING').length;
+
+    return {
+      agentId, hostname: (agent as any).hostname || agent.id.slice(0, 8),
+      assessedAt: new Date().toISOString(),
+      score: Math.round((pass / checks.length) * 100),
+      summary: { total: checks.length, pass, fail, warn },
+      checks,
+    };
+  }
+
+  async getCisBenchmarkReport(tenantId: string) {
+    const agents = await this.prisma.agent.findMany({
+      where: { tenantId, status: 'ONLINE' },
+      select: { id: true, systemInfo: true, hostname: true },
+    });
+
+    const results = [];
+    for (const agent of agents) {
+      try {
+        const assessment = await this.assessCisBenchmark(tenantId, agent.id);
+        results.push(assessment);
+      } catch {}
+    }
+
+    const avgScore = results.length > 0
+      ? Math.round(results.reduce((sum, r) => sum + r.score, 0) / results.length)
+      : 0;
+
+    return {
+      assessedAt: new Date().toISOString(),
+      totalAgents: results.length,
+      averageScore: avgScore,
+      agents: results,
     };
   }
 }

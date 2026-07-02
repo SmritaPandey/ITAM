@@ -1,10 +1,12 @@
-import { Module } from '@nestjs/common';
+import { Module, MiddlewareConsumer, NestModule } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { ThrottlerModule } from '@nestjs/throttler';
 import { ScheduleModule } from '@nestjs/schedule';
-import { APP_INTERCEPTOR } from '@nestjs/core';
+import { APP_INTERCEPTOR, APP_GUARD } from '@nestjs/core';
+import { ThrottlerGuard } from '@nestjs/throttler';
 import { PrismaModule } from './common/database/prisma.module';
 import { AuditLogInterceptor } from './common/interceptors/audit-log.interceptor';
+import { SecurityMiddleware } from './common/middleware/security.middleware';
 import { AuthModule } from './modules/auth/auth.module';
 import { UsersModule } from './modules/users/users.module';
 import { TenantsModule } from './modules/tenants/tenants.module';
@@ -37,6 +39,7 @@ import { ContactModule } from './modules/contact/contact.module';
 import { AdminModule } from './modules/admin/admin.module';
 import { AnalyticsModule } from './modules/analytics/analytics.module';
 import { AiModule } from './modules/ai/ai.module';
+import { AlertsModule } from './modules/alerts/alerts.module';
 
 @Module({
   imports: [
@@ -44,7 +47,11 @@ import { AiModule } from './modules/ai/ai.module';
     ConfigModule.forRoot({ isGlobal: true }),
 
     // Rate limiting
-    ThrottlerModule.forRoot([{ ttl: 60000, limit: 100 }]),
+    ThrottlerModule.forRoot([
+      { name: 'short', ttl: 1000, limit: 3 },    // 3 requests per second burst protection
+      { name: 'medium', ttl: 10000, limit: 20 },  // 20 requests per 10 seconds
+      { name: 'long', ttl: 60000, limit: 100 },    // 100 requests per minute
+    ]),
 
     // Scheduled tasks
     ScheduleModule.forRoot(),
@@ -97,9 +104,20 @@ import { AiModule } from './modules/ai/ai.module';
 
     // Real-time WebSocket
     WebSocketModule,
+
+    // Alerting & Notifications
+    AlertsModule,
   ],
   providers: [
     { provide: APP_INTERCEPTOR, useClass: AuditLogInterceptor },
+    { provide: APP_GUARD, useClass: ThrottlerGuard },
   ],
 })
-export class AppModule {}
+export class AppModule implements NestModule {
+  configure(consumer: MiddlewareConsumer) {
+    consumer
+      .apply(SecurityMiddleware)
+      .forRoutes('*');
+  }
+}
+

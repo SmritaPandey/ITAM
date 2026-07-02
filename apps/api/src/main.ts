@@ -1,4 +1,5 @@
 import { NestFactory } from '@nestjs/core';
+import { v4 as uuidv4 } from 'uuid';
 import { ValidationPipe, Logger } from '@nestjs/common';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 import helmet from 'helmet';
@@ -9,6 +10,7 @@ import { AppModule } from './app.module';
 import { GlobalExceptionFilter } from './common/filters/global-exception.filter';
 import { PrismaExceptionFilter } from './common/filters/prisma-exception.filter';
 import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
+import { SanitizePipe } from './common/pipes/sanitize.pipe';
 
 async function bootstrap() {
   const logger = new Logger('Bootstrap');
@@ -27,7 +29,42 @@ async function bootstrap() {
   app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
   // Security
-  app.use(helmet());
+  app.use(helmet({
+    contentSecurityPolicy: {
+      directives: {
+        defaultSrc: ["'self'"],
+        scriptSrc: ["'self'"],
+        styleSrc: ["'self'", "'unsafe-inline'"],
+        imgSrc: ["'self'", 'data:', 'https:'],
+        connectSrc: ["'self'"],
+        fontSrc: ["'self'"],
+        objectSrc: ["'none'"],
+        frameSrc: ["'none'"],
+        baseUri: ["'self'"],
+        formAction: ["'self'"],
+      },
+    },
+    crossOriginEmbedderPolicy: false, // allow API calls from web app
+    hsts: { maxAge: 31536000, includeSubDomains: true, preload: true },
+  }));
+
+  // Request ID for tracing
+  app.use((req: any, res: any, next: any) => {
+    req.id = req.headers['x-request-id'] || uuidv4();
+    res.setHeader('X-Request-Id', req.id);
+    next();
+  });
+
+  // Additional security headers
+  app.use((req: any, res: any, next: any) => {
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.setHeader('X-Frame-Options', 'DENY');
+    res.setHeader('X-XSS-Protection', '0'); // Modern browsers: CSP is preferred
+    res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
+    res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
+    res.removeHeader('X-Powered-By');
+    next();
+  });
   app.use(compression());
   app.use(cookieParser());
 
@@ -44,6 +81,7 @@ async function bootstrap() {
 
   // Validation
   app.useGlobalPipes(
+    new SanitizePipe(),
     new ValidationPipe({
       whitelist: true,
       forbidNonWhitelisted: true,
@@ -55,25 +93,27 @@ async function bootstrap() {
   // Global exception filter — safe error responses
   app.useGlobalFilters(new AllExceptionsFilter(), new PrismaExceptionFilter(), new GlobalExceptionFilter());
 
-  // Swagger API docs
-  const config = new DocumentBuilder()
-    .setTitle('QS Asset Management API')
-    .setDescription('Enterprise IT Asset Monitoring, Management & Security Platform — API Reference')
-    .setVersion('1.0.0')
-    .addBearerAuth()
-    .addServer(process.env.NODE_ENV === 'production' ? 'https://api.qsasset.com' : `http://localhost:${process.env.PORT || 4100}`)
-    .addTag('auth', 'Authentication & authorization')
-    .addTag('assets', 'Asset management & CMDB')
-    .addTag('tickets', 'ITSM ticketing')
-    .addTag('users', 'User management')
-    .addTag('monitoring', 'Network, CCTV & VDI monitoring')
-    .addTag('scanning', 'Security & vulnerability scanning')
-    .addTag('reports', 'Reports & analytics')
-    .addTag('health', 'System health checks')
-    .build();
+  // Swagger API docs (disabled in production)
+  if (process.env.NODE_ENV !== 'production') {
+    const config = new DocumentBuilder()
+      .setTitle('QS Asset Management API')
+      .setDescription('Enterprise IT Asset Monitoring, Management & Security Platform — API Reference')
+      .setVersion('1.0.0')
+      .addBearerAuth()
+      .addServer(process.env.NODE_ENV === 'production' ? 'https://api.qsasset.com' : `http://localhost:${process.env.PORT || 4100}`)
+      .addTag('auth', 'Authentication & authorization')
+      .addTag('assets', 'Asset management & CMDB')
+      .addTag('tickets', 'ITSM ticketing')
+      .addTag('users', 'User management')
+      .addTag('monitoring', 'Network, CCTV & VDI monitoring')
+      .addTag('scanning', 'Security & vulnerability scanning')
+      .addTag('reports', 'Reports & analytics')
+      .addTag('health', 'System health checks')
+      .build();
 
-  const document = SwaggerModule.createDocument(app, config);
-  SwaggerModule.setup('api/docs', app, document);
+    const document = SwaggerModule.createDocument(app, config);
+    SwaggerModule.setup('api/docs', app, document);
+  }
 
   const port = process.env.PORT || 4100;
   await app.listen(port);

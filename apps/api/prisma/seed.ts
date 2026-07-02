@@ -14,7 +14,9 @@ function genAssets(opts: {
   count: number;
   costRange: [number, number];
   hasNetwork?: boolean;
+  category?: string; // e.g. 'Laptop', 'Server', 'Furniture'
 }) {
+  const siteNames = ['NDBK-MUM', 'NDBK-TRS', 'NDBK-BLR', 'NDBK-DEL', 'NDBK-HYD', 'NDBK-PUN', 'NDBK-CHE', 'NDBK-KOL'];
   return Array.from({ length: opts.count }, (_, i) => {
     const pick = opts.models[i % opts.models.length];
     const status =
@@ -25,10 +27,16 @@ function genAssets(opts: {
           : i % 10 === 0
             ? ('IN_STORAGE' as const)
             : ('ACTIVE' as const);
+    const tag = `${opts.prefix}-${String(i + 1).padStart(3, '0')}`;
+    const siteSuffix = siteNames[i % opts.sites.length] || 'NDBK';
     return {
       tenantId: opts.tenantId,
-      assetTag: `${opts.prefix}-${String(i + 1).padStart(3, '0')}`,
+      assetTag: tag,
       name: `${pick.mfr} ${pick.model}`,
+      notes: opts.hasNetwork
+        ? `${pick.mfr} ${pick.model} — ${opts.category || 'IT Asset'} deployed at ${siteSuffix}. Asset tag ${tag}.`
+        : `${pick.mfr} ${pick.model} — ${opts.category || 'Asset'} at ${siteSuffix}. Tag ${tag}.`,
+      category: opts.category || undefined,
       assetTypeId: opts.typeId,
       manufacturer: pick.mfr,
       model: pick.model,
@@ -41,6 +49,7 @@ function genAssets(opts: {
       warrantyExpiry: new Date(2026 + Math.floor(Math.random() * 3), Math.floor(Math.random() * 12), 1),
       ...(opts.hasNetwork
         ? {
+            hostname: `${siteSuffix}-${opts.prefix}-${String(i + 1).padStart(3, '0')}`,
             ipAddress: `10.${10 + Math.floor(i / 254)}.${(i % 254) + 1}.${1 + Math.floor(Math.random() * 250)}`,
             macAddress: Array.from({ length: 6 }, () =>
               Math.floor(Math.random() * 256)
@@ -325,7 +334,7 @@ async function main() {
   // Laptops — 120
   await prisma.asset.createMany({
     data: genAssets({
-      tenantId: bankTenant.id, typeId: typeLaptop.id, prefix: 'LPT', count: 120, costRange: [65000, 185000], hasNetwork: true,
+      tenantId: bankTenant.id, typeId: typeLaptop.id, prefix: 'LPT', count: 120, costRange: [65000, 185000], hasNetwork: true, category: 'Laptop',
       models: [
         { mfr: 'Dell', model: 'Latitude 5540' }, { mfr: 'Dell', model: 'Latitude 7440' },
         { mfr: 'Lenovo', model: 'ThinkPad T14s Gen 4' }, { mfr: 'Lenovo', model: 'ThinkPad X1 Carbon Gen 11' },
@@ -338,7 +347,7 @@ async function main() {
   // Desktops — 80
   await prisma.asset.createMany({
     data: genAssets({
-      tenantId: bankTenant.id, typeId: typeDesktop.id, prefix: 'DSK', count: 80, costRange: [45000, 120000], hasNetwork: true,
+      tenantId: bankTenant.id, typeId: typeDesktop.id, prefix: 'DSK', count: 80, costRange: [45000, 120000], hasNetwork: true, category: 'Desktop Workstation',
       models: [
         { mfr: 'Dell', model: 'OptiPlex 7010' }, { mfr: 'HP', model: 'ProDesk 400 G9' },
         { mfr: 'Lenovo', model: 'ThinkCentre M90q Gen 4' }, { mfr: 'Dell', model: 'Precision 3660' },
@@ -350,7 +359,7 @@ async function main() {
   // Servers — 40
   await prisma.asset.createMany({
     data: genAssets({
-      tenantId: bankTenant.id, typeId: typeServer.id, prefix: 'SRV', count: 40, costRange: [350000, 2500000], hasNetwork: true,
+      tenantId: bankTenant.id, typeId: typeServer.id, prefix: 'SRV', count: 40, costRange: [350000, 2500000], hasNetwork: true, category: 'Rack Server',
       models: [
         { mfr: 'Dell', model: 'PowerEdge R760' }, { mfr: 'HPE', model: 'ProLiant DL380 Gen11' },
         { mfr: 'Lenovo', model: 'ThinkSystem SR650 V3' }, { mfr: 'Dell', model: 'PowerEdge R660' },
@@ -363,7 +372,7 @@ async function main() {
   // Thin Clients — 35
   await prisma.asset.createMany({
     data: genAssets({
-      tenantId: bankTenant.id, typeId: typeThinClient.id, prefix: 'THN', count: 35, costRange: [25000, 55000], hasNetwork: true,
+      tenantId: bankTenant.id, typeId: typeThinClient.id, prefix: 'THN', count: 35, costRange: [25000, 55000], hasNetwork: true, category: 'Thin Client',
       models: [
         { mfr: 'Dell', model: 'Wyse 5070' }, { mfr: 'HP', model: 't640 Thin Client' },
         { mfr: 'IGEL', model: 'UD3-LX' },
@@ -375,7 +384,7 @@ async function main() {
   // ATMs — 30
   await prisma.asset.createMany({
     data: genAssets({
-      tenantId: bankTenant.id, typeId: typeATM.id, prefix: 'ATM', count: 30, costRange: [800000, 1500000], hasNetwork: true,
+      tenantId: bankTenant.id, typeId: typeATM.id, prefix: 'ATM', count: 30, costRange: [800000, 1500000], hasNetwork: true, category: 'ATM Terminal',
       models: [
         { mfr: 'NCR', model: 'SelfServ 84' }, { mfr: 'Diebold Nixdorf', model: 'DN Series 400' },
         { mfr: 'Hitachi', model: 'SR7500' },
@@ -387,7 +396,7 @@ async function main() {
   // Switches — 40
   await prisma.asset.createMany({
     data: genAssets({
-      tenantId: bankTenant.id, typeId: typeSwitch.id, prefix: 'NSW', count: 40, costRange: [85000, 650000], hasNetwork: true,
+      tenantId: bankTenant.id, typeId: typeSwitch.id, prefix: 'NSW', count: 40, costRange: [85000, 650000], hasNetwork: true, category: 'Network Switch',
       models: [
         { mfr: 'Cisco', model: 'Catalyst 9300L' }, { mfr: 'Cisco', model: 'Catalyst 9200' },
         { mfr: 'Aruba', model: 'CX 6300' }, { mfr: 'Juniper', model: 'EX4400' },
@@ -399,7 +408,7 @@ async function main() {
   // Routers — 15
   await prisma.asset.createMany({
     data: genAssets({
-      tenantId: bankTenant.id, typeId: typeRouter.id, prefix: 'RTR', count: 15, costRange: [150000, 900000], hasNetwork: true,
+      tenantId: bankTenant.id, typeId: typeRouter.id, prefix: 'RTR', count: 15, costRange: [150000, 900000], hasNetwork: true, category: 'Router',
       models: [
         { mfr: 'Cisco', model: 'ISR 4451-X' }, { mfr: 'Juniper', model: 'MX204' },
         { mfr: 'Cisco', model: 'ASR 1001-X' },
@@ -411,7 +420,7 @@ async function main() {
   // Firewalls — 10
   await prisma.asset.createMany({
     data: genAssets({
-      tenantId: bankTenant.id, typeId: typeFirewall.id, prefix: 'FWL', count: 10, costRange: [500000, 3500000], hasNetwork: true,
+      tenantId: bankTenant.id, typeId: typeFirewall.id, prefix: 'FWL', count: 10, costRange: [500000, 3500000], hasNetwork: true, category: 'Firewall',
       models: [
         { mfr: 'Palo Alto', model: 'PA-5260' }, { mfr: 'Fortinet', model: 'FortiGate 600F' },
         { mfr: 'Check Point', model: 'Quantum 6800' },
@@ -423,7 +432,7 @@ async function main() {
   // Access Points — 20
   await prisma.asset.createMany({
     data: genAssets({
-      tenantId: bankTenant.id, typeId: typeAP.id, prefix: 'WAP', count: 20, costRange: [18000, 65000], hasNetwork: true,
+      tenantId: bankTenant.id, typeId: typeAP.id, prefix: 'WAP', count: 20, costRange: [18000, 65000], hasNetwork: true, category: 'Wireless Access Point',
       models: [
         { mfr: 'Cisco', model: 'Meraki MR56' }, { mfr: 'Aruba', model: 'AP-635' },
         { mfr: 'Ruckus', model: 'R770' },
@@ -435,7 +444,7 @@ async function main() {
   // CCTVs — 40
   await prisma.asset.createMany({
     data: genAssets({
-      tenantId: bankTenant.id, typeId: typeCCTV.id, prefix: 'CAM', count: 40, costRange: [15000, 85000], hasNetwork: true,
+      tenantId: bankTenant.id, typeId: typeCCTV.id, prefix: 'CAM', count: 40, costRange: [15000, 85000], hasNetwork: true, category: 'IP Camera',
       models: [
         { mfr: 'Hikvision', model: 'DS-2CD2T87G2-L' }, { mfr: 'Dahua', model: 'IPC-HFW5849T1-ASE' },
         { mfr: 'Axis', model: 'P3265-LV' }, { mfr: 'Bosch', model: 'FLEXIDOME 5100i' },
@@ -447,7 +456,7 @@ async function main() {
   // Biometrics — 15
   await prisma.asset.createMany({
     data: genAssets({
-      tenantId: bankTenant.id, typeId: typeBiometric.id, prefix: 'BIO', count: 15, costRange: [35000, 120000], hasNetwork: true,
+      tenantId: bankTenant.id, typeId: typeBiometric.id, prefix: 'BIO', count: 15, costRange: [35000, 120000], hasNetwork: true, category: 'Biometric Reader',
       models: [
         { mfr: 'HID', model: 'iCLASS SE R40' }, { mfr: 'Suprema', model: 'BioStation 3' },
         { mfr: 'ZKTeco', model: 'SpeedFace V5L Pro' },
@@ -459,7 +468,7 @@ async function main() {
   // Printers — 25
   await prisma.asset.createMany({
     data: genAssets({
-      tenantId: bankTenant.id, typeId: typePrinter.id, prefix: 'PRT', count: 25, costRange: [25000, 350000], hasNetwork: true,
+      tenantId: bankTenant.id, typeId: typePrinter.id, prefix: 'PRT', count: 25, costRange: [25000, 350000], hasNetwork: true, category: 'Network Printer',
       models: [
         { mfr: 'HP', model: 'LaserJet Pro MFP 4101fdw' }, { mfr: 'Canon', model: 'imageRUNNER ADVANCE DX C3826i' },
         { mfr: 'Epson', model: 'WorkForce Pro WF-C5890' },
@@ -471,7 +480,7 @@ async function main() {
   // UPS — 10
   await prisma.asset.createMany({
     data: genAssets({
-      tenantId: bankTenant.id, typeId: typeUPS.id, prefix: 'UPS', count: 10, costRange: [85000, 1200000],
+      tenantId: bankTenant.id, typeId: typeUPS.id, prefix: 'UPS', count: 10, costRange: [85000, 1200000], hasNetwork: true, category: 'UPS Power',
       models: [
         { mfr: 'APC', model: 'Smart-UPS SRT 10kVA' }, { mfr: 'Eaton', model: '9PX 6kVA' },
         { mfr: 'Vertiv', model: 'Liebert GXT5 8kVA' },
@@ -483,7 +492,7 @@ async function main() {
   // Scanners — 10
   await prisma.asset.createMany({
     data: genAssets({
-      tenantId: bankTenant.id, typeId: typeScanner.id, prefix: 'SCN', count: 10, costRange: [20000, 95000],
+      tenantId: bankTenant.id, typeId: typeScanner.id, prefix: 'SCN', count: 10, costRange: [20000, 95000], hasNetwork: true, category: 'Document Scanner',
       models: [
         { mfr: 'Fujitsu', model: 'fi-8170' }, { mfr: 'Canon', model: 'imageFORMULA DR-C230' },
         { mfr: 'Epson', model: 'DS-870' },
@@ -495,7 +504,7 @@ async function main() {
   // Furniture — 20
   await prisma.asset.createMany({
     data: genAssets({
-      tenantId: bankTenant.id, typeId: typeFurniture.id, prefix: 'FRN', count: 20, costRange: [8000, 75000],
+      tenantId: bankTenant.id, typeId: typeFurniture.id, prefix: 'FRN', count: 20, costRange: [8000, 75000], category: 'Office Furniture',
       models: [
         { mfr: 'Godrej', model: 'Interio Motion Chair' }, { mfr: 'Steelcase', model: 'Leap V2' },
         { mfr: 'Featherlite', model: 'Optima High Back' }, { mfr: 'Godrej', model: 'Storwel Filing Cabinet' },
@@ -507,7 +516,7 @@ async function main() {
   // Vehicles — 10
   await prisma.asset.createMany({
     data: genAssets({
-      tenantId: bankTenant.id, typeId: typeVehicle.id, prefix: 'VEH', count: 10, costRange: [600000, 2500000],
+      tenantId: bankTenant.id, typeId: typeVehicle.id, prefix: 'VEH', count: 10, costRange: [600000, 2500000], category: 'Fleet Vehicle',
       models: [
         { mfr: 'Maruti Suzuki', model: 'Ertiga ZXi+' }, { mfr: 'Toyota', model: 'Innova Crysta' },
         { mfr: 'Tata', model: 'Nexon EV' }, { mfr: 'Mahindra', model: 'Bolero Neo' },

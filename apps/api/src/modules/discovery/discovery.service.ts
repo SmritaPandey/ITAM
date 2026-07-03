@@ -537,6 +537,10 @@ export class DiscoveryService {
             aliveHosts.push(result.value);
           }
         }
+
+        // Emit progress
+        const progress = Math.floor(((i + batchSize) / ips.length) * 40); // 0-40% for ping sweep
+        this.eventBus.emitDiscoveryEvent(tenantId, 'scan_progress', { scanJobId, progress, phase: 'Ping Sweep', found: aliveHosts.length });
       }
 
       // Fallback 1: If no hosts found by ping (possibly due to cloud container isolation, blocked ICMP, or permission error),
@@ -620,6 +624,10 @@ export class DiscoveryService {
               host.classification = this.classifyDevice(host.openPorts, mac);
             }),
           );
+
+          // Emit progress
+          const progress = 40 + Math.floor(((i + portBatchSize) / aliveHosts.length) * 40); // 40-80% for port scan
+          this.eventBus.emitDiscoveryEvent(tenantId, 'scan_progress', { scanJobId, progress, phase: 'Port Scan', found: aliveHosts.length });
         }
       }
 
@@ -753,7 +761,8 @@ export class DiscoveryService {
         // Count as new only if freshly created with PENDING_REVIEW
         if (result.seenCount === 1 && result.status === 'PENDING_REVIEW') {
           newCount++;
-          this.eventBus.emitDiscoveryEvent(tenantId, 'new_device', {
+          this.eventBus.emitDiscoveryEvent(tenantId, 'device_discovered', {
+            device: result,
             ipAddress: host.ip, deviceType: classification?.deviceType,
             hostname: host.hostname, mac, scanJobId,
           });
@@ -774,12 +783,23 @@ export class DiscoveryService {
         scanJobId, devicesFound: aliveHosts.length, newDevices: newCount, scanType,
       });
 
+      // Emit final scan_progress with COMPLETED status so frontend triggers refresh
+      this.eventBus.emitDiscoveryEvent(tenantId, 'scan_progress', {
+        scanJobId, progress: 100, phase: 'Complete', found: aliveHosts.length, status: 'COMPLETED',
+      });
+
       this.logger.log(`Scan ${scanJobId} completed: ${aliveHosts.length} devices, ${newCount} new (type: ${scanType})`);
     } catch (error: any) {
       await this.prisma.scanJob.update({
         where: { id: scanJobId },
         data: { status: 'FAILED', completedAt: new Date(), errorMessage: error.message },
       });
+
+      // Emit scan_progress with FAILED status so frontend triggers refresh
+      this.eventBus.emitDiscoveryEvent(tenantId, 'scan_progress', {
+        scanJobId, progress: 0, phase: 'Failed', found: 0, status: 'FAILED',
+      });
+
       throw error;
     }
   }
@@ -912,6 +932,23 @@ export class DiscoveryService {
         category: device.deviceType ? this.mapDeviceTypeToAssetType(device.deviceType) : 'Other',
       },
     });
+
+    // Auto-add to Live Monitoring if it's a network device or server
+    const typeName = this.mapDeviceTypeToAssetType(device.deviceType || undefined).toLowerCase();
+    const isMonitoredType = ['server', 'network equipment', 'switch', 'router', 'firewall'].some(t => typeName.includes(t));
+    if (isMonitoredType && asset.ipAddress) {
+      await this.prisma.monitoredDevice.create({
+        data: {
+          tenantId,
+          type: 'NETWORK_DEVICE',
+          name: asset.name,
+          ipAddress: asset.ipAddress,
+          status: 'ONLINE',
+          config: { deviceType: typeName, sourceAssetId: asset.id },
+        },
+      });
+      this.eventBus.emitMonitoringEvent(tenantId, 'new_monitored_device', { deviceId: asset.id, name: asset.name, ipAddress: asset.ipAddress });
+    }
 
     // Write Operating System details
     if (enrichment?.operatingSystem) {
@@ -1218,12 +1255,26 @@ export class DiscoveryService {
         data: { status: 'STALE' },
       });
 
+      // Update linked asset status to IN_MAINTENANCE or OFFLINE
+      if (agent.assetId) {
+        await this.prisma.asset.update({
+          where: { id: agent.assetId },
+          data: { status: 'IN_MAINTENANCE' },
+        });
+      }
+
       this.eventBus.emitDiscoveryEvent(agent.tenantId, 'agent_offline', {
         agentId: agent.id,
         hostname: agent.hostname,
         ipAddress: agent.ipAddress,
         lastHeartbeat: agent.lastHeartbeat,
         message: `Agent ${agent.hostname} has gone offline`,
+      });
+
+      this.eventBus.emitMonitoringEvent(agent.tenantId, 'device_down', {
+        deviceId: agent.id,
+        name: agent.hostname,
+        type: 'AGENT',
       });
 
       this.logger.warn(`Agent ${agent.hostname} (${agent.ipAddress}) marked as STALE — last heartbeat: ${agent.lastHeartbeat?.toISOString()}`);
@@ -1294,21 +1345,57 @@ export class DiscoveryService {
     const agent = await this.prisma.agent.findFirst({ where: { id, tenantId } });
     if (!agent) throw new NotFoundException('Agent not found');
 
-    const updated = await this.prisma.agent.update({
-      where: { id },
-      data: {
-        lastHeartbeat: new Date(),
-        status: 'ONLINE',
-        ...(data?.systemInfo ? { systemInfo: data.systemInfo } : {}),
-        ...(data?.version ? { agentVersion: data.version } : {}),
-      },
-    });
+    let updated: any;
+
+    if (agent.status !== 'ONLINE') {
+      updated = await this.prisma.agent.update({
+        where: { id },
+        data: {
+          lastHeartbeat: new Date(),
+          status: 'ONLINE',
+          ...(data?.systemInfo ? { systemInfo: data.systemInfo } : {}),
+          ...(data?.version ? { agentVersion: data.version } : {}),
+        },
+      });
+
+      // If linked to an asset, ensure it's ACTIVE
+      if (agent.assetId) {
+        await this.prisma.asset.update({
+          where: { id: agent.assetId },
+          data: { status: 'ACTIVE' },
+        });
+      }
+
+      this.eventBus.emitMonitoringEvent(tenantId, 'device_recovered', {
+        deviceId: agent.id,
+        name: agent.hostname,
+        type: 'AGENT',
+      });
+    } else {
+      updated = await this.prisma.agent.update({
+        where: { id },
+        data: {
+          lastHeartbeat: new Date(),
+          status: 'ONLINE',
+          ...(data?.systemInfo ? { systemInfo: data.systemInfo } : {}),
+          ...(data?.version ? { agentVersion: data.version } : {}),
+        },
+      });
+    }
 
     // Warn if agent version is outdated
     const LATEST_AGENT_VERSION = '2.0.0';
     if (data?.version && data.version < LATEST_AGENT_VERSION) {
       this.logger.warn(`Agent ${agent.hostname} is running outdated version ${data.version} (latest: ${LATEST_AGENT_VERSION})`);
     }
+
+    // Emit heartbeat event for real-time UI updates
+    this.eventBus.emitDiscoveryEvent(tenantId, 'agent_heartbeat', {
+      agentId: agent.id,
+      hostname: agent.hostname,
+      ipAddress: agent.ipAddress,
+      status: 'ONLINE',
+    });
 
     // Run compliance change detection and sync systemInfo snapshot directly to CMDB Asset tables
     if (data?.systemInfo) {
@@ -1812,7 +1899,8 @@ export class DiscoveryService {
 
         if (result.seenCount === 1 && result.status === 'PENDING_REVIEW') {
           newCount++;
-          this.eventBus.emitDiscoveryEvent(tenantId, 'new_device', {
+          this.eventBus.emitDiscoveryEvent(tenantId, 'device_discovered', {
+            device: result,
             ipAddress: host.ip, deviceType: deviceType,
             hostname: host.hostname, mac, scanJobId,
           });
@@ -1835,6 +1923,11 @@ export class DiscoveryService {
         scanJobId, devicesFound: devices.length, newDevices: newCount, scanType: scanJob.scanType,
       });
 
+      // Emit final scan_progress with COMPLETED status so frontend triggers refresh
+      this.eventBus.emitDiscoveryEvent(tenantId, 'scan_progress', {
+        scanJobId, progress: 100, phase: 'Complete', found: devices.length, status: 'COMPLETED',
+      });
+
       this.logger.log(`Scan job ${scanJobId} completed via agent upload: ${devices.length} devices, ${newCount} new`);
       return { success: true, devicesFound: devices.length, newDevices: newCount };
     } catch (error: any) {
@@ -1842,6 +1935,11 @@ export class DiscoveryService {
         where: { id: scanJobId },
         data: { status: 'FAILED', completedAt: new Date(), errorMessage: error.message },
       });
+
+      this.eventBus.emitDiscoveryEvent(tenantId, 'scan_progress', {
+        scanJobId, progress: 0, phase: 'Failed', found: 0, status: 'FAILED',
+      });
+
       throw error;
     }
   }

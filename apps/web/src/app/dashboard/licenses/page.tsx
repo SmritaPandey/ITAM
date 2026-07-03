@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 import {
   Key, Plus, AlertTriangle, CheckCircle2, Clock, XCircle,
   Loader2, RefreshCw, DollarSign, Copy, Check, ChevronRight, X,
-  Search, Trash2, Edit3, Save
+  Search, Trash2, Edit3, Save, Layers
 } from "lucide-react";
 import { apiFetch } from "@/lib/api";
 import { PageHelp } from "@/components/HelpSystem";
@@ -466,6 +466,10 @@ export default function LicensesPage() {
                   <p style={{ fontSize: 12, color: "var(--text-tertiary)", margin: "4px 0 0" }}>
                     {l.vendor || "No vendor recorded"} • Build v{l.version || "N/A"}
                   </p>
+                  <a href="/dashboard/software" style={{ fontSize: 11, color: "var(--brand-400)", display: "inline-flex", alignItems: "center", gap: 4, marginTop: 4, textDecoration: "none", fontWeight: 500, opacity: 0.8 }}
+                    onMouseEnter={e => (e.currentTarget.style.opacity = "1")} onMouseLeave={e => (e.currentTarget.style.opacity = "0.8")}>
+                    <Layers size={11} /> View in Software Inventory
+                  </a>
                 </div>
                 <div style={{ display: "flex", gap: 8 }}>
                   <button onClick={() => {

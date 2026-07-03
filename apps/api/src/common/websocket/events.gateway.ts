@@ -39,11 +39,42 @@ export class EventsGateway
 
     // Bridge ALL domain events to WebSocket rooms
     this.eventBus.on('*', (event: DomainEvent) => {
+      // Send as generic domain_event envelope (for the useRealtimeEvents dispatcher)
       this.broadcastToTenant(event.tenantId, 'domain_event', {
         type: event.type,
         payload: event.payload,
         timestamp: event.timestamp,
       });
+
+      // Also forward specific events as dedicated socket events
+      // (the frontend listens for these directly, not just inside domain_event)
+      if (event.type === 'discovery.scan_progress') {
+        this.broadcastToTenant(event.tenantId, 'scan_progress', {
+          scanId: event.payload.scanJobId,
+          progress: event.payload.progress,
+          phase: event.payload.phase,
+          found: event.payload.found,
+          status: event.payload.status,
+        });
+      }
+
+      if (event.type.startsWith('monitoring.device_')) {
+        this.broadcastToTenant(event.tenantId, 'device_status', {
+          deviceId: event.payload.deviceId,
+          name: event.payload.name,
+          status: event.type.includes('down') ? 'OFFLINE' : 'ONLINE',
+          timestamp: event.timestamp,
+        });
+      }
+
+      if (event.type === 'discovery.agent_heartbeat') {
+        this.broadcastToTenant(event.tenantId, 'agent_heartbeat', {
+          agentId: event.payload.agentId,
+          hostname: event.payload.hostname,
+          status: event.payload.status,
+          timestamp: event.timestamp,
+        });
+      }
     });
 
     // Emit dashboard stats every 30 seconds to all connected rooms

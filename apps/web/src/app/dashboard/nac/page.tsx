@@ -548,7 +548,7 @@ export default function NACPage() {
                       <td>
                         <span className={`badge ${levelBadge(d.level)}`} style={{ fontSize: 10 }}>{d.level?.replace("_", " ")}</span>
                       </td>
-                      <td style={{ fontSize: 12, color: "var(--text-secondary)" }}>VLAN {d.recommendedVlan}</td>
+                      <td style={{ fontSize: 12, color: "var(--text-secondary)" }}>VLAN {typeof d.recommendedVlan === 'object' && d.recommendedVlan ? (d.recommendedVlan as any).vlanId ?? JSON.stringify(d.recommendedVlan) : d.recommendedVlan}</td>
                       <td onClick={e => e.stopPropagation()}>
                         <div style={{ display: "flex", gap: 4 }}>
                           <button className="btn btn-secondary" style={{ padding: "3px 8px", fontSize: 10 }}

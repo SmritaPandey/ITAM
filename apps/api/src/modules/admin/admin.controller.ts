@@ -111,8 +111,8 @@ export class AdminController {
   }
 
   // ─── Audit & System ────────────────────────────────────────
-  @Get('audit-logs')
-  @ApiOperation({ summary: 'Platform-wide audit logs' })
+  @Get('platform-audit-logs')
+  @ApiOperation({ summary: 'Platform-wide audit logs (super admin only)' })
   listAuditLogs(
     @Query('limit') limit?: number,
     @Query('offset') offset?: number,

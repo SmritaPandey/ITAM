@@ -185,6 +185,7 @@ model User {
   triggeredScans ScanJob[]       @relation("ScanTriggeredBy")
   notifications  Notification[]
   createdRules   AutomationRule[] @relation("RuleCreator")
+  licenseAssignments LicenseAssignment[]
 
   @@unique([tenantId, email])
   @@index([tenantId])
@@ -433,6 +434,7 @@ model Asset {
   patchDeployments  PatchDeployment[]
   checkouts         AssetCheckout[]
   attestations      AssetAttestation[]
+  licenseAssignments LicenseAssignment[]
   sourceRelations   AssetRelationship[] @relation("RelSource")
   targetRelations   AssetRelationship[] @relation("RelTarget")
   trips             Trip[]
@@ -561,13 +563,25 @@ model SoftwareCatalog {
   publisher     String?
   category      String?
   isBlacklisted Boolean  @default(false) @map("is_blacklisted")
+  isAuthorized  Boolean  @default(true) @map("is_authorized")
+  authorizationStatus String @default("NEEDS_REVIEW") @map("authorization_status")
   latestVersion String?  @map("latest_version")
+  // Lifecycle tracking (Qualys CSAM-inspired)
+  eolDate       DateTime? @map("eol_date")
+  eosDate       DateTime? @map("eos_date")
+  lifecycleStatus String? @map("lifecycle_status")
+  riskScore     Int?      @map("risk_score")
+  description   String?
+  website       String?
   createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @default(now()) @updatedAt @map("updated_at")
 
   installations SoftwareInstallation[]
+  licenses      License[]
 
   @@unique([tenantId, name, publisher])
   @@index([tenantId])
+  @@index([tenantId, authorizationStatus])
   @@map("software_catalog")
 }
 
@@ -818,6 +832,7 @@ model License {
   id             String       @id @default(uuid()) @db.Uuid
   tenantId       String       @map("tenant_id") @db.Uuid
   softwareName   String       @map("software_name")
+  softwareCatalogId String?   @map("software_catalog_id") @db.Uuid
   vendor         String?
   version        String?
   licenseKey     String?      @map("license_key")
@@ -839,10 +854,12 @@ model License {
   createdAt      DateTime     @default(now()) @map("created_at")
   updatedAt      DateTime     @updatedAt @map("updated_at")
 
-  tenant         Tenant       @relation(fields: [tenantId], references: [id])
-  assignments    LicenseAssignment[]
+  tenant           Tenant           @relation(fields: [tenantId], references: [id])
+  softwareCatalog  SoftwareCatalog? @relation(fields: [softwareCatalogId], references: [id])
+  assignments      LicenseAssignment[]
 
   @@index([tenantId])
+  @@index([tenantId, softwareCatalogId])
   @@map("licenses")
 }
 
@@ -855,8 +872,12 @@ model LicenseAssignment {
   revokedAt   DateTime? @map("revoked_at")
 
   license     License  @relation(fields: [licenseId], references: [id], onDelete: Cascade)
+  user        User?    @relation(fields: [userId], references: [id])
+  asset       Asset?   @relation(fields: [assetId], references: [id])
 
   @@index([licenseId])
+  @@index([userId])
+  @@index([assetId])
   @@map("license_assignments")
 }
 

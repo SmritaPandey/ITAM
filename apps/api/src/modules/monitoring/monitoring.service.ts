@@ -402,7 +402,7 @@ export class MonitoringService {
           ipAddress: { not: null },
           tenant: { status: 'ACTIVE' },
         },
-        select: { id: true, ipAddress: true, status: true, name: true, tenantId: true, metrics: true },
+        select: { id: true, ipAddress: true, status: true, name: true, tenantId: true, metrics: true, config: true },
       });
 
       if (allDevices.length === 0) return;
@@ -431,6 +431,9 @@ export class MonitoringService {
       for (const { device, ping } of pingResults) {
         const newStatus = ping.alive ? 'ONLINE' : 'OFFLINE';
         const existingMetrics = (device.metrics as any) || {};
+        const config = (device.config as any) || {};
+        const sourceAssetId = config.sourceAssetId;
+
         if (device.status !== newStatus) {
           updateOps.push(
             this.prisma.monitoredDevice.update({
@@ -442,8 +445,21 @@ export class MonitoringService {
               },
             }),
           );
+
+          // If linked to an asset, update asset status too
+          if (sourceAssetId) {
+            updateOps.push(
+              this.prisma.asset.update({
+                where: { id: sourceAssetId },
+                data: { status: newStatus === 'ONLINE' ? 'ACTIVE' : 'IN_MAINTENANCE' },
+              }),
+            );
+          }
+
           if (newStatus === 'OFFLINE') {
-            events.push({ tenantId: device.tenantId, event: 'device_down', data: { deviceId: device.id, name: device.name } });
+            events.push({ tenantId: device.tenantId, event: 'device_down', data: { deviceId: device.id, name: device.name, ipAddress: device.ipAddress } });
+          } else {
+            events.push({ tenantId: device.tenantId, event: 'device_recovered', data: { deviceId: device.id, name: device.name, ipAddress: device.ipAddress } });
           }
         } else if (ping.alive) {
           updateOps.push(

@@ -14,6 +14,7 @@ import { AssetsModule } from './modules/assets/assets.module';
 import { TicketsModule } from './modules/tickets/tickets.module';
 import { DiscoveryModule } from './modules/discovery/discovery.module';
 import { LicensesModule } from './modules/licenses/licenses.module';
+import { SoftwareModule } from './modules/software/software.module';
 import { AuditLogsModule } from './modules/audit-logs/audit-logs.module';
 import { NotificationsModule } from './modules/notifications/notifications.module';
 import { AutomationModule } from './modules/automation/automation.module';
@@ -46,11 +47,11 @@ import { AlertsModule } from './modules/alerts/alerts.module';
     // Config
     ConfigModule.forRoot({ isGlobal: true }),
 
-    // Rate limiting
+    // Rate limiting (generous for dashboard — pages make 5-8 parallel API calls)
     ThrottlerModule.forRoot([
-      { name: 'short', ttl: 1000, limit: 3 },    // 3 requests per second burst protection
-      { name: 'medium', ttl: 10000, limit: 20 },  // 20 requests per 10 seconds
-      { name: 'long', ttl: 60000, limit: 100 },    // 100 requests per minute
+      { name: 'short', ttl: 1000, limit: 20 },     // 20 requests per second burst
+      { name: 'medium', ttl: 10000, limit: 100 },   // 100 requests per 10 seconds
+      { name: 'long', ttl: 60000, limit: 500 },     // 500 requests per minute
     ]),
 
     // Scheduled tasks
@@ -70,6 +71,7 @@ import { AlertsModule } from './modules/alerts/alerts.module';
     TicketsModule,
     DiscoveryModule,
     LicensesModule,
+    SoftwareModule,
     AuditLogsModule,
     NotificationsModule,
     AutomationModule,

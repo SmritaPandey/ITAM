@@ -3,7 +3,8 @@ import { useEffect, useState } from "react";
 import {
   Users, Shield, UserCheck, UserX, Search, Plus, Clock,
   Mail, MapPin, Building, Key, Eye, MoreVertical, Loader2, RefreshCw,
-  UserPlus, Power, X, Check, ChevronLeft, ChevronRight
+  UserPlus, Power, X, Check, ChevronLeft, ChevronRight,
+  Monitor, Package, Box
 } from "lucide-react";
 import { apiFetch } from "@/lib/api";
 
@@ -24,6 +25,8 @@ export default function UsersPage() {
   const [showChangePw, setShowChangePw] = useState(false);
   const [newPassword, setNewPassword] = useState("");
   const [changingPw, setChangingPw] = useState(false);
+  const [userSoftware, setUserSoftware] = useState<any[]>([]);
+  const [loadingSoftware, setLoadingSoftware] = useState(false);
 
   async function refresh() {
     try {
@@ -42,6 +45,20 @@ export default function UsersPage() {
   );
   const totalPages = Math.max(1, Math.ceil(allFiltered.length / pageSize));
   const filtered = allFiltered.slice((page - 1) * pageSize, page * pageSize);
+
+  async function fetchUserSoftware(userId: string) {
+    setLoadingSoftware(true);
+    setUserSoftware([]);
+    try {
+      const sw = await apiFetch(`/software/by-user/${userId}`);
+      setUserSoftware(Array.isArray(sw) ? sw : []);
+    } catch (err: any) {
+      console.error("Failed to load user software:", err);
+      setUserSoftware([]);
+    } finally {
+      setLoadingSoftware(false);
+    }
+  }
 
   async function toggleUserStatus(userId: string) {
     try {
@@ -260,7 +277,7 @@ export default function UsersPage() {
                 background: "linear-gradient(135deg, var(--bg-card) 0%, rgba(30, 37, 64, 0.4) 100%)",
                 padding: 20, transition: "all 0.2s cubic-bezier(0.16, 1, 0.3, 1)"
               }}
-                onClick={() => setSelectedUser(u)}>
+                onClick={() => { setSelectedUser(u); fetchUserSoftware(u.id); }}>
                 
                 <div style={{ display: "flex", gap: 14, alignItems: "center", marginBottom: 16 }}>
                   {/* Glowing dynamic role-gradient avatar */}
@@ -417,6 +434,77 @@ export default function UsersPage() {
                   </div>
                 </div>
 
+                {/* Software & Assets Section */}
+                <div>
+                  <div style={{ fontSize: 12, fontWeight: 700, color: "var(--brand-400)", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 12, borderBottom: "1px solid var(--border-primary)", paddingBottom: 6, display: "flex", alignItems: "center", gap: 6 }}>
+                    <Package size={13} /> Software & Assets
+                  </div>
+
+                  {loadingSoftware ? (
+                    <div style={{ display: "flex", alignItems: "center", gap: 8, padding: 16, justifyContent: "center", color: "var(--text-tertiary)", fontSize: 12 }}>
+                      <Loader2 size={14} style={{ animation: "spin 1s linear infinite" }} /> Loading software…
+                    </div>
+                  ) : userSoftware.length === 0 ? (
+                    <div style={{ padding: "14px 0", textAlign: "center", color: "var(--text-tertiary)", fontSize: 12 }}>
+                      <Monitor size={20} style={{ margin: "0 auto 6px", opacity: 0.4, display: "block" }} />
+                      No software or assets assigned to this user.
+                    </div>
+                  ) : (
+                    <>
+                      <div style={{
+                        display: "flex", alignItems: "center", gap: 8, marginBottom: 10,
+                        padding: "8px 12px", borderRadius: 8,
+                        background: "rgba(6, 182, 212, 0.06)", border: "1px solid rgba(6, 182, 212, 0.12)"
+                      }}>
+                        <Box size={13} style={{ color: "#22d3ee" }} />
+                        <span style={{ fontSize: 12, color: "var(--text-secondary)", fontWeight: 600 }}>
+                          {new Set(userSoftware.map((s: any) => s.assetId || s.asset?.id)).size} Assigned Asset{new Set(userSoftware.map((s: any) => s.assetId || s.asset?.id)).size !== 1 ? "s" : ""}
+                        </span>
+                        <span style={{ marginLeft: "auto", fontSize: 11, color: "var(--text-tertiary)" }}>
+                          {userSoftware.length} software entr{userSoftware.length !== 1 ? "ies" : "y"}
+                        </span>
+                      </div>
+                      <div style={{ display: "flex", flexDirection: "column", gap: 6, maxHeight: 220, overflowY: "auto" }}>
+                        {userSoftware.map((sw: any, idx: number) => (
+                          <div key={sw.id || idx} style={{
+                            display: "flex", alignItems: "center", gap: 10,
+                            padding: "8px 12px", borderRadius: 8,
+                            background: "var(--bg-elevated)", border: "1px solid var(--border-primary)",
+                            transition: "border-color 0.15s"
+                          }} className="sw-row">
+                            <div style={{
+                              width: 28, height: 28, borderRadius: 7, flexShrink: 0,
+                              background: "rgba(139, 92, 246, 0.1)", border: "1px solid rgba(139, 92, 246, 0.15)",
+                              display: "flex", alignItems: "center", justifyContent: "center", color: "#a78bfa"
+                            }}>
+                              <Package size={13} />
+                            </div>
+                            <div style={{ flex: 1, minWidth: 0 }}>
+                              <div style={{ fontSize: 12, fontWeight: 700, color: "var(--text-primary)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                                {sw.name || sw.softwareName || "Unknown"}
+                              </div>
+                              <div style={{ fontSize: 10, color: "var(--text-tertiary)", marginTop: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                                {sw.publisher || "—"} {sw.version ? `· v${sw.version}` : ""}
+                              </div>
+                            </div>
+                            {(sw.asset?.hostname || sw.assetHostname || sw.asset?.name) && (
+                              <div style={{
+                                fontSize: 10, fontWeight: 600, color: "var(--text-tertiary)",
+                                background: "rgba(100,116,139,0.1)", border: "1px solid rgba(100,116,139,0.12)",
+                                padding: "2px 7px", borderRadius: 5, flexShrink: 0, maxWidth: 100,
+                                overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap"
+                              }}>
+                                <Monitor size={9} style={{ marginRight: 3, verticalAlign: "middle" }} />
+                                {sw.asset?.hostname || sw.assetHostname || sw.asset?.name}
+                              </div>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    </>
+                  )}
+                </div>
+
                 {/* Info Block 5: Timestamps */}
                 <div style={{ borderTop: "1px solid var(--border-primary)", paddingTop: 16, display: "flex", justifyContent: "space-between", fontSize: 11, color: "var(--text-tertiary)" }}>
                   <span>User Record: {selectedUser.id.substring(0, 12)}...</span>
@@ -519,6 +607,9 @@ export default function UsersPage() {
           transform: translateY(-2px);
           border-color: rgba(6,182,212,0.25) !important;
           box-shadow: 0 6px 20px rgba(0,0,0,0.25), 0 0 12px rgba(6,182,212,0.02);
+        }
+        .sw-row:hover {
+          border-color: rgba(139,92,246,0.25) !important;
         }
         @keyframes spin {
           to { transform: rotate(360deg); }

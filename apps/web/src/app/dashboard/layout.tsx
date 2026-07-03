@@ -7,7 +7,7 @@ import {
   BarChart3, Zap, Users, Building2, Package, LogOut, User,
   AlertTriangle, CheckCircle2, Info, Clock, X, Radar, Key, FileText, BookOpen,
   Headphones, UserCircle, Wrench, Scan, ShoppingCart, GitBranch, AlertOctagon,
-  Sun, Moon, Menu, Lock, CheckCircle, Terminal, Download
+  Sun, Moon, Menu, Lock, CheckCircle, Terminal, Download, Layers
 } from "lucide-react";
 
 import { apiFetch, safeFetch, getToken } from "@/lib/api";
@@ -39,6 +39,7 @@ const nameToModuleKeyMap: Record<string, string> = {
   "VDI": "VDI",
   "Automation": "AUTOMATION",
   "Licenses": "LICENSES",
+  "Software Inventory": "ASSETS",
   "Knowledge Base": "KNOWLEDGE_BASE",
   "Service Catalog": "SERVICE_CATALOG",
   "Reports": "REPORTS",
@@ -64,6 +65,7 @@ const hrefToModuleKeyMap: Record<string, string> = {
   "/dashboard/vdi": "VDI",
   "/dashboard/automation": "AUTOMATION",
   "/dashboard/licenses": "LICENSES",
+  "/dashboard/software": "ASSETS",
   "/dashboard/knowledge-base": "KNOWLEDGE_BASE",
   "/dashboard/service-catalog": "SERVICE_CATALOG",
   "/dashboard/reports": "REPORTS",
@@ -294,6 +296,7 @@ const navSections = [
       { name: "IT Assets", icon: Monitor, href: "/dashboard/it-assets", badge: null },
       { name: "Non-IT Assets", icon: Building2, href: "/dashboard/non-it-assets", badge: null },
       { name: "CMDB", icon: Server, href: "/dashboard/cmdb", badge: null },
+      { name: "Software Inventory", icon: Layers, href: "/dashboard/software", badge: null },
     ],
   },
   {

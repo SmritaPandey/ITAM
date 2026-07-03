@@ -1,7 +1,7 @@
 "use client";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Search, Plus, Filter, Download, RefreshCw, ChevronLeft, ChevronRight, Upload } from "lucide-react";
+import { Search, Plus, Filter, Download, RefreshCw, ChevronLeft, ChevronRight, Upload, Layers } from "lucide-react";
 import CreateAssetPanel from "@/components/CreateAssetPanel";
 import ImportAssetsPanel from "@/components/ImportAssetsPanel";
 import { apiFetch } from "@/lib/api";
@@ -92,6 +92,7 @@ export default function AssetsPage() {
               <th>Asset</th>
               <th>Type</th>
               <th>Status</th>
+              <th>Software</th>
               <th>Location</th>
               <th>Assigned To</th>
               <th>IP / MAC</th>
@@ -100,9 +101,9 @@ export default function AssetsPage() {
           </thead>
           <tbody>
             {loading ? (
-              <tr><td colSpan={7} style={{ textAlign: "center", padding: 40, color: "var(--text-tertiary)" }}>Loading...</td></tr>
+              <tr><td colSpan={8} style={{ textAlign: "center", padding: 40, color: "var(--text-tertiary)" }}>Loading...</td></tr>
             ) : assets.data?.length === 0 ? (
-              <tr><td colSpan={7} style={{ textAlign: "center", padding: 40, color: "var(--text-tertiary)" }}>No assets found</td></tr>
+              <tr><td colSpan={8} style={{ textAlign: "center", padding: 40, color: "var(--text-tertiary)" }}>No assets found</td></tr>
             ) : assets.data?.map((a: any) => (
               <tr key={a.id} style={{ cursor: "pointer" }} onClick={() => router.push(`/dashboard/assets/${a.id}`)}>
                 <td>
@@ -113,6 +114,12 @@ export default function AssetsPage() {
                 </td>
                 <td><span className="badge cyan">{a.assetType?.name}</span></td>
                 <td><span className={`badge ${STATUS_BADGE[a.status] || "gray"}`}>{a.status.replace("_", " ")}</span></td>
+                <td>
+                  <span style={{ display: "inline-flex", alignItems: "center", gap: 4, background: "rgba(168, 85, 247, 0.1)", color: "#c084fc", padding: "2px 8px", borderRadius: 6, fontSize: 12 }}>
+                    <Layers size={12} />
+                    {a.softwareInstalls?.length || a._count?.softwareInstalls || 0}
+                  </span>
+                </td>
                 <td style={{ fontSize: 12, color: "var(--text-secondary)" }}>
                   {a.site?.name || "—"}{a.department ? ` / ${a.department.name}` : ""}
                 </td>

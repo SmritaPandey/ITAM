@@ -309,35 +309,7 @@ export class NmapScanner {
       ipsToScan = [target];
     }
 
-    // DEMO MODE: If target is in the 10.10.x.x range, return simulated results
-    if (target.startsWith('10.10.') || target === 'banking.demobank.com') {
-      const hosts = ipsToScan.slice(0, 15).map((ip, i) => ({
-        ip,
-        state: 'up' as const,
-        hostname: `demo-host-${i + 1}`,
-        latency: 2 + Math.random() * 5,
-        vendor: i % 3 === 0 ? 'Dell' : i % 3 === 1 ? 'Cisco' : 'HP',
-        osGuess: i % 2 === 0 ? 'Ubuntu Linux 22.04' : 'Windows Server 2022',
-        ports: [
-          { port: 80, protocol: 'tcp' as const, state: 'open' as const, service: 'http', product: 'nginx', version: '1.18.0' },
-          { port: 443, protocol: 'tcp' as const, state: 'open' as const, service: 'https', product: 'nginx', version: '1.18.0' },
-          { port: 22, protocol: 'tcp' as const, state: i % 2 === 0 ? 'open' as const : 'closed' as const, service: 'ssh', product: 'OpenSSH', version: '8.9p1' },
-        ],
-      }));
-
-      const completedAt = new Date();
-      return {
-        command: `demo-simulated-scan --target=${target}`,
-        scanType,
-        startedAt,
-        completedAt,
-        hosts,
-        totalUp: hosts.length,
-        totalDown: Math.max(0, ipsToScan.length - hosts.length),
-        scanDuration: (completedAt.getTime() - startedAt.getTime()) / 1000,
-        fallbackUsed: true,
-      };
-    }
+    // All targets go through the real Pure JS TCP scanner — no demo/simulation modes
 
     const hosts: NmapHost[] = [];
     // Concurrency limit for scanning hosts

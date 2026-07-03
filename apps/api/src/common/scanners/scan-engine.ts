@@ -116,13 +116,7 @@ export class ScanEngine {
     const startedAt = new Date();
 
     try {
-      let results;
-      try {
-        results = await this.dispatch(request);
-      } catch (dispatchErr) {
-        this.logger.warn(`Dispatch failed: ${dispatchErr.message}. Falling back to simulated results.`);
-        results = await this.simulateDispatch(request);
-      }
+      const results = await this.dispatch(request);
       const completedAt = new Date();
       const duration = (completedAt.getTime() - startedAt.getTime()) / 1000;
 
@@ -131,6 +125,7 @@ export class ScanEngine {
       return { type: request.type, target: request.target, startedAt, completedAt, duration, status: 'COMPLETED', summary, results };
     } catch (err: any) {
       const completedAt = new Date();
+      this.logger.error(`Scan failed for ${request.type} on ${request.target}: ${err.message}`);
       return {
         type: request.type, target: request.target, startedAt, completedAt,
         duration: (completedAt.getTime() - startedAt.getTime()) / 1000,
@@ -138,77 +133,6 @@ export class ScanEngine {
       };
     } finally {
       this.activeScanCount--;
-    }
-  }
-
-  private static async simulateDispatch(request: ScanRequest): Promise<any> {
-    const { type, target } = request;
-    await new Promise(resolve => setTimeout(resolve, 2000)); // Simulate work
-
-    switch (type) {
-      case 'NMAP':
-        return {
-          totalUp: 12, totalDown: 3,
-          hosts: Array.from({ length: 5 }, (_, i) => ({
-            ip: `10.10.1.${100 + i}`,
-            status: 'up',
-            ports: [
-              { port: 80, state: 'open', service: 'http' },
-              { port: 443, state: 'open', service: 'https' },
-              { port: 22, state: i % 2 === 0 ? 'open' : 'closed', service: 'ssh' },
-            ],
-          })),
-          scanDuration: '2.5s',
-        };
-      case 'SNMP':
-        return {
-          sysName: `NDB-SIM-${target.split('.').pop()}`,
-          sysDescr: 'Simulated Network Device v1.0',
-          cpuLoad: 15,
-          memoryPercent: 42,
-          interfaces: [
-            { index: 1, name: 'GigabitEthernet0/1', operStatus: 'up', inOctets: 123456, outOctets: 654321 },
-            { index: 2, name: 'GigabitEthernet0/2', operStatus: 'down', inOctets: 0, outOctets: 0 },
-          ],
-        };
-      case 'SSH':
-        return {
-          hostname: `simulated-host-${target}`,
-          osInfo: { distro: 'Ubuntu 22.04 LTS', kernel: '5.15.0' },
-          runningServices: ['nginx', 'postgresql', 'docker'],
-          openPorts: [80, 443, 5432],
-          pendingPatches: [
-            { name: 'libc6', version: '2.35-0ubuntu3.1' },
-            { name: 'linux-image-generic', version: '5.15.0.76.74' },
-          ],
-        };
-      case 'ARP':
-        return { totalFound: 8, source: 'simulated-interface' };
-      case 'TRACEROUTE':
-        return {
-          totalHops: 4,
-          reachable: true,
-          target,
-          hops: [
-            { hop: 1, ip: '10.10.1.1', rtt: '1.2ms' },
-            { hop: 2, ip: '172.16.0.1', rtt: '5.4ms' },
-            { hop: 3, ip: '192.168.100.5', rtt: '12.8ms' },
-            { hop: 4, ip: target, rtt: '15.2ms' },
-          ],
-        };
-      case 'SSL':
-        return {
-          grade: 'A+',
-          daysRemaining: 185,
-          expired: false,
-          selfSigned: false,
-          issuer: 'Let\'s Encrypt E1',
-          subject: target,
-          validFrom: new Date(Date.now() - 180 * 86400000),
-          validTo: new Date(Date.now() + 185 * 86400000),
-        };
-      default:
-        throw new Error(`Simulation not implemented for: ${type}`);
     }
   }
 

@@ -30,7 +30,8 @@ export class SecurityMiddleware implements NestMiddleware {
     /\.(env|git|svn|htaccess)/i,   // Config/VCS files
     /\/(wp-admin|wp-login|xmlrpc)/i, // WordPress probes
     /\/phpmyadmin/i,               // phpMyAdmin probes
-    /\/(cgi-bin|admin|manager)/i,  // Common admin panels
+    /\/(cgi-bin|manager)/i,         // Common admin panel probes
+    /^\/?(admin|phpmyadmin)\/?$/i,  // Standalone admin panel access (not /api/v1/admin/*)
   ];
 
   use(req: Request, res: Response, next: NextFunction) {

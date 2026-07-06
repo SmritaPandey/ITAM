@@ -43,9 +43,18 @@ export class AiService {
         this.redis = new Redis(redisUrl, {
           maxRetriesPerRequest: 1,
           connectTimeout: 5000,
+          lazyConnect: true,
+          retryStrategy: (times) => {
+            if (times > 3) return null; // stop retrying after 3 attempts
+            return Math.min(times * 500, 2000);
+          },
         });
         this.redis.on('error', (err) => {
           this.logger.warn(`Redis connection error: ${err.message}`);
+        });
+        this.redis.connect().catch(() => {
+          this.logger.warn('Redis not available — AI caching disabled');
+          this.redis = null;
         });
       } catch (err: any) {
         this.logger.warn(`Failed to initialize Redis client: ${err.message}`);

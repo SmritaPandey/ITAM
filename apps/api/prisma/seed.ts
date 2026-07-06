@@ -285,52 +285,52 @@ async function main() {
   const passwordHash = await bcrypt.hash('Demo@2026', 12);
 
   const userDirector = await prisma.user.create({
-    data: { tenantId: bankTenant.id, email: 'director@demobank.com', passwordHash, firstName: 'Rajesh', lastName: 'Kapoor', roleId: roleTenantAdmin.id, departmentId: deptIT.id, siteId: siteMumbaiHQ.id, status: 'ACTIVE' },
+    data: { tenantId: bankTenant.id, email: 'director@demobank.com', passwordHash, firstName: 'Rajesh', lastName: 'Kapoor', roleId: roleTenantAdmin.id, departmentId: deptIT.id, siteId: siteMumbaiHQ.id, status: 'ACTIVE', emailVerified: true },
   });
   const userCISO = await prisma.user.create({
-    data: { tenantId: bankTenant.id, email: 'ciso@demobank.com', passwordHash, firstName: 'Priya', lastName: 'Sharma', roleId: roleSecurityAdmin.id, departmentId: deptCyber.id, siteId: siteMumbaiHQ.id, status: 'ACTIVE' },
+    data: { tenantId: bankTenant.id, email: 'ciso@demobank.com', passwordHash, firstName: 'Priya', lastName: 'Sharma', roleId: roleSecurityAdmin.id, departmentId: deptCyber.id, siteId: siteMumbaiHQ.id, status: 'ACTIVE', emailVerified: true },
   });
   const userITSupport = await prisma.user.create({
-    data: { tenantId: bankTenant.id, email: 'itsupport@demobank.com', passwordHash, firstName: 'Amit', lastName: 'Patel', roleId: roleITAdmin.id, departmentId: deptIT.id, siteId: siteMumbaiHQ.id, status: 'ACTIVE' },
+    data: { tenantId: bankTenant.id, email: 'itsupport@demobank.com', passwordHash, firstName: 'Amit', lastName: 'Patel', roleId: roleITAdmin.id, departmentId: deptIT.id, siteId: siteMumbaiHQ.id, status: 'ACTIVE', emailVerified: true },
   });
   const userBranchMgr = await prisma.user.create({
-    data: { tenantId: bankTenant.id, email: 'branchmgr@demobank.com', passwordHash, firstName: 'Sunita', lastName: 'Verma', roleId: roleBranchMgr.id, departmentId: deptRetail.id, siteId: siteDelhi.id, status: 'ACTIVE' },
+    data: { tenantId: bankTenant.id, email: 'branchmgr@demobank.com', passwordHash, firstName: 'Sunita', lastName: 'Verma', roleId: roleBranchMgr.id, departmentId: deptRetail.id, siteId: siteDelhi.id, status: 'ACTIVE', emailVerified: true },
   });
   const userEmployee = await prisma.user.create({
-    data: { tenantId: bankTenant.id, email: 'employee@demobank.com', passwordHash, firstName: 'Vikram', lastName: 'Singh', roleId: roleEmployee.id, departmentId: deptCoreBanking.id, siteId: siteBangalore.id, status: 'ACTIVE' },
+    data: { tenantId: bankTenant.id, email: 'employee@demobank.com', passwordHash, firstName: 'Vikram', lastName: 'Singh', roleId: roleEmployee.id, departmentId: deptCoreBanking.id, siteId: siteBangalore.id, status: 'ACTIVE', emailVerified: true },
   });
   const userPlatformOwner = await prisma.user.create({
-    data: { tenantId: platformTenant.id, email: 'owner@qsasset.com', passwordHash, firstName: 'Admin', lastName: 'QS', roleId: rolePlatformOwner.id, siteId: siteMumbaiHQ.id, status: 'ACTIVE', isSuperAdmin: true },
+    data: { tenantId: platformTenant.id, email: 'owner@qsasset.com', passwordHash, firstName: 'Admin', lastName: 'QS', roleId: rolePlatformOwner.id, siteId: siteMumbaiHQ.id, status: 'ACTIVE', isSuperAdmin: true, emailVerified: true },
   });
   const userNetworkEng = await prisma.user.create({
-    data: { tenantId: bankTenant.id, email: 'network.eng@demobank.com', passwordHash, firstName: 'Deepak', lastName: 'Nair', roleId: roleITAdmin.id, departmentId: deptIT.id, siteId: siteBangalore.id, status: 'ACTIVE' },
+    data: { tenantId: bankTenant.id, email: 'network.eng@demobank.com', passwordHash, firstName: 'Deepak', lastName: 'Nair', roleId: roleITAdmin.id, departmentId: deptIT.id, siteId: siteBangalore.id, status: 'ACTIVE', emailVerified: true },
   });
   const userDBA = await prisma.user.create({
-    data: { tenantId: bankTenant.id, email: 'dba@demobank.com', passwordHash, firstName: 'Kavitha', lastName: 'Ramasamy', roleId: roleITAdmin.id, departmentId: deptCoreBanking.id, siteId: siteBangalore.id, status: 'ACTIVE' },
+    data: { tenantId: bankTenant.id, email: 'dba@demobank.com', passwordHash, firstName: 'Kavitha', lastName: 'Ramasamy', roleId: roleITAdmin.id, departmentId: deptCoreBanking.id, siteId: siteBangalore.id, status: 'ACTIVE', emailVerified: true },
   });
   const userSecAnalyst = await prisma.user.create({
-    data: { tenantId: bankTenant.id, email: 'secanalyst@demobank.com', passwordHash, firstName: 'Arjun', lastName: 'Menon', roleId: roleSecurityAdmin.id, departmentId: deptCyber.id, siteId: siteMumbaiHQ.id, status: 'ACTIVE' },
+    data: { tenantId: bankTenant.id, email: 'secanalyst@demobank.com', passwordHash, firstName: 'Arjun', lastName: 'Menon', roleId: roleSecurityAdmin.id, departmentId: deptCyber.id, siteId: siteMumbaiHQ.id, status: 'ACTIVE', emailVerified: true },
   });
   const userTreasuryMgr = await prisma.user.create({
-    data: { tenantId: bankTenant.id, email: 'treasury.mgr@demobank.com', passwordHash, firstName: 'Neha', lastName: 'Gupta', roleId: roleBranchMgr.id, departmentId: deptTreasury.id, siteId: siteTreasury.id, status: 'ACTIVE' },
+    data: { tenantId: bankTenant.id, email: 'treasury.mgr@demobank.com', passwordHash, firstName: 'Neha', lastName: 'Gupta', roleId: roleBranchMgr.id, departmentId: deptTreasury.id, siteId: siteTreasury.id, status: 'ACTIVE', emailVerified: true },
   });
   const userRiskOfficer = await prisma.user.create({
-    data: { tenantId: bankTenant.id, email: 'risk.officer@demobank.com', passwordHash, firstName: 'Suresh', lastName: 'Iyer', roleId: roleBranchMgr.id, departmentId: deptRisk.id, siteId: siteMumbaiHQ.id, status: 'ACTIVE' },
+    data: { tenantId: bankTenant.id, email: 'risk.officer@demobank.com', passwordHash, firstName: 'Suresh', lastName: 'Iyer', roleId: roleBranchMgr.id, departmentId: deptRisk.id, siteId: siteMumbaiHQ.id, status: 'ACTIVE', emailVerified: true },
   });
   const userHRManager = await prisma.user.create({
-    data: { tenantId: bankTenant.id, email: 'hr.manager@demobank.com', passwordHash, firstName: 'Ananya', lastName: 'Das', roleId: roleBranchMgr.id, departmentId: deptHR.id, siteId: siteMumbaiHQ.id, status: 'ACTIVE' },
+    data: { tenantId: bankTenant.id, email: 'hr.manager@demobank.com', passwordHash, firstName: 'Ananya', lastName: 'Das', roleId: roleBranchMgr.id, departmentId: deptHR.id, siteId: siteMumbaiHQ.id, status: 'ACTIVE', emailVerified: true },
   });
   const userFleetMgr = await prisma.user.create({
-    data: { tenantId: bankTenant.id, email: 'fleet.mgr@demobank.com', passwordHash, firstName: 'Ravi', lastName: 'Kumar', roleId: roleFleetMgr.id, departmentId: deptFacilities.id, siteId: siteMumbaiHQ.id, status: 'ACTIVE' },
+    data: { tenantId: bankTenant.id, email: 'fleet.mgr@demobank.com', passwordHash, firstName: 'Ravi', lastName: 'Kumar', roleId: roleFleetMgr.id, departmentId: deptFacilities.id, siteId: siteMumbaiHQ.id, status: 'ACTIVE', emailVerified: true },
   });
   const userDigitalLead = await prisma.user.create({
-    data: { tenantId: bankTenant.id, email: 'digital.lead@demobank.com', passwordHash, firstName: 'Meera', lastName: 'Joshi', roleId: roleITAdmin.id, departmentId: deptDigital.id, siteId: siteBangalore.id, status: 'ACTIVE' },
+    data: { tenantId: bankTenant.id, email: 'digital.lead@demobank.com', passwordHash, firstName: 'Meera', lastName: 'Joshi', roleId: roleITAdmin.id, departmentId: deptDigital.id, siteId: siteBangalore.id, status: 'ACTIVE', emailVerified: true },
   });
   const userAuditor = await prisma.user.create({
-    data: { tenantId: bankTenant.id, email: 'auditor@demobank.com', passwordHash, firstName: 'Karthik', lastName: 'Pillai', roleId: roleEmployee.id, departmentId: deptAudit.id, siteId: siteMumbaiHQ.id, status: 'ACTIVE' },
+    data: { tenantId: bankTenant.id, email: 'auditor@demobank.com', passwordHash, firstName: 'Karthik', lastName: 'Pillai', roleId: roleEmployee.id, departmentId: deptAudit.id, siteId: siteMumbaiHQ.id, status: 'ACTIVE', emailVerified: true },
   });
   const userLegal = await prisma.user.create({
-    data: { tenantId: bankTenant.id, email: 'legal@demobank.com', passwordHash, firstName: 'Divya', lastName: 'Reddy', roleId: roleEmployee.id, departmentId: deptLegal.id, siteId: siteMumbaiHQ.id, status: 'ACTIVE' },
+    data: { tenantId: bankTenant.id, email: 'legal@demobank.com', passwordHash, firstName: 'Divya', lastName: 'Reddy', roleId: roleEmployee.id, departmentId: deptLegal.id, siteId: siteMumbaiHQ.id, status: 'ACTIVE', emailVerified: true },
   });
   console.log('  ✓ 16 Users');
 

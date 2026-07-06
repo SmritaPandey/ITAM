@@ -55,8 +55,8 @@ import { AlertsModule } from './modules/alerts/alerts.module';
       { name: 'long', ttl: 60000, limit: 6000 },    // 6000 requests per minute
     ]),
 
-    // Scheduled tasks
-    ScheduleModule.forRoot(),
+    // Scheduled tasks (disabled via DISABLE_CRON_JOBS=true to save memory)
+    ...(process.env.DISABLE_CRON_JOBS === 'true' ? [] : [ScheduleModule.forRoot()]),
 
     // Database
     PrismaModule,

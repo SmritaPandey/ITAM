@@ -157,10 +157,24 @@ export class AnalyticsService {
    * Flush buffered events to the database using audit_logs (no schema change needed)
    */
   private async resolveSystemTenantId(): Promise<string | null> {
-    if (this.cachedSystemTenantId) return this.cachedSystemTenantId;
+    // Validate cached ID still exists (handles post-migration/seed scenarios)
+    if (this.cachedSystemTenantId) {
+      const exists = await this.prisma.tenant.findUnique({
+        where: { id: this.cachedSystemTenantId },
+        select: { id: true },
+      }).catch(() => null);
+      if (exists) return this.cachedSystemTenantId;
+      this.cachedSystemTenantId = null; // Cache was stale
+    }
     if (SYSTEM_TENANT_ID) {
-      this.cachedSystemTenantId = SYSTEM_TENANT_ID;
-      return SYSTEM_TENANT_ID;
+      const exists = await this.prisma.tenant.findUnique({
+        where: { id: SYSTEM_TENANT_ID },
+        select: { id: true },
+      }).catch(() => null);
+      if (exists) {
+        this.cachedSystemTenantId = SYSTEM_TENANT_ID;
+        return SYSTEM_TENANT_ID;
+      }
     }
     const firstTenant = await this.prisma.tenant.findFirst({ select: { id: true } });
     if (firstTenant) this.cachedSystemTenantId = firstTenant.id;

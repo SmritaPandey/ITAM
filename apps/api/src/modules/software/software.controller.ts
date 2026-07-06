@@ -65,6 +65,27 @@ export class SoftwareController {
     return this.softwareService.getUnauthorized(req.user.tenantId);
   }
 
+  @Get('risk-distribution')
+  @Roles('Tenant Admin', 'IT Admin')
+  @ApiOperation({ summary: 'TruRisk-style asset risk distribution based on software risk factors' })
+  async getRiskDistribution(@Request() req: any) {
+    return this.softwareService.getRiskDistribution(req.user.tenantId);
+  }
+
+  @Get('alerts')
+  @Roles('Tenant Admin', 'IT Admin')
+  @ApiOperation({ summary: 'Recent unauthorized/blacklisted/EOL software detection alerts' })
+  async getAlerts(@Request() req: any) {
+    return this.softwareService.getRecentAlerts(req.user.tenantId);
+  }
+
+  @Get('compliance')
+  @Roles('Tenant Admin', 'IT Admin')
+  @ApiOperation({ summary: 'Overall software compliance summary with breakdown' })
+  async getCompliance(@Request() req: any) {
+    return this.softwareService.getComplianceSummary(req.user.tenantId);
+  }
+
   @Get('by-user/:userId')
   @Roles('Tenant Admin', 'IT Admin')
   @ApiOperation({ summary: 'All software installed on assets assigned to a user' })

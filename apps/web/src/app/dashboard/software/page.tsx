@@ -5,7 +5,7 @@ import {
   Shield, ShieldAlert, ShieldCheck, ShieldQuestion, AlertTriangle,
   Monitor, Users, Package, Clock, CheckCircle2, XCircle,
   Edit3, Save, ExternalLink, Download, Filter, ChevronDown,
-  BarChart3, TrendingUp, Brain
+  BarChart3, TrendingUp, Brain, Ban
 } from "lucide-react";
 import { apiFetch } from "@/lib/api";
 import { useRouter } from "next/navigation";
@@ -49,6 +49,9 @@ type DashboardStats = {
   needsReviewCount: number;
   eolCount: number;
   totalInstallations: number;
+  blacklistedCount: number;
+  requiredCount: number;
+  highRiskCount: number;
   topPublishers: { publisher: string; count: number }[];
   topCategories: { category: string; count: number }[];
   topInstalled: { id: string; name: string; publisher: string; installCount?: number; installationCount?: number }[];
@@ -115,6 +118,10 @@ export default function SoftwareInventoryPage() {
   const [showFilters, setShowFilters] = useState(true);
   const [selectedSoftware, setSelectedSoftware] = useState<any>(null);
   const [syncing, setSyncing] = useState(false);
+  const [riskDist, setRiskDist] = useState<any>(null);
+  const [compliance, setCompliance] = useState<any>(null);
+  const [alerts, setAlerts] = useState<any[]>([]);
+  const [activeView, setActiveView] = useState<'inventory' | 'risk' | 'alerts'>('inventory');
 
   useEffect(() => {
     setUser(getLocalUser());
@@ -154,6 +161,15 @@ export default function SoftwareInventoryPage() {
       setSoftware(list.data || []);
       setTotal(list.total || 0);
       setDashboard(stats);
+
+      const [riskData, compData, alertData] = await Promise.all([
+        apiFetch('/software/risk-distribution').catch(() => null),
+        apiFetch('/software/compliance').catch(() => null),
+        apiFetch('/software/alerts').catch(() => []),
+      ]);
+      setRiskDist(riskData);
+      setCompliance(compData);
+      setAlerts(alertData || []);
     } catch (err: any) {
       console.error("Software load failed:", err);
       setError(err.message || "Failed to load software inventory. Please try again.");
@@ -281,6 +297,21 @@ export default function SoftwareInventoryPage() {
         </div>
       </div>
 
+      {/* View Switcher */}
+      <div style={{ display: 'flex', gap: 2, marginBottom: 20, background: 'var(--bg-elevated)', borderRadius: 10, padding: 3, border: '1px solid var(--border-primary)', width: 'fit-content' }}>
+        {(['inventory', 'risk', 'alerts'] as const).map(v => (
+          <button key={v} onClick={() => setActiveView(v)} style={{
+            padding: '8px 18px', borderRadius: 8, fontSize: 13, fontWeight: 600,
+            border: 'none', cursor: 'pointer', fontFamily: 'inherit',
+            background: activeView === v ? 'var(--brand-500)' : 'transparent',
+            color: activeView === v ? 'white' : 'var(--text-secondary)',
+            transition: 'all 0.15s',
+          }}>
+            {v === 'inventory' ? '📦 Inventory' : v === 'risk' ? '🛡️ Risk & Compliance' : `🔔 Alerts (${alerts.length})`}
+          </button>
+        ))}
+      </div>
+
       {/* Stats Cards */}
       {dashboard && (
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 16, marginBottom: 24 }}>
@@ -368,10 +399,30 @@ export default function SoftwareInventoryPage() {
               <div style={{ fontSize: 22, fontWeight: 800, color: "#c084fc", marginTop: 2 }}>{dashboard.eolCount}</div>
             </div>
           </div>
+
+          {/* Blacklisted */}
+          {(dashboard as any).blacklistedCount > 0 && (
+            <div style={{
+              background: 'linear-gradient(135deg, var(--bg-card) 0%, rgba(30, 37, 64, 0.4) 100%)',
+              border: '1px solid rgba(153, 27, 27, 0.3)',
+              borderRadius: 14, padding: 18, display: 'flex', alignItems: 'center', gap: 14,
+              boxShadow: '0 4px 20px rgba(0,0,0,0.15), 0 0 12px rgba(153, 27, 27, 0.02)', position: 'relative', overflow: 'hidden'
+            }}>
+              <div style={{ position: 'absolute', top: 0, right: 0, width: 60, height: 60, background: 'rgba(153, 27, 27, 0.03)', borderRadius: '50%', filter: 'blur(15px)' }} />
+              <div style={{ background: 'rgba(153, 27, 27, 0.15)', border: '1px solid rgba(153, 27, 27, 0.3)', borderRadius: 10, width: 42, height: 42, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fca5a5' }}>
+                <Ban size={20} />
+              </div>
+              <div>
+                <div style={{ fontSize: 12, color: 'var(--text-tertiary)', fontWeight: 500, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Blacklisted</div>
+                <div style={{ fontSize: 22, fontWeight: 800, color: '#fca5a5', marginTop: 2 }}>{(dashboard as any).blacklistedCount}</div>
+              </div>
+            </div>
+          )}
         </div>
       )}
 
       {/* Main Content Area: Filters Sidebar + Table */}
+      {activeView === 'inventory' && (
       <div style={{ display: "flex", gap: 16 }}>
         {/* Filter Sidebar */}
         {showFilters && (
@@ -545,6 +596,227 @@ export default function SoftwareInventoryPage() {
           </div>
         </div>
       </div>
+      )}
+
+      {/* Risk & Compliance View */}
+      {activeView === 'risk' && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 20, animation: 'fadeIn 0.3s ease' }}>
+          {/* Row 1: Compliance Gauge + Risk Distribution */}
+          <div style={{ display: 'grid', gridTemplateColumns: '320px 1fr', gap: 20 }}>
+            {/* Compliance Gauge */}
+            <div style={{
+              background: 'linear-gradient(180deg, var(--bg-card) 0%, rgba(15, 23, 42, 0.25) 100%)',
+              border: '1px solid var(--border-primary)', borderRadius: 16, padding: 28,
+              display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 16,
+            }}>
+              <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-tertiary)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Compliance Score</div>
+              {(() => {
+                const pct = compliance?.compliancePercentage ?? 0;
+                const gaugeColor = pct >= 80 ? '#10b981' : pct >= 50 ? '#f59e0b' : '#ef4444';
+                return (
+                  <div style={{ position: 'relative', width: 160, height: 160 }}>
+                    <div style={{
+                      width: 160, height: 160, borderRadius: '50%',
+                      background: `conic-gradient(${gaugeColor} ${pct * 3.6}deg, rgba(255,255,255,0.06) ${pct * 3.6}deg)`,
+                    }} />
+                    <div style={{
+                      position: 'absolute', top: 16, left: 16, width: 128, height: 128, borderRadius: '50%',
+                      background: 'var(--bg-card)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+                    }}>
+                      <div style={{ fontSize: 36, fontWeight: 900, color: gaugeColor }}>{pct}%</div>
+                      <div style={{ fontSize: 11, color: 'var(--text-tertiary)' }}>Compliant</div>
+                    </div>
+                  </div>
+                );
+              })()}
+              <div style={{ display: 'flex', gap: 16, fontSize: 12, color: 'var(--text-secondary)' }}>
+                <span>✅ {compliance?.breakdown?.authorized ?? compliance?.compliantCount ?? 0} Authorized</span>
+                <span>❌ {compliance?.breakdown?.unauthorized ?? 0} Unauthorized</span>
+              </div>
+            </div>
+
+            {/* Risk Distribution */}
+            <div style={{
+              background: 'linear-gradient(180deg, var(--bg-card) 0%, rgba(15, 23, 42, 0.25) 100%)',
+              border: '1px solid var(--border-primary)', borderRadius: 16, padding: 24,
+            }}>
+              <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-tertiary)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 20 }}>Risk Distribution</div>
+              {(() => {
+                const buckets = [
+                  { label: 'Critical', count: riskDist?.buckets?.critical ?? 0, color: '#ef4444' },
+                  { label: 'High', count: riskDist?.buckets?.high ?? 0, color: '#f59e0b' },
+                  { label: 'Medium', count: riskDist?.buckets?.medium ?? 0, color: '#60a5fa' },
+                  { label: 'Low', count: riskDist?.buckets?.low ?? 0, color: '#10b981' },
+                ];
+                const maxCount = Math.max(...buckets.map(b => b.count), 1);
+                return (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+                    {buckets.map(b => (
+                      <div key={b.label} style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+                        <div style={{ width: 70, fontSize: 13, fontWeight: 600, color: b.color }}>{b.label}</div>
+                        <div style={{ flex: 1, height: 24, borderRadius: 6, background: 'rgba(255,255,255,0.04)', overflow: 'hidden', position: 'relative' }}>
+                          <div style={{
+                            width: `${(b.count / maxCount) * 100}%`, height: '100%', borderRadius: 6,
+                            background: `linear-gradient(90deg, ${b.color}cc, ${b.color}66)`,
+                            transition: 'width 0.6s ease',
+                            display: 'flex', alignItems: 'center', justifyContent: 'flex-end', paddingRight: 8,
+                          }}>
+                            {b.count > 0 && <span style={{ fontSize: 11, fontWeight: 700, color: 'white' }}>{b.count}</span>}
+                          </div>
+                        </div>
+                        <div style={{ width: 40, fontSize: 14, fontWeight: 800, color: 'var(--text-primary)', textAlign: 'right' }}>{b.count}</div>
+                      </div>
+                    ))}
+                  </div>
+                );
+              })()}
+            </div>
+          </div>
+
+          {/* Row 2: Top Risky Assets */}
+          <div style={{
+            background: 'linear-gradient(180deg, var(--bg-card) 0%, rgba(15, 23, 42, 0.25) 100%)',
+            border: '1px solid var(--border-primary)', borderRadius: 16, padding: 24,
+          }}>
+            <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-tertiary)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 16 }}>Top Risky Assets</div>
+            <div style={{ overflowX: 'auto' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                <thead>
+                  <tr style={{ borderBottom: '1px solid var(--border-primary)' }}>
+                    {['Rank', 'Asset Name', 'Asset Tag', 'Hostname', 'IP Address', 'Risk Score'].map(h => (
+                      <th key={h} style={{ padding: '10px 14px', textAlign: 'left', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-tertiary)' }}>{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {(riskDist?.topRiskyAssets || []).slice(0, 10).map((asset: any, i: number) => (
+                    <tr key={asset.id || i} style={{ borderBottom: '1px solid var(--border-primary)' }} className="table-row-hover">
+                      <td style={{ padding: '12px 14px', fontSize: 13, fontWeight: 700, color: i < 3 ? '#ef4444' : 'var(--text-secondary)' }}>#{i + 1}</td>
+                      <td style={{ padding: '12px 14px', fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>{asset.name || '—'}</td>
+                      <td style={{ padding: '12px 14px', fontSize: 12, color: 'var(--text-secondary)', fontFamily: 'monospace' }}>{asset.assetTag || '—'}</td>
+                      <td style={{ padding: '12px 14px', fontSize: 12, color: 'var(--text-secondary)' }}>{asset.hostname || '—'}</td>
+                      <td style={{ padding: '12px 14px', fontSize: 12, color: 'var(--text-secondary)', fontFamily: 'monospace' }}>{asset.ipAddress || '—'}</td>
+                      <td style={{ padding: '12px 14px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                          <div style={{ width: 60, height: 8, borderRadius: 4, background: 'rgba(255,255,255,0.06)', overflow: 'hidden' }}>
+                            <div style={{
+                              width: `${asset.riskScore || 0}%`, height: '100%', borderRadius: 4,
+                              background: (asset.riskScore || 0) >= 75 ? '#ef4444' : (asset.riskScore || 0) >= 50 ? '#f59e0b' : (asset.riskScore || 0) >= 25 ? '#60a5fa' : '#10b981',
+                            }} />
+                          </div>
+                          <span style={{ fontSize: 13, fontWeight: 700, color: (asset.riskScore || 0) >= 75 ? '#ef4444' : (asset.riskScore || 0) >= 50 ? '#f59e0b' : '#60a5fa' }}>{asset.riskScore ?? '—'}</span>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                  {(!riskDist?.topRiskyAssets || riskDist.topRiskyAssets.length === 0) && (
+                    <tr><td colSpan={6} style={{ textAlign: 'center', padding: 40, color: 'var(--text-tertiary)', fontSize: 13 }}>No risk data available.</td></tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          {/* Row 3: EOL/EOS Breakdown */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 16 }}>
+            <div style={{
+              background: 'linear-gradient(180deg, var(--bg-card) 0%, rgba(15, 23, 42, 0.25) 100%)',
+              border: '1px solid rgba(239, 68, 68, 0.2)', borderRadius: 14, padding: 22, textAlign: 'center',
+            }}>
+              <AlertTriangle size={28} style={{ color: '#f87171', marginBottom: 8 }} />
+              <div style={{ fontSize: 12, color: 'var(--text-tertiary)', fontWeight: 600, textTransform: 'uppercase', marginBottom: 4 }}>End of Life</div>
+              <div style={{ fontSize: 32, fontWeight: 900, color: '#f87171' }}>{compliance?.lifecycle?.eolCount ?? dashboard?.eolCount ?? 0}</div>
+              <div style={{ fontSize: 11, color: 'var(--text-tertiary)', marginTop: 4 }}>Software past EOL</div>
+            </div>
+            <div style={{
+              background: 'linear-gradient(180deg, var(--bg-card) 0%, rgba(15, 23, 42, 0.25) 100%)',
+              border: '1px solid rgba(153, 27, 27, 0.3)', borderRadius: 14, padding: 22, textAlign: 'center',
+            }}>
+              <Shield size={28} style={{ color: '#fca5a5', marginBottom: 8 }} />
+              <div style={{ fontSize: 12, color: 'var(--text-tertiary)', fontWeight: 600, textTransform: 'uppercase', marginBottom: 4 }}>End of Support</div>
+              <div style={{ fontSize: 32, fontWeight: 900, color: '#fca5a5' }}>{compliance?.lifecycle?.eosCount ?? 0}</div>
+              <div style={{ fontSize: 11, color: 'var(--text-tertiary)', marginTop: 4 }}>No vendor support</div>
+            </div>
+            <div style={{
+              background: 'linear-gradient(180deg, var(--bg-card) 0%, rgba(15, 23, 42, 0.25) 100%)',
+              border: '1px solid rgba(245, 158, 11, 0.2)', borderRadius: 14, padding: 22, textAlign: 'center',
+            }}>
+              <Clock size={28} style={{ color: '#fbbf24', marginBottom: 8 }} />
+              <div style={{ fontSize: 12, color: 'var(--text-tertiary)', fontWeight: 600, textTransform: 'uppercase', marginBottom: 4 }}>Approaching EOL</div>
+              <div style={{ fontSize: 32, fontWeight: 900, color: '#fbbf24' }}>{compliance?.lifecycle?.approachingEol ?? 0}</div>
+              <div style={{ fontSize: 11, color: 'var(--text-tertiary)', marginTop: 4 }}>Within 6 months</div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Security Alerts View */}
+      {activeView === 'alerts' && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 14, animation: 'fadeIn 0.3s ease' }}>
+          {alerts.length === 0 ? (
+            <div style={{
+              background: 'linear-gradient(180deg, var(--bg-card) 0%, rgba(15, 23, 42, 0.25) 100%)',
+              border: '1px solid var(--border-primary)', borderRadius: 16, padding: '60px 24px', textAlign: 'center',
+            }}>
+              <ShieldCheck size={48} style={{ color: '#10b981', marginBottom: 16 }} />
+              <div style={{ fontSize: 18, fontWeight: 700, color: 'var(--text-primary)', marginBottom: 8 }}>No Active Alerts</div>
+              <p style={{ fontSize: 13, color: 'var(--text-tertiary)', maxWidth: 400, margin: '0 auto' }}>All software installations are within compliance. Alerts will appear here when unauthorized, blacklisted, or high-risk software is detected.</p>
+            </div>
+          ) : (
+            alerts.map((alert: any, i: number) => {
+              const sevColor = alert.severity === 'CRITICAL' ? '#ef4444' : alert.severity === 'HIGH' ? '#f59e0b' : '#60a5fa';
+              return (
+                <div key={alert.id || i} style={{
+                  background: 'linear-gradient(180deg, var(--bg-card) 0%, rgba(15, 23, 42, 0.25) 100%)',
+                  border: '1px solid var(--border-primary)', borderRadius: 14, padding: '18px 22px',
+                  borderLeft: `4px solid ${sevColor}`,
+                  display: 'flex', flexDirection: 'column', gap: 10,
+                }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                      <span style={{
+                        padding: '3px 10px', borderRadius: 6, fontSize: 10, fontWeight: 800,
+                        textTransform: 'uppercase', letterSpacing: '0.05em',
+                        background: `${sevColor}22`, border: `1px solid ${sevColor}44`, color: sevColor,
+                      }}>{alert.severity || 'MEDIUM'}</span>
+                      <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)', textTransform: 'uppercase' }}>{alert.alertType || alert.type || 'Detection'}</span>
+                    </div>
+                    <span style={{ fontSize: 11, color: 'var(--text-tertiary)' }}>{alert.detectedAt ? new Date(alert.detectedAt).toLocaleString() : '—'}</span>
+                  </div>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 20, fontSize: 13 }}>
+                    <div>
+                      <div style={{ fontSize: 10, color: 'var(--text-tertiary)', fontWeight: 600, textTransform: 'uppercase', marginBottom: 2 }}>Software</div>
+                      <div style={{ fontWeight: 700, color: 'var(--text-primary)' }}>{alert.software?.name || alert.softwareName || '—'} <span style={{ fontWeight: 400, color: 'var(--text-secondary)' }}>{alert.version ? `v${alert.version}` : ''}</span></div>
+                    </div>
+                    <div>
+                      <div style={{ fontSize: 10, color: 'var(--text-tertiary)', fontWeight: 600, textTransform: 'uppercase', marginBottom: 2 }}>Asset</div>
+                      <div style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{alert.asset?.name || alert.assetName || '—'} <span style={{ fontWeight: 400, color: 'var(--text-tertiary)', fontFamily: 'monospace', fontSize: 11 }}>{alert.asset?.assetTag || alert.assetTag || ''}</span></div>
+                    </div>
+                    {(alert.asset?.ipAddress || alert.ipAddress) && (
+                      <div>
+                        <div style={{ fontSize: 10, color: 'var(--text-tertiary)', fontWeight: 600, textTransform: 'uppercase', marginBottom: 2 }}>IP</div>
+                        <div style={{ fontWeight: 600, color: 'var(--text-secondary)', fontFamily: 'monospace' }}>{alert.asset?.ipAddress || alert.ipAddress}</div>
+                      </div>
+                    )}
+                    {(alert.asset?.assignedTo || alert.assignedUser) && (
+                      <div>
+                        <div style={{ fontSize: 10, color: 'var(--text-tertiary)', fontWeight: 600, textTransform: 'uppercase', marginBottom: 2 }}>Assigned To</div>
+                        <div style={{ fontWeight: 600, color: 'var(--text-secondary)' }}>{alert.asset?.assignedTo ? `${alert.asset.assignedTo.firstName || ''} ${alert.asset.assignedTo.lastName || ''}`.trim() : alert.assignedUser}</div>
+                      </div>
+                    )}
+                    {alert.installPath && (
+                      <div>
+                        <div style={{ fontSize: 10, color: 'var(--text-tertiary)', fontWeight: 600, textTransform: 'uppercase', marginBottom: 2 }}>Install Path</div>
+                        <div style={{ fontWeight: 500, color: 'var(--text-tertiary)', fontFamily: 'monospace', fontSize: 11 }}>{alert.installPath}</div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              );
+            })
+          )}
+        </div>
+      )}
 
       {/* Detail Drawer */}
       {selectedSoftware && (

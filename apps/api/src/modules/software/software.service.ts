@@ -573,4 +573,212 @@ export class SoftwareService {
 
     return { success: true, processedAssets: syncCount };
   }
+
+  // ═══════════════════════════════════════════════════════════════════
+  // Qualys CSAM-Inspired: Risk Distribution, Alerts, Compliance
+  // ═══════════════════════════════════════════════════════════════════
+
+  /**
+   * Compute TruRisk-style risk distribution across all assets.
+   * Scores each asset based on: unauthorized sw (+100), blacklisted (+200),
+   * EOL/EOS (+150), needs-review (+25). Buckets into Critical/High/Medium/Low.
+   */
+  async getRiskDistribution(tenantId: string) {
+    // Get all installations with their software's risk attributes
+    const installations = await this.prisma.softwareInstallation.findMany({
+      where: { tenantId },
+      select: {
+        assetId: true,
+        software: {
+          select: {
+            authorizationStatus: true,
+            lifecycleStatus: true,
+            isBlacklisted: true,
+            riskScore: true,
+          },
+        },
+      },
+    });
+
+    // Compute per-asset risk scores
+    const assetRisks: Record<string, number> = {};
+    for (const inst of installations) {
+      const aid = inst.assetId;
+      if (!assetRisks[aid]) assetRisks[aid] = 0;
+
+      const sw = inst.software;
+      if (sw.isBlacklisted || sw.authorizationStatus === 'BLACKLISTED') assetRisks[aid] += 200;
+      else if (sw.authorizationStatus === 'UNAUTHORIZED') assetRisks[aid] += 100;
+      if (sw.lifecycleStatus === 'EOS') assetRisks[aid] += 150;
+      else if (sw.lifecycleStatus === 'EOL') assetRisks[aid] += 120;
+      else if (sw.lifecycleStatus === 'APPROACHING_EOL') assetRisks[aid] += 40;
+      if (sw.authorizationStatus === 'NEEDS_REVIEW') assetRisks[aid] += 25;
+      if (sw.riskScore && sw.riskScore >= 50) assetRisks[aid] += sw.riskScore;
+    }
+
+    // Bucket into risk levels (0-1000 scale like Qualys TruRisk)
+    const buckets = { critical: 0, high: 0, medium: 0, low: 0 };
+    const scores = Object.values(assetRisks);
+    for (const s of scores) {
+      const capped = Math.min(s, 1000);
+      if (capped >= 700) buckets.critical++;
+      else if (capped >= 400) buckets.high++;
+      else if (capped >= 150) buckets.medium++;
+      else buckets.low++;
+    }
+
+    // Top 10 riskiest assets
+    const sortedAssets = Object.entries(assetRisks)
+      .sort(([, a], [, b]) => b - a)
+      .slice(0, 10);
+
+    const topRiskyAssetIds = sortedAssets.map(([id]) => id);
+    const assetDetails = topRiskyAssetIds.length > 0
+      ? await this.prisma.asset.findMany({
+          where: { id: { in: topRiskyAssetIds }, tenantId },
+          select: { id: true, name: true, assetTag: true, hostname: true, ipAddress: true, status: true },
+        })
+      : [];
+
+    const topRiskyAssets = sortedAssets.map(([id, score]) => {
+      const asset = assetDetails.find((a) => a.id === id);
+      return {
+        assetId: id,
+        riskScore: Math.min(score, 1000),
+        name: asset?.name || 'Unknown',
+        assetTag: asset?.assetTag || '',
+        hostname: asset?.hostname || '',
+        ipAddress: asset?.ipAddress || '',
+        status: asset?.status || 'UNKNOWN',
+      };
+    });
+
+    return {
+      totalAssetsScored: scores.length,
+      averageRisk: scores.length > 0 ? Math.round(scores.reduce((a, b) => a + b, 0) / scores.length) : 0,
+      buckets,
+      topRiskyAssets,
+    };
+  }
+
+  /**
+   * Recent unauthorized/blacklisted software detections (last 30 days).
+   * Acts as an alerting feed for security operations.
+   */
+  async getRecentAlerts(tenantId: string) {
+    const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+
+    const recentInstallations = await this.prisma.softwareInstallation.findMany({
+      where: {
+        tenantId,
+        installDate: { gte: thirtyDaysAgo },
+        software: {
+          OR: [
+            { authorizationStatus: 'UNAUTHORIZED' },
+            { authorizationStatus: 'BLACKLISTED' },
+            { isBlacklisted: true },
+            { lifecycleStatus: { in: ['EOL', 'EOS'] } },
+          ],
+        },
+      },
+      include: {
+        software: {
+          select: {
+            id: true, name: true, publisher: true,
+            authorizationStatus: true, lifecycleStatus: true,
+            isBlacklisted: true, riskScore: true,
+          },
+        },
+        asset: {
+          select: {
+            id: true, name: true, assetTag: true,
+            hostname: true, ipAddress: true,
+            assignedTo: { select: { firstName: true, lastName: true, email: true } },
+          },
+        },
+      },
+      orderBy: { installDate: 'desc' },
+      take: 50,
+    });
+
+    return recentInstallations.map((inst) => {
+      let severity: 'CRITICAL' | 'HIGH' | 'MEDIUM' = 'MEDIUM';
+      let alertType = 'NEEDS_ATTENTION';
+
+      if (inst.software.isBlacklisted || inst.software.authorizationStatus === 'BLACKLISTED') {
+        severity = 'CRITICAL';
+        alertType = 'BLACKLISTED_SOFTWARE';
+      } else if (inst.software.authorizationStatus === 'UNAUTHORIZED') {
+        severity = 'HIGH';
+        alertType = 'UNAUTHORIZED_SOFTWARE';
+      } else if (inst.software.lifecycleStatus === 'EOS') {
+        severity = 'CRITICAL';
+        alertType = 'END_OF_SUPPORT';
+      } else if (inst.software.lifecycleStatus === 'EOL') {
+        severity = 'HIGH';
+        alertType = 'END_OF_LIFE';
+      }
+
+      return {
+        id: inst.id,
+        alertType,
+        severity,
+        detectedAt: inst.installDate,
+        software: inst.software,
+        asset: inst.asset,
+        version: inst.version,
+        installPath: inst.installPath,
+      };
+    });
+  }
+
+  /**
+   * Overall compliance summary — percentage of software that is authorized,
+   * breakdown by status, license compliance.
+   */
+  async getComplianceSummary(tenantId: string) {
+    const [total, authorized, required, unauthorized, blacklisted, needsReview] =
+      await Promise.all([
+        this.prisma.softwareCatalog.count({ where: { tenantId } }),
+        this.prisma.softwareCatalog.count({ where: { tenantId, authorizationStatus: 'AUTHORIZED' } }),
+        this.prisma.softwareCatalog.count({ where: { tenantId, authorizationStatus: 'REQUIRED' } }),
+        this.prisma.softwareCatalog.count({ where: { tenantId, authorizationStatus: 'UNAUTHORIZED' } }),
+        this.prisma.softwareCatalog.count({ where: { tenantId, authorizationStatus: 'BLACKLISTED' } }),
+        this.prisma.softwareCatalog.count({ where: { tenantId, authorizationStatus: 'NEEDS_REVIEW' } }),
+      ]);
+
+    // Compliance % = (authorized + required) / total * 100
+    const compliantCount = authorized + required;
+    const compliancePercentage = total > 0 ? Math.round((compliantCount / total) * 100) : 100;
+
+    // License compliance
+    const licenses = await this.prisma.license.findMany({
+      where: { tenantId },
+      select: { totalSeats: true, usedSeats: true, complianceStatus: true },
+    });
+    const totalLicenses = licenses.length;
+    const compliantLicenses = licenses.filter((l) => l.complianceStatus === 'COMPLIANT').length;
+    const overUsedLicenses = licenses.filter((l) => (l.usedSeats || 0) > (l.totalSeats || 0)).length;
+
+    // EOL/EOS breakdown
+    const [eolCount, eosCount, approachingEol] = await Promise.all([
+      this.prisma.softwareCatalog.count({ where: { tenantId, lifecycleStatus: 'EOL' } }),
+      this.prisma.softwareCatalog.count({ where: { tenantId, lifecycleStatus: 'EOS' } }),
+      this.prisma.softwareCatalog.count({ where: { tenantId, lifecycleStatus: 'APPROACHING_EOL' } }),
+    ]);
+
+    return {
+      compliancePercentage,
+      total,
+      compliantCount,
+      breakdown: { authorized, required, unauthorized, blacklisted, needsReview },
+      lifecycle: { eolCount, eosCount, approachingEol },
+      licenseCompliance: {
+        totalLicenses,
+        compliantLicenses,
+        overUsedLicenses,
+        percentage: totalLicenses > 0 ? Math.round((compliantLicenses / totalLicenses) * 100) : 100,
+      },
+    };
+  }
 }

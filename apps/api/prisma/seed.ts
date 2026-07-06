@@ -63,6 +63,43 @@ function genAssets(opts: {
 }
 
 async function main() {
+  // ═══════════════════════════════════════════════════════════════════
+  // 🛡️ PRODUCTION SAFETY GUARD — Prevent accidental data destruction
+  // ═══════════════════════════════════════════════════════════════════
+  const dbUrl = process.env.DATABASE_URL || '';
+  const isProduction = dbUrl.includes('railway.app') || dbUrl.includes('neon.tech') ||
+    dbUrl.includes('supabase') || dbUrl.includes('planetscale') ||
+    process.env.NODE_ENV === 'production';
+
+  if (isProduction && process.env.FORCE_SEED !== 'true') {
+    console.error('🚫 SEED ABORTED — Production database detected!');
+    console.error('   Your real user data (smrita@neurqai.com and others) would be DELETED.');
+    console.error('   If you REALLY want to seed production, set FORCE_SEED=true');
+    console.error('   DATABASE_URL contains: ' + dbUrl.replace(/:[^:@]+@/, ':***@'));
+    process.exit(1);
+  }
+
+  // Extra safety: check if real (non-demo) users exist
+  const realUserCount = await prisma.user.count({
+    where: {
+      email: { notIn: [
+        'director@demobank.com', 'ciso@demobank.com', 'itsupport@demobank.com',
+        'branchmgr@demobank.com', 'employee@demobank.com', 'owner@qsasset.com',
+        'network.eng@demobank.com', 'dba@demobank.com', 'secanalyst@demobank.com',
+        'treasury.mgr@demobank.com', 'risk.officer@demobank.com', 'hr.manager@demobank.com',
+        'fleet.mgr@demobank.com', 'digital.lead@demobank.com', 'auditor@demobank.com',
+        'legal@demobank.com',
+      ]},
+    },
+  });
+
+  if (realUserCount > 0 && process.env.FORCE_SEED !== 'true') {
+    console.error(`🚫 SEED ABORTED — Found ${realUserCount} real user account(s) in the database!`);
+    console.error('   Running seed would DELETE all real user data permanently.');
+    console.error('   Set FORCE_SEED=true to override (DANGEROUS!).');
+    process.exit(1);
+  }
+
   console.log('🧹 Cleaning existing data...');
 
   // Delete in reverse dependency order

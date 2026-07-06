@@ -19,7 +19,7 @@ export class AiService {
   private readonly enabled: boolean;
   private readonly maxTokens: number;
   private readonly temperature: number;
-  private readonly redis: Redis | null = null;
+  private redis: Redis | null = null;
 
   constructor(
     private readonly prisma: PrismaService,

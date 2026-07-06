@@ -9,6 +9,8 @@ RUN npm install --include=dev
 
 RUN npx prisma generate
 
+# Cache-bust: forces Docker to re-copy source and rebuild
+ARG CACHEBUST=1
 COPY . .
 RUN npx nest build
 

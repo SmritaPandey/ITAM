@@ -4,6 +4,8 @@ import { PrismaService } from '../../common/database/prisma.service';
 import { EventBusService } from '../../common/events/event-bus.service';
 import { SYSTEM_PROMPT_COPILOT, SYSTEM_PROMPT_RISK_ANALYST, SYSTEM_PROMPT_TICKET_CLASSIFIER, SYSTEM_PROMPT_PATCH_ADVISOR, SYSTEM_PROMPT_COMPLIANCE_AUDITOR } from './ai.prompts';
 import { AI_TOOLS } from './ai.tools';
+import { RiskService } from '../risk/risk.service';
+import { SoftwareService } from '../software/software.service';
 import OpenAI from 'openai';
 import Redis from 'ioredis';
 
@@ -23,6 +25,8 @@ export class AiService {
     private readonly prisma: PrismaService,
     private readonly config: ConfigService,
     private readonly eventBus: EventBusService,
+    private readonly riskService: RiskService,
+    private readonly softwareService: SoftwareService,
   ) {
     const baseURL = this.config.get<string>('AI_BASE_URL', 'http://localhost:11434/v1');
     const apiKey = this.config.get<string>('AI_API_KEY', 'not-needed');
@@ -620,6 +624,21 @@ export class AiService {
           return JSON.stringify(results);
         }
 
+        case 'get_top_risks': {
+          const risks = await this.riskService.getTopRisks(tenantId, args.limit || 10);
+          return JSON.stringify(risks);
+        }
+
+        case 'analyze_asset_risk': {
+          const analysis = await this.riskService.calculateAssetRisk(args.assetId, tenantId);
+          return analysis ? JSON.stringify(analysis) : '{"error": "Asset not found"}';
+        }
+
+        case 'get_optimization_recommendations': {
+          const utilization = await this.softwareService.getUtilization(tenantId);
+          return JSON.stringify(utilization);
+        }
+
         default:
           return `{"error": "Unknown tool: ${name}"}`;
       }
@@ -636,12 +655,17 @@ export class AiService {
 
     try {
       // Get high-level org stats
-      const [assetCount, ticketCount, agentCount] = await Promise.all([
+      const [assetCount, ticketCount, agentCount, topRisks] = await Promise.all([
         this.prisma.asset.count({ where: { tenantId } }),
         this.prisma.ticket.count({ where: { tenantId, status: { in: ['NEW', 'OPEN', 'IN_PROGRESS'] } } }),
         this.prisma.agent.count({ where: { tenantId } }),
+        this.riskService.getTopRisks(tenantId, 3),
       ]);
       parts.push(`Organization: ${assetCount} assets, ${ticketCount} open tickets, ${agentCount} agents deployed.`);
+      
+      if (topRisks.length > 0) {
+        parts.push(`Top Security Risks:\n${topRisks.map(r => `- ${r.assetName}: ${r.riskLevel} Risk (Score: ${r.overallScore})`).join('\n')}`);
+      }
 
       // Search for relevant assets
       const assets = await this.prisma.asset.findMany({

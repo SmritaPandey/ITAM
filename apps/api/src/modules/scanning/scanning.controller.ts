@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Patch, Body, Param, UseGuards, Request } from '@nestjs/common';
+import { Controller, Get, Post, Patch, Delete, Body, Param, UseGuards, Request } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
 import { Throttle } from '@nestjs/throttler';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
@@ -60,6 +60,13 @@ export class ScanningController {
   @ApiOperation({ summary: 'Get detailed scan result' })
   async resultDetail(@Param('id') id: string, @Request() req: any) {
     return this.service.getScanDetail(id, req.user.tenantId);
+  }
+
+  @Delete('results/:id')
+  @Roles('Tenant Admin')
+  @ApiOperation({ summary: 'Delete a scan result' })
+  async deleteResult(@Param('id') id: string, @Request() req: any) {
+    return this.service.deleteScanResult(id, req.user.tenantId);
   }
 
   @Patch('detected/:id')

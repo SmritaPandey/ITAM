@@ -598,6 +598,7 @@ model SoftwareInstallation {
   asset    Asset           @relation(fields: [assetId], references: [id], onDelete: Cascade)
   software SoftwareCatalog @relation(fields: [softwareId], references: [id])
 
+  @@unique([tenantId, assetId, softwareId])
   @@index([tenantId, assetId])
   @@map("software_installations")
 }

@@ -16,7 +16,7 @@ export class AuditLogsController {
   constructor(private service: AuditLogsService) {}
 
   @Get()
-  @Roles('Tenant Admin')
+  @Roles('Tenant Admin', 'IT Admin')
   @ApiOperation({ summary: 'List audit logs with filters' })
   @ApiQuery({ name: 'page', required: false })
   @ApiQuery({ name: 'limit', required: false })
@@ -32,14 +32,14 @@ export class AuditLogsController {
   }
 
   @Get('stats')
-  @Roles('Tenant Admin')
+  @Roles('Tenant Admin', 'IT Admin')
   @ApiOperation({ summary: 'Audit log statistics' })
   async getStats(@Request() req: any) {
     return this.service.getStats(req.user.tenantId);
   }
 
   @Get('verify')
-  @Roles('Tenant Admin')
+  @Roles('Tenant Admin', 'IT Admin')
   @ApiOperation({ summary: 'Verify audit log hash chain integrity' })
   async verify(@Request() req: any) {
     return this.service.verifyChain(req.user.tenantId);

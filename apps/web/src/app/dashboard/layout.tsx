@@ -7,7 +7,7 @@ import {
   BarChart3, Zap, Users, Building2, Package, LogOut, User,
   AlertTriangle, CheckCircle2, Info, Clock, X, Radar, Key, FileText, BookOpen,
   Headphones, UserCircle, Wrench, Scan, ShoppingCart, GitBranch, AlertOctagon,
-  Sun, Moon, Menu, Lock, CheckCircle, Terminal, Download, Layers
+  Sun, Moon, Menu, Lock, CheckCircle, Terminal, Download, Layers, Brain
 } from "lucide-react";
 
 import { apiFetch, safeFetch, getToken } from "@/lib/api";
@@ -39,7 +39,8 @@ const nameToModuleKeyMap: Record<string, string> = {
   "VDI": "VDI",
   "Automation": "AUTOMATION",
   "Licenses": "LICENSES",
-  "Software Inventory": "ASSETS",
+  "Software Inventory": "IT_ASSETS",
+  "Software Deploy": "SOFTWARE_DEPLOYMENT",
   "Knowledge Base": "KNOWLEDGE_BASE",
   "Service Catalog": "SERVICE_CATALOG",
   "Reports": "REPORTS",
@@ -65,12 +66,13 @@ const hrefToModuleKeyMap: Record<string, string> = {
   "/dashboard/vdi": "VDI",
   "/dashboard/automation": "AUTOMATION",
   "/dashboard/licenses": "LICENSES",
-  "/dashboard/software": "ASSETS",
+  "/dashboard/software": "IT_ASSETS",
   "/dashboard/knowledge-base": "KNOWLEDGE_BASE",
   "/dashboard/service-catalog": "SERVICE_CATALOG",
   "/dashboard/reports": "REPORTS",
   "/dashboard/users": "USERS",
   "/dashboard/audit-logs": "AUDIT_LOGS",
+  "/dashboard/software-deploy": "SOFTWARE_DEPLOYMENT",
 };
 
 const MODULE_METADATA: Record<string, {
@@ -266,6 +268,17 @@ const MODULE_METADATA: Record<string, {
       "VDI health telemetry reporting",
     ],
   },
+  IT_ASSETS: {
+    name: "IT Asset Management",
+    tier: "Professional",
+    desc: "Comprehensive tracking of all IT hardware and installed software inventory.",
+    benefits: [
+      "Hardware lifecycle tracking",
+      "Software inventory & EOL data",
+      "Employee asset assignment",
+      "Risk & vulnerability mapping",
+    ],
+  },
   AUTOMATION: {
     name: "Automation Runbooks",
     tier: "Enterprise",
@@ -277,6 +290,17 @@ const MODULE_METADATA: Record<string, {
       "Trigger rules (webhook, alerts)",
     ],
   },
+  SOFTWARE_DEPLOYMENT: {
+    name: "Software Deployment",
+    tier: "Professional",
+    desc: "Distribute and manage software packages across remote endpoints.",
+    benefits: [
+      "Package repository management",
+      "Silent installation scripts",
+      "Deployment scheduling",
+      "Success/failure reporting",
+    ],
+  },
 };
 
 const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4100/api/v1";
@@ -286,6 +310,7 @@ const navSections = [
     label: "Overview",
     items: [
       { name: "Dashboard", icon: LayoutDashboard, href: "/dashboard", badge: null },
+      { name: "Intelligence", icon: Brain, href: "/dashboard/intelligence", badge: "NEW" },
       { name: "My Portal", icon: UserCircle, href: "/dashboard/my-portal", badge: null },
     ],
   },

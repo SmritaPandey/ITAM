@@ -5,9 +5,22 @@ import {
   Shield, ShieldAlert, ShieldCheck, ShieldQuestion, AlertTriangle,
   Monitor, Users, Package, Clock, CheckCircle2, XCircle,
   Edit3, Save, ExternalLink, Download, Filter, ChevronDown,
-  BarChart3, TrendingUp
+  BarChart3, TrendingUp, Brain
 } from "lucide-react";
 import { apiFetch } from "@/lib/api";
+import { useRouter } from "next/navigation";
+
+// Local helper to decode token and get user info
+function getLocalUser() {
+  if (typeof window === "undefined") return null;
+  const token = localStorage.getItem("accessToken");
+  if (!token) return null;
+  try {
+    return JSON.parse(atob(token.split(".")[1]));
+  } catch {
+    return null;
+  }
+}
 
 type Software = {
   id: string;
@@ -68,7 +81,7 @@ function RiskBadge({ score }: { score: number | null }) {
   );
 }
 
-function StatusBadge({ status, map }: { status: string | null; map: typeof AUTH_COLORS }) {
+function StatusBadge({ status, map }: { status: string | null; map: typeof AUTH_COLORS | typeof LIFECYCLE_COLORS }) {
   if (!status || !map[status]) return <span style={{ color: "var(--text-tertiary)", fontSize: 12 }}>—</span>;
   const c = map[status];
   return (
@@ -83,9 +96,12 @@ function StatusBadge({ status, map }: { status: string | null; map: typeof AUTH_
 }
 
 export default function SoftwareInventoryPage() {
+  const router = useRouter();
+  const [user, setUser] = useState<any>(null);
   const [software, setSoftware] = useState<Software[]>([]);
   const [dashboard, setDashboard] = useState<DashboardStats | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [page, setPage] = useState(1);
   const [total, setTotal] = useState(0);
   const [searchQuery, setSearchQuery] = useState("");
@@ -97,6 +113,11 @@ export default function SoftwareInventoryPage() {
   const [sortBy, setSortBy] = useState("installCount");
   const [showFilters, setShowFilters] = useState(true);
   const [selectedSoftware, setSelectedSoftware] = useState<any>(null);
+  const [syncing, setSyncing] = useState(false);
+
+  useEffect(() => {
+    setUser(getLocalUser());
+  }, []);
   const [detailTab, setDetailTab] = useState<"overview" | "assets" | "users" | "licenses">("overview");
   const [detailData, setDetailData] = useState<any>(null);
   const [detailAssets, setDetailAssets] = useState<any[]>([]);
@@ -113,6 +134,8 @@ export default function SoftwareInventoryPage() {
   }, [searchQuery]);
 
   const refresh = useCallback(async () => {
+    setError(null);
+    setLoading(true);
     try {
       const params = new URLSearchParams({
         page: String(page), limit: String(limit), sortBy,
@@ -132,10 +155,25 @@ export default function SoftwareInventoryPage() {
       setDashboard(stats);
     } catch (err: any) {
       console.error("Software load failed:", err);
+      setError(err.message || "Failed to load software inventory. Please try again.");
     } finally {
       setLoading(false);
     }
   }, [page, debouncedSearch, authFilter, lifecycleFilter, categoryFilter, publisherFilter, sortBy]);
+
+  const handleSync = async () => {
+    if (!confirm("This will manually re-sync software installations from the latest discovery data for all approved assets. Continue?")) return;
+    setSyncing(true);
+    try {
+      const res = await apiFetch("/software/sync", { method: "POST" });
+      refresh();
+      alert(`Sync successful! Processed ${res.processedAssets} assets.`);
+    } catch (err: any) {
+      alert(`Sync failed: ${err.message}`);
+    } finally {
+      setSyncing(false);
+    }
+  };
 
   useEffect(() => { refresh(); }, [refresh]);
 
@@ -191,6 +229,21 @@ export default function SoftwareInventoryPage() {
 
   const totalPages = Math.ceil(total / limit);
 
+  if (error) return (
+    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", height: "60vh", color: "var(--text-secondary)" }}>
+      <AlertTriangle size={48} style={{ color: "var(--error)", marginBottom: 16 }} />
+      <h3 style={{ fontSize: 18, fontWeight: 600, marginBottom: 8 }}>Unable to Load Software</h3>
+      <p style={{ fontSize: 14, color: "var(--text-tertiary)", marginBottom: 24, maxWidth: 400, textAlign: "center" }}>{error}</p>
+      <button onClick={() => refresh()} style={{
+        padding: "10px 24px", borderRadius: 10, border: "none",
+        background: "var(--brand-500)", color: "white", fontSize: 14, fontWeight: 600,
+        cursor: "pointer", display: "flex", alignItems: "center", gap: 8
+      }}>
+        <RefreshCw size={16} /> Retry Now
+      </button>
+    </div>
+  );
+
   if (loading) return (
     <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "60vh", color: "var(--text-tertiary)" }}>
       <Loader2 size={24} style={{ animation: "spin 1s linear infinite" }} />
@@ -216,9 +269,13 @@ export default function SoftwareInventoryPage() {
             style={{ display: "flex", alignItems: "center", gap: 6, padding: "8px 14px", borderRadius: 10, fontWeight: 600, fontSize: 13 }}>
             <Filter size={14} /> Filters
           </button>
+          <button className="btn btn-secondary" onClick={handleSync} disabled={syncing}
+            style={{ display: "flex", alignItems: "center", gap: 6, padding: "8px 14px", borderRadius: 10, fontWeight: 600, fontSize: 13, background: "rgba(245, 158, 11, 0.1)", color: "#f59e0b", border: "1px solid rgba(245, 158, 11, 0.2)" }}>
+            <TrendingUp size={14} className={syncing ? "animate-spin" : ""} /> {syncing ? "Syncing..." : "Sync Discovery"}
+          </button>
           <button className="btn btn-secondary" onClick={refresh}
             style={{ display: "flex", alignItems: "center", justifyContent: "center", width: 36, height: 36, padding: 0, borderRadius: 10 }}>
-            <RefreshCw size={15} />
+            <RefreshCw size={15} className={loading ? "animate-spin" : ""} />
           </button>
         </div>
       </div>
@@ -313,68 +370,6 @@ export default function SoftwareInventoryPage() {
         </div>
       )}
 
-      {/* Top Publishers & Categories Horizontal Bar Charts */}
-      {dashboard && (dashboard.topPublishers?.length > 0 || dashboard.topInstalled?.length > 0) && (
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginBottom: 24 }}>
-          {/* Top Publishers */}
-          <div style={{
-            background: "linear-gradient(180deg, var(--bg-card) 0%, rgba(15, 23, 42, 0.25) 100%)",
-            border: "1px solid var(--border-primary)", borderRadius: 14, padding: 20, overflow: "hidden"
-          }}>
-            <div style={{ fontSize: 13, fontWeight: 700, color: "var(--text-primary)", marginBottom: 14, display: "flex", alignItems: "center", gap: 8 }}>
-              <BarChart3 size={15} style={{ color: "var(--brand-400)" }} /> Top Publishers
-            </div>
-            {dashboard.topPublishers?.slice(0, 6).map((p, i) => {
-              const maxCount = dashboard.topPublishers[0]?.count || 1;
-              return (
-                <div key={i} style={{ marginBottom: 8, cursor: "pointer" }} onClick={() => setPublisherFilter(p.publisher)}>
-                  <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 3 }}>
-                    <span style={{ fontSize: 12, color: "var(--text-secondary)", fontWeight: 500 }}>{p.publisher || "Unknown"}</span>
-                    <span style={{ fontSize: 11, color: "var(--text-tertiary)", fontWeight: 600 }}>{p.count}</span>
-                  </div>
-                  <div style={{ width: "100%", height: 6, borderRadius: 3, background: "rgba(255,255,255,0.04)", overflow: "hidden" }}>
-                    <div style={{
-                      width: `${(p.count / maxCount) * 100}%`, height: "100%", borderRadius: 3,
-                      background: "linear-gradient(90deg, var(--brand-500), var(--brand-400))",
-                      transition: "width 0.6s ease"
-                    }} />
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-
-          {/* Top Installed */}
-          <div style={{
-            background: "linear-gradient(180deg, var(--bg-card) 0%, rgba(15, 23, 42, 0.25) 100%)",
-            border: "1px solid var(--border-primary)", borderRadius: 14, padding: 20, overflow: "hidden"
-          }}>
-            <div style={{ fontSize: 13, fontWeight: 700, color: "var(--text-primary)", marginBottom: 14, display: "flex", alignItems: "center", gap: 8 }}>
-              <TrendingUp size={15} style={{ color: "#34d399" }} /> Most Installed
-            </div>
-            {dashboard.topInstalled?.slice(0, 6).map((s, i) => {
-              const cnt = s.installCount ?? s.installationCount ?? 0;
-              const maxCount = (dashboard.topInstalled[0]?.installCount ?? dashboard.topInstalled[0]?.installationCount) || 1;
-              return (
-                <div key={i} style={{ marginBottom: 8 }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 3 }}>
-                    <span style={{ fontSize: 12, color: "var(--text-secondary)", fontWeight: 500 }}>{s.name}</span>
-                    <span style={{ fontSize: 11, color: "var(--text-tertiary)", fontWeight: 600 }}>{cnt} installs</span>
-                  </div>
-                  <div style={{ width: "100%", height: 6, borderRadius: 3, background: "rgba(255,255,255,0.04)", overflow: "hidden" }}>
-                    <div style={{
-                      width: `${(cnt / maxCount) * 100}%`, height: "100%", borderRadius: 3,
-                      background: "linear-gradient(90deg, #10b981, #34d399)",
-                      transition: "width 0.6s ease"
-                    }} />
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      )}
-
       {/* Main Content Area: Filters Sidebar + Table */}
       <div style={{ display: "flex", gap: 16 }}>
         {/* Filter Sidebar */}
@@ -421,28 +416,6 @@ export default function SoftwareInventoryPage() {
               ))}
             </div>
 
-            {/* Top Publishers */}
-            {dashboard?.topPublishers && dashboard.topPublishers.length > 0 && (
-              <div style={{ marginBottom: 16 }}>
-                <div style={{ fontSize: 11, fontWeight: 600, color: "var(--text-tertiary)", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 8 }}>Publisher</div>
-                <div style={{ cursor: "pointer", padding: "3px 0", fontSize: 12, color: publisherFilter === "" ? "var(--brand-400)" : "var(--text-secondary)", fontWeight: publisherFilter === "" ? 600 : 400 }}
-                  onClick={() => { setPublisherFilter(""); setPage(1); }}>
-                  All Publishers
-                </div>
-                {dashboard.topPublishers.slice(0, 8).map(p => (
-                  <div key={p.publisher} style={{
-                    cursor: "pointer", padding: "3px 0", fontSize: 12, display: "flex", justifyContent: "space-between",
-                    color: publisherFilter === p.publisher ? "var(--brand-400)" : "var(--text-secondary)",
-                    fontWeight: publisherFilter === p.publisher ? 600 : 400,
-                  }}
-                    onClick={() => { setPublisherFilter(p.publisher); setPage(1); }}>
-                    <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: 140 }}>{p.publisher || "Unknown"}</span>
-                    <span style={{ fontSize: 11, color: "var(--text-tertiary)" }}>{p.count}</span>
-                  </div>
-                ))}
-              </div>
-            )}
-
             {/* Sort By */}
             <div>
               <div style={{ fontSize: 11, fontWeight: 600, color: "var(--text-tertiary)", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 8 }}>Sort By</div>
@@ -465,67 +438,81 @@ export default function SoftwareInventoryPage() {
           </div>
         )}
 
-        {/* Table */}
+        {/* Table Area */}
         <div style={{ flex: 1, minWidth: 0 }}>
           <div className="card" style={{ padding: 0, borderRadius: 16, overflow: "hidden", border: "1px solid var(--border-primary)", background: "linear-gradient(180deg, var(--bg-card) 0%, rgba(15, 23, 42, 0.25) 100%)" }}>
             {software.length === 0 ? (
-              <div style={{ textAlign: "center", padding: "64px 24px", color: "var(--text-tertiary)" }}>
-                <div style={{ background: "rgba(255,255,255,0.03)", width: 72, height: 72, borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 16px" }}>
-                  <Layers size={32} style={{ color: "var(--text-tertiary)" }} />
+              <div style={{ textAlign: "center", padding: "80px 24px", color: "var(--text-tertiary)" }}>
+                <div style={{ width: 80, height: 80, borderRadius: 40, background: "rgba(255,255,255,0.03)", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 20px" }}>
+                  <Package size={40} style={{ color: "var(--text-tertiary)", opacity: 0.5 }} />
                 </div>
-                <div style={{ fontSize: 16, fontWeight: 700, marginBottom: 6, color: "var(--text-primary)" }}>No software found</div>
-                <p style={{ fontSize: 13, maxWidth: 360, margin: "0 auto" }}>Software entries are auto-discovered from network scans and agent reports. Try adjusting your filters or run a discovery scan.</p>
+                <div style={{ fontSize: 18, fontWeight: 700, marginBottom: 8, color: "var(--text-primary)" }}>No software discovered yet</div>
+                <p style={{ fontSize: 14, maxWidth: 450, margin: "0 auto 24px", lineHeight: 1.6 }}>
+                  Software entries are automatically populated from <b>Network Scans</b>. 
+                  Ensure your devices are approved in the <b>Discovery</b> module and have <b>SSH/SNMP</b> credentials configured for enrichment.
+                </p>
+                <div style={{ display: "flex", justifyContent: "center", gap: 12 }}>
+                  <button className="btn btn-primary" onClick={() => router.push("/dashboard/discovery")} style={{ padding: "8px 20px", borderRadius: 8, fontSize: 13 }}>
+                    Go to Discovery
+                  </button>
+                  <button className="btn btn-secondary" onClick={() => router.push("/dashboard/intelligence")} style={{ padding: "8px 20px", borderRadius: 8, fontSize: 13, display: "flex", alignItems: "center", gap: 6 }}>
+                    <Brain size={14} /> Risk Intelligence
+                  </button>
+                </div>
+
+                {/* Admin Debug Info */}
+                {(user?.role === "Tenant Admin" || user?.role === "IT Admin") && (
+                  <div style={{ marginTop: 64, padding: 16, background: "rgba(0,0,0,0.2)", borderRadius: 12, border: "1px dashed rgba(255,255,255,0.1)", textAlign: "left", maxWidth: 600, margin: "64px auto 0" }}>
+                    <div style={{ fontSize: 11, fontWeight: 700, color: "var(--text-tertiary)", textTransform: "uppercase", marginBottom: 8, display: "flex", alignItems: "center", gap: 6 }}>
+                      <AlertTriangle size={12} /> Diagnostic Info (Admin Only)
+                    </div>
+                    <div style={{ fontSize: 12, fontFamily: "monospace", color: "var(--text-secondary)" }}>
+                      <div>Tenant ID: {user?.tenantId || "Missing"}</div>
+                      <div>API Base: {process.env.NEXT_PUBLIC_API_URL || "Default (Localhost:4100)"}</div>
+                      <div>Filters: search={debouncedSearch}, auth={authFilter}, lifecycle={lifecycleFilter}</div>
+                      <div>Total Records: {total}</div>
+                    </div>
+                  </div>
+                )}
               </div>
             ) : (
               <>
                 <div style={{ overflowX: "auto" }}>
                   <table className="data-table" style={{ width: "100%", borderCollapse: "collapse" }}>
                     <thead>
-                      <tr style={{ borderBottom: "1px solid var(--border-primary)" }}>
-                        {["Software", "Publisher", "Category", "Version", "Installs", "Users", "Authorization", "Lifecycle", "Risk"].map(h => (
-                          <th key={h} style={{ padding: "14px 16px", textAlign: "left", fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em", color: "var(--text-tertiary)", whiteSpace: "nowrap" }}>{h}</th>
+                      <tr style={{ borderBottom: "1px solid var(--border-primary)", background: "rgba(0,0,0,0.1)" }}>
+                        {["Software", "Publisher", "Category", "Status", "Risk", "Installs", ""].map(h => (
+                          <th key={h} style={{ padding: "14px 16px", textAlign: "left", fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em", color: "var(--text-tertiary)" }}>{h}</th>
                         ))}
-                        <th style={{ padding: "14px 16px" }}></th>
                       </tr>
                     </thead>
                     <tbody>
                       {software.map((sw) => {
                         const installs = sw._count?.installations ?? sw.installCount ?? 0;
                         return (
-                          <tr key={sw.id}
-                            onClick={() => loadDetail(sw)}
-                            style={{ borderBottom: "1px solid var(--border-primary)", cursor: "pointer", transition: "background 0.15s" }}
-                            onMouseEnter={e => (e.currentTarget.style.background = "rgba(255,255,255,0.02)")}
-                            onMouseLeave={e => (e.currentTarget.style.background = "transparent")}>
+                          <tr key={sw.id} onClick={() => loadDetail(sw)} style={{ borderBottom: "1px solid var(--border-primary)", cursor: "pointer", transition: "background 0.2s" }} className="table-row-hover">
                             <td style={{ padding: "14px 16px" }}>
-                              <div style={{ fontWeight: 600, fontSize: 13, color: "var(--text-primary)" }}>{sw.name}</div>
+                              <div style={{ fontSize: 13, fontWeight: 700, color: "var(--text-primary)" }}>{sw.name}</div>
+                              <div style={{ fontSize: 11, color: "var(--text-tertiary)" }}>v{sw.latestVersion || "?.?"}</div>
                             </td>
                             <td style={{ padding: "14px 16px", fontSize: 13, color: "var(--text-secondary)" }}>{sw.publisher || "—"}</td>
                             <td style={{ padding: "14px 16px", fontSize: 13, color: "var(--text-secondary)" }}>{sw.category || "—"}</td>
-                            <td style={{ padding: "14px 16px", fontSize: 12, color: "var(--text-tertiary)", fontFamily: "monospace" }}>{sw.latestVersion || "—"}</td>
                             <td style={{ padding: "14px 16px" }}>
-                              <span style={{
-                                display: "inline-flex", alignItems: "center", gap: 4,
-                                padding: "2px 8px", borderRadius: 6, fontSize: 12, fontWeight: 600,
-                                background: "rgba(6, 182, 212, 0.1)", color: "var(--brand-400)"
-                              }}>
-                                <Monitor size={12} /> {installs}
-                              </span>
+                              <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                                <StatusBadge status={sw.authorizationStatus} map={AUTH_COLORS} />
+                                {sw.lifecycleStatus && sw.lifecycleStatus !== "CURRENT" && (
+                                  <StatusBadge status={sw.lifecycleStatus} map={LIFECYCLE_COLORS} />
+                                )}
+                              </div>
                             </td>
-                            <td style={{ padding: "14px 16px" }}>
-                              <span style={{
-                                display: "inline-flex", alignItems: "center", gap: 4,
-                                padding: "2px 8px", borderRadius: 6, fontSize: 12, fontWeight: 600,
-                                background: "rgba(168, 85, 247, 0.1)", color: "#c084fc"
-                              }}>
-                                <Users size={12} /> {sw.userCount ?? "—"}
-                              </span>
-                            </td>
-                            <td style={{ padding: "14px 16px" }}><StatusBadge status={sw.authorizationStatus} map={AUTH_COLORS} /></td>
-                            <td style={{ padding: "14px 16px" }}><StatusBadge status={sw.lifecycleStatus} map={LIFECYCLE_COLORS} /></td>
                             <td style={{ padding: "14px 16px" }}><RiskBadge score={sw.riskScore} /></td>
                             <td style={{ padding: "14px 16px" }}>
-                              <ChevronRight size={14} style={{ color: "var(--text-tertiary)" }} />
+                              <div style={{ display: "inline-flex", alignItems: "center", gap: 6, color: "var(--text-primary)", fontWeight: 600 }}>
+                                <Monitor size={14} style={{ color: "var(--text-tertiary)" }} /> {installs}
+                              </div>
+                            </td>
+                            <td style={{ padding: "14px 16px", textAlign: "right" }}>
+                              <ChevronRight size={16} style={{ color: "var(--text-tertiary)" }} />
                             </td>
                           </tr>
                         );
@@ -658,196 +645,96 @@ export default function SoftwareInventoryPage() {
                     </div>
                     <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
                       <button onClick={() => setEditing(false)} style={{ padding: "8px 14px", borderRadius: 8, background: "rgba(255,255,255,0.05)", border: "1px solid var(--border-primary)", color: "var(--text-secondary)", fontSize: 12, fontWeight: 600, cursor: "pointer" }}>Cancel</button>
-                      <button onClick={handleSaveEdit} style={{ padding: "8px 14px", borderRadius: 8, background: "rgba(6, 182, 212, 0.15)", border: "1px solid rgba(6, 182, 212, 0.3)", color: "var(--brand-400)", fontSize: 12, fontWeight: 600, cursor: "pointer", display: "flex", alignItems: "center", gap: 4 }}>
-                        <Save size={12} /> Save Changes
-                      </button>
+                      <button onClick={handleSaveEdit} style={{ padding: "8px 20px", borderRadius: 8, background: "var(--brand-500)", border: "none", color: "white", fontSize: 12, fontWeight: 700, cursor: "pointer" }}>Save Changes</button>
                     </div>
                   </div>
                 ) : (
-                  /* Read-only Overview */
-                  <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-                    {/* Authorization & Lifecycle */}
+                  /* Overview Display */
+                  <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
                     <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-                      <div style={{ background: "var(--bg-elevated)", borderRadius: 10, padding: 14, border: "1px solid var(--border-primary)" }}>
-                        <div style={{ fontSize: 11, color: "var(--text-tertiary)", fontWeight: 500, marginBottom: 6 }}>AUTHORIZATION</div>
+                      <div className="card" style={{ padding: 12, background: "rgba(255,255,255,0.02)" }}>
+                        <div style={{ fontSize: 11, color: "var(--text-tertiary)", marginBottom: 4 }}>Authorization</div>
                         <StatusBadge status={detailData?.authorizationStatus} map={AUTH_COLORS} />
                       </div>
-                      <div style={{ background: "var(--bg-elevated)", borderRadius: 10, padding: 14, border: "1px solid var(--border-primary)" }}>
-                        <div style={{ fontSize: 11, color: "var(--text-tertiary)", fontWeight: 500, marginBottom: 6 }}>LIFECYCLE</div>
+                      <div className="card" style={{ padding: 12, background: "rgba(255,255,255,0.02)" }}>
+                        <div style={{ fontSize: 11, color: "var(--text-tertiary)", marginBottom: 4 }}>Lifecycle</div>
                         <StatusBadge status={detailData?.lifecycleStatus} map={LIFECYCLE_COLORS} />
                       </div>
                     </div>
 
-                    {/* Risk Score */}
-                    <div style={{ background: "var(--bg-elevated)", borderRadius: 10, padding: 14, border: "1px solid var(--border-primary)" }}>
-                      <div style={{ fontSize: 11, color: "var(--text-tertiary)", fontWeight: 500, marginBottom: 8 }}>RISK SCORE</div>
-                      <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-                        <div style={{ width: "100%", height: 8, borderRadius: 4, background: "rgba(255,255,255,0.06)", overflow: "hidden" }}>
-                          <div style={{
-                            width: `${detailData?.riskScore || 0}%`, height: "100%", borderRadius: 4,
-                            background: (detailData?.riskScore || 0) >= 75 ? "linear-gradient(90deg, #ef4444, #f87171)" : (detailData?.riskScore || 0) >= 50 ? "linear-gradient(90deg, #f59e0b, #fbbf24)" : "linear-gradient(90deg, #10b981, #34d399)",
-                            transition: "width 0.5s ease"
-                          }} />
+                    <div>
+                      <div style={{ fontSize: 11, fontWeight: 700, color: "var(--text-tertiary)", textTransform: "uppercase", marginBottom: 12 }}>Risk Assessment</div>
+                      <div className="card" style={{ padding: 16, background: "rgba(255,255,255,0.02)" }}>
+                        <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 8 }}>
+                          <span style={{ fontSize: 13, fontWeight: 600 }}>Security Risk Score</span>
+                          <span style={{ fontSize: 13, fontWeight: 700, color: (detailData?.riskScore || 0) > 70 ? "#ef4444" : "#10b981" }}>{detailData?.riskScore || 0}/100</span>
                         </div>
-                        <span style={{ fontSize: 16, fontWeight: 800, color: "var(--text-primary)", minWidth: 30 }}>{detailData?.riskScore ?? "—"}</span>
+                        <div style={{ height: 8, borderRadius: 4, background: "rgba(255,255,255,0.05)", overflow: "hidden" }}>
+                          <div style={{ width: `${detailData?.riskScore || 0}%`, height: "100%", background: (detailData?.riskScore || 0) > 70 ? "#ef4444" : "#10b981" }} />
+                        </div>
+                        <p style={{ fontSize: 11, color: "var(--text-tertiary)", marginTop: 12 }}>
+                          Calculated based on version age, lifecycle status, and known vulnerabilities for this category.
+                        </p>
                       </div>
                     </div>
 
-                    {/* Details Grid */}
-                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-                      {[
-                        { label: "Publisher", value: detailData?.publisher || "—" },
-                        { label: "Category", value: detailData?.category || "—" },
-                        { label: "Latest Version", value: detailData?.latestVersion || "—" },
-                        { label: "Installations", value: detailData?.installCount ?? "—" },
-                        { label: "EOL Date", value: detailData?.eolDate ? new Date(detailData.eolDate).toLocaleDateString() : "Not set" },
-                        { label: "EOS Date", value: detailData?.eosDate ? new Date(detailData.eosDate).toLocaleDateString() : "Not set" },
-                      ].map(item => (
-                        <div key={item.label} style={{ padding: "8px 0" }}>
-                          <div style={{ fontSize: 11, color: "var(--text-tertiary)", fontWeight: 500, marginBottom: 2 }}>{item.label}</div>
-                          <div style={{ fontSize: 13, color: "var(--text-primary)", fontWeight: 500 }}>{item.value}</div>
-                        </div>
-                      ))}
+                    <div>
+                      <div style={{ fontSize: 11, fontWeight: 700, color: "var(--text-tertiary)", textTransform: "uppercase", marginBottom: 12 }}>Description</div>
+                      <p style={{ fontSize: 13, color: "var(--text-secondary)", lineHeight: 1.6 }}>
+                        {detailData?.description || "No description available for this software."}
+                      </p>
                     </div>
 
-                    {/* Description */}
-                    {detailData?.description && (
+                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
                       <div>
-                        <div style={{ fontSize: 11, color: "var(--text-tertiary)", fontWeight: 500, marginBottom: 4 }}>DESCRIPTION</div>
-                        <p style={{ fontSize: 13, color: "var(--text-secondary)", lineHeight: 1.5 }}>{detailData.description}</p>
+                        <div style={{ fontSize: 11, fontWeight: 700, color: "var(--text-tertiary)", textTransform: "uppercase", marginBottom: 8 }}>End of Life</div>
+                        <div style={{ fontSize: 13, color: detailData?.eolDate ? "#f87171" : "var(--text-secondary)" }}>
+                          <Clock size={12} style={{ marginRight: 6, display: "inline" }} />
+                          {detailData?.eolDate ? new Date(detailData.eolDate).toLocaleDateString() : "Not defined"}
+                        </div>
                       </div>
-                    )}
-
-                    {/* Version Distribution */}
-                    {detailData?.versionDistribution && detailData.versionDistribution.length > 0 && (
                       <div>
-                        <div style={{ fontSize: 11, color: "var(--text-tertiary)", fontWeight: 500, marginBottom: 8 }}>VERSION DISTRIBUTION</div>
-                        {detailData.versionDistribution.map((v: any, i: number) => {
-                          const maxCount = detailData.versionDistribution[0]?.count || 1;
-                          return (
-                            <div key={i} style={{ marginBottom: 6 }}>
-                              <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 2 }}>
-                                <span style={{ fontSize: 12, color: "var(--text-secondary)", fontFamily: "monospace" }}>{v.version || "Unknown"}</span>
-                                <span style={{ fontSize: 11, color: "var(--text-tertiary)" }}>{v.count} installs</span>
-                              </div>
-                              <div style={{ width: "100%", height: 4, borderRadius: 2, background: "rgba(255,255,255,0.04)", overflow: "hidden" }}>
-                                <div style={{ width: `${(v.count / maxCount) * 100}%`, height: "100%", borderRadius: 2, background: "var(--brand-400)", transition: "width 0.5s ease" }} />
-                              </div>
-                            </div>
-                          );
-                        })}
+                        <div style={{ fontSize: 11, fontWeight: 700, color: "var(--text-tertiary)", textTransform: "uppercase", marginBottom: 8 }}>End of Support</div>
+                        <div style={{ fontSize: 13, color: detailData?.eosDate ? "#f87171" : "var(--text-secondary)" }}>
+                          <Shield size={12} style={{ marginRight: 6, display: "inline" }} />
+                          {detailData?.eosDate ? new Date(detailData.eosDate).toLocaleDateString() : "Not defined"}
+                        </div>
                       </div>
-                    )}
+                    </div>
                   </div>
                 )}
               </div>
             ) : detailTab === "assets" ? (
-              /* Assets Tab */
-              <div>
-                <div style={{ fontSize: 12, color: "var(--text-tertiary)", marginBottom: 12 }}>{detailAssets.length} asset(s) with this software installed</div>
-                {detailAssets.length === 0 ? (
-                  <div style={{ textAlign: "center", padding: 40, color: "var(--text-tertiary)", fontSize: 13 }}>No assets found</div>
-                ) : (
-                  <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                    {detailAssets.map((a: any) => {
-                      const asset = a.asset || a;
-                      return (
-                      <div key={a.id || a.assetId} style={{
-                        background: "var(--bg-elevated)", borderRadius: 10, padding: 14,
-                        border: "1px solid var(--border-primary)", display: "flex", justifyContent: "space-between", alignItems: "center"
-                      }}>
-                        <div>
-                          <div style={{ fontSize: 13, fontWeight: 600, color: "var(--text-primary)", marginBottom: 2 }}>{asset.name || asset.hostname || "Unknown"}</div>
-                          <div style={{ fontSize: 11, color: "var(--text-tertiary)", display: "flex", gap: 12 }}>
-                            {asset.ipAddress && <span>{asset.ipAddress}</span>}
-                            {asset.hostname && <span>{asset.hostname}</span>}
-                            {a.version && <span>v{a.version}</span>}
-                            {a.lastUsedAt && <span>Last used: {new Date(a.lastUsedAt).toLocaleDateString()}</span>}
-                          </div>
-                        </div>
-                        <span style={{
-                          padding: "3px 8px", borderRadius: 6, fontSize: 11, fontWeight: 600,
-                          background: asset.status === "ACTIVE" ? "rgba(16, 185, 129, 0.1)" : "rgba(255,255,255,0.05)",
-                          color: asset.status === "ACTIVE" ? "#34d399" : "var(--text-tertiary)",
-                          border: `1px solid ${asset.status === "ACTIVE" ? "rgba(16, 185, 129, 0.2)" : "var(--border-primary)"}`,
-                        }}>{asset.status || "—"}</span>
-                      </div>
-                      );
-                    })}
+              <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+                {detailAssets.map(asset => (
+                  <div key={asset.id} className="card" style={{ padding: 12, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                    <div>
+                      <div style={{ fontSize: 13, fontWeight: 700 }}>{asset.hostname || asset.name}</div>
+                      <div style={{ fontSize: 11, color: "var(--text-tertiary)" }}>{asset.ipAddress} · {asset.osFamily} {asset.osVersion}</div>
+                    </div>
+                    <div style={{ fontSize: 12, color: "var(--text-secondary)", fontWeight: 600 }}>v{asset.softwareVersion || "?.?"}</div>
                   </div>
-                )}
+                ))}
+                {detailAssets.length === 0 && <div style={{ textAlign: "center", padding: 40, color: "var(--text-tertiary)", fontSize: 13 }}>No installations found.</div>}
               </div>
             ) : detailTab === "users" ? (
-              /* Users Tab */
-              <div>
-                <div style={{ fontSize: 12, color: "var(--text-tertiary)", marginBottom: 12 }}>{detailUsers.length} user(s) using this software</div>
-                {detailUsers.length === 0 ? (
-                  <div style={{ textAlign: "center", padding: 40, color: "var(--text-tertiary)", fontSize: 13 }}>No users found — software may be on unassigned assets</div>
-                ) : (
-                  <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                    {detailUsers.map((u: any, i: number) => (
-                      <div key={u.id || i} style={{
-                        background: "var(--bg-elevated)", borderRadius: 10, padding: 14,
-                        border: "1px solid var(--border-primary)", display: "flex", justifyContent: "space-between", alignItems: "center"
-                      }}>
-                        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-                          <div style={{ width: 36, height: 36, borderRadius: "50%", background: "rgba(6, 182, 212, 0.1)", border: "1px solid rgba(6, 182, 212, 0.2)", display: "flex", alignItems: "center", justifyContent: "center", color: "var(--brand-400)", fontSize: 13, fontWeight: 700 }}>
-                            {(u.firstName || u.name || "?")[0]?.toUpperCase()}
-                          </div>
-                          <div>
-                            <div style={{ fontSize: 13, fontWeight: 600, color: "var(--text-primary)" }}>{u.firstName ? `${u.firstName} ${u.lastName || ""}` : u.name || "Unknown"}</div>
-                            <div style={{ fontSize: 11, color: "var(--text-tertiary)" }}>{u.email || ""} {u.department ? `· ${u.department}` : ""}</div>
-                          </div>
-                        </div>
-                        <span style={{ fontSize: 11, color: "var(--text-tertiary)", fontWeight: 500 }}>{u.assetCount || 1} asset(s)</span>
-                      </div>
-                    ))}
+              <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+                {detailUsers.map(user => (
+                  <div key={user.id} className="card" style={{ padding: 12, display: "flex", alignItems: "center", gap: 12 }}>
+                    <div style={{ width: 32, height: 32, borderRadius: 16, background: "var(--brand-500)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, fontWeight: 700, color: "white" }}>
+                      {user.name?.charAt(0) || "U"}
+                    </div>
+                    <div>
+                      <div style={{ fontSize: 13, fontWeight: 700 }}>{user.name}</div>
+                      <div style={{ fontSize: 11, color: "var(--text-tertiary)" }}>{user.email} · {user.department}</div>
+                    </div>
                   </div>
-                )}
+                ))}
+                {detailUsers.length === 0 && <div style={{ textAlign: "center", padding: 40, color: "var(--text-tertiary)", fontSize: 13 }}>No users associated with this software.</div>}
               </div>
             ) : (
-              /* Licenses Tab */
-              <div>
-                {detailData?.licenses && detailData.licenses.length > 0 ? (
-                  <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-                    {detailData.licenses.map((lic: any) => {
-                      const utilization = lic.totalSeats > 0 ? Math.round((lic.usedSeats / lic.totalSeats) * 100) : 0;
-                      const barColor = utilization > 100 ? "#ef4444" : utilization > 85 ? "#f59e0b" : "#10b981";
-                      return (
-                        <div key={lic.id} style={{
-                          background: "var(--bg-elevated)", borderRadius: 10, padding: 16,
-                          border: "1px solid var(--border-primary)"
-                        }}>
-                          <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 8 }}>
-                            <div style={{ fontSize: 13, fontWeight: 600, color: "var(--text-primary)" }}>{lic.softwareName}</div>
-                            <span style={{
-                              padding: "2px 8px", borderRadius: 6, fontSize: 11, fontWeight: 600,
-                              background: lic.status === "ACTIVE" ? "rgba(16, 185, 129, 0.1)" : "rgba(239, 68, 68, 0.1)",
-                              color: lic.status === "ACTIVE" ? "#34d399" : "#f87171",
-                            }}>{lic.status}</span>
-                          </div>
-                          <div style={{ fontSize: 12, color: "var(--text-tertiary)", marginBottom: 8 }}>
-                            {lic.licenseType} · {lic.licenseModel} · {lic.vendor || "Unknown vendor"}
-                          </div>
-                          <div style={{ marginBottom: 4, display: "flex", justifyContent: "space-between" }}>
-                            <span style={{ fontSize: 11, color: "var(--text-tertiary)" }}>Utilization</span>
-                            <span style={{ fontSize: 11, fontWeight: 600, color: barColor }}>{lic.usedSeats}/{lic.totalSeats} seats ({utilization}%)</span>
-                          </div>
-                          <div style={{ width: "100%", height: 6, borderRadius: 3, background: "rgba(255,255,255,0.06)", overflow: "hidden" }}>
-                            <div style={{ width: `${Math.min(utilization, 100)}%`, height: "100%", borderRadius: 3, background: barColor, transition: "width 0.5s ease" }} />
-                          </div>
-                          {lic.expiryDate && (
-                            <div style={{ fontSize: 11, color: "var(--text-tertiary)", marginTop: 6 }}>
-                              Expires: {new Date(lic.expiryDate).toLocaleDateString()}
-                            </div>
-                          )}
-                        </div>
-                      );
-                    })}
-                  </div>
-                ) : (
-                  <div style={{ textAlign: "center", padding: 40, color: "var(--text-tertiary)", fontSize: 13 }}>No licenses linked to this software</div>
-                )}
+              <div style={{ textAlign: "center", padding: 40, color: "var(--text-tertiary)", fontSize: 13 }}>
+                License integration coming soon.
               </div>
             )}
           </div>
@@ -864,6 +751,8 @@ export default function SoftwareInventoryPage() {
         @keyframes spin { to { transform: rotate(360deg); } }
         @keyframes slideIn { from { transform: translateX(100%); } to { transform: translateX(0); } }
         @keyframes fadeIn { from { opacity: 0; transform: translateY(-8px); } to { opacity: 1; transform: translateY(0); } }
+        .table-row-hover:hover { background: rgba(255,255,255,0.02) !important; }
+        .animate-spin { animation: spin 1s linear infinite; }
       `}</style>
     </>
   );

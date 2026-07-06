@@ -123,13 +123,21 @@ export async function apiFetch<T = any>(path: string, opts?: RequestInit): Promi
     ...opts?.headers,
   };
 
-  // Retry logic for transient 5xx errors
+  // Retry logic for transient 5xx errors and 429 (rate limiting)
   let lastError: Error | null = null;
   for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
     try {
       const res = await fetchWithTimeout(`${API_BASE}${path}`, { ...opts, headers });
 
-      // Don't retry 4xx — they are not transient
+      // Handle 429 (Too Many Requests) with retry
+      if (res.status === 429 && attempt < MAX_RETRIES) {
+        const retryAfter = res.headers.get("Retry-After");
+        const delay = retryAfter ? parseInt(retryAfter) * 1000 : 1000 * Math.pow(2, attempt) + Math.random() * 100;
+        await new Promise(r => setTimeout(r, delay));
+        continue;
+      }
+
+      // Don't retry other 4xx — they are not transient
       if (res.status >= 400 && res.status < 500) {
         return handleClientError(res, path, opts);
       }

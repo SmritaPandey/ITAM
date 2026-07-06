@@ -1,8 +1,10 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../common/database/prisma.service';
 
 @Injectable()
 export class SoftwareService {
+  private readonly logger = new Logger(SoftwareService.name);
+
   constructor(private prisma: PrismaService) {}
 
   async findAll(
@@ -16,7 +18,9 @@ export class SoftwareService {
       category?: string;
       publisher?: string;
     },
+    sortBy = 'installCount',
   ) {
+    this.logger.log(`findAll: tenantId=${tenantId}, page=${page}, limit=${limit}, search=${search}, sortBy=${sortBy}`);
     const skip = (Number(page) - 1) * Number(limit);
     const where: any = { tenantId };
 
@@ -40,11 +44,22 @@ export class SoftwareService {
       where.publisher = filters.publisher;
     }
 
+    let orderBy: any = { updatedAt: 'desc' };
+    if (sortBy === 'name') {
+      orderBy = { name: 'asc' };
+    } else if (sortBy === 'riskScore') {
+      orderBy = { riskScore: 'desc' };
+    } else if (sortBy === 'createdAt') {
+      orderBy = { createdAt: 'desc' };
+    } else if (sortBy === 'installCount') {
+      orderBy = { installations: { _count: 'desc' } };
+    }
+
     const [data, total] = await Promise.all([
       this.prisma.softwareCatalog.findMany({
         where,
         include: { _count: { select: { installations: true } } },
-        orderBy: { updatedAt: 'desc' },
+        orderBy,
         skip,
         take: Number(limit),
       }),
@@ -434,5 +449,113 @@ export class SoftwareService {
     });
 
     return software;
+  }
+
+  async ingestSoftware(
+    tenantId: string,
+    assetId: string,
+    packages: {
+      name: string;
+      version: string;
+      publisher?: string;
+      description?: string;
+    }[],
+  ) {
+    if (!packages || !Array.isArray(packages) || packages.length === 0) return;
+
+    this.logger.log(`Ingesting ${packages.length} packages for asset ${assetId}`);
+
+    // Process in chunks of 5 to balance speed and DB load
+    const CHUNK_SIZE = 5;
+    for (let i = 0; i < packages.length; i += CHUNK_SIZE) {
+      const chunk = packages.slice(i, i + CHUNK_SIZE);
+      await Promise.all(
+        chunk.map(async (pkg) => {
+          try {
+            // 1. Find or create software in catalog
+            const software = await this.prisma.softwareCatalog.upsert({
+              where: {
+                tenantId_name_publisher: {
+                  tenantId,
+                  name: pkg.name,
+                  publisher: pkg.publisher || 'Unknown',
+                },
+              },
+              create: {
+                tenantId,
+                name: pkg.name,
+                publisher: pkg.publisher || 'Unknown',
+                description: pkg.description,
+                latestVersion: pkg.version,
+                authorizationStatus: 'NEEDS_REVIEW',
+                lifecycleStatus: 'CURRENT',
+                riskScore: Math.floor(Math.random() * 30), // Initial random risk score
+              },
+              update: {
+                latestVersion: pkg.version,
+                description: pkg.description || undefined,
+              },
+            });
+
+            // 2. Upsert installation record for this asset
+            await this.prisma.softwareInstallation.upsert({
+              where: {
+                tenantId_assetId_softwareId: {
+                  tenantId,
+                  assetId,
+                  softwareId: software.id,
+                },
+              },
+              create: {
+                tenantId,
+                assetId,
+                softwareId: software.id,
+                version: pkg.version,
+                installDate: new Date(),
+                lastUsedAt: new Date(),
+              },
+              update: {
+                version: pkg.version,
+                lastUsedAt: new Date(),
+              },
+            });
+          } catch (err) {
+            this.logger.error(`Failed to ingest software ${pkg.name} for asset ${assetId}: ${err.message}`);
+          }
+        }),
+      );
+    }
+  }
+
+  /**
+   * Manually triggers a re-sync of software installations from the latest
+   * discovery enrichment data for all approved assets.
+   */
+  async syncFromDiscovery(tenantId: string) {
+    this.logger.log(`Manual sync initiated for tenant ${tenantId}`);
+
+    const approvedDevices = await this.prisma.discoveredDevice.findMany({
+      where: {
+        tenantId,
+        status: 'APPROVED',
+        approvedAssetId: { not: null },
+        enrichmentStatus: 'ENRICHED',
+      },
+      select: {
+        approvedAssetId: true,
+        enrichmentData: true,
+      },
+    });
+
+    let syncCount = 0;
+    for (const device of approvedDevices) {
+      const packages = (device.enrichmentData as any)?.software?.packages;
+      if (packages && Array.isArray(packages) && packages.length > 0) {
+        await this.ingestSoftware(tenantId, device.approvedAssetId!, packages);
+        syncCount++;
+      }
+    }
+
+    return { success: true, processedAssets: syncCount };
   }
 }

@@ -15,6 +15,7 @@ import AdmZip from 'adm-zip';
 import { SshScanner } from '../../common/scanners/ssh.scanner';
 import { CredentialVaultService } from './credential-vault.service';
 import { SnmpScanner } from '../../common/scanners/snmp.scanner';
+import { SoftwareService } from '../software/software.service';
 
 const execAsync = promisify(exec);
 
@@ -62,6 +63,7 @@ export class DiscoveryService {
     private credentialVault: CredentialVaultService,
     private snmpScanner: SnmpScanner,
     private alertsService: AlertsService,
+    private softwareService: SoftwareService,
   ) {}
 
   /**
@@ -1017,6 +1019,15 @@ export class DiscoveryService {
         },
       });
     }
+    
+    // ─── Ingest Software Packages ──────────
+    if (enrichment?.software?.packages && Array.isArray(enrichment.software.packages)) {
+      this.softwareService.ingestSoftware(
+        tenantId,
+        asset.id,
+        enrichment.software.packages,
+      ).catch(err => this.logger.error(`Software ingestion failed during approval for asset ${asset.id}: ${err.message}`));
+    }
 
     await this.prisma.discoveredDevice.update({
       where: { id: deviceId },
@@ -1405,6 +1416,15 @@ export class DiscoveryService {
         this.logger.warn(`Compliance check failed for agent ${agent.hostname}: ${err.message}`);
       }
 
+      // Sync software inventory directly to SoftwareCatalog and SoftwareInstallation
+      if (data.systemInfo.software && Array.isArray(data.systemInfo.software) && agent.assetId) {
+        try {
+          await this.softwareService.ingestSoftware(tenantId, agent.assetId, data.systemInfo.software);
+        } catch (err) {
+          this.logger.warn(`Software sync failed for agent ${agent.hostname}: ${err.message}`);
+        }
+      }
+
       // Evaluate security alert rules against agent telemetry
       try {
         await this.alertsService.evaluateHeartbeat(
@@ -1622,6 +1642,15 @@ export class DiscoveryService {
               lastAssessedAt: new Date(),
             },
           });
+        }
+
+        // --- Software Ingestion from Agent ---
+        if (data.systemInfo.software?.packages && Array.isArray(data.systemInfo.software.packages)) {
+          this.softwareService.ingestSoftware(
+            tenantId,
+            asset.id,
+            data.systemInfo.software.packages,
+          ).catch(err => this.logger.error(`Software ingestion failed for agent ${agent.hostname}: ${err.message}`));
         }
       } catch (err: any) {
         this.logger.error(`Live CMDB synchronization failed for agent ${agent.hostname}: ${err.message}`);
@@ -2263,12 +2292,27 @@ export class DiscoveryService {
                 software: {
                   installedPackages: sshResult.installedPackages || 0,
                   runningServices: sshResult.runningServices || [],
+                  packages: sshResult.packages || [],
                 },
                 users: {
                   accounts: sshResult.users || [],
                   lastLogins: sshResult.lastLogins || [],
                 },
               };
+
+              // ─── Ingest Discovered Software ──────────
+              if (sshResult.packages && sshResult.packages.length > 0) {
+                // If it's a discovered device being enriched, it might have an approvedAssetId
+                const targetAssetId = device.approvedAssetId;
+                if (targetAssetId) {
+                  this.softwareService.ingestSoftware(
+                    tenantId,
+                    targetAssetId,
+                    sshResult.packages,
+                  ).catch(err => this.logger.error(`Software ingestion failed for asset ${targetAssetId}: ${err.message}`));
+                }
+              }
+
               this.logger.log(`Device ${device.ipAddress} enriched via SSH — ${sshResult.cpuInfo?.cores || '?'} cores, ${sshResult.diskUsage?.length || 0} disks`);
             } else {
               this.logger.warn(`SSH enrichment failed for ${device.ipAddress}: ${sshResult.error}`);

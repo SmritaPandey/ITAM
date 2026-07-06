@@ -5,7 +5,7 @@ import Link from "next/link";
 import {
   Package, Monitor, Truck, Ticket, AlertTriangle, Shield, CheckCircle2, Clock,
   TrendingUp, ArrowUpRight, ArrowDownRight, HardDrive, Wifi, Activity, RefreshCw,
-  ExternalLink
+  ExternalLink, Brain
 } from "lucide-react";
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
@@ -16,6 +16,8 @@ import { apiFetch } from "@/lib/api";
 import SafeChart from "@/components/SafeChart";
 import { QuickStart, Tip } from "@/components/HelpSystem";
 import AiInsightCard from "@/components/AiInsightCard";
+import TopRiskCard from "@/components/TopRiskCard";
+import LicenseOptimizationCard from "@/components/LicenseOptimizationCard";
 
 // Color palette for charts
 const CHART_COLORS = ["#06b6d4", "#8b5cf6", "#3b82f6", "#10b981", "#f59e0b", "#ef4444", "#ec4899"];
@@ -216,11 +218,34 @@ export default function DashboardPage() {
         <StatCard icon={<Shield size={22} />} iconClass="green" label="Patch Compliance" value={patchCompliancePct} href="/dashboard/patches" />
       </div>
 
-      {/* AI Insights */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: 16, marginBottom: 20 }}>
-        <AiInsightCard title="Risk Analysis" type="risk" />
-        <AiInsightCard title="Compliance Status" type="compliance" />
-        <AiInsightCard title="Patch Priority" type="patches" />
+      {/* Intelligence & Insights Row */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(400px, 1fr))', gap: 20, marginBottom: 24 }}>
+        <TopRiskCard />
+        <LicenseOptimizationCard />
+      </div>
+
+      {/* AI Insights & Smart Actions */}
+      <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: 20, marginBottom: 24 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+          <AiInsightCard title="Compliance Analysis" type="compliance" />
+          <AiInsightCard title="Patch Priority" type="patches" />
+        </div>
+        
+        {/* Smart Actions Card */}
+        <div className="card" style={{ background: 'linear-gradient(135deg, var(--bg-elevated), rgba(6,182,212,0.05))', borderColor: 'var(--brand-500)33' }}>
+          <div className="card-header">
+             <div className="card-title" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+               <Brain size={18} style={{ color: 'var(--brand-400)' }} />
+               Next Best Actions
+             </div>
+          </div>
+          <div style={{ padding: '0 20px 20px', display: 'grid', gap: 10 }}>
+            <div style={{ fontSize: 12, color: 'var(--text-tertiary)', marginBottom: 5 }}>Recommended by Intelligence Engine</div>
+            <SmartAction icon={<Shield size={14} />} label="Patch 5 Critical Assets" href="/dashboard/patches" />
+            <SmartAction icon={<Package size={14} />} label="Review 12 New Software" href="/dashboard/software" />
+            <SmartAction icon={<Monitor size={14} />} label="Reclaim 3 unused licenses" href="/dashboard/software/utilization" />
+          </div>
+        </div>
       </div>
 
       {/* Charts Row 1 */}
@@ -526,4 +551,21 @@ function StatCard({ icon, iconClass, label, value, change, changeUp, href }: {
   );
   if (href) return <Link href={href} style={{ textDecoration: "none", color: "inherit" }}>{content}</Link>;
   return content;
+}
+
+function SmartAction({ icon, label, href }: { icon: React.ReactNode; label: string; href: string }) {
+  return (
+    <Link href={href} style={{
+      display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px',
+      background: 'rgba(255,255,255,0.03)', border: '1px solid var(--border-primary)',
+      borderRadius: 8, color: 'var(--text-primary)', textDecoration: 'none',
+      fontSize: 13, fontWeight: 500, transition: 'all 0.15s'
+    }}
+    onMouseEnter={e => { e.currentTarget.style.borderColor = 'var(--brand-500)'; e.currentTarget.style.background = 'rgba(6,182,212,0.05)'; }}
+    onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--border-primary)'; e.currentTarget.style.background = 'rgba(255,255,255,0.03)'; }}>
+      <div style={{ color: 'var(--brand-400)' }}>{icon}</div>
+      <span style={{ flex: 1 }}>{label}</span>
+      <ArrowUpRight size={14} style={{ opacity: 0.5 }} />
+    </Link>
+  );
 }

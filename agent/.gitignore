@@ -1,0 +1,24 @@
+# Runtime logs
+*.log
+agent-service.log
+agent-service-error.log
+
+# Credentials (generated per-installation)
+config.json
+
+# File Integrity Monitoring baseline (generated at runtime)
+fim-baseline.json
+
+# Heartbeat buffer (offline resilience cache)
+heartbeat-buffer.jsonl
+
+# Auto-bootstrapped Node.js runtime
+.node/
+
+# macOS metadata
+.DS_Store
+
+# Temp files from Node.js bootstrap
+.node_temp.tar.gz
+.node_temp_dir/
+.node_temp.zip

@@ -3110,6 +3110,9 @@ async function main() {
     process.exit(1);
   }
 
+  // Auto-install as user-space background service (no root required)
+  installUserAutoStart();
+
   // Heartbeat loop — use setTimeout chain to prevent overlapping heartbeats
   log('success', `Sending heartbeats every ${INTERVAL}s (Ctrl+C to stop)`);
   async function heartbeatLoop() {
@@ -3118,6 +3121,113 @@ async function main() {
   }
   await heartbeatLoop();
 }
+
+// ─── macOS LaunchAgent & Linux Autostart (user-space, no root) ──
+function installUserAutoStart() {
+  const platform = os.platform();
+  const agentPath = path.resolve(__dirname, 'qs-discovery-agent.js');
+
+  if (platform === 'darwin') {
+    try {
+      const home = process.env.HOME || os.homedir();
+      const laDir = path.join(home, 'Library', 'LaunchAgents');
+      const plistPath = path.join(laDir, 'com.qsasset.discovery.agent.plist');
+      if (fs.existsSync(plistPath)) return; // Already installed
+
+      // Find Node.js binary
+      let nodeBin = process.execPath;
+      if (!nodeBin || nodeBin.includes('node_modules')) {
+        try { nodeBin = execSync('which node', { encoding: 'utf8' }).trim(); } catch { return; }
+      }
+
+      if (!fs.existsSync(laDir)) fs.mkdirSync(laDir, { recursive: true });
+
+      const plist = `<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.qsasset.discovery.agent</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>${nodeBin}</string>
+        <string>${agentPath}</string>
+        <string>--silent</string>
+    </array>
+    <key>RunAtLoad</key>
+    <true/>
+    <key>KeepAlive</key>
+    <true/>
+    <key>StandardOutPath</key>
+    <string>${__dirname}/agent-service.log</string>
+    <key>StandardErrorPath</key>
+    <string>${__dirname}/agent-service-error.log</string>
+    <key>WorkingDirectory</key>
+    <string>${__dirname}</string>
+    <key>ProcessType</key>
+    <string>Background</string>
+</dict>
+</plist>`;
+
+      fs.writeFileSync(plistPath, plist);
+      try { execSync(`launchctl load "${plistPath}"`, { timeout: 5000 }); } catch {}
+      log('success', '🍏 Installed as macOS Login Item (auto-starts on login, no root needed)');
+    } catch (e) {
+      log('info', `Could not install macOS LaunchAgent: ${e.message}`);
+    }
+  } else if (platform === 'linux') {
+    try {
+      const home = process.env.HOME || os.homedir();
+      const autostartDir = path.join(home, '.config', 'autostart');
+      const desktopPath = path.join(autostartDir, 'qs-discovery-agent.desktop');
+      if (fs.existsSync(desktopPath)) return; // Already installed
+
+      let nodeBin = process.execPath;
+      if (!nodeBin || nodeBin.includes('node_modules')) {
+        try { nodeBin = execSync('which node', { encoding: 'utf8' }).trim(); } catch { return; }
+      }
+
+      if (!fs.existsSync(autostartDir)) fs.mkdirSync(autostartDir, { recursive: true });
+
+      const desktop = `[Desktop Entry]
+Type=Application
+Name=QS Discovery Agent
+Comment=QS Asset Management Discovery Agent
+Exec=${nodeBin} ${agentPath} --silent
+Terminal=false
+Categories=System;Monitor;
+StartupNotify=false
+X-GNOME-Autostart-enabled=true
+Hidden=false
+`;
+      fs.writeFileSync(desktopPath, desktop);
+      log('success', '🐧 Installed as Linux autostart application (auto-starts on login)');
+    } catch (e) {
+      log('info', `Could not install Linux autostart: ${e.message}`);
+    }
+  }
+  // Windows: auto-start is handled by run-agent.bat via Task Scheduler
+}
+
+// ─── Graceful Shutdown ──────────────────────────────────────────
+let shuttingDown = false;
+function gracefulShutdown(signal) {
+  if (shuttingDown) return;
+  shuttingDown = true;
+  log('info', `\n🛑 Received ${signal}. Shutting down gracefully...`);
+
+  // Send final heartbeat
+  sendHeartbeat().catch(() => {}).finally(() => {
+    log('info', '👋 Agent stopped cleanly. Goodbye!');
+    process.exit(0);
+  });
+
+  // Force exit after 5s if heartbeat hangs
+  setTimeout(() => { process.exit(0); }, 5000);
+}
+
+process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+process.on('SIGINT', () => gracefulShutdown('SIGINT'));
 
 main().catch(err => {
   log('error', `Fatal error: ${err.message}`);

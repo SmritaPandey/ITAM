@@ -18,6 +18,7 @@ export interface SshScanResult {
   lastLogins?: { user: string; terminal: string; from: string; time: string }[];
   failedLoginsCount?: number;
   installedPackages?: number;
+  packages?: { name: string; version: string; publisher?: string; description?: string }[];
   users?: string[];
   activeShellUsers?: string[];
   firewallStatus?: string;
@@ -341,7 +342,61 @@ export class SshScanner {
       }
 
       result.pendingPatches = patches.slice(0, 30);
-      result.installedPackages = parseInt(await runCmd('dpkg -l 2>/dev/null | grep -c "^ii" || rpm -qa 2>/dev/null | wc -l || apk info 2>/dev/null | wc -l || brew list 2>/dev/null | wc -l')) || undefined;
+      
+      // Full Software Inventory Discovery
+      const packages: { name: string; version: string; publisher?: string; description?: string }[] = [];
+      const distroLower = (distro || '').toLowerCase();
+      
+      try {
+        if (isMac) {
+          // Homebrew packages
+          const brewOut = await runCmd('brew list --versions 2>/dev/null');
+          if (brewOut) {
+            brewOut.split('\n').forEach(line => {
+              const [name, version] = line.trim().split(/\s+/);
+              if (name && version) packages.push({ name, version, publisher: 'Homebrew' });
+            });
+          }
+          // System Applications
+          const appsOut = await runCmd('ls /Applications 2>/dev/null');
+          if (appsOut) {
+            appsOut.split('\n').forEach(app => {
+              if (app.endsWith('.app')) {
+                packages.push({ name: app.replace('.app', ''), version: 'Latest', publisher: 'Apple' });
+              }
+            });
+          }
+        } else if (distroLower.includes('ubuntu') || distroLower.includes('debian')) {
+          const dpkgOut = await runCmd('dpkg-query -W -f=\'${Package}|${Version}|${Maintainer}|${Description}\n\' 2>/dev/null');
+          if (dpkgOut) {
+            dpkgOut.split('\n').forEach(line => {
+              const [name, version, pub, desc] = line.trim().split('|');
+              if (name && version) packages.push({ name, version, publisher: pub, description: desc?.split('.')[0] });
+            });
+          }
+        } else if (distroLower.includes('centos') || distroLower.includes('redhat') || distroLower.includes('fedora') || distroLower.includes('rocky')) {
+          const rpmOut = await runCmd('rpm -qa --queryformat "%{NAME}|%{VERSION}|%{VENDOR}|%{SUMMARY}\n" 2>/dev/null');
+          if (rpmOut) {
+            rpmOut.split('\n').forEach(line => {
+              const [name, version, pub, desc] = line.trim().split('|');
+              if (name && version) packages.push({ name, version, publisher: pub, description: desc });
+            });
+          }
+        } else if (distroLower.includes('alpine')) {
+          const apkOut = await runCmd('apk info -v 2>/dev/null');
+          if (apkOut) {
+            apkOut.split('\n').forEach(line => {
+              const match = line.match(/^([a-z0-9-]+)-([0-9].*)$/);
+              if (match) packages.push({ name: match[1], version: match[2], publisher: 'Alpine' });
+            });
+          }
+        }
+      } catch (e) {
+        this.logger.warn(`Failed to fetch package list for ${ip}: ${e.message}`);
+      }
+
+      result.packages = packages;
+      result.installedPackages = packages.length;
 
       // Open Listening Ports with Processes mapping
       const openPorts: SshScanResult['openPorts'] = [];

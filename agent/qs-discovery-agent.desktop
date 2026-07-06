@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=QS Discovery Agent
+Comment=QS Asset Management — Lightweight Discovery Agent
+Exec=bash -c 'cd "$(dirname "%k")" && ./run-agent.sh --silent'
+Icon=utilities-system-monitor
+Terminal=false
+Categories=System;Monitor;
+StartupNotify=false
+X-GNOME-Autostart-enabled=true
+X-KDE-autostart-after=panel

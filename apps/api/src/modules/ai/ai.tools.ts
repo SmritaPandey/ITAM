@@ -251,4 +251,31 @@ export const AI_TOOLS = [
       },
     },
   },
+  {
+    type: 'function' as const,
+    function: {
+      name: 'get_top_risks',
+      description: 'Get the highest risk assets across the organization based on compound risk analysis. Returns assets with critical vulnerabilities, EOL software, or hardware issues.',
+      parameters: {
+        type: 'object',
+        properties: {
+          limit: { type: 'number', description: 'Number of top risks to return (default: 10)' },
+        },
+      },
+    },
+  },
+  {
+    type: 'function' as const,
+    function: {
+      name: 'analyze_asset_risk',
+      description: 'Perform a detailed compound risk analysis for a specific asset. Evaluates OS lifecycle, software vulnerabilities, security posture, and hardware status.',
+      parameters: {
+        type: 'object',
+        properties: {
+          assetId: { type: 'string', description: 'The UUID of the asset to analyze' },
+        },
+        required: ['assetId'],
+      },
+    },
+  },
 ] as const;

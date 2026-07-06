@@ -1,4 +1,4 @@
-import { Controller, Get, Patch, Body, Param, Query, UseGuards, Request } from '@nestjs/common';
+import { Controller, Get, Post, Patch, Body, Param, Query, UseGuards, Request } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
@@ -27,13 +27,14 @@ export class SoftwareController {
     @Query('lifecycleStatus') lifecycleStatus?: string,
     @Query('category') category?: string,
     @Query('publisher') publisher?: string,
+    @Query('sortBy') sortBy?: string,
   ) {
     return this.softwareService.findAll(req.user.tenantId, page, limit, search, {
       authorizationStatus,
       lifecycleStatus,
       category,
       publisher,
-    });
+    }, sortBy);
   }
 
   @Get('dashboard')
@@ -92,14 +93,21 @@ export class SoftwareController {
 
   @Get(':id/users')
   @Roles('Tenant Admin', 'IT Admin')
-  @ApiOperation({ summary: 'Users using this software (via asset assignments)' })
+  @ApiOperation({ summary: 'Get users using a specific software' })
   async getUsers(
-    @Request() req: any,
     @Param('id') id: string,
+    @Request() req: any,
     @Query('page') page = 1,
     @Query('limit') limit = 20,
   ) {
     return this.softwareService.getUsers(id, req.user.tenantId, page, limit);
+  }
+
+  @Post('sync')
+  @Roles('Tenant Admin', 'IT Admin')
+  @ApiOperation({ summary: 'Manually sync software inventory from discovery data' })
+  async sync(@Request() req: any) {
+    return this.softwareService.syncFromDiscovery(req.user.tenantId);
   }
 
   @Patch(':id')

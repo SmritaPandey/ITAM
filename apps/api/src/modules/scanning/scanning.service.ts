@@ -394,4 +394,17 @@ export class ScanningService {
       data: { settings: { ...settings, scanFindingOverrides: overrides } },
     });
   }
+
+  // ─── Delete Scan Result ───────────────────────────────────────
+  async deleteScanResult(id: string, tenantId: string) {
+    const result = await this.prisma.scanResult.findFirst({
+      where: { id, tenantId },
+    });
+    if (!result) {
+      return { deleted: false, message: 'Scan result not found' };
+    }
+    await this.prisma.scanResult.delete({ where: { id } });
+    this.logger.log(`Deleted scan result ${id} for tenant ${tenantId}`);
+    return { deleted: true, id };
+  }
 }

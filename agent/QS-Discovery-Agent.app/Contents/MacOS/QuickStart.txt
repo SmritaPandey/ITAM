@@ -1,0 +1,21 @@
+QS Discovery Agent — Quick Start Guide
+═══════════════════════════════════════
+
+FIRST-TIME SETUP (one time only):
+
+  1. Open "setup.html" in your web browser (double-click it)
+  2. Enter your server address and login credentials
+  3. Click "Test Connection" → then "Save Configuration"
+  4. Move the downloaded "config.json" into this folder
+
+STARTING THE AGENT:
+
+  • Mac:     Double-click "QS-Discovery-Agent.app"
+  • Windows: Double-click "Start Agent.bat"
+  • Linux:   Run ./run-agent.sh in terminal
+
+That's it! The agent runs silently in the background,
+reports your system info, and starts automatically on boot.
+
+═══════════════════════════════════════
+Need help? Contact your IT administrator.

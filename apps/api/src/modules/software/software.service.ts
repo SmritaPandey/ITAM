@@ -81,7 +81,7 @@ export class SoftwareService {
         COUNT(*) FILTER (WHERE "authorization_status" = 'NEEDS_REVIEW')::int AS "needsReviewCount",
         COUNT(*) FILTER (WHERE "lifecycle_status" IN ('EOL','EOS','APPROACHING_EOL'))::int AS "eolCount",
         COUNT(*) FILTER (WHERE "risk_score" >= 50)::int AS "highRiskCount"
-      FROM software_catalog WHERE tenant_id = $1
+      FROM software_catalog WHERE tenant_id = $1::uuid
     `, tenantId);
     const c = countResult[0] || {};
 
@@ -725,7 +725,7 @@ export class SoftwareService {
         COUNT(*) FILTER (WHERE "lifecycle_status" = 'EOL')::int AS "eolCount",
         COUNT(*) FILTER (WHERE "lifecycle_status" = 'EOS')::int AS "eosCount",
         COUNT(*) FILTER (WHERE "lifecycle_status" = 'APPROACHING_EOL')::int AS "approachingEol"
-      FROM software_catalog WHERE tenant_id = $1
+      FROM software_catalog WHERE tenant_id = $1::uuid
     `, tenantId);
     const s = stats[0] || {};
     const total = s.total || 0;

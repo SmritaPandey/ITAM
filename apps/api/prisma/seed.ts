@@ -856,22 +856,128 @@ async function main() {
   console.log('  ✓ 5 Purchase Orders, 10 Items');
 
   // ═══════════════════════════════════════════════════════════════════════════
-  // 21. SOFTWARE CATALOG (10)
+  // 21. SOFTWARE CATALOG (20) + INSTALLATIONS (per device)
   // ═══════════════════════════════════════════════════════════════════════════
   console.log('📀 Seeding Software Catalog...');
   const swCatalog = await Promise.all([
-    prisma.softwareCatalog.create({ data: { tenantId: bankTenant.id, name: 'Microsoft 365', publisher: 'Microsoft', category: 'Productivity', isAuthorized: true, authorizationStatus: 'AUTHORIZED', latestVersion: '16.0.17328' } }),
-    prisma.softwareCatalog.create({ data: { tenantId: bankTenant.id, name: 'Oracle Database', publisher: 'Oracle', category: 'Database', isAuthorized: true, authorizationStatus: 'AUTHORIZED', latestVersion: '21c' } }),
-    prisma.softwareCatalog.create({ data: { tenantId: bankTenant.id, name: 'Adobe Creative Cloud', publisher: 'Adobe', category: 'Design', isAuthorized: true, authorizationStatus: 'AUTHORIZED', latestVersion: '2026.1' } }),
-    prisma.softwareCatalog.create({ data: { tenantId: bankTenant.id, name: 'CrowdStrike Falcon', publisher: 'CrowdStrike', category: 'Security', isAuthorized: true, authorizationStatus: 'AUTHORIZED', latestVersion: '7.04' } }),
-    prisma.softwareCatalog.create({ data: { tenantId: bankTenant.id, name: 'VMware vSphere', publisher: 'Broadcom', category: 'Virtualization', isAuthorized: true, authorizationStatus: 'AUTHORIZED', latestVersion: '8.0 U3' } }),
-    prisma.softwareCatalog.create({ data: { tenantId: bankTenant.id, name: 'Cisco DNA Center', publisher: 'Cisco', category: 'Network', isAuthorized: true, authorizationStatus: 'AUTHORIZED', latestVersion: '2.3.7' } }),
-    prisma.softwareCatalog.create({ data: { tenantId: bankTenant.id, name: 'SAP S/4HANA', publisher: 'SAP', category: 'ERP', isAuthorized: true, authorizationStatus: 'AUTHORIZED', latestVersion: '2023 FPS02' } }),
-    prisma.softwareCatalog.create({ data: { tenantId: bankTenant.id, name: 'Tally Prime', publisher: 'Tally Solutions', category: 'Accounting', isAuthorized: true, authorizationStatus: 'AUTHORIZED', latestVersion: '4.0' } }),
-    prisma.softwareCatalog.create({ data: { tenantId: bankTenant.id, name: 'Google Chrome', publisher: 'Google', category: 'Browser', isAuthorized: true, authorizationStatus: 'AUTHORIZED', latestVersion: '126.0' } }),
-    prisma.softwareCatalog.create({ data: { tenantId: bankTenant.id, name: 'BitTorrent', publisher: 'BitTorrent Inc', category: 'P2P', isBlacklisted: true, isAuthorized: false, authorizationStatus: 'BLACKLISTED', description: 'Unauthorized P2P software' } }),
+    /* 0  */ prisma.softwareCatalog.create({ data: { tenantId: bankTenant.id, name: 'Microsoft 365', publisher: 'Microsoft', category: 'Productivity', isAuthorized: true, authorizationStatus: 'AUTHORIZED', latestVersion: '16.0.17328' } }),
+    /* 1  */ prisma.softwareCatalog.create({ data: { tenantId: bankTenant.id, name: 'Oracle Database', publisher: 'Oracle', category: 'Database', isAuthorized: true, authorizationStatus: 'AUTHORIZED', latestVersion: '21c' } }),
+    /* 2  */ prisma.softwareCatalog.create({ data: { tenantId: bankTenant.id, name: 'Adobe Creative Cloud', publisher: 'Adobe', category: 'Design', isAuthorized: true, authorizationStatus: 'AUTHORIZED', latestVersion: '2026.1' } }),
+    /* 3  */ prisma.softwareCatalog.create({ data: { tenantId: bankTenant.id, name: 'CrowdStrike Falcon', publisher: 'CrowdStrike', category: 'Security', isAuthorized: true, authorizationStatus: 'AUTHORIZED', latestVersion: '7.04' } }),
+    /* 4  */ prisma.softwareCatalog.create({ data: { tenantId: bankTenant.id, name: 'VMware vSphere', publisher: 'Broadcom', category: 'Virtualization', isAuthorized: true, authorizationStatus: 'AUTHORIZED', latestVersion: '8.0 U3' } }),
+    /* 5  */ prisma.softwareCatalog.create({ data: { tenantId: bankTenant.id, name: 'Cisco DNA Center', publisher: 'Cisco', category: 'Network', isAuthorized: true, authorizationStatus: 'AUTHORIZED', latestVersion: '2.3.7' } }),
+    /* 6  */ prisma.softwareCatalog.create({ data: { tenantId: bankTenant.id, name: 'SAP S/4HANA', publisher: 'SAP', category: 'ERP', isAuthorized: true, authorizationStatus: 'AUTHORIZED', latestVersion: '2023 FPS02' } }),
+    /* 7  */ prisma.softwareCatalog.create({ data: { tenantId: bankTenant.id, name: 'Tally Prime', publisher: 'Tally Solutions', category: 'Accounting', isAuthorized: true, authorizationStatus: 'AUTHORIZED', latestVersion: '4.0' } }),
+    /* 8  */ prisma.softwareCatalog.create({ data: { tenantId: bankTenant.id, name: 'Google Chrome', publisher: 'Google', category: 'Browser', isAuthorized: true, authorizationStatus: 'AUTHORIZED', latestVersion: '126.0' } }),
+    /* 9  */ prisma.softwareCatalog.create({ data: { tenantId: bankTenant.id, name: 'BitTorrent', publisher: 'BitTorrent Inc', category: 'P2P', isBlacklisted: true, isAuthorized: false, authorizationStatus: 'BLACKLISTED', description: 'Unauthorized P2P software' } }),
+    /* 10 */ prisma.softwareCatalog.create({ data: { tenantId: bankTenant.id, name: 'Zoom Workplace', publisher: 'Zoom', category: 'Communication', isAuthorized: true, authorizationStatus: 'AUTHORIZED', latestVersion: '6.1.0' } }),
+    /* 11 */ prisma.softwareCatalog.create({ data: { tenantId: bankTenant.id, name: 'Microsoft Teams', publisher: 'Microsoft', category: 'Communication', isAuthorized: true, authorizationStatus: 'AUTHORIZED', latestVersion: '24165.1503' } }),
+    /* 12 */ prisma.softwareCatalog.create({ data: { tenantId: bankTenant.id, name: '7-Zip', publisher: 'Igor Pavlov', category: 'Utility', isAuthorized: true, authorizationStatus: 'AUTHORIZED', latestVersion: '24.07' } }),
+    /* 13 */ prisma.softwareCatalog.create({ data: { tenantId: bankTenant.id, name: 'Notepad++', publisher: 'Don Ho', category: 'Utility', isAuthorized: true, authorizationStatus: 'AUTHORIZED', latestVersion: '8.6.9' } }),
+    /* 14 */ prisma.softwareCatalog.create({ data: { tenantId: bankTenant.id, name: 'PuTTY', publisher: 'Simon Tatham', category: 'Utility', isAuthorized: true, authorizationStatus: 'AUTHORIZED', latestVersion: '0.81' } }),
+    /* 15 */ prisma.softwareCatalog.create({ data: { tenantId: bankTenant.id, name: 'Windows Defender', publisher: 'Microsoft', category: 'Security', isAuthorized: true, authorizationStatus: 'AUTHORIZED', latestVersion: '4.18.24070' } }),
+    /* 16 */ prisma.softwareCatalog.create({ data: { tenantId: bankTenant.id, name: 'Finacle Core Banking', publisher: 'Infosys', category: 'Banking', isAuthorized: true, authorizationStatus: 'AUTHORIZED', latestVersion: '11.3' } }),
+    /* 17 */ prisma.softwareCatalog.create({ data: { tenantId: bankTenant.id, name: 'Python', publisher: 'Python Software Foundation', category: 'Development', isAuthorized: true, authorizationStatus: 'AUTHORIZED', latestVersion: '3.12.4' } }),
+    /* 18 */ prisma.softwareCatalog.create({ data: { tenantId: bankTenant.id, name: 'DBeaver', publisher: 'DBeaver Corp', category: 'Database', isAuthorized: true, authorizationStatus: 'AUTHORIZED', latestVersion: '24.1.0' } }),
+    /* 19 */ prisma.softwareCatalog.create({ data: { tenantId: bankTenant.id, name: 'VLC Media Player', publisher: 'VideoLAN', category: 'Media', isAuthorized: true, authorizationStatus: 'NEEDS_REVIEW', latestVersion: '3.0.21' } }),
   ]);
-  console.log('  ✓ 10 Software Catalog entries');
+  console.log('  ✓ 20 Software Catalog entries');
+
+  // ─── SOFTWARE INSTALLATIONS (per-device mapping) ──────────────────────────
+  console.log('💿 Seeding Software Installations...');
+
+  // Fetch all laptops, desktops, and servers
+  const installLaptops = await prisma.asset.findMany({ where: { assetTypeId: typeLaptop.id }, take: 120 });
+  const installDesktops = await prisma.asset.findMany({ where: { assetTypeId: typeDesktop.id }, take: 80 });
+  const installServers = await prisma.asset.findMany({ where: { assetTypeId: typeServer.id }, take: 40 });
+
+  // Software profiles: which software goes on which device type
+  // [catalogIndex, version, installPath, probability (0-1)]
+  const laptopSoftwareProfile: [number, string, string, number][] = [
+    [0,  '16.0.17328.20644', 'C:\\Program Files\\Microsoft Office',      1.0],   // M365 — all laptops
+    [3,  '7.04.18307',       'C:\\Program Files\\CrowdStrike',           1.0],   // CrowdStrike — all
+    [8,  '126.0.6478.127',   'C:\\Program Files\\Google\\Chrome',        0.95],  // Chrome — 95%
+    [15, '4.18.24070.5',     'C:\\ProgramData\\Microsoft\\Windows Defender', 1.0], // Defender — all
+    [11, '24165.1503.3108',  'C:\\Program Files\\WindowsApps\\MSTeams',  0.9],   // Teams — 90%
+    [10, '6.1.0.38865',      'C:\\Program Files\\Zoom',                  0.7],   // Zoom — 70%
+    [12, '24.07',            'C:\\Program Files\\7-Zip',                 0.6],   // 7-Zip — 60%
+    [13, '8.6.9',            'C:\\Program Files\\Notepad++',             0.5],   // Notepad++ — 50%
+    [7,  '4.0.1',            'C:\\Tally\\TallyPrime',                    0.2],   // Tally — 20% (finance)
+    [2,  '2026.1.0',         'C:\\Program Files\\Adobe',                 0.1],   // Adobe CC — 10%
+    [16, '11.3.1',           'C:\\Finacle\\Client',                      0.3],   // Finacle — 30% (banking)
+    [6,  'SAP GUI 8.0',      'C:\\Program Files\\SAP\\FrontEnd',         0.15],  // SAP — 15%
+    [14, '0.81',             'C:\\Program Files\\PuTTY',                 0.25],  // PuTTY — 25% (IT staff)
+    [19, '3.0.21',           'C:\\Program Files\\VideoLAN\\VLC',         0.15],  // VLC — 15%
+  ];
+
+  const desktopSoftwareProfile: [number, string, string, number][] = [
+    [0,  '16.0.17328.20644', 'C:\\Program Files\\Microsoft Office',      1.0],
+    [3,  '7.04.18307',       'C:\\Program Files\\CrowdStrike',           1.0],
+    [8,  '126.0.6478.127',   'C:\\Program Files\\Google\\Chrome',        0.95],
+    [15, '4.18.24070.5',     'C:\\ProgramData\\Microsoft\\Windows Defender', 1.0],
+    [11, '24165.1503.3108',  'C:\\Program Files\\WindowsApps\\MSTeams',  0.85],
+    [10, '6.1.0.38865',      'C:\\Program Files\\Zoom',                  0.6],
+    [12, '24.07',            'C:\\Program Files\\7-Zip',                 0.7],
+    [16, '11.3.1',           'C:\\Finacle\\Client',                      0.5],   // More Finacle on desktops
+    [7,  '4.0.1',            'C:\\Tally\\TallyPrime',                    0.35],  // More Tally on desktops
+    [6,  'SAP GUI 8.0',      'C:\\Program Files\\SAP\\FrontEnd',         0.25],
+    [13, '8.6.9',            'C:\\Program Files\\Notepad++',             0.4],
+    [18, '24.1.0',           'C:\\Program Files\\DBeaver',               0.15],  // DBeaver on some
+  ];
+
+  const serverSoftwareProfile: [number, string, string, number][] = [
+    [3,  '7.04.18307',       '/opt/CrowdStrike',                         1.0],   // CrowdStrike — all servers
+    [15, '4.18.24070.5',     'C:\\ProgramData\\Microsoft\\Windows Defender', 0.6], // Defender — Windows servers
+    [1,  '21c',              '/opt/oracle/product/21c',                   0.5],   // Oracle — 50%
+    [4,  '8.0 U3',           '/opt/vmware/vsphere',                      0.4],   // vSphere — 40%
+    [17, '3.12.4',           '/usr/local/bin/python3',                    0.6],   // Python — 60%
+    [14, '0.81',             '/usr/bin/putty',                            0.3],   // PuTTY — 30%
+    [16, '11.3.1',           '/opt/finacle/server',                       0.25],  // Finacle server — 25%
+  ];
+
+  const installationRecords: any[] = [];
+  const usedKeys = new Set<string>(); // track tenantId+assetId+softwareId uniqueness
+
+  function addInstalls(assets: typeof installLaptops, profile: typeof laptopSoftwareProfile) {
+    for (const asset of assets) {
+      for (const [catIdx, ver, path, prob] of profile) {
+        if (Math.random() <= prob) {
+          const key = `${bankTenant.id}:${asset.id}:${swCatalog[catIdx].id}`;
+          if (usedKeys.has(key)) continue;
+          usedKeys.add(key);
+          // Vary install dates: 1–365 days ago
+          const daysAgo = Math.floor(Math.random() * 365) + 1;
+          const installDate = new Date(now.getTime() - daysAgo * 86400000);
+          // Last used: 0–14 days ago (actively used software)
+          const lastUsedDaysAgo = Math.floor(Math.random() * 14);
+          const lastUsedAt = new Date(now.getTime() - lastUsedDaysAgo * 86400000);
+          installationRecords.push({
+            tenantId: bankTenant.id,
+            assetId: asset.id,
+            softwareId: swCatalog[catIdx].id,
+            version: ver,
+            installPath: path,
+            installDate,
+            lastUsedAt,
+          });
+        }
+      }
+    }
+  }
+
+  addInstalls(installLaptops, laptopSoftwareProfile);
+  addInstalls(installDesktops, desktopSoftwareProfile);
+  addInstalls(installServers, serverSoftwareProfile);
+
+  // Batch insert in chunks to avoid query size limits
+  const CHUNK = 500;
+  for (let i = 0; i < installationRecords.length; i += CHUNK) {
+    await prisma.softwareInstallation.createMany({
+      data: installationRecords.slice(i, i + CHUNK),
+    });
+  }
+  console.log(`  ✓ ${installationRecords.length} Software Installations across ${installLaptops.length + installDesktops.length + installServers.length} devices`);
+
 
   // ═══════════════════════════════════════════════════════════════════════════
   // 22. LICENSES (12)
@@ -1386,6 +1492,7 @@ async function main() {
     purchaseOrders: await prisma.purchaseOrder.count(),
     purchaseOrderItems: await prisma.purchaseOrderItem.count(),
     softwareCatalog: await prisma.softwareCatalog.count(),
+    softwareInstallations: await prisma.softwareInstallation.count(),
     licenses: await prisma.license.count(),
     licenseAssignments: await prisma.licenseAssignment.count(),
     scanJobs: await prisma.scanJob.count(),

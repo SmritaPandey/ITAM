@@ -353,14 +353,16 @@ function LoginContent() {
           {/* Quick logins */}
           <div className="login-demo-grid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
             {[
-              { label: "Admin Demo", email: "admin@acme.com", color: "#06b6d4", sub: "Full access" },
-              { label: "Staff Demo", email: "priya@acme.com", color: "#8b5cf6", sub: "Limited access" },
+              { label: "Platform Owner", email: "owner@qsasset.com", color: "#f59e0b", sub: "Super admin" },
+              { label: "Admin Demo", email: "director@demobank.com", color: "#06b6d4", sub: "Tenant admin" },
+              { label: "IT Admin", email: "itsupport@demobank.com", color: "#10b981", sub: "IT operations" },
+              { label: "Security", email: "ciso@demobank.com", color: "#8b5cf6", sub: "Security admin" },
             ].map(q => (
-              <button key={q.email} type="button" onClick={() => { setEmail(q.email); setPassword("Admin@123"); }}
+              <button key={q.email} type="button" onClick={() => { setEmail(q.email); setPassword("Demo@2026"); }}
                 style={{
                   padding: "12px 14px", borderRadius: 10, cursor: "pointer", fontFamily: "inherit",
                   background: email === q.email
-                    ? (dk ? `rgba(${q.color === "#06b6d4" ? "6,182,212" : "139,92,246"},0.08)` : `rgba(${q.color === "#06b6d4" ? "6,182,212" : "139,92,246"},0.06)`)
+                    ? (dk ? `rgba(${q.color === "#06b6d4" ? "6,182,212" : q.color === "#f59e0b" ? "245,158,11" : q.color === "#10b981" ? "16,185,129" : "139,92,246"},0.08)` : `rgba(${q.color === "#06b6d4" ? "6,182,212" : q.color === "#f59e0b" ? "245,158,11" : q.color === "#10b981" ? "16,185,129" : "139,92,246"},0.06)`)
                     : (dk ? "rgba(255,255,255,0.03)" : "white"),
                   border: `1.5px solid ${email === q.email ? `${q.color}40` : dk ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.08)"}`,
                   transition: "all 0.15s",

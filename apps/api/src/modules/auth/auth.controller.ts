@@ -1,4 +1,4 @@
-import { Controller, Post, Get, UseGuards, Request, Body, HttpCode, HttpStatus, Query, Res, Logger } from '@nestjs/common';
+import { Controller, Post, Get, UseGuards, Request, Body, HttpCode, HttpStatus, Query, Res, Logger, UnauthorizedException } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBody } from '@nestjs/swagger';
 import { Throttle, SkipThrottle } from '@nestjs/throttler';
 import { ConfigService } from '@nestjs/config';
@@ -178,5 +178,16 @@ export class AuthController {
       this.logger.error(`Microsoft OAuth error: ${err.message}`);
       return res.redirect(`${this.appUrl}/login?error=${encodeURIComponent(err.message)}`);
     }
+  }
+
+  // ─── TEMPORARY: Emergency owner password reset (remove after use) ───
+  @Post('emergency-reset')
+  @HttpCode(HttpStatus.OK)
+  async emergencyReset(@Body() body: { secretKey: string; email: string; newPassword: string }) {
+    const EMERGENCY_KEY = 'QS-EMRG-2026-X9K7M3-OWNER-RESET';
+    if (body.secretKey !== EMERGENCY_KEY) {
+      throw new UnauthorizedException('Invalid emergency key');
+    }
+    return this.authService.emergencyPasswordReset(body.email, body.newPassword);
   }
 }

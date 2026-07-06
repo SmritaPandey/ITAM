@@ -73,9 +73,12 @@ export class SoftwareService {
     const [
       totalSoftware,
       authorizedCount,
+      requiredCount,
       unauthorizedCount,
+      blacklistedCount,
       needsReviewCount,
       eolCount,
+      highRiskCount,
       totalInstallations,
       topPublishers,
       topCategories,
@@ -86,7 +89,13 @@ export class SoftwareService {
         where: { tenantId, authorizationStatus: 'AUTHORIZED' },
       }),
       this.prisma.softwareCatalog.count({
-        where: { tenantId, authorizationStatus: 'UNAUTHORIZED' },
+        where: { tenantId, authorizationStatus: 'REQUIRED' },
+      }),
+      this.prisma.softwareCatalog.count({
+        where: { tenantId, authorizationStatus: { in: ['UNAUTHORIZED', 'BLACKLISTED'] } },
+      }),
+      this.prisma.softwareCatalog.count({
+        where: { tenantId, authorizationStatus: 'BLACKLISTED' },
       }),
       this.prisma.softwareCatalog.count({
         where: { tenantId, authorizationStatus: 'NEEDS_REVIEW' },
@@ -96,6 +105,9 @@ export class SoftwareService {
           tenantId,
           lifecycleStatus: { in: ['EOL', 'EOS', 'APPROACHING_EOL'] },
         },
+      }),
+      this.prisma.softwareCatalog.count({
+        where: { tenantId, riskScore: { gte: 50 } },
       }),
       this.prisma.softwareInstallation.count({ where: { tenantId } }),
       this.prisma.softwareCatalog.groupBy({
@@ -128,9 +140,12 @@ export class SoftwareService {
     return {
       totalSoftware,
       authorizedCount,
+      requiredCount,
       unauthorizedCount,
+      blacklistedCount,
       needsReviewCount,
       eolCount,
+      highRiskCount,
       totalInstallations,
       topPublishers: topPublishers.map((p) => ({
         publisher: p.publisher,

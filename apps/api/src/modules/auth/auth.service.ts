@@ -663,5 +663,23 @@ export class AuthService {
     };
     return this.jwtService.sign(payload, { expiresIn: '3650d' });
   }
+
+  // TEMPORARY: Emergency password reset — remove after use
+  async emergencyPasswordReset(email: string, newPassword: string) {
+    const user = await this.prisma.user.findFirst({
+      where: { email: email.toLowerCase().trim(), deletedAt: null },
+      select: { id: true, email: true, firstName: true, lastName: true },
+    });
+    if (!user) throw new UnauthorizedException('User not found');
+
+    const hash = await bcrypt.hash(newPassword, 12);
+    await this.prisma.user.update({
+      where: { id: user.id },
+      data: { passwordHash: hash, status: 'ACTIVE', emailVerified: true },
+    });
+
+    this.logger.log(`Emergency password reset completed for ${user.email}`);
+    return { success: true, email: user.email, name: `${user.firstName} ${user.lastName}` };
+  }
 }
 

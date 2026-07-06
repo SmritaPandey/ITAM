@@ -56,9 +56,10 @@ type DashboardStats = {
 
 const AUTH_COLORS: Record<string, { bg: string; border: string; text: string; label: string }> = {
   AUTHORIZED: { bg: "rgba(16, 185, 129, 0.1)", border: "rgba(16, 185, 129, 0.3)", text: "#34d399", label: "Authorized" },
-  UNAUTHORIZED: { bg: "rgba(239, 68, 68, 0.1)", border: "rgba(239, 68, 68, 0.3)", text: "#f87171", label: "Unauthorized" },
-  NEEDS_REVIEW: { bg: "rgba(245, 158, 11, 0.1)", border: "rgba(245, 158, 11, 0.3)", text: "#fbbf24", label: "Needs Review" },
   REQUIRED: { bg: "rgba(59, 130, 246, 0.1)", border: "rgba(59, 130, 246, 0.3)", text: "#60a5fa", label: "Required" },
+  NEEDS_REVIEW: { bg: "rgba(245, 158, 11, 0.1)", border: "rgba(245, 158, 11, 0.3)", text: "#fbbf24", label: "Needs Review" },
+  UNAUTHORIZED: { bg: "rgba(239, 68, 68, 0.1)", border: "rgba(239, 68, 68, 0.3)", text: "#f87171", label: "Unauthorized" },
+  BLACKLISTED: { bg: "rgba(153, 27, 27, 0.15)", border: "rgba(153, 27, 27, 0.4)", text: "#fca5a5", label: "Blacklisted" },
 };
 
 const LIFECYCLE_COLORS: Record<string, { bg: string; border: string; text: string; label: string }> = {
@@ -395,7 +396,7 @@ export default function SoftwareInventoryPage() {
             {/* Authorization Status */}
             <div style={{ marginBottom: 16 }}>
               <div style={{ fontSize: 11, fontWeight: 600, color: "var(--text-tertiary)", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 8 }}>Authorization</div>
-              {["", "AUTHORIZED", "UNAUTHORIZED", "NEEDS_REVIEW", "REQUIRED"].map(val => (
+              {["", "AUTHORIZED", "REQUIRED", "NEEDS_REVIEW", "UNAUTHORIZED", "BLACKLISTED"].map(val => (
                 <label key={val} style={{ display: "flex", alignItems: "center", gap: 8, padding: "4px 0", cursor: "pointer", fontSize: 12, color: authFilter === val ? "var(--text-primary)" : "var(--text-secondary)" }}>
                   <input type="radio" name="auth" checked={authFilter === val} onChange={() => { setAuthFilter(val); setPage(1); }}
                     style={{ accentColor: "var(--brand-400)" }} />

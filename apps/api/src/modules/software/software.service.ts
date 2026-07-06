@@ -70,82 +70,58 @@ export class SoftwareService {
   }
 
   async getDashboard(tenantId: string) {
-    const [
-      totalSoftware,
-      authorizedCount,
-      requiredCount,
-      unauthorizedCount,
-      blacklistedCount,
-      needsReviewCount,
-      eolCount,
-      highRiskCount,
-      totalInstallations,
-      topPublishers,
-      topCategories,
-      topInstalled,
-    ] = await Promise.all([
-      this.prisma.softwareCatalog.count({ where: { tenantId } }),
-      this.prisma.softwareCatalog.count({
-        where: { tenantId, authorizationStatus: 'AUTHORIZED' },
-      }),
-      this.prisma.softwareCatalog.count({
-        where: { tenantId, authorizationStatus: 'REQUIRED' },
-      }),
-      this.prisma.softwareCatalog.count({
-        where: { tenantId, authorizationStatus: { in: ['UNAUTHORIZED', 'BLACKLISTED'] } },
-      }),
-      this.prisma.softwareCatalog.count({
-        where: { tenantId, authorizationStatus: 'BLACKLISTED' },
-      }),
-      this.prisma.softwareCatalog.count({
-        where: { tenantId, authorizationStatus: 'NEEDS_REVIEW' },
-      }),
-      this.prisma.softwareCatalog.count({
-        where: {
-          tenantId,
-          lifecycleStatus: { in: ['EOL', 'EOS', 'APPROACHING_EOL'] },
-        },
-      }),
-      this.prisma.softwareCatalog.count({
-        where: { tenantId, riskScore: { gte: 50 } },
-      }),
-      this.prisma.softwareInstallation.count({ where: { tenantId } }),
-      this.prisma.softwareCatalog.groupBy({
-        by: ['publisher'],
-        where: { tenantId, publisher: { not: null } },
-        _count: { id: true },
-        orderBy: { _count: { id: 'desc' } },
-        take: 10,
-      }),
-      this.prisma.softwareCatalog.groupBy({
-        by: ['category'],
-        where: { tenantId, category: { not: null } },
-        _count: { id: true },
-        orderBy: { _count: { id: 'desc' } },
-        take: 10,
-      }),
-      this.prisma.softwareCatalog.findMany({
-        where: { tenantId },
-        select: {
-          id: true,
-          name: true,
-          publisher: true,
-          _count: { select: { installations: true } },
-        },
-        orderBy: { installations: { _count: 'desc' } },
-        take: 10,
-      }),
-    ]);
+    // Single SQL query for all counts — avoids 12 concurrent Prisma queries that OOM the container
+    const countResult: any[] = await this.prisma.$queryRawUnsafe(`
+      SELECT
+        COUNT(*)::int AS "totalSoftware",
+        COUNT(*) FILTER (WHERE "authorization_status" = 'AUTHORIZED')::int AS "authorizedCount",
+        COUNT(*) FILTER (WHERE "authorization_status" = 'REQUIRED')::int AS "requiredCount",
+        COUNT(*) FILTER (WHERE "authorization_status" IN ('UNAUTHORIZED','BLACKLISTED'))::int AS "unauthorizedCount",
+        COUNT(*) FILTER (WHERE "authorization_status" = 'BLACKLISTED')::int AS "blacklistedCount",
+        COUNT(*) FILTER (WHERE "authorization_status" = 'NEEDS_REVIEW')::int AS "needsReviewCount",
+        COUNT(*) FILTER (WHERE "lifecycle_status" IN ('EOL','EOS','APPROACHING_EOL'))::int AS "eolCount",
+        COUNT(*) FILTER (WHERE "risk_score" >= 50)::int AS "highRiskCount"
+      FROM software_catalogs WHERE tenant_id = $1
+    `, tenantId);
+    const c = countResult[0] || {};
+
+    const totalInstallations = await this.prisma.softwareInstallation.count({ where: { tenantId } });
+
+    const topPublishers = await this.prisma.softwareCatalog.groupBy({
+      by: ['publisher'],
+      where: { tenantId, publisher: { not: null } },
+      _count: { id: true },
+      orderBy: { _count: { id: 'desc' } },
+      take: 10,
+    });
+
+    const topCategories = await this.prisma.softwareCatalog.groupBy({
+      by: ['category'],
+      where: { tenantId, category: { not: null } },
+      _count: { id: true },
+      orderBy: { _count: { id: 'desc' } },
+      take: 10,
+    });
+
+    const topInstalled = await this.prisma.softwareCatalog.findMany({
+      where: { tenantId },
+      select: {
+        id: true, name: true, publisher: true,
+        _count: { select: { installations: true } },
+      },
+      orderBy: { installations: { _count: 'desc' } },
+      take: 10,
+    });
 
     return {
-      totalSoftware,
-      authorizedCount,
-      requiredCount,
-      unauthorizedCount,
-      blacklistedCount,
-      needsReviewCount,
-      eolCount,
-      highRiskCount,
+      totalSoftware: c.totalSoftware || 0,
+      authorizedCount: c.authorizedCount || 0,
+      requiredCount: c.requiredCount || 0,
+      unauthorizedCount: c.unauthorizedCount || 0,
+      blacklistedCount: c.blacklistedCount || 0,
+      needsReviewCount: c.needsReviewCount || 0,
+      eolCount: c.eolCount || 0,
+      highRiskCount: c.highRiskCount || 0,
       totalInstallations,
       topPublishers: topPublishers.map((p) => ({
         publisher: p.publisher,
@@ -737,17 +713,25 @@ export class SoftwareService {
    * breakdown by status, license compliance.
    */
   async getComplianceSummary(tenantId: string) {
-    const [total, authorized, required, unauthorized, blacklisted, needsReview] =
-      await Promise.all([
-        this.prisma.softwareCatalog.count({ where: { tenantId } }),
-        this.prisma.softwareCatalog.count({ where: { tenantId, authorizationStatus: 'AUTHORIZED' } }),
-        this.prisma.softwareCatalog.count({ where: { tenantId, authorizationStatus: 'REQUIRED' } }),
-        this.prisma.softwareCatalog.count({ where: { tenantId, authorizationStatus: 'UNAUTHORIZED' } }),
-        this.prisma.softwareCatalog.count({ where: { tenantId, authorizationStatus: 'BLACKLISTED' } }),
-        this.prisma.softwareCatalog.count({ where: { tenantId, authorizationStatus: 'NEEDS_REVIEW' } }),
-      ]);
+    // Single SQL for all counts — memory efficient
+    const stats: any[] = await this.prisma.$queryRawUnsafe(`
+      SELECT
+        COUNT(*)::int AS "total",
+        COUNT(*) FILTER (WHERE "authorization_status" = 'AUTHORIZED')::int AS "authorized",
+        COUNT(*) FILTER (WHERE "authorization_status" = 'REQUIRED')::int AS "required",
+        COUNT(*) FILTER (WHERE "authorization_status" = 'UNAUTHORIZED')::int AS "unauthorized",
+        COUNT(*) FILTER (WHERE "authorization_status" = 'BLACKLISTED')::int AS "blacklisted",
+        COUNT(*) FILTER (WHERE "authorization_status" = 'NEEDS_REVIEW')::int AS "needsReview",
+        COUNT(*) FILTER (WHERE "lifecycle_status" = 'EOL')::int AS "eolCount",
+        COUNT(*) FILTER (WHERE "lifecycle_status" = 'EOS')::int AS "eosCount",
+        COUNT(*) FILTER (WHERE "lifecycle_status" = 'APPROACHING_EOL')::int AS "approachingEol"
+      FROM software_catalogs WHERE tenant_id = $1
+    `, tenantId);
+    const s = stats[0] || {};
+    const total = s.total || 0;
+    const authorized = s.authorized || 0;
+    const required = s.required || 0;
 
-    // Compliance % = (authorized + required) / total * 100
     const compliantCount = authorized + required;
     const compliancePercentage = total > 0 ? Math.round((compliantCount / total) * 100) : 100;
 
@@ -760,19 +744,22 @@ export class SoftwareService {
     const compliantLicenses = licenses.filter((l) => l.complianceStatus === 'COMPLIANT').length;
     const overUsedLicenses = licenses.filter((l) => (l.usedSeats || 0) > (l.totalSeats || 0)).length;
 
-    // EOL/EOS breakdown
-    const [eolCount, eosCount, approachingEol] = await Promise.all([
-      this.prisma.softwareCatalog.count({ where: { tenantId, lifecycleStatus: 'EOL' } }),
-      this.prisma.softwareCatalog.count({ where: { tenantId, lifecycleStatus: 'EOS' } }),
-      this.prisma.softwareCatalog.count({ where: { tenantId, lifecycleStatus: 'APPROACHING_EOL' } }),
-    ]);
-
     return {
       compliancePercentage,
       total,
       compliantCount,
-      breakdown: { authorized, required, unauthorized, blacklisted, needsReview },
-      lifecycle: { eolCount, eosCount, approachingEol },
+      breakdown: {
+        authorized,
+        required,
+        unauthorized: s.unauthorized || 0,
+        blacklisted: s.blacklisted || 0,
+        needsReview: s.needsReview || 0,
+      },
+      lifecycle: {
+        eolCount: s.eolCount || 0,
+        eosCount: s.eosCount || 0,
+        approachingEol: s.approachingEol || 0,
+      },
       licenseCompliance: {
         totalLicenses,
         compliantLicenses,

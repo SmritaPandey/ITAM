@@ -162,14 +162,10 @@ export default function SoftwareInventoryPage() {
       setTotal(list.total || 0);
       setDashboard(stats);
 
-      const [riskData, compData, alertData] = await Promise.all([
-        apiFetch('/software/risk-distribution').catch(() => null),
-        apiFetch('/software/compliance').catch(() => null),
-        apiFetch('/software/alerts').catch(() => []),
-      ]);
-      setRiskDist(riskData);
-      setCompliance(compData);
-      setAlerts(alertData || []);
+      // Fetch CSAM data sequentially to avoid overwhelming the server
+      try { setRiskDist(await apiFetch('/software/risk-distribution')); } catch { setRiskDist(null); }
+      try { setCompliance(await apiFetch('/software/compliance')); } catch { setCompliance(null); }
+      try { const a = await apiFetch('/software/alerts'); setAlerts(a || []); } catch { setAlerts([]); }
     } catch (err: any) {
       console.error("Software load failed:", err);
       setError(err.message || "Failed to load software inventory. Please try again.");

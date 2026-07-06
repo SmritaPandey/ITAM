@@ -1,4 +1,4 @@
-FROM node:20-alpine AS builder
+FROM node:20.19-alpine AS builder
 WORKDIR /app
 
 COPY package.json ./
@@ -9,13 +9,11 @@ RUN npm install --include=dev
 
 RUN npx prisma generate
 
-# Cache-bust: forces Docker to re-copy source and rebuild
-ARG CACHEBUST=1
 COPY . .
 RUN npx nest build
 
 # --- Production stage ---
-FROM node:20-alpine
+FROM node:20.19-alpine
 WORKDIR /app
 ENV NODE_ENV=production
 

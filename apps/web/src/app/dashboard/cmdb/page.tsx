@@ -326,9 +326,15 @@ export default function CMDBPage() {
     for (const node of nodes) {
       const isSelected = selectedNode?.id === node.id;
       const isHovered = hoveredNode?.id === node.id;
-      const isDimmed = selectedNode && !isSelected && !links.some(
+      
+      const matchesSearch = searchQuery === "" || 
+        node.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
+        (node.ip && node.ip.includes(searchQuery)) ||
+        node.type.toLowerCase().includes(searchQuery.toLowerCase());
+
+      const isDimmed = (selectedNode && !isSelected && !links.some(
         l => (l.source === selectedNode.id && l.target === node.id) || (l.target === selectedNode.id && l.source === node.id)
-      );
+      )) || !matchesSearch;
 
       const color = TYPE_COLORS[node.type] || "#64748b";
       const radius = isSelected ? 26 : isHovered ? 23 : 20;
@@ -343,7 +349,7 @@ export default function CMDBPage() {
       }
 
       // Outer radial glow for selection or hover
-      if (isSelected || isHovered) {
+      if ((isSelected || isHovered) && !isDimmed) {
         ctx.beginPath();
         ctx.arc(node.x, node.y, radius + 8, 0, Math.PI * 2);
         ctx.fillStyle = isSelected ? `${color}25` : `${color}15`;
@@ -353,23 +359,23 @@ export default function CMDBPage() {
       // Main circle fill
       ctx.beginPath();
       ctx.arc(node.x, node.y, radius, 0, Math.PI * 2);
-      ctx.fillStyle = isDimmed ? "rgba(30, 41, 59, 0.4)" : "#0f172a";
+      ctx.fillStyle = isDimmed ? "rgba(15, 23, 42, 0.75)" : "#0f172a";
       ctx.fill();
 
       // Colored border ring
-      ctx.strokeStyle = isDimmed ? "rgba(71, 85, 105, 0.2)" : color;
+      ctx.strokeStyle = isDimmed ? "rgba(71, 85, 105, 0.15)" : color;
       ctx.lineWidth = isSelected ? 3.0 : 2.0;
       ctx.stroke();
 
       // Draw centered icon (Emoji or Text)
-      ctx.fillStyle = isDimmed ? "rgba(255, 255, 255, 0.2)" : "#ffffff";
+      ctx.fillStyle = isDimmed ? "rgba(255, 255, 255, 0.15)" : "#ffffff";
       ctx.font = `${radius * 0.75}px system-ui`;
       ctx.textAlign = "center";
       ctx.textBaseline = "middle";
       ctx.fillText(TYPE_ICONS[node.type] || "📦", node.x, node.y + (radius * 0.05));
 
       // Draw text label (Hostname/IP)
-      ctx.fillStyle = isDimmed ? "rgba(148, 163, 184, 0.3)" : "rgba(241, 245, 249, 0.95)";
+      ctx.fillStyle = isDimmed ? "rgba(148, 163, 184, 0.15)" : "rgba(241, 245, 249, 0.95)";
       ctx.font = `bold ${isSelected ? 12 : 10.5}px 'Plus Jakarta Sans', system-ui`;
       ctx.textAlign = "center";
       
@@ -377,15 +383,15 @@ export default function CMDBPage() {
       ctx.fillText(nodeLabel, node.x, node.y + radius + 15);
 
       // Subtle IP Label underneath hostname
-      if (node.ip && !isDimmed) {
-        ctx.fillStyle = isDimmed ? "rgba(148, 163, 184, 0.15)" : "rgba(148, 163, 184, 0.6)";
+      if (node.ip) {
+        ctx.fillStyle = isDimmed ? "rgba(148, 163, 184, 0.08)" : "rgba(148, 163, 184, 0.6)";
         ctx.font = "9px monospace";
         ctx.fillText(node.ip, node.x, node.y + radius + 25);
       }
     }
 
     ctx.restore();
-  }, [nodes, links, selectedNode, hoveredNode, zoom, pan]);
+  }, [nodes, links, selectedNode, hoveredNode, zoom, pan, searchQuery]);
 
   // Click handler to select node
   const handleCanvasClick = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
@@ -736,7 +742,7 @@ export default function CMDBPage() {
 
                   <div style={{ marginTop: 8, paddingTop: 8 }}>
                     <button
-                      onClick={() => router.push(`/dashboard/assets`)}
+                      onClick={() => router.push(`/dashboard/assets/${selectedNode.id}`)}
                       className="btn btn-primary"
                       style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "center", gap: 6, fontSize: 12, padding: "9px 12px" }}
                     >

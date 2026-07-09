@@ -642,12 +642,12 @@ export class SoftwareService {
    * Acts as an alerting feed for security operations.
    */
   async getRecentAlerts(tenantId: string) {
-    const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+    const ninetyDaysAgo = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000);
 
     const recentInstallations = await this.prisma.softwareInstallation.findMany({
       where: {
         tenantId,
-        installDate: { gte: thirtyDaysAgo },
+        installDate: { gte: ninetyDaysAgo },
         software: {
           OR: [
             { authorizationStatus: 'UNAUTHORIZED' },

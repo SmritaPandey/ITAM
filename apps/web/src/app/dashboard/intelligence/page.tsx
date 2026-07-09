@@ -26,18 +26,19 @@ export default function IntelligencePage() {
     async function loadData() {
       try {
         const data = await apiFetch("/risk/top-risks?limit=50");
-        setRisks(data || []);
+        const safeData = Array.isArray(data) ? data : [];
+        setRisks(safeData);
         
         // Calculate stats
-        const scores = data.map((r: any) => r.overallScore);
+        const scores = safeData.map((r: any) => r.overallScore);
         const avg = scores.reduce((a: any, b: any) => a + b, 0) / (scores.length || 1);
         
         setStats({
           avgScore: Math.round(avg),
-          criticalCount: data.filter((r: any) => r.overallScore >= 75).length,
-          highCount: data.filter((r: any) => r.overallScore >= 50 && r.overallScore < 75).length,
-          mediumCount: data.filter((r: any) => r.overallScore >= 25 && r.overallScore < 50).length,
-          lowCount: data.filter((r: any) => r.overallScore < 25).length
+          criticalCount: safeData.filter((r: any) => r.overallScore >= 75).length,
+          highCount: safeData.filter((r: any) => r.overallScore >= 50 && r.overallScore < 75).length,
+          mediumCount: safeData.filter((r: any) => r.overallScore >= 25 && r.overallScore < 50).length,
+          lowCount: safeData.filter((r: any) => r.overallScore < 25).length
         });
       } catch (e) {
         console.error(e);
@@ -139,37 +140,51 @@ export default function IntelligencePage() {
               </tr>
             </thead>
             <tbody>
-              {risks.map((risk, i) => (
-                <tr key={i}>
-                  <td>
-                    <div style={{ fontWeight: 600 }}>{risk.assetName}</div>
-                    <div style={{ fontSize: 11, color: 'var(--text-tertiary)' }}>ID: {risk.assetId}</div>
-                  </td>
-                  <td>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                      <div style={{ flex: 1, height: 6, background: 'rgba(255,255,255,0.05)', borderRadius: 3, maxWidth: 60 }}>
-                        <div style={{ width: `${risk.overallScore}%`, height: '100%', background: getScoreColor(risk.overallScore), borderRadius: 3 }} />
-                      </div>
-                      <span style={{ fontWeight: 700, color: getScoreColor(risk.overallScore) }}>{risk.overallScore}</span>
-                    </div>
-                  </td>
-                  <td>
-                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
-                      {Object.entries(risk.components).map(([k, v]: any) => (
-                        v < 60 && <span key={k} style={{ fontSize: 10, padding: '2px 6px', background: 'rgba(239, 68, 68, 0.1)', color: '#ef4444', borderRadius: 4, textTransform: 'capitalize' }}>{k}</span>
-                      ))}
-                    </div>
-                  </td>
-                  <td>
-                     <span className={`badge ${risk.overallScore > 75 ? 'red' : risk.overallScore > 50 ? 'orange' : 'green'}`}>
-                       {risk.overallScore > 75 ? 'CRITICAL' : risk.overallScore > 50 ? 'HIGH' : 'SECURE'}
-                     </span>
-                  </td>
-                  <td style={{ textAlign: 'right' }}>
-                    <button className="btn btn-secondary" style={{ padding: '4px 10px', fontSize: 11 }}>Analyze</button>
+              {risks.length === 0 ? (
+                <tr>
+                  <td colSpan={5} style={{ textAlign: 'center', padding: '30px 10px', color: 'var(--text-tertiary)' }}>
+                    No assets analyzed by the Risk Engine. Run scan metrics discovery.
                   </td>
                 </tr>
-              ))}
+              ) : (
+                risks.map((risk, i) => (
+                  <tr key={i}>
+                    <td>
+                      <div style={{ fontWeight: 600 }}>{risk.assetName}</div>
+                      <div style={{ fontSize: 11, color: 'var(--text-tertiary)' }}>ID: {risk.assetId}</div>
+                    </td>
+                    <td>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                        <div style={{ flex: 1, height: 6, background: 'rgba(255,255,255,0.05)', borderRadius: 3, maxWidth: 60 }}>
+                          <div style={{ width: `${risk.overallScore}%`, height: '100%', background: getScoreColor(risk.overallScore), borderRadius: 3 }} />
+                        </div>
+                        <span style={{ fontWeight: 700, color: getScoreColor(risk.overallScore) }}>{risk.overallScore}</span>
+                      </div>
+                    </td>
+                    <td>
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+                        {Object.entries(risk.components).map(([k, v]: any) => (
+                          v < 60 && <span key={k} style={{ fontSize: 10, padding: '2px 6px', background: 'rgba(239, 68, 68, 0.1)', color: '#ef4444', borderRadius: 4, textTransform: 'capitalize' }}>{k}</span>
+                        ))}
+                      </div>
+                    </td>
+                    <td>
+                       <span className={`badge ${risk.overallScore > 75 ? 'red' : risk.overallScore > 50 ? 'orange' : 'green'}`}>
+                         {risk.overallScore > 75 ? 'CRITICAL' : risk.overallScore > 50 ? 'HIGH' : 'SECURE'}
+                       </span>
+                    </td>
+                    <td style={{ textAlign: 'right' }}>
+                      <button 
+                        onClick={() => window.location.href = `/dashboard/assets/${risk.assetId}`}
+                        className="btn btn-secondary" 
+                        style={{ padding: '4px 10px', fontSize: 11 }}
+                      >
+                        Analyze
+                      </button>
+                    </td>
+                  </tr>
+                ))
+              )}
             </tbody>
           </table>
         </div>

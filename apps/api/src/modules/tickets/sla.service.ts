@@ -113,16 +113,8 @@ export class SlaService {
             await this.markBreachNotified(ticket.id, 'resolution', ticket);
           }
 
-          // Auto-escalate: bump priority if not already CRITICAL
-          if (ticket.priority !== 'CRITICAL') {
-            const priorities = ['LOW', 'MEDIUM', 'HIGH', 'CRITICAL'];
-            const nextIdx = Math.min(priorities.indexOf(ticket.priority) + 1, 3);
-            await this.prisma.ticket.update({
-              where: { id: ticket.id },
-              data: { priority: priorities[nextIdx] as any },
-            });
-            this.logger.warn(`SLA breach: ticket ${ticket.ticketNumber} escalated to ${priorities[nextIdx]}`);
-          }
+          // Multi-level escalation: bump escalationLevel, notify admins, optionally reassign
+          await this.escalateBreachedTicket(ticket);
         } else if (resElapsed >= warningThreshold) {
           this.eventBus.emit('ticket.sla_warning', {
             tenantId: ticket.tenantId,
@@ -184,6 +176,82 @@ export class SlaService {
     ]);
     const onTrack = total - breached - atRisk;
     return { total, onTrack, atRisk, breached };
+  }
+
+  /**
+   * When resolutionDueAt has passed and ticket is not resolved:
+   * bump escalationLevel, notify tenant admins, optionally reassign to an admin.
+   */
+  private async escalateBreachedTicket(ticket: any) {
+    const currentLevel = ticket.escalationLevel || 0;
+    // Cap at level 5; only bump once per distinct level window via escalatedAt freshness
+    if (currentLevel >= 5) return;
+    if (ticket.escalatedAt) {
+      const since = Date.now() - new Date(ticket.escalatedAt).getTime();
+      // Don't re-bump more than once per hour
+      if (since < 60 * 60 * 1000) return;
+    }
+
+    const newLevel = currentLevel + 1;
+    const priorities = ['LOW', 'MEDIUM', 'HIGH', 'CRITICAL'];
+    const nextPriority =
+      ticket.priority === 'CRITICAL'
+        ? 'CRITICAL'
+        : priorities[Math.min(priorities.indexOf(ticket.priority) + 1, 3)];
+
+    const admins = await this.prisma.user.findMany({
+      where: {
+        tenantId: ticket.tenantId,
+        status: 'ACTIVE',
+        role: { name: { in: ['Tenant Admin', 'IT Admin'] } },
+      },
+      select: { id: true },
+      take: 10,
+    });
+
+    // Reassign to first admin who isn't the current assignee (level >= 2)
+    let reassignedTo: string | undefined;
+    if (newLevel >= 2 && admins.length) {
+      const candidate = admins.find((a) => a.id !== ticket.assignedToId) || admins[0];
+      reassignedTo = candidate.id;
+    }
+
+    await this.prisma.ticket.update({
+      where: { id: ticket.id },
+      data: {
+        escalationLevel: newLevel,
+        escalatedAt: new Date(),
+        priority: nextPriority as any,
+        ...(reassignedTo ? { assignedToId: reassignedTo } : {}),
+      },
+    });
+
+    for (const admin of admins) {
+      await this.prisma.notification.create({
+        data: {
+          tenantId: ticket.tenantId,
+          userId: admin.id,
+          title: `SLA escalation L${newLevel}: ${ticket.ticketNumber}`,
+          message: `Resolution SLA breached for "${ticket.subject}". Escalation level ${newLevel}. Priority → ${nextPriority}.${reassignedTo ? ' Reassigned to admin.' : ''}`,
+          type: 'ALERT',
+          module: 'tickets',
+        },
+      });
+    }
+
+    this.eventBus.emit('ticket.escalated', {
+      tenantId: ticket.tenantId,
+      ticketId: ticket.id,
+      ticketNumber: ticket.ticketNumber,
+      escalationLevel: newLevel,
+      priority: nextPriority,
+      reassignedTo,
+    });
+
+    this.logger.warn(
+      `SLA escalation L${newLevel}: ticket ${ticket.ticketNumber} → ${nextPriority}` +
+        (reassignedTo ? ` reassigned=${reassignedTo}` : ''),
+    );
   }
 
   // ─── SLA Breach Deduplication Helpers ───────────────────────

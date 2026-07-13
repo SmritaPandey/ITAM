@@ -6,7 +6,9 @@ import {
   Printer, Wifi, Shield, Ticket, Database, ExternalLink, RefreshCw, Layers,
   Cpu, HardDrive, AlertTriangle, CheckCircle2, Info, Network, ArrowRight
 } from "lucide-react";
-import { apiFetch } from "@/lib/api";
+import { apiFetch, cmdbApi } from "@/lib/api";
+import EmptyState from "@/components/EmptyState";
+import PageHeader from "@/components/PageHeader";
 
 interface Node { 
   id: string; 
@@ -66,6 +68,15 @@ const TYPE_ICONS: Record<string, string> = {
 export default function CMDBPage() {
   const router = useRouter();
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const [viewMode, setViewMode] = useState<"topology" | "services" | "impact">("topology");
+  const [services, setServices] = useState<any[]>([]);
+  const [servicesLoading, setServicesLoading] = useState(false);
+  const [selectedService, setSelectedService] = useState<any>(null);
+  const [impactAssetId, setImpactAssetId] = useState("");
+  const [impactResult, setImpactResult] = useState<any>(null);
+  const [impactLoading, setImpactLoading] = useState(false);
+  const [newServiceName, setNewServiceName] = useState("");
+  const [linkAssetId, setLinkAssetId] = useState("");
   
   const [nodes, setNodes] = useState<Node[]>([]);
   const [links, setLinks] = useState<Link[]>([]);
@@ -137,6 +148,57 @@ export default function CMDBPage() {
   useEffect(() => {
     fetchTopology();
   }, [fetchTopology]);
+
+  const loadServices = useCallback(async () => {
+    setServicesLoading(true);
+    try {
+      const data = await cmdbApi.listServices();
+      setServices(Array.isArray(data) ? data : []);
+    } catch (err) {
+      console.warn("CMDB services fetch failed", err);
+      setServices([]);
+    } finally {
+      setServicesLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (viewMode === "services") loadServices();
+  }, [viewMode, loadServices]);
+
+  async function openService(id: string) {
+    try {
+      const detail = await cmdbApi.getService(id);
+      setSelectedService(detail);
+    } catch (err: any) {
+      alert(err?.message || "Failed to load service");
+    }
+  }
+
+  async function createService() {
+    if (!newServiceName.trim()) return;
+    try {
+      await cmdbApi.createService({ name: newServiceName.trim(), criticality: "MEDIUM" });
+      setNewServiceName("");
+      await loadServices();
+    } catch (err: any) {
+      alert(err?.message || "Create failed");
+    }
+  }
+
+  async function runImpact() {
+    if (!impactAssetId.trim()) return;
+    setImpactLoading(true);
+    try {
+      const data = await cmdbApi.impactAnalysis(impactAssetId.trim());
+      setImpactResult(data);
+    } catch (err: any) {
+      alert(err?.message || "Impact analysis failed");
+      setImpactResult(null);
+    } finally {
+      setImpactLoading(false);
+    }
+  }
 
   // Continuous physics engine simulation step in requestAnimationFrame
   useEffect(() => {
@@ -496,18 +558,251 @@ export default function CMDBPage() {
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 16, height: "100%", width: "100%" }}>
-      {/* Header telemetry control bar */}
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 12 }}>
-        <div>
-          <h1 style={{ fontSize: 24, fontWeight: 800, letterSpacing: "-0.02em", color: "var(--text-primary)", display: "flex", alignItems: "center", gap: 8 }}>
-            <Network size={22} color="#06b6d4" /> SNMP Topology &amp; CMDB Map
-          </h1>
-          <p style={{ fontSize: 13, color: "var(--text-tertiary)", marginTop: 2 }}>
-            Physical neighbors autodiscovered via continuous CDP/LLDP MIB SNMP poller cycles
-          </p>
-        </div>
+      <PageHeader
+        eyebrow="Configuration"
+        title="CMDB"
+        description="Topology map, business service health, and dependency impact analysis"
+        actions={
+          <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+            {([
+              ["topology", "Topology"],
+              ["services", "Business Services"],
+              ["impact", "Impact Analysis"],
+            ] as const).map(([id, label]) => (
+              <button
+                key={id}
+                onClick={() => setViewMode(id)}
+                className="btn btn-secondary"
+                style={{
+                  fontSize: 12.5,
+                  padding: "8px 14px",
+                  background: viewMode === id ? "var(--brand-500)" : undefined,
+                  color: viewMode === id ? "#fff" : undefined,
+                  borderColor: viewMode === id ? "var(--brand-500)" : undefined,
+                }}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        }
+      />
 
-        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+      {viewMode === "services" && (
+        <div style={{ display: "grid", gridTemplateColumns: "1.1fr 0.9fr", gap: 16 }}>
+          <div className="card" style={{ padding: 16 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", gap: 8, marginBottom: 14, flexWrap: "wrap" }}>
+              <div style={{ fontWeight: 700 }}>Business services</div>
+              <div style={{ display: "flex", gap: 6 }}>
+                <button className="btn btn-secondary" style={{ fontSize: 12 }} onClick={() => cmdbApi.rollupAll().then(loadServices)}>
+                  Rollup health
+                </button>
+                <button className="btn btn-secondary" style={{ fontSize: 12 }} onClick={loadServices}>
+                  <RefreshCw size={12} /> Refresh
+                </button>
+              </div>
+            </div>
+            <div style={{ display: "flex", gap: 8, marginBottom: 14 }}>
+              <input
+                value={newServiceName}
+                onChange={(e) => setNewServiceName(e.target.value)}
+                placeholder="New service name…"
+                style={{ flex: 1, padding: "8px 10px", borderRadius: 8, border: "1px solid var(--border-primary)", background: "var(--bg-elevated)", color: "var(--text-primary)" }}
+              />
+              <button className="btn btn-primary" style={{ fontSize: 12 }} onClick={createService}>Create</button>
+            </div>
+            {servicesLoading ? (
+              <div style={{ color: "var(--text-tertiary)", fontSize: 13 }}>Loading…</div>
+            ) : services.length === 0 ? (
+              <EmptyState title="No business services" description="Create a service to map critical CIs and roll up health." />
+            ) : (
+              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                {services.map((s) => (
+                  <button
+                    key={s.id}
+                    onClick={() => openService(s.id)}
+                    style={{
+                      textAlign: "left",
+                      padding: 12,
+                      borderRadius: 10,
+                      border: `1px solid ${selectedService?.id === s.id ? "var(--brand-500)" : "var(--border-primary)"}`,
+                      background: "var(--bg-elevated)",
+                      cursor: "pointer",
+                      color: "inherit",
+                    }}
+                  >
+                    <div style={{ display: "flex", justifyContent: "space-between", gap: 8 }}>
+                      <span style={{ fontWeight: 700 }}>{s.name}</span>
+                      <span style={{
+                        fontSize: 11,
+                        fontWeight: 700,
+                        color: (s.health || s.status) === "HEALTHY" ? "#10b981" : "#f59e0b",
+                      }}>
+                        {s.health || s.status}
+                      </span>
+                    </div>
+                    <div style={{ fontSize: 12, color: "var(--text-tertiary)", marginTop: 4 }}>
+                      {s.criticality} · {s.assetCount ?? s.assets?.length ?? 0} assets
+                    </div>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <div className="card" style={{ padding: 16 }}>
+            {!selectedService ? (
+              <EmptyState title="Select a service" description="Inspect linked CIs and criticality roles." />
+            ) : (
+              <>
+                <div style={{ display: "flex", justifyContent: "space-between", gap: 8, marginBottom: 12 }}>
+                  <div>
+                    <div style={{ fontWeight: 800, fontSize: 16 }}>{selectedService.name}</div>
+                    <div style={{ fontSize: 12, color: "var(--text-tertiary)" }}>{selectedService.description || "No description"}</div>
+                  </div>
+                  <span style={{
+                    alignSelf: "flex-start",
+                    fontSize: 11,
+                    fontWeight: 800,
+                    padding: "4px 10px",
+                    borderRadius: 999,
+                    color: (selectedService.health || selectedService.status) === "HEALTHY" ? "#10b981" : "#f59e0b",
+                    background: (selectedService.health || selectedService.status) === "HEALTHY" ? "rgba(16,185,129,0.12)" : "rgba(245,158,11,0.12)",
+                  }}>
+                    {selectedService.health || selectedService.status}
+                  </span>
+                </div>
+                <div style={{ display: "flex", gap: 8, marginBottom: 14 }}>
+                  <input
+                    value={linkAssetId}
+                    onChange={(e) => setLinkAssetId(e.target.value)}
+                    placeholder="Asset UUID to link…"
+                    style={{ flex: 1, padding: "8px 10px", borderRadius: 8, border: "1px solid var(--border-primary)", background: "var(--bg-elevated)", color: "var(--text-primary)", fontSize: 12 }}
+                  />
+                  <button
+                    className="btn btn-secondary"
+                    style={{ fontSize: 12 }}
+                    onClick={async () => {
+                      if (!linkAssetId.trim()) return;
+                      try {
+                        await cmdbApi.linkAsset(selectedService.id, linkAssetId.trim(), "CRITICAL");
+                        setLinkAssetId("");
+                        await openService(selectedService.id);
+                        await loadServices();
+                      } catch (e: any) {
+                        alert(e.message);
+                      }
+                    }}
+                  >
+                    Link CRITICAL
+                  </button>
+                </div>
+                <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                  {(selectedService.assets || []).map((link: any) => (
+                    <div key={link.id} style={{
+                      display: "flex",
+                      justifyContent: "space-between",
+                      gap: 8,
+                      padding: 10,
+                      borderRadius: 8,
+                      background: "var(--bg-elevated)",
+                      border: "1px solid var(--border-primary)",
+                      fontSize: 12,
+                    }}>
+                      <div>
+                        <div style={{ fontWeight: 700 }}>{link.asset?.name}</div>
+                        <div style={{ color: "var(--text-tertiary)" }}>{link.role} · {link.asset?.status}</div>
+                      </div>
+                      <div style={{ display: "flex", gap: 6 }}>
+                        <button className="btn btn-secondary" style={{ fontSize: 11, padding: "4px 8px" }} onClick={() => router.push(`/dashboard/assets/${link.assetId}`)}>Open</button>
+                        <button
+                          className="btn btn-secondary"
+                          style={{ fontSize: 11, padding: "4px 8px" }}
+                          onClick={async () => {
+                            await cmdbApi.unlinkAsset(selectedService.id, link.assetId);
+                            await openService(selectedService.id);
+                            await loadServices();
+                          }}
+                        >
+                          Unlink
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                  {(selectedService.assets || []).length === 0 && (
+                    <div style={{ color: "var(--text-tertiary)", fontSize: 13 }}>No linked assets yet.</div>
+                  )}
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      )}
+
+      {viewMode === "impact" && (
+        <div className="card" style={{ padding: 16, maxWidth: 900 }}>
+          <div style={{ fontWeight: 700, marginBottom: 8 }}>Impact analysis</div>
+          <p style={{ fontSize: 13, color: "var(--text-tertiary)", marginBottom: 14 }}>
+            BFS through DEPENDS_ON / COMPONENT_OF relationships to estimate blast radius if a CI fails.
+          </p>
+          <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>
+            <input
+              value={impactAssetId}
+              onChange={(e) => setImpactAssetId(e.target.value)}
+              placeholder="Root asset UUID…"
+              style={{ flex: 1, padding: "8px 10px", borderRadius: 8, border: "1px solid var(--border-primary)", background: "var(--bg-elevated)", color: "var(--text-primary)" }}
+            />
+            <button className="btn btn-primary" style={{ fontSize: 12 }} onClick={runImpact} disabled={impactLoading}>
+              {impactLoading ? "Analyzing…" : "Analyze"}
+            </button>
+          </div>
+          {impactResult && (
+            <>
+              <div style={{ marginBottom: 12, fontSize: 13 }}>
+                Root: <strong>{impactResult.root?.name || impactResult.rootAssetId}</strong>
+                {" · "}
+                Impacted: <strong>{impactResult.impactedCount}</strong>
+                {impactResult.maxDepth != null && <> · Max depth: <strong>{impactResult.maxDepth}</strong></>}
+              </div>
+              {(impactResult.impacted || []).length === 0 ? (
+                <EmptyState title="No downstream impact" description="No DEPENDS_ON / COMPONENT_OF neighbors found." compact />
+              ) : (
+                <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+                  <thead>
+                    <tr>
+                      <th style={{ textAlign: "left", padding: 8, borderBottom: "1px solid var(--border-primary)" }}>Depth</th>
+                      <th style={{ textAlign: "left", padding: 8, borderBottom: "1px solid var(--border-primary)" }}>Asset</th>
+                      <th style={{ textAlign: "left", padding: 8, borderBottom: "1px solid var(--border-primary)" }}>Status</th>
+                      <th style={{ textAlign: "left", padding: 8, borderBottom: "1px solid var(--border-primary)" }}>Via</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {impactResult.impacted.map((row: any) => (
+                      <tr key={`${row.assetId}-${row.depth}`}>
+                        <td style={{ padding: 8, borderBottom: "1px solid var(--border-primary)" }}>{row.depth}</td>
+                        <td style={{ padding: 8, borderBottom: "1px solid var(--border-primary)" }}>
+                          <button
+                            onClick={() => router.push(`/dashboard/assets/${row.assetId}`)}
+                            style={{ background: "none", border: "none", color: "var(--brand-500)", cursor: "pointer", fontWeight: 600, padding: 0 }}
+                          >
+                            {row.name}
+                          </button>
+                        </td>
+                        <td style={{ padding: 8, borderBottom: "1px solid var(--border-primary)" }}>{row.status}</td>
+                        <td style={{ padding: 8, borderBottom: "1px solid var(--border-primary)" }}>{row.via}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </>
+          )}
+        </div>
+      )}
+
+      {viewMode === "topology" && (
+      <>
+      <div style={{ display: "flex", justifyContent: "flex-end", alignItems: "center", flexWrap: "wrap", gap: 8 }}>
           <div style={{ position: "relative", width: 220 }}>
             <Search size={14} style={{ position: "absolute", left: 10, top: "50%", transform: "translateY(-50%)", color: "var(--text-tertiary)" }} />
             <input
@@ -545,7 +840,6 @@ export default function CMDBPage() {
               <Maximize2 size={11} /> Reset
             </button>
           </div>
-        </div>
       </div>
 
       {/* Grid Legend Overlay */}
@@ -867,6 +1161,8 @@ export default function CMDBPage() {
           animation: spin 1.5s linear infinite;
         }
       `}</style>
+      </>
+      )}
     </div>
   );
 }

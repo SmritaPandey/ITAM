@@ -1,15 +1,20 @@
 import { Injectable, HttpException, HttpStatus, Logger } from '@nestjs/common';
 import { PrismaService } from '../../common/database/prisma.service';
 import { PLAN_LIMITS } from '../../common/constants/plan-limits';
+import { ProductLicenseService } from '../product-license/product-license.service';
+import { isOnPrem } from '../../common/deployment-mode';
 
 /**
- * Tenant usage metering — enforces plan limits for SaaS billing.
+ * Tenant usage metering — enforces plan limits for SaaS billing + on-prem entitlements.
  */
 @Injectable()
 export class TenantMeteringService {
   private readonly logger = new Logger(TenantMeteringService.name);
 
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private productLicense: ProductLicenseService,
+  ) {}
 
   /**
    * Get current usage stats for a tenant
@@ -24,18 +29,30 @@ export class TenantMeteringService {
 
     if (!tenant) throw new HttpException('Tenant not found', HttpStatus.NOT_FOUND);
 
-    const limits = this.getPlanLimits(tenant.plan);
-    const settings = (tenant.settings as any) || {};
-
-    const effectiveLimits = this.getEffectiveLimits(tenant);
+    const effectiveLimits = await this.getEffectiveLimits(tenant);
+    const maxA = effectiveLimits.maxAssets === Infinity ? -1 : effectiveLimits.maxAssets;
+    const maxU = effectiveLimits.maxUsers === Infinity ? -1 : effectiveLimits.maxUsers;
+    const maxS = effectiveLimits.maxScansPerMonth === Infinity ? -1 : effectiveLimits.maxScansPerMonth;
 
     return {
       plan: tenant.plan,
       status: tenant.status,
       usage: {
-        assets: { current: assetCount, limit: effectiveLimits.maxAssets, percent: Math.round((assetCount / effectiveLimits.maxAssets) * 100) },
-        users: { current: userCount, limit: effectiveLimits.maxUsers, percent: Math.round((userCount / effectiveLimits.maxUsers) * 100) },
-        scansThisMonth: { current: scanCount, limit: effectiveLimits.maxScansPerMonth, percent: Math.round((scanCount / effectiveLimits.maxScansPerMonth) * 100) },
+        assets: {
+          current: assetCount,
+          limit: maxA,
+          percent: maxA < 0 ? 0 : Math.round((assetCount / maxA) * 100),
+        },
+        users: {
+          current: userCount,
+          limit: maxU,
+          percent: maxU < 0 ? 0 : Math.round((userCount / maxU) * 100),
+        },
+        scansThisMonth: {
+          current: scanCount,
+          limit: maxS,
+          percent: maxS < 0 ? 0 : Math.round((scanCount / maxS) * 100),
+        },
       },
     };
   }
@@ -50,7 +67,10 @@ export class TenantMeteringService {
       throw new HttpException('Account is suspended. Please update your billing.', HttpStatus.PAYMENT_REQUIRED);
     }
 
-    const limits = this.getEffectiveLimits(tenant);
+    await this.productLicense.assertOperationalLicense();
+
+    const limits = await this.getEffectiveLimits(tenant);
+    if (limits.maxAssets === Infinity || limits.maxAssets < 0) return;
     const count = await this.prisma.asset.count({ where: { tenantId, deletedAt: null } });
 
     if (count >= limits.maxAssets) {
@@ -68,7 +88,10 @@ export class TenantMeteringService {
     const tenant = await this.prisma.tenant.findUnique({ where: { id: tenantId } });
     if (!tenant) throw new HttpException('Tenant not found', HttpStatus.NOT_FOUND);
 
-    const limits = this.getEffectiveLimits(tenant);
+    await this.productLicense.assertOperationalLicense();
+
+    const limits = await this.getEffectiveLimits(tenant);
+    if (limits.maxUsers === Infinity || limits.maxUsers < 0) return;
     const count = await this.prisma.user.count({ where: { tenantId, deletedAt: null } });
 
     if (count >= limits.maxUsers) {
@@ -86,7 +109,10 @@ export class TenantMeteringService {
     const tenant = await this.prisma.tenant.findUnique({ where: { id: tenantId } });
     if (!tenant) throw new HttpException('Tenant not found', HttpStatus.NOT_FOUND);
 
-    const limits = this.getEffectiveLimits(tenant);
+    await this.productLicense.assertOperationalLicense();
+
+    const limits = await this.getEffectiveLimits(tenant);
+    if (limits.maxScansPerMonth === Infinity || limits.maxScansPerMonth < 0) return;
     const scans = await this.getMonthlyScans(tenantId);
 
     if (scans >= limits.maxScansPerMonth) {
@@ -101,14 +127,44 @@ export class TenantMeteringService {
     return PLAN_LIMITS[plan] || PLAN_LIMITS.STARTER;
   }
 
-  private getEffectiveLimits(tenant: any) {
+  private async getEffectiveLimits(tenant: any) {
     const base = this.getPlanLimits(tenant.plan);
     const settings = (tenant.settings as any) || {};
-    return {
-      maxAssets: Math.max(settings.maxAssets || 0, base.maxAssets),
-      maxUsers: Math.max(settings.maxUsers || 0, base.maxUsers),
-      maxScansPerMonth: Math.max(settings.maxScansPerMonth || 0, base.maxScansPerMonth),
-    };
+
+    let maxAssets = base.maxAssets;
+    let maxUsers = base.maxUsers;
+    let maxScansPerMonth = base.maxScansPerMonth;
+
+    if (typeof settings.maxAssets === 'number' && settings.maxAssets > 0) {
+      maxAssets = Math.max(settings.maxAssets, maxAssets === Infinity ? settings.maxAssets : maxAssets);
+    }
+    if (typeof settings.maxUsers === 'number' && settings.maxUsers > 0) {
+      maxUsers = Math.max(settings.maxUsers, maxUsers === Infinity ? settings.maxUsers : maxUsers);
+    }
+    if (typeof settings.maxScansPerMonth === 'number' && settings.maxScansPerMonth > 0) {
+      maxScansPerMonth = Math.max(
+        settings.maxScansPerMonth,
+        maxScansPerMonth === Infinity ? settings.maxScansPerMonth : maxScansPerMonth,
+      );
+    }
+
+    if (isOnPrem()) {
+      const ent = await this.productLicense.getEffectiveEntitlement();
+      if (ent.missing) {
+        maxAssets = 0;
+        maxUsers = Math.min(maxUsers === Infinity ? 5 : maxUsers, 5);
+        maxScansPerMonth = 0;
+      } else {
+        if (ent.maxAssets >= 0) maxAssets = ent.maxAssets;
+        if (ent.maxUsers >= 0) maxUsers = ent.maxUsers;
+        if (ent.expired) {
+          maxAssets = 0;
+          maxScansPerMonth = 0;
+        }
+      }
+    }
+
+    return { maxAssets, maxUsers, maxScansPerMonth };
   }
 
   private async getMonthlyScans(tenantId: string): Promise<number> {

@@ -35,13 +35,13 @@ const DEFAULT_PRICING: PricingConfig = {
     priceUSD: 499,
     priceINR: 39999,
     discountPercent: 50,
-    features: ["Everything in Pro", "On-Premise Deploy", "SSO / SAML / LDAP", "Dedicated CSM", "Custom SLA", "White-Label Option"]
+    features: ["Everything in Pro", "On-Premise Deploy", "SSO / SAML / LDAP", "Dedicated Support", "Custom SLA"]
   },
   custom: {
     priceUSD: -1,
     priceINR: -1,
     discountPercent: 0,
-    features: ["Everything in Enterprise", "Custom asset limits", "Negotiated pricing", "Dedicated account manager", "Custom SLA", "White-label option", "Priority onboarding"]
+    features: ["Everything in Enterprise", "Custom asset limits", "Negotiated pricing", "Dedicated account manager", "Custom SLA", "Priority onboarding"]
   }
 };
 

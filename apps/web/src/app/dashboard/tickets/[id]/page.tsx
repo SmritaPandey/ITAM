@@ -24,9 +24,14 @@ export default function TicketDetailPage() {
   const [comment, setComment] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [statusChanging, setStatusChanging] = useState(false);
+  const [csatScore, setCsatScore] = useState(0);
+  const [csatComment, setCsatComment] = useState("");
+  const [csatSubmitting, setCsatSubmitting] = useState(false);
+  const [kbArticles, setKbArticles] = useState<any[]>([]);
 
   function loadTicket() {
     apiFetch(`/tickets/${params.id}`).then(setTicket).catch(console.error).finally(() => setLoading(false));
+    apiFetch(`/tickets/${params.id}/kb-suggest`).then((r) => setKbArticles(r?.data || [])).catch(() => setKbArticles([]));
   }
 
   useEffect(() => { loadTicket(); }, [params.id]);
@@ -104,6 +109,58 @@ export default function TicketDetailPage() {
               ))}
             </div>
           </div>
+
+          {/* CSAT */}
+          {["RESOLVED", "CLOSED"].includes(ticket.status) && !ticket.csatAt && (
+            <div className="card" style={{ marginBottom: 16 }}>
+              <div className="card-header"><div className="card-title">Customer Satisfaction</div></div>
+              <p style={{ fontSize: 12, color: "var(--text-tertiary)", marginBottom: 12 }}>How satisfied are you with the resolution? (1–5)</p>
+              <div style={{ display: "flex", gap: 8, marginBottom: 10 }}>
+                {[1, 2, 3, 4, 5].map(n => (
+                  <button key={n} type="button" className={`btn ${csatScore === n ? "btn-primary" : "btn-secondary"}`}
+                    style={{ width: 40, padding: "8px 0" }} onClick={() => setCsatScore(n)}>{n}</button>
+                ))}
+              </div>
+              <textarea value={csatComment} onChange={e => setCsatComment(e.target.value)} placeholder="Optional comment"
+                rows={2} style={{
+                  width: "100%", padding: 10, borderRadius: 8, border: "1px solid var(--border-primary)",
+                  background: "var(--bg-input)", color: "var(--text-primary)", fontSize: 13, fontFamily: "inherit", marginBottom: 10,
+                }} />
+              <button className="btn btn-primary" disabled={!csatScore || csatSubmitting} onClick={async () => {
+                setCsatSubmitting(true);
+                try {
+                  await apiFetch(`/tickets/${params.id}/csat`, { method: "POST", body: JSON.stringify({ score: csatScore, comment: csatComment }) });
+                  loadTicket();
+                } catch (err) { alert(String(err)); }
+                setCsatSubmitting(false);
+              }}>{csatSubmitting ? "Submitting…" : "Submit CSAT"}</button>
+            </div>
+          )}
+          {ticket.csatAt && (
+            <div className="card" style={{ marginBottom: 16 }}>
+              <div className="card-header"><div className="card-title">CSAT submitted</div></div>
+              <div style={{ fontSize: 13 }}>Score: <strong>{ticket.satisfactionScore}/5</strong></div>
+              {ticket.csatComment && <p style={{ fontSize: 12, color: "var(--text-secondary)", marginTop: 6 }}>{ticket.csatComment}</p>}
+            </div>
+          )}
+
+          {/* Knowledge base suggestions */}
+          {kbArticles.length > 0 && (
+            <div className="card" style={{ marginBottom: 16 }}>
+              <div className="card-header"><div className="card-title">Suggested knowledge articles</div></div>
+              <div style={{ display: "grid", gap: 8 }}>
+                {kbArticles.map((a: any) => (
+                  <a key={a.id} href={`/dashboard/knowledge-base?id=${a.id}`}
+                    style={{ display: "block", padding: "10px 12px", borderRadius: 8, background: "var(--bg-elevated)", border: "1px solid var(--border-primary)", textDecoration: "none", color: "inherit" }}>
+                    <div style={{ fontSize: 13, fontWeight: 600, color: "var(--brand-400)" }}>{a.title}</div>
+                    <div style={{ fontSize: 11, color: "var(--text-tertiary)", marginTop: 2 }}>
+                      {a.category}{a.viewCount != null ? ` · ${a.viewCount} views` : ""}
+                    </div>
+                  </a>
+                ))}
+              </div>
+            </div>
+          )}
 
           {/* Comments Thread */}
           <div className="card">

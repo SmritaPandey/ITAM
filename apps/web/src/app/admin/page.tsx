@@ -1,6 +1,7 @@
 "use client";
 import { useState, useEffect } from "react";
 import { apiFetch } from "@/lib/api";
+import PageHeader from "@/components/PageHeader";
 import {
   Building2, Users, Package, TrendingUp, MessageSquare, CreditCard,
   ArrowUpRight, ArrowDownRight, Clock,
@@ -19,19 +20,19 @@ export default function AdminDashboard() {
 
   const kpis = [
     { label: "Total Tenants", value: data.kpis.totalTenants, icon: Building2, color: "#06b6d4", sub: `${data.kpis.activeTenants} active` },
-    { label: "Total Users", value: data.kpis.totalUsers, icon: Users, color: "#8b5cf6", sub: "Across all tenants" },
+    { label: "Total Users", value: data.kpis.totalUsers, icon: Users, color: "#14b8a6", sub: "Across all tenants" },
     { label: "Total Assets", value: data.kpis.totalAssets, icon: Package, color: "#10b981", sub: "All categories" },
     { label: "MRR", value: `₹${Number(data.kpis.mrr || 0).toLocaleString()}`, icon: TrendingUp, color: "#f59e0b", sub: "Monthly recurring" },
-    { label: "New Signups (7d)", value: data.kpis.newSignups7d, icon: ArrowUpRight, color: "#3b82f6", sub: "Last 7 days" },
+    { label: "New Signups (7d)", value: data.kpis.newSignups7d, icon: ArrowUpRight, color: "#0891b2", sub: "Last 7 days" },
     { label: "Pending Support", value: data.kpis.pendingContacts, icon: MessageSquare, color: "#ef4444", sub: "Awaiting reply" },
   ];
 
   return (
     <div>
-      <div style={{ marginBottom: 28 }}>
-        <h1 style={{ fontSize: 24, fontWeight: 800, color: "var(--text-primary)", marginBottom: 4 }}>Platform Dashboard</h1>
-        <p style={{ fontSize: 13, color: "var(--text-tertiary)" }}>Overview of all tenants, users, revenue, and support requests</p>
-      </div>
+      <PageHeader
+        title="Platform Dashboard"
+        description="Overview of all tenants, users, revenue, and support requests"
+      />
 
       {/* KPI Cards */}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))", gap: 14, marginBottom: 28 }}>

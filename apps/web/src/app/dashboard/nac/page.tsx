@@ -14,9 +14,18 @@ import { apiFetch } from "@/lib/api";
 /* ──────────────────────── Types ──────────────────────── */
 interface PostureCheck { name: string; passed: boolean; detail?: string; }
 interface DevicePosture {
-  id: string; hostname: string; ip: string; mac: string; status: "online" | "offline";
-  postureScore: number; level: string; recommendedVlan: number; osFamily: string;
-  deviceType: string; lastAssessed: string;
+  id: string;
+  agentId: string;
+  hostname: string;
+  ip: string;
+  mac: string;
+  status: "online" | "offline";
+  postureScore: number;
+  level: string;
+  recommendedVlan: number;
+  osFamily: string;
+  deviceType: string;
+  lastAssessed: string;
   checks: PostureCheck[];
 }
 interface Segment {
@@ -48,6 +57,39 @@ const TABS: { key: Tab; label: string; icon: any }[] = [
   { key: "policies",  label: "VLAN Policies", icon: ArrowRightLeft },
   { key: "radius",    label: "RADIUS / 802.1X", icon: Radio },
 ];
+
+/** Map API posture payload (agentId + nested posture) → UI DevicePosture */
+function normalizeDevicePosture(raw: any): DevicePosture {
+  const posture = raw?.posture || {};
+  const fingerprint = raw?.fingerprint || {};
+  const id = String(raw?.agentId || raw?.id || "").trim();
+  const checksRaw = Array.isArray(posture.checks) ? posture.checks : Array.isArray(raw?.checks) ? raw.checks : [];
+  const checks: PostureCheck[] = checksRaw.map((c: any) => ({
+    name: c.name || "Check",
+    passed: c.passed === true || c.status === "PASS",
+    detail: c.detail,
+  }));
+  const vlan = raw?.recommendedVlan;
+  const vlanNum = typeof vlan === "object" && vlan != null
+    ? Number(vlan.vlanId ?? vlan.id ?? 0)
+    : Number(vlan ?? 0);
+
+  return {
+    id,
+    agentId: id,
+    hostname: raw?.hostname || id.slice(0, 8) || "Unknown",
+    ip: raw?.ip || raw?.ipAddress || "—",
+    mac: raw?.mac || fingerprint.macAddress || "—",
+    status: (String(raw?.status || "").toLowerCase() === "online" ? "online" : "offline") as "online" | "offline",
+    postureScore: Number(raw?.postureScore ?? posture.score ?? 0),
+    level: String(raw?.level || posture.level || "UNKNOWN"),
+    recommendedVlan: Number.isFinite(vlanNum) ? vlanNum : 0,
+    osFamily: raw?.osFamily || fingerprint.osFamily || "—",
+    deviceType: raw?.deviceType || fingerprint.deviceType || "Workstation",
+    lastAssessed: raw?.lastAssessed || raw?.lastSeen || "",
+    checks,
+  };
+}
 
 const ZONE_COLORS: Record<string, { bg: string; border: string; text: string; badge: string }> = {
   TRUSTED:    { bg: "rgba(16,185,129,0.08)", border: "#10b981", text: "#10b981", badge: "green" },
@@ -128,7 +170,13 @@ export default function NACPage() {
   }, []);
 
   const fetchPosture = useCallback(async () => {
-    try { const d = await apiFetch("/nac/posture"); setDevices(Array.isArray(d) ? d : d.data || []); } catch { setDevices([]); }
+    try {
+      const d = await apiFetch("/nac/posture");
+      const rows = Array.isArray(d) ? d : d.data || [];
+      setDevices(rows.map(normalizeDevicePosture).filter((x: DevicePosture) => !!x.id));
+    } catch {
+      setDevices([]);
+    }
   }, []);
 
   const fetchSegments = useCallback(async () => {
@@ -152,7 +200,11 @@ export default function NACPage() {
   useEffect(() => { refreshAll(); }, [refreshAll]);
 
   /* ── Actions ── */
-  async function reassessDevice(id: string) {
+  async function reassessDevice(id?: string | null) {
+    if (!id || id === "undefined") {
+      showBanner("error", "Cannot reassess — device id is missing");
+      return;
+    }
     setReassessing(id);
     try {
       await apiFetch(`/nac/posture/${id}/reassess`, { method: "POST" });
@@ -163,7 +215,10 @@ export default function NACPage() {
   }
 
   async function quarantineDevice() {
-    if (!quarantineModal) return;
+    if (!quarantineModal?.id || quarantineModal.id === "undefined") {
+      showBanner("error", "Cannot quarantine — device id is missing");
+      return;
+    }
     setQuarantining(true);
     try {
       await apiFetch(`/nac/posture/${quarantineModal.id}/quarantine`, {

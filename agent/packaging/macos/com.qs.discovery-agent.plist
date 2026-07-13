@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  QS Discovery Agent — macOS LaunchDaemon
+  Install path (pkg): /Library/Application Support/QS-Discovery-Agent
+  Label: com.qs.discovery-agent
+
+  Place under /Library/LaunchDaemons/ and load with:
+    sudo launchctl bootstrap system /Library/LaunchDaemons/com.qs.discovery-agent.plist
+  (or launchctl load on older macOS)
+-->
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.qs.discovery-agent</string>
+
+  <key>ProgramArguments</key>
+  <array>
+    <string>/Library/Application Support/QS-Discovery-Agent/.node/bin/node</string>
+    <string>/Library/Application Support/QS-Discovery-Agent/qs-discovery-agent.js</string>
+  </array>
+
+  <key>WorkingDirectory</key>
+  <string>/Library/Application Support/QS-Discovery-Agent</string>
+
+  <key>RunAtLoad</key>
+  <true/>
+
+  <key>KeepAlive</key>
+  <true/>
+
+  <key>StandardOutPath</key>
+  <string>/Library/Logs/QS-Discovery-Agent/agent-service.log</string>
+
+  <key>StandardErrorPath</key>
+  <string>/Library/Logs/QS-Discovery-Agent/agent-service-error.log</string>
+
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>QS_AGENT_SILENT</key>
+    <string>true</string>
+  </dict>
+
+  <key>ProcessType</key>
+  <string>Background</string>
+
+  <key>ThrottleInterval</key>
+  <integer>10</integer>
+</dict>
+</plist>

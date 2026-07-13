@@ -1,0 +1,3 @@
+-- AlterEnum
+ALTER TYPE "DiscoverySource" ADD VALUE IF NOT EXISTS 'IOT';
+ALTER TYPE "DiscoverySource" ADD VALUE IF NOT EXISTS 'AGENTLESS';

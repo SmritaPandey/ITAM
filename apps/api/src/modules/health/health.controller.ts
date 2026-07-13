@@ -22,7 +22,8 @@ export class HealthController {
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Basic health check (public, no auth)' })
   async check(@Res() res: any) {
-    const dbHealthy = await this.checkDb();
+    // Hard cap so a stuck DB pool never hangs load balancers / clients
+    const dbHealthy = await this.checkDb(5000);
     const status = dbHealthy ? 'healthy' : 'degraded';
     const code = dbHealthy ? 200 : 503;
 
@@ -41,7 +42,7 @@ export class HealthController {
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Readiness probe (K8s/ECS)' })
   async ready(@Res() res: any) {
-    const dbReady = await this.checkDb();
+    const dbReady = await this.checkDb(5000);
     const memOk = this.checkMemory();
 
     const ready = dbReady && memOk;
@@ -78,7 +79,7 @@ export class HealthController {
   @Roles('Tenant Admin')
   @ApiOperation({ summary: 'Detailed health with system stats (admin only)' })
   async detailed() {
-    const dbHealthy = await this.checkDb();
+    const dbHealthy = await this.checkDb(5000);
     const [assetCount, ticketCount, userCount, deviceCount, tenantCount] = await Promise.all([
       this.prisma.asset.count().catch(() => 0),
       this.prisma.ticket.count().catch(() => 0),
@@ -121,9 +122,14 @@ export class HealthController {
     };
   }
 
-  private async checkDb(): Promise<boolean> {
+  private async checkDb(timeoutMs = 2000): Promise<boolean> {
     try {
-      await this.prisma.$queryRaw`SELECT 1`;
+      await Promise.race([
+        this.prisma.$queryRaw`SELECT 1`,
+        new Promise((_, reject) =>
+          setTimeout(() => reject(new Error('db ping timeout')), timeoutMs),
+        ),
+      ]);
       return true;
     } catch {
       return false;

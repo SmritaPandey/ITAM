@@ -1,19 +1,125 @@
 "use client";
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import {
-  Camera, Video, Eye, AlertTriangle, CheckCircle2, Clock, MapPin, Shield,
-  Grid3X3, Loader2, RefreshCw, Plus, Search, Trash2, Settings, X,
-  MonitorPlay, Wifi, WifiOff, Play, Pause, RotateCw
+  Camera, Video, Eye, AlertTriangle, CheckCircle2, MapPin,
+  Grid3X3, Loader2, RefreshCw, Plus, Search, Trash2, X,
+  MonitorPlay, Wifi, WifiOff
 } from "lucide-react";
+import Hls from "hls.js";
 import { apiFetch } from "@/lib/api";
 import { useRealtimeEvents } from "@/lib/useRealtimeEvents";
+import PageHeader from "@/components/PageHeader";
+import EmptyState from "@/components/EmptyState";
 
 const STATUS_COLORS: Record<string, string> = { ONLINE: "green", WARNING: "amber", OFFLINE: "red" };
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4100/api/v1";
+
+function CameraHlsPlayer({ cameraId, onUnavailable }: { cameraId: string; onUnavailable: (reason: string) => void }) {
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const hlsRef = useRef<Hls | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    setError(null);
+
+    (async () => {
+      try {
+        const result = await apiFetch(`/monitoring/cameras/${cameraId}/hls`, { method: "POST" });
+        if (cancelled) return;
+        if (!result.streamingAvailable) {
+          onUnavailable(result.reason || "Live streaming is not available on this server.");
+          setError(result.reason || "Streaming unavailable");
+          setLoading(false);
+          return;
+        }
+
+        const token = typeof window !== "undefined" ? localStorage.getItem("accessToken") : null;
+        const playlistUrl = result.playlistUrl?.startsWith("http")
+          ? result.playlistUrl
+          : `${API_BASE.replace(/\/api\/v1$/, "")}${result.playlistUrl}`;
+
+        const video = videoRef.current;
+        if (!video) return;
+
+        if (Hls.isSupported()) {
+          const hls = new Hls({
+            enableWorker: true,
+            xhrSetup: (xhr) => {
+              if (token) xhr.setRequestHeader("Authorization", `Bearer ${token}`);
+            },
+          });
+          hlsRef.current = hls;
+          hls.loadSource(playlistUrl);
+          hls.attachMedia(video);
+          hls.on(Hls.Events.MANIFEST_PARSED, () => {
+            if (!cancelled) {
+              setLoading(false);
+              video.play().catch(() => undefined);
+            }
+          });
+          hls.on(Hls.Events.ERROR, (_e, data) => {
+            if (data.fatal && !cancelled) {
+              setError("Unable to play HLS stream. Check camera RTSP reachability from the API host.");
+              setLoading(false);
+            }
+          });
+        } else if (video.canPlayType("application/vnd.apple.mpegurl")) {
+          video.src = playlistUrl;
+          video.addEventListener("loadedmetadata", () => {
+            if (!cancelled) {
+              setLoading(false);
+              video.play().catch(() => undefined);
+            }
+          });
+        } else {
+          setError("This browser does not support HLS playback.");
+          setLoading(false);
+        }
+      } catch (err: any) {
+        if (!cancelled) {
+          setError(err.message || "Failed to start stream");
+          setLoading(false);
+        }
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+      if (hlsRef.current) {
+        hlsRef.current.destroy();
+        hlsRef.current = null;
+      }
+      apiFetch(`/monitoring/cameras/${cameraId}/hls`, { method: "DELETE" }).catch(() => undefined);
+    };
+  }, [cameraId, onUnavailable]);
+
+  return (
+    <div style={{ position: "relative", width: "100%", height: "100%", background: "#0a0e1a" }}>
+      <video ref={videoRef} muted playsInline controls style={{ width: "100%", height: "100%", objectFit: "contain" }} />
+      {loading && (
+        <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", background: "rgba(0,0,0,0.4)" }}>
+          <Loader2 size={24} style={{ color: "#06b6d4", animation: "spin 1s linear infinite" }} />
+        </div>
+      )}
+      {error && (
+        <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", padding: 16, textAlign: "center", background: "rgba(10,14,26,0.92)" }}>
+          <div>
+            <WifiOff size={28} style={{ color: "rgba(239,68,68,0.5)", marginBottom: 8 }} />
+            <div style={{ fontSize: 11, color: "var(--text-tertiary)", lineHeight: 1.5 }}>{error}</div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
 
 export default function CCTVPage() {
   const [data, setData] = useState<any>({ data: [], total: 0, online: 0, recording: 0, alerts: 0 });
   const [loading, setLoading] = useState(true);
-  const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
+  const [viewMode, setViewMode] = useState<"grid" | "list" | "wall">("grid");
   const [selectedCam, setSelectedCam] = useState<any>(null);
   const [events, setEvents] = useState<any[]>([]);
   const [eventsLoading, setEventsLoading] = useState(false);
@@ -22,6 +128,10 @@ export default function CCTVPage() {
   const [adding, setAdding] = useState(false);
   const [filter, setFilter] = useState<string>("all");
   const [searchQuery, setSearchQuery] = useState("");
+  const [streamUnavailable, setStreamUnavailable] = useState<string | null>(null);
+  const [ffmpegAvailable, setFfmpegAvailable] = useState<boolean | null>(null);
+  const [wallLayout, setWallLayout] = useState<any>(null);
+  const [wallSaving, setWallSaving] = useState(false);
 
   const { connected, on } = useRealtimeEvents();
 
@@ -42,16 +152,27 @@ export default function CCTVPage() {
 
   useEffect(() => { refresh(); }, [refresh]);
 
-  // Auto-refresh on WebSocket events
+  useEffect(() => {
+    apiFetch("/monitoring/cameras/video-wall")
+      .then(setWallLayout)
+      .catch(() => null);
+  }, []);
+
+  useEffect(() => {
+    apiFetch("/monitoring/cameras/hls/status")
+      .then((r) => setFfmpegAvailable(!!r.available))
+      .catch(() => setFfmpegAvailable(false));
+  }, []);
+
   useEffect(() => {
     const c1 = on("monitoring.camera_offline", () => refresh());
     const c2 = on("monitoring.device_down", () => refresh());
     return () => { c1(); c2(); };
   }, [on, refresh]);
 
-  // Load camera events when detail panel opens
   useEffect(() => {
     if (!selectedCam) return;
+    setStreamUnavailable(null);
     setEventsLoading(true);
     apiFetch(`/monitoring/cameras/${selectedCam.id}/events`)
       .then(d => setEvents(d.events || []))
@@ -111,23 +232,31 @@ export default function CCTVPage() {
 
   return (
     <>
-      <div className="page-header">
-        <div>
-          <h1 className="page-title">CCTV Surveillance</h1>
-          <p className="page-subtitle">
-            {data.total} cameras • {data.online} online
-            {connected && <span style={{ marginLeft: 8, fontSize: 10, color: "#10b981" }}>● Live</span>}
-          </p>
-        </div>
-        <div style={{ display: "flex", gap: 8 }}>
-          <button className="btn btn-secondary" onClick={refresh}><RefreshCw size={14} /></button>
-          <button className={`btn ${viewMode === "grid" ? "btn-primary" : "btn-secondary"}`} onClick={() => setViewMode("grid")} style={{ padding: "6px 10px" }}><Grid3X3 size={14} /></button>
-          <button className={`btn ${viewMode === "list" ? "btn-primary" : "btn-secondary"}`} onClick={() => setViewMode("list")} style={{ padding: "6px 10px" }}><Eye size={14} /></button>
-          <button className="btn btn-primary" onClick={() => setShowAddModal(true)}><Plus size={14} /> Add Camera</button>
-        </div>
-      </div>
+      <PageHeader
+        eyebrow="Surveillance"
+        title="CCTV Surveillance"
+        description={`${data.total} cameras • ${data.online} online${ffmpegAvailable === false ? " • Inventory only (ffmpeg not installed)" : ""}`}
+        actions={
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            <button className="btn btn-secondary" onClick={refresh}><RefreshCw size={14} /></button>
+            <button className={`btn ${viewMode === "grid" ? "btn-primary" : "btn-secondary"}`} onClick={() => setViewMode("grid")} style={{ padding: "6px 10px" }}><Grid3X3 size={14} /></button>
+            <button className={`btn ${viewMode === "list" ? "btn-primary" : "btn-secondary"}`} onClick={() => setViewMode("list")} style={{ padding: "6px 10px" }}><Eye size={14} /></button>
+            <button className={`btn ${viewMode === "wall" ? "btn-primary" : "btn-secondary"}`} onClick={() => setViewMode("wall")} style={{ padding: "6px 10px" }} title="Video wall"><MonitorPlay size={14} /></button>
+            <button className="btn btn-primary" onClick={() => setShowAddModal(true)}><Plus size={14} /> Add Camera</button>
+          </div>
+        }
+      />
 
-      {/* Search Bar */}
+      {ffmpegAvailable === false && (
+        <div className="card" style={{ marginBottom: 16, padding: "12px 16px", borderColor: "rgba(245,158,11,0.35)", background: "rgba(245,158,11,0.06)" }}>
+          <div style={{ fontSize: 13, fontWeight: 600, color: "var(--text-primary)", marginBottom: 4 }}>Live video unavailable</div>
+          <div style={{ fontSize: 12, color: "var(--text-secondary)", lineHeight: 1.5 }}>
+            This API host does not have <code>ffmpeg</code> on PATH, so RTSP→HLS streaming cannot start.
+            Cameras are shown as inventory only — no placeholder or fake video is displayed. Install ffmpeg on the server to enable live playback.
+          </div>
+        </div>
+      )}
+
       <div style={{ display: "flex", gap: 10, marginBottom: 16, alignItems: "center" }}>
         <div style={{ flex: 1, display: "flex", alignItems: "center", gap: 8, background: "var(--bg-elevated)", border: "1px solid var(--border-primary)", borderRadius: 10, padding: "8px 14px" }}>
           <Search size={15} style={{ color: "var(--text-tertiary)" }} />
@@ -149,11 +278,66 @@ export default function CCTVPage() {
       </div>
 
       {filtered.length === 0 ? (
-        <div className="card" style={{ textAlign: "center", padding: 60, color: "var(--text-tertiary)" }}>
-          <Camera size={40} style={{ marginBottom: 12, opacity: 0.3 }} />
-          <div style={{ fontSize: 14, fontWeight: 600 }}>{filter === "all" ? "No cameras configured" : `No ${filter} cameras`}</div>
-          <div style={{ fontSize: 12, marginTop: 4 }}>
-            {filter === "all" ? "Click Add Camera to register your CCTV devices." : "Try a different filter."}
+        <EmptyState
+          icon={<Camera size={40} />}
+          title={filter === "all" ? "No cameras configured" : `No ${filter} cameras`}
+          description={filter === "all" ? "Add a camera or run ONVIF discovery to populate the video wall." : "Try a different filter."}
+          action={filter === "all" ? { label: "Add Camera", onClick: () => setShowAddModal(true) } : undefined}
+        />
+      ) : viewMode === "wall" ? (
+        <div className="card" style={{ padding: 16, marginBottom: 16 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+            <div>
+              <div style={{ fontWeight: 700, fontSize: 14 }}>Video Wall</div>
+              <div style={{ fontSize: 11, color: "var(--text-tertiary)" }}>
+                Multi-camera HLS grid — layout saved to tenant settings
+              </div>
+            </div>
+            <button
+              className="btn btn-secondary"
+              disabled={wallSaving}
+              onClick={async () => {
+                setWallSaving(true);
+                try {
+                  const ids = filtered.slice(0, 8).map((c: any) => c.id);
+                  const saved = await apiFetch("/monitoring/cameras/video-wall", {
+                    method: "POST",
+                    body: JSON.stringify({
+                      columns: Math.min(4, Math.ceil(Math.sqrt(ids.length || 1))),
+                      rows: Math.min(2, Math.ceil((ids.length || 1) / 4)),
+                      cameraIds: ids,
+                    }),
+                  });
+                  setWallLayout(saved);
+                } finally {
+                  setWallSaving(false);
+                }
+              }}
+            >
+              {wallSaving ? "Saving…" : "Use visible cameras"}
+            </button>
+          </div>
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: `repeat(${wallLayout?.layout?.columns || 2}, 1fr)`,
+              gap: 8,
+              minHeight: 320,
+            }}
+          >
+            {(wallLayout?.cameras?.length ? wallLayout.cameras : filtered.slice(0, 4)).map((cam: any) => (
+              <div key={cam.id} style={{ background: "#0a0e1a", borderRadius: 8, overflow: "hidden", aspectRatio: "16/9", position: "relative" }}>
+                {ffmpegAvailable ? (
+                  <CameraHlsPlayer cameraId={cam.id} onUnavailable={() => undefined} />
+                ) : (
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "100%", color: "var(--text-tertiary)", fontSize: 12, flexDirection: "column", gap: 6 }}>
+                    <Camera size={20} />
+                    {cam.name}
+                  </div>
+                )}
+                <div style={{ position: "absolute", bottom: 6, left: 8, fontSize: 11, color: "#fff", textShadow: "0 1px 3px #000" }}>{cam.name}</div>
+              </div>
+            ))}
           </div>
         </div>
       ) : (
@@ -179,7 +363,9 @@ export default function CCTVPage() {
                     {cam.status === "ONLINE" ? (
                       <>
                         <MonitorPlay size={32} style={{ color: "rgba(6,182,212,0.4)" }} />
-                        <div style={{ fontSize: 9, color: "rgba(6,182,212,0.6)", marginTop: 4, letterSpacing: 1.5, fontWeight: 600 }}>LIVE FEED</div>
+                        <div style={{ fontSize: 9, color: "rgba(6,182,212,0.6)", marginTop: 4, letterSpacing: 1.5, fontWeight: 600 }}>
+                          {ffmpegAvailable ? "OPEN FOR LIVE" : "INVENTORY"}
+                        </div>
                       </>
                     ) : (
                       <>
@@ -221,7 +407,6 @@ export default function CCTVPage() {
         </div>
       )}
 
-      {/* Detail Panel */}
       {selectedCam && (
         <>
           <div onClick={() => setSelectedCam(null)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", zIndex: 1000, backdropFilter: "blur(4px)" }} />
@@ -234,26 +419,32 @@ export default function CCTVPage() {
               <button onClick={() => setSelectedCam(null)} className="btn btn-secondary" style={{ padding: "4px 8px" }}><X size={14} /></button>
             </div>
             <div style={{ flex: 1, overflowY: "auto", padding: 20 }}>
-              {/* Stream Preview */}
               <div style={{
-                height: 200, borderRadius: 8, marginBottom: 16,
-                background: selectedCam.status === "ONLINE" ? "linear-gradient(135deg, #0a0e1a, #1a1f35)" : "linear-gradient(135deg, #1a0a0a, #2d1515)",
+                height: 220, borderRadius: 8, marginBottom: 16, overflow: "hidden",
+                background: "#0a0e1a",
                 display: "flex", alignItems: "center", justifyContent: "center", position: "relative",
               }}>
-                {selectedCam.status === "ONLINE" ? (
-                  <div style={{ textAlign: "center" }}>
-                    <MonitorPlay size={40} style={{ color: "rgba(6,182,212,0.3)" }} />
-                    <div style={{ fontSize: 10, color: "rgba(6,182,212,0.5)", marginTop: 6 }}>Camera stream requires RTSP client</div>
-                  </div>
-                ) : (
-                  <div style={{ textAlign: "center" }}>
+                {selectedCam.status !== "ONLINE" ? (
+                  <div style={{ textAlign: "center", padding: 16 }}>
                     <WifiOff size={40} style={{ color: "rgba(239,68,68,0.3)" }} />
                     <div style={{ fontSize: 10, color: "rgba(239,68,68,0.5)", marginTop: 6 }}>Camera is offline</div>
                   </div>
+                ) : streamUnavailable || ffmpegAvailable === false ? (
+                  <div style={{ textAlign: "center", padding: 20 }}>
+                    <MonitorPlay size={36} style={{ color: "rgba(148,163,184,0.35)" }} />
+                    <div style={{ fontSize: 12, fontWeight: 600, color: "var(--text-secondary)", marginTop: 8 }}>Inventory only</div>
+                    <div style={{ fontSize: 11, color: "var(--text-tertiary)", marginTop: 6, lineHeight: 1.5, maxWidth: 320 }}>
+                      {streamUnavailable || "Live RTSP→HLS requires ffmpeg on the API host. No simulated video is shown."}
+                    </div>
+                  </div>
+                ) : (
+                  <CameraHlsPlayer
+                    cameraId={selectedCam.id}
+                    onUnavailable={(reason) => setStreamUnavailable(reason)}
+                  />
                 )}
               </div>
 
-              {/* Camera Info */}
               <div style={{ display: "grid", gap: 8, marginBottom: 20 }}>
                 <DRow label="Status" value={<span className={`badge ${STATUS_COLORS[selectedCam.status]}`}>{selectedCam.status}</span>} />
                 <DRow label="IP Address" value={selectedCam.ipAddress || "—"} />
@@ -272,7 +463,6 @@ export default function CCTVPage() {
                 <DRow label="Last Seen" value={selectedCam.lastSeen ? new Date(selectedCam.lastSeen).toLocaleString() : "Never"} />
               </div>
 
-              {/* Delete Camera */}
               <button
                 className="btn btn-secondary"
                 style={{ width: "100%", padding: "10px 16px", marginBottom: 20, display: "flex", alignItems: "center", justifyContent: "center", gap: 8, color: "#ef4444", borderColor: "rgba(239,68,68,0.3)", fontSize: 13, fontWeight: 600 }}
@@ -281,7 +471,6 @@ export default function CCTVPage() {
                 <Trash2 size={14} /> Delete Camera
               </button>
 
-              {/* Events Timeline */}
               <h3 style={{ fontSize: 13, fontWeight: 600, marginBottom: 8, color: "var(--text-primary)" }}>Event History</h3>
               {eventsLoading ? (
                 <div style={{ height: 100, display: "flex", alignItems: "center", justifyContent: "center", color: "var(--text-tertiary)" }}>
@@ -312,7 +501,6 @@ export default function CCTVPage() {
         </>
       )}
 
-      {/* Add Camera Modal */}
       {showAddModal && (
         <>
           <div onClick={() => setShowAddModal(false)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", zIndex: 1000, backdropFilter: "blur(4px)" }} />

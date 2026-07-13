@@ -1,0 +1,24 @@
+[Unit]
+Description=QS Discovery Agent
+Documentation=file:///opt/qs-discovery-agent/QuickStart.txt
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/qs-discovery-agent
+ExecStart=/opt/qs-discovery-agent/run-agent-service.sh
+Restart=always
+RestartSec=10
+StartLimitIntervalSec=0
+# Recovery-style restart backoff is handled by systemd Restart=
+StandardOutput=append:/var/log/qs-discovery-agent/agent-service.log
+StandardError=append:/var/log/qs-discovery-agent/agent-service-error.log
+Environment=QS_AGENT_SILENT=true
+# Harden lightly; agent needs host inventory access
+NoNewPrivileges=true
+ProtectSystem=false
+ProtectHome=read-only
+
+[Install]
+WantedBy=multi-user.target

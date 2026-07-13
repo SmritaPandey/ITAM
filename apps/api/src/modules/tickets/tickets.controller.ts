@@ -32,6 +32,16 @@ export class TicketsController {
     return this.ticketsService.getStats(req.user.tenantId);
   }
 
+  @Get('kb-suggest')
+  @Roles('*')
+  @ApiOperation({ summary: 'Suggest knowledge-base articles by query string' })
+  async kbSuggestQuery(@Request() req: any, @Query('q') q?: string, @Query('limit') limit?: string) {
+    return this.ticketsService.suggestKb(req.user.tenantId, q || '', {
+      q,
+      limit: limit ? parseInt(limit, 10) : 5,
+    });
+  }
+
   // SLA routes (static, before :id)
   @Get('sla/policies')
   @Roles('Tenant Admin', 'IT Admin')
@@ -99,6 +109,26 @@ export class TicketsController {
   @ApiOperation({ summary: 'Escalate ticket priority' })
   async escalateTicket(@Request() req: any, @Param('id') id: string, @Body() body: { reason: string; escalateTo?: string }) {
     return this.ticketsService.escalateTicket(id, req.user.tenantId, body);
+  }
+
+  @Post(':id/csat')
+  @Roles('*')
+  @ApiOperation({ summary: 'Submit CSAT score (1-5) when ticket is RESOLVED/CLOSED' })
+  async submitCsat(
+    @Request() req: any,
+    @Param('id') id: string,
+    @Body() body: { score: number; comment?: string },
+  ) {
+    return this.ticketsService.submitCsat(id, req.user.tenantId, body, req.user.sub);
+  }
+
+  @Get(':id/kb-suggest')
+  @Roles('*')
+  @ApiOperation({ summary: 'Suggest KB articles linked to this ticket subject/description' })
+  async kbSuggestForTicket(@Request() req: any, @Param('id') id: string, @Query('limit') limit?: string) {
+    return this.ticketsService.suggestKb(req.user.tenantId, id, {
+      limit: limit ? parseInt(limit, 10) : 5,
+    });
   }
 
   @Get(':id/history')

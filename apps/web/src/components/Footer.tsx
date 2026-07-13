@@ -20,10 +20,10 @@ const SOCIAL_LINKS = [
 ];
 
 const PRODUCT_LINKS = [
-  { label: "Platform", hash: "nerve-system" },
-  { label: "Security", hash: "immune-system" },
-  { label: "Pricing", hash: "pricing" },
+  { label: "Platform", hash: "platform" },
+  { label: "Security", hash: "security" },
   { label: "Modules", hash: "modules-grid" },
+  { label: "Pricing", hash: "pricing" },
 ];
 
 const COMPANY_LINKS = [
@@ -62,10 +62,10 @@ export default function Footer({ theme }: FooterProps) {
         {/* Brand Column */}
         <div>
           <Link href="/" style={{ display: "flex", alignItems: "center", marginBottom: 16, textDecoration: "none", color: "inherit" }}>
-            <Logo size={24} glow={!L} theme={theme} />
+            <Logo size={34} glow={!L} theme={theme} />
           </Link>
           <p style={{ fontSize: 12.5, color: muted, lineHeight: 1.7, maxWidth: 300, marginBottom: 20 }}>
-            Autonomous IT asset lifecycle management, real-time SNMP topology, and security mitigation engine. Crafted by NeurQ AI Labs.
+            Discover, track, and operate IT and non-IT assets — discovery, monitoring, and service workflows in one place. Built by NeurQ AI Labs.
           </p>
           {/* Social Links */}
           <div style={{ display: "flex", gap: 10 }}>

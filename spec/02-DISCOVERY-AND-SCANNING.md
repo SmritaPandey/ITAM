@@ -1,206 +1,201 @@
-# Discovery & Scanning Engine Specification
+# QS Assets — Discovery & Scanning
+
+| Field | Value |
+|-------|-------|
+| **Product** | QS Assets |
+| **Last reviewed** | 2026-07-13 |
+| **Status** | Living PRD |
+| **Depends on** | [01](01-PRODUCT-OVERVIEW.md), [03](03-ARCHITECTURE-AND-TECH-STACK.md) |
+| **Analog** | ME AssetExplorer / Endpoint Central · Qualys CSAM · OpManager SNMP |
+
+---
 
 ## Overview
-The Discovery Engine is responsible for automatically detecting, inventorying, and maintaining awareness of all assets across the organization's IT infrastructure, physical facilities, cloud environments, and IoT/OT networks.
 
-**Inspired by:** ManageEngine AssetExplorer Discovery, Endpoint Central Agent, OpManager SNMP Discovery
+Discovery keeps the CMDB current across endpoints, network gear, directory, cloud, cameras, and IoT/OT. All paths converge on `Asset` / `DiscoveredDevice` with `DiscoverySource` and correlation rules that prevent duplicates.
 
----
-
-## 1. Agent-Based Discovery
-
-### Lightweight Agent (AssetCommand Agent)
-- **Platforms:** Windows (7+), macOS (10.14+), Linux (Ubuntu, RHEL, CentOS, Debian, SUSE, Fedora)
-- **Footprint:** < 50MB RAM, < 1% CPU average
-- **Installation Methods:** MSI/EXE (Windows), DMG/PKG (macOS), DEB/RPM (Linux), GPO deployment, logon scripts, manual install, remote push from console
-- **Communication:** HTTPS/TLS 1.3 to server, configurable polling interval (default 15 min)
-- **Heartbeat:** Periodic check-in to confirm device is online and managed
-
-### Data Collected by Agent
-| Category | Details |
-|----------|---------|
-| **Hardware** | CPU, RAM, disk (model, capacity, health/SMART), GPU, motherboard, serial numbers, BIOS/UEFI version, battery health (laptops), connected peripherals (USB, monitors) |
-| **Operating System** | Name, version, build, architecture, install date, last boot time, uptime |
-| **Software Inventory** | Installed applications (name, version, publisher, install date, size), Windows Store/Snap/Flatpak apps, browser extensions |
-| **Patch Status** | Missing OS patches, missing third-party patches, installed update history, reboot pending status |
-| **Security Posture** | Antivirus (installed, version, definitions date, real-time protection), Firewall (on/off, rules count), Disk encryption (BitLocker/FileVault/LUKS status), TPM presence and version |
-| **Network** | IP address(es), MAC address(es), DNS, gateway, DHCP/static, WiFi SSID, network adapter details |
-| **User Info** | Logged-in user(s), last login time, domain membership |
-| **Performance** | Real-time CPU/RAM/disk usage, process list, startup items |
-| **Compliance** | CIS benchmark checks, custom compliance rules evaluation |
-
-### Agent Capabilities Beyond Discovery
-- Remote script execution (PowerShell, Bash, Python) — with approval workflow
-- Patch installation (silent deployment)
-- Software installation/uninstallation
-- Remote desktop/assist initiation
-- File transfer
-- Registry/config manipulation
-- VDI session telemetry collection
+**As-built agent stack (permanent):** Node.js agent — **not** Go. Packaging: Electron tray app, native Windows Service / LaunchDaemon / systemd, MSI/PKG/DEB build scripts.
 
 ---
 
-## 2. Agentless Discovery
+## 1. Agent-based discovery
 
-### Protocols & Methods
-| Method | Use Case | Requirements |
-|--------|----------|-------------|
-| **WMI (Windows Management Instrumentation)** | Windows devices — hardware, software, services | Admin credentials, WMI enabled, DCOM ports |
-| **SSH** | Linux/macOS/Unix — full system inventory | SSH credentials (key or password), sudo access |
-| **SNMP v1/v2c/v3** | Network devices — switches, routers, firewalls, printers, UPS | Community string (v1/v2c) or auth/priv credentials (v3) |
-| **WinRM** | Windows remote management | WinRM enabled, HTTPS preferred |
-| **Telnet** | Legacy network devices (fallback only) | Credentials, insecure — use only for legacy |
-| **ICMP/Ping Sweep** | Host discovery — alive/dead detection | Network access, ICMP not blocked |
-| **TCP Port Scan** | Service discovery, OS fingerprinting | Network access to target ports |
-| **ARP Sweep** | Layer 2 device discovery on local subnet | Local subnet access |
-| **Nmap Integration** | Advanced port scanning, service detection, OS fingerprinting | Nmap binary available on scan server |
+### Runtime & packaging
 
-### Network Scan Scheduling
-- One-time scans (manual trigger)
-- Scheduled scans (hourly, daily, weekly, monthly, custom cron)
-- Continuous monitoring mode (event-driven on new device detection)
-- Scan windows (restrict scanning to off-peak hours)
+| Path | Location / artifact | Status |
+|------|---------------------|--------|
+| Canonical agent | `agent/qs-discovery-agent.js` (monorepo root `agent/` only) | Shipped |
+| Electron desktop tray | `apps/agent-desktop` (online / offline / paused tray icons) | Shipped |
+| Windows service | `packaging/windows/` + NSSM/`sc.exe`; `build-msi.ps1` | Shipped |
+| macOS | LaunchDaemon plist + `build-pkg.sh` | Shipped |
+| Linux | systemd unit + `build-deb.sh` / RPM staging | Shipped |
+| ZIP / USB | Extract + `setup.html` → `config.json` | Shipped |
+| Discovery UI download tabs | Desktop / Service / ZIP with real endpoints or artifacts | In-build polish |
 
----
+**Requirements:** Node 18+, HTTPS to API, deploy token / agent JWT. Footprint target: &lt;50MB RAM, &lt;1% CPU average.
 
-## 3. Active Directory / LDAP Import
+### Data collected
 
-- Sync users, computers, groups, OUs from AD/LDAP
-- Scheduled sync (configurable interval)
-- Attribute mapping (AD fields → AssetCommand fields)
-- Auto-create asset records for discovered AD computers
-- Auto-assign assets to users based on AD computer-user mapping
-- Support for multiple AD domains/forests
-- LDAPS (secure LDAP) support
+| Category | Fields | Status |
+|----------|--------|--------|
+| Hardware | CPU, RAM, disk, serial, BIOS | Shipped |
+| OS | Platform, version, arch, hostname, uptime | Shipped |
+| Network | Interfaces IP/MAC/DNS/gateway | Shipped |
+| Software | Installed apps/packages (bounded list + expand) | Shipped |
+| Security | Firewall, disk encryption, AV when available | Shipped |
+| Performance | Load, RAM %, top processes | Shipped |
+| Patch / product inventory for CVE match | Authenticated product versions | In-build |
+| CIS checks evidence | Benchmark collectors | In-build |
 
----
+### Agent UEM capabilities
 
-## 4. Cloud Asset Discovery
+| Capability | Status |
+|------------|--------|
+| Heartbeat + online/stale | Shipped |
+| Inventory POST / baseline | Shipped |
+| ScriptLibrary remote run (approved) | Shipped |
+| Software deploy rings (pilot → prod) | In-build |
+| File pull agent logs | In-build |
+| License blacklist enforce (KILL_PROCESS) | In-build |
+| Remote assist | Documented RDP/SSH deep-link (no fake WebRTC) | In-build |
+| Pause / resume from tray | Shipped |
 
-### Supported Cloud Providers
-| Provider | Assets Discovered |
-|----------|------------------|
-| **AWS** | EC2 instances, RDS databases, S3 buckets, Lambda functions, VPCs, Security Groups, ELB/ALB, EBS volumes, IAM users/roles, CloudFront distributions, Route53 |
-| **Microsoft Azure** | Virtual Machines, SQL Databases, Storage Accounts, App Services, VNets, NSGs, Key Vaults, Azure AD users/groups, AKS clusters |
-| **Google Cloud Platform** | Compute Engine instances, Cloud SQL, GCS buckets, GKE clusters, VPC networks, IAM, Cloud Functions |
+### Acceptance tests — agent
 
-### Cloud Discovery Features
-- API-based discovery (read-only service account credentials)
-- Multi-account/subscription support
-- Tag-based asset classification
-- Cloud security posture checks (public access, encryption, logging enabled)
-- Cost attribution per asset
-- Auto-sync interval: configurable (default: every 4 hours)
-- Cloud-to-CMDB mapping
+1. Install service on Windows/macOS/Linux; agent appears in Agents list; heartbeat &lt; 2× poll interval.
+2. Inventory upserts Asset with `discoverySource=AGENT`; hardware/OS detail rows populated.
+3. Electron tray reflects ONLINE / OFFLINE / PAUSED.
+4. Approved script executes once; rejected script refused.
+5. MSI/PKG/DEB build scripts produce installable artifacts on supported hosts (notarization optional).
 
 ---
 
-## 5. SNMP Deep Discovery
+## 2. Agentless discovery
 
-### Capabilities
-- SNMP v1, v2c, v3 (AuthPriv with SHA/AES)
-- Auto-discovery via sysOID → manufacturer/model identification
-- MIB browser for custom OID mapping
-- **Printer Discovery:** Toner levels, page counts, paper tray status, error states, supply replacement alerts
-- **Network Device Discovery:** Interface table, routing table, ARP table, VLAN config, port status, PoE status
-- **UPS Discovery:** Battery health, load percentage, remaining runtime, input/output voltage
-- **Environment Sensors:** Temperature, humidity, door contacts (via SNMP-enabled sensors)
-- Custom OID polling for any SNMP-enabled device
+| Method | Use | Status |
+|--------|-----|--------|
+| ICMP / TCP port scan | Host + service discovery | Shipped |
+| Nmap integration | Advanced ports / OS guess when binary present | Shipped |
+| SNMP v1/v2c/v3 | Network devices + printers / UPS | Shipped |
+| WMI | Windows hardware/software enrich | Shipped |
+| SSH | Linux/Unix inventory enrich | Shipped |
+| WinRM | Windows remote (when enabled) | In-build / optional |
+| ARP / LLDP/CDP neighbor | L2 topology | ARP Shipped; LLDP enrich In-build |
 
----
+**Credentials:** `ScanCredential` vaulted; never returned in API plaintext. Scheduled via `ScheduledScan` / cron.
 
-## 6. CCTV & IoT Discovery
+**Rule:** Successful WMI/SSH **must** fill HardwareDetail / OsDetail — no empty CMDB after success.
 
-### ONVIF Camera Discovery
-- Multicast probe for ONVIF-compliant cameras on network
-- Auto-detect: manufacturer, model, firmware version, IP, MAC
-- Stream URL extraction (main stream + sub stream)
-- PTZ capability detection
-- Recording capability detection
+### Acceptance tests — agentless
 
-### IoT/OT Device Discovery
-- Protocol support: MQTT, CoAP, Modbus (TCP/RTU), BACnet
-- Device type classification based on protocol fingerprinting
-- Sensor data ingestion (temperature, humidity, pressure, vibration)
-- Integration with IoT gateways
+1. Subnet scan creates DiscoveredDevice rows; promote creates Asset.
+2. WMI with valid creds populates CPU/RAM/OS; failure returns honest error, no fake inventory.
+3. SNMP poll updates MonitoredDevice.metrics + DeviceMetricsHistory.
+4. Nmap absent → capability endpoint reports unavailable; UI does not invent ports.
 
 ---
 
-## 7. VDI Pool Discovery
+## 3. Active Directory / LDAP
 
-- VMware Horizon: vCenter API integration for pool, farm, session data
-- Citrix: Delivery Controller API for site, catalog, delivery group data
-- Azure Virtual Desktop: Azure API for host pool, session host, user session data
-- Amazon WorkSpaces: AWS API for workspace, bundle, directory data
-- Auto-map VDI sessions to user identities
+| Capability | Status |
+|------------|--------|
+| Multi-OU computer/user sync (`ldapts`) | In-build |
+| Vaulted bind credentials | In-build |
+| Schedule + conflict merge (serial/hostname) | In-build |
+| `DiscoverySource.ACTIVE_DIRECTORY` assets | Enum Shipped; sync In-build |
+| LDAPS | In-build |
 
----
+### Acceptance tests — AD
 
-## 8. Auto-Classification & Correlation
-
-### Device Classification
-When a new device is discovered:
-1. Fingerprint the device (OS, open ports, SNMP sysDescr, MAC OUI)
-2. Auto-classify into asset type (Server, Workstation, Printer, Switch, Router, etc.)
-3. Auto-assign tags (e.g., "New Device", "Unmanaged", "Windows Server")
-4. Check against existing CMDB for duplicates (serial number, MAC, hostname matching)
-5. If new: create asset record, flag as "Pending Review"
-6. If existing: update attributes, log changes
-7. Trigger automation rule: "New unmanaged device detected" → notify admin
-
-### Correlation Engine
-- Deduplicate assets discovered from multiple sources (agent + agentless + cloud + AD)
-- Priority hierarchy: Agent data > WMI/SSH data > SNMP data > AD data
-- Merge rules configurable by admin
-- Confidence scoring for matches
-- Manual merge/split capability for edge cases
+1. Sync creates users + computer assets for test OU.
+2. Re-sync merges without duplicate hostnames.
+3. Disabled AD computer → asset flagged PENDING_REVIEW or retired per policy.
 
 ---
 
-## 9. Manual Entry & Import
+## 4. Cloud asset discovery
 
-### Web UI Forms
-- Admin-configurable forms per asset type
-- Required/optional field definitions
-- Custom field support (text, number, date, dropdown, checkbox, file upload)
-- Barcode/QR scanner integration (mobile-friendly)
-- Bulk create with copy/template
+| Provider | Assets | Status |
+|----------|--------|--------|
+| AWS | EC2 (+ expand RDS/S3 later as needed) | Shipped (`CloudConnector` / CLOUD_AWS) |
+| Azure | Compute / Resource Graph VMs | In-build (no stubs) |
+| GCP | Compute Engine list | In-build (no stubs) |
 
-### Bulk Import
-- CSV import with column mapping wizard
-- Excel (XLSX) import with sheet selection
-- JSON/XML import for API-driven ingestion
-- Validation and error reporting before commit
-- Import history with rollback capability
-- Scheduled imports from external sources (SFTP, API endpoint)
+Multi-account, regions JSON, encrypted creds, `lastSyncAt` / status. Tag → classification. Default interval 4h via job queue.
 
-### Mobile App Asset Entry
-- QR/barcode scan to create or look up asset
-- Photo capture for asset condition documentation
-- GPS location capture for physical asset placement
-- Offline mode with sync when connected
-- NFC tag read/write support
+### Acceptance tests — cloud
+
+1. AWS sync with valid keys creates/updates CLOUD_AWS assets.
+2. Azure/GCP connectors sync real inventories or show config/auth error — never mock VMs.
+3. Disable connector stops scheduled sync.
 
 ---
 
-## 10. Scan Security & Governance
+## 5. IoT / OT / physical sensors
 
-### Credential Vault
-- Encrypted storage for all scan credentials (AES-256)
-- Role-based access to credential sets
-- Credential rotation reminders
-- No credentials stored on scan targets
-- Audit log for credential access
+| Protocol | Status |
+|----------|--------|
+| MQTT broker config + telemetry topics | Shipped |
+| ONVIF camera discovery | Shipped |
+| Modbus TCP probe | In-build (feature flag) |
+| BACnet/IP probe | In-build (feature flag) |
 
-### Scan Permissions
-- Scan scope restrictions per admin role
-- IP range/subnet restrictions
-- Scan type restrictions (e.g., "agentless only for production")
-- Approval workflow for first-time scan of new subnets
-- Rate limiting to prevent network impact
+Discovered devices register as assets with `DiscoverySource.IOT` / `ONVIF`.
 
-### Compliance
-- All scan activities logged with timestamp, user, scope, results
-- Scan reports for audit evidence
-- Data retention policies for scan results
-- PII handling: mask sensitive data in scan results where applicable
+### Acceptance tests — IoT
+
+1. MQTT message on configured topic creates/updates telemetry-linked asset.
+2. ONVIF discover registers CAMERA monitored device.
+3. Modbus/BACnet behind flag; when off, UI shows disabled — no fake PLC inventory.
+
+---
+
+## 6. Correlation & CMDB merge
+
+**Match keys (priority):** serial → MAC → hostname+domain → cloud instance id → agentId.
+
+| Rule | Behavior |
+|------|----------|
+| Exact serial/MAC match | Update existing Asset; merge discoverySource history |
+| Conflict (two live agents same serial) | Flag PENDING_REVIEW + AlertEvent |
+| Unmanaged new MAC on scanned subnet | DiscoveredDevice + optional investigation ticket |
+| Soft-deleted asset rediscovered | Undelete or new PENDING_REVIEW per tenant setting |
+
+### Acceptance tests — correlation
+
+1. Agent then WMI on same host → one Asset, both sources reflected.
+2. Duplicate MAC from two scans → single CI.
+3. 10k import/scan job batch completes with pagination; no tenant bleed.
+
+---
+
+## 7. API & UI surfaces
+
+| Surface | Notes |
+|---------|-------|
+| `/dashboard/discovery` | Jobs, credentials, schedules, agent downloads |
+| `/dashboard/scanning` | Security scan capabilities |
+| `/dashboard/nac` | VLAN / RADIUS / quarantine |
+| `/scan` | PWA barcode/QR/RFID lookup |
+| REST | `discovery/*`, `scanning/*`, `cloud-connectors/*`, `iot/mqtt/*`, `monitoring/*` |
+
+---
+
+## 8. Scale & ops requirements
+
+- Scan jobs via Redis/Bull when Redis up; in-process fallback only for dev.
+- Rate-limit agent posts per tenant.
+- Pagination on discovered devices and assets.
+- Indexes on `tenantId+ipAddress`, `macAddress`, `serialNumber`, `hostname` (Prisma as-built).
+
+---
+
+## Module acceptance checklist
+
+- [ ] Agent Desktop + Service + ZIP paths documented and downloadable from Discovery UI
+- [ ] Agentless WMI/SSH/SNMP/Nmap paths honest about deps
+- [ ] AD sync scheduled and merge-safe
+- [ ] AWS + Azure + GCP connectors non-stub
+- [ ] MQTT + ONVIF live; Modbus/BACnet flagged
+- [ ] Correlation prevents duplicate CIs at 10k scale smoke
+- [ ] NAC policy can quarantine via CoA or agent firewall fallback ([04](04-SSDLC-COMPLIANCE-SECURITY.md))

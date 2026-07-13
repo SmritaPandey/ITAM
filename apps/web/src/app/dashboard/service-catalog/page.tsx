@@ -18,22 +18,6 @@ const CATEGORY_COLORS: Record<string, string> = {
   SECURITY: "#f97316", ONBOARDING: "#6366f1", INFRASTRUCTURE: "#a855f7", OTHER: "#64748b",
 };
 
-// Default catalog items since the API might return empty
-const DEFAULT_CATALOG = [
-  { id: "1", name: "New Laptop Request", description: "Request a new laptop for a new joiner or replacement. Includes standard software suite.", category: "HARDWARE", estimatedDelivery: "3-5 business days", approvalRequired: true },
-  { id: "2", name: "Software Installation", description: "Request installation of approved software. Check the approved software list before requesting.", category: "SOFTWARE", estimatedDelivery: "1-2 business days", approvalRequired: false },
-  { id: "3", name: "VPN Access", description: "Request VPN access for remote connectivity. Requires manager approval.", category: "ACCESS", estimatedDelivery: "1 business day", approvalRequired: true },
-  { id: "4", name: "Network Port Activation", description: "Activate a network port at a specified desk or meeting room location.", category: "NETWORK", estimatedDelivery: "2-3 business days", approvalRequired: false },
-  { id: "5", name: "Printer Setup", description: "Request printer installation, driver setup, or toner replacement.", category: "PRINTING", estimatedDelivery: "1 business day", approvalRequired: false },
-  { id: "6", name: "Password Reset", description: "Reset your Active Directory, email, or application password.", category: "SUPPORT", estimatedDelivery: "Within 1 hour", approvalRequired: false },
-  { id: "7", name: "Email Distribution List", description: "Create or modify an email distribution list. Requires manager approval.", category: "EMAIL", estimatedDelivery: "1-2 business days", approvalRequired: true },
-  { id: "8", name: "Server Provisioning", description: "Request a new virtual or physical server. Includes OS installation and basic hardening.", category: "INFRASTRUCTURE", estimatedDelivery: "5-7 business days", approvalRequired: true },
-  { id: "9", name: "Security Exception", description: "Request a temporary security policy exception with business justification.", category: "SECURITY", estimatedDelivery: "2-3 business days", approvalRequired: true },
-  { id: "10", name: "Employee Onboarding", description: "Complete IT onboarding package — laptop, accounts, badge, email, and system access.", category: "ONBOARDING", estimatedDelivery: "3-5 business days", approvalRequired: true },
-  { id: "11", name: "Storage Increase", description: "Request additional shared drive or cloud storage allocation.", category: "STORAGE", estimatedDelivery: "1-2 business days", approvalRequired: true },
-  { id: "12", name: "Monitor / Peripheral", description: "Request an additional monitor, keyboard, mouse, headset, or docking station.", category: "HARDWARE", estimatedDelivery: "2-3 business days", approvalRequired: false },
-];
-
 export default function ServiceCatalogPage() {
   const [catalog, setCatalog] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -51,11 +35,18 @@ export default function ServiceCatalogPage() {
 
   function loadCatalog() {
     setLoading(true);
+    setError(null);
     apiFetch("/service-catalog").then(data => {
       const items = Array.isArray(data) ? data : (data?.data || []);
-      setCatalog(items.length > 0 ? items : DEFAULT_CATALOG);
-    }).catch(() => {
-      setCatalog(DEFAULT_CATALOG);
+      // Normalize API fields for display (API stores `sla`; older UI used `estimatedDelivery`)
+      setCatalog(items.map((it: any) => ({
+        ...it,
+        estimatedDelivery: it.sla || it.estimatedDelivery || "As per SLA",
+        category: (it.category || "OTHER").toUpperCase(),
+      })));
+    }).catch((err: any) => {
+      setCatalog([]);
+      setError(err?.message || "Failed to load the service catalog. Please retry.");
     }).finally(() => setLoading(false));
   }
 
@@ -68,7 +59,12 @@ export default function ServiceCatalogPage() {
     setSuccess(null);
     try {
       await apiFetch(`/service-catalog/${requestModal.id}/request`, {
-        method: "POST", body: JSON.stringify({ notes: requestNotes, priority: "MEDIUM" }),
+        method: "POST",
+        body: JSON.stringify({
+          subject: `Service Request: ${requestModal.name}`,
+          description: requestNotes || requestModal.description || "",
+          priority: "MEDIUM",
+        }),
       });
       setSuccess(`Request submitted for "${requestModal.name}". A ticket has been created.`);
       setRequestModal(null); setRequestNotes("");
@@ -81,17 +77,25 @@ export default function ServiceCatalogPage() {
   async function handleSaveItem() {
     setSaving(true);
     setError(null);
+    // Map UI form fields to API contract (`sla` is the canonical field)
+    const payload = {
+      name: editForm.name,
+      description: editForm.description,
+      category: editForm.category,
+      sla: editForm.estimatedDelivery,
+      approvalRequired: editForm.approvalRequired,
+    };
     try {
       if (editModal?.id) {
         await apiFetch(`/service-catalog/${editModal.id}`, {
           method: "PATCH",
-          body: JSON.stringify(editForm),
+          body: JSON.stringify(payload),
         });
         setSuccess(`Service "${editForm.name}" updated.`);
       } else {
         await apiFetch("/service-catalog", {
           method: "POST",
-          body: JSON.stringify(editForm),
+          body: JSON.stringify(payload),
         });
         setSuccess(`Service "${editForm.name}" created.`);
       }
@@ -110,8 +114,8 @@ export default function ServiceCatalogPage() {
       await apiFetch(`/service-catalog/${id}`, { method: "DELETE" });
       setSuccess(`Service "${name}" deleted.`);
       loadCatalog();
-    } catch {
-      alert("Failed to delete service item.");
+    } catch (err: any) {
+      setError(err?.message || "Failed to delete service item.");
     }
   }
 

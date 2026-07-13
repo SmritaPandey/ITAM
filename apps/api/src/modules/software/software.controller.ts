@@ -93,6 +93,40 @@ export class SoftwareController {
     return this.softwareService.getByUser(userId, req.user.tenantId);
   }
 
+  @Get('harvest')
+  @Roles('Tenant Admin', 'IT Admin')
+  @ApiOperation({ summary: 'Unused software harvest recommendations (stale last-used)' })
+  async harvest(@Request() req: any, @Query('unusedDays') unusedDays?: string) {
+    return this.softwareService.getHarvestRecommendations(
+      req.user.tenantId,
+      unusedDays ? parseInt(unusedDays, 10) : 90,
+    );
+  }
+
+  @Post('harvest/reclaim')
+  @Roles('Tenant Admin', 'IT Admin')
+  @ApiOperation({ summary: 'Reclaim unused install — create ticket and optionally uninstall via agent' })
+  async reclaim(
+    @Request() req: any,
+    @Body() body: { installationId: string; createTicket?: boolean; uninstall?: boolean },
+  ) {
+    return this.softwareService.reclaimHarvest(req.user.tenantId, req.user.sub, body);
+  }
+
+  @Post('policy/push')
+  @Roles('Tenant Admin', 'IT Admin')
+  @ApiOperation({ summary: 'Push blacklist/whitelist software policy to all agents' })
+  async pushPolicy(@Request() req: any) {
+    return this.softwareService.pushSoftwarePolicyToAgents(req.user.tenantId);
+  }
+
+  @Post('sync')
+  @Roles('Tenant Admin', 'IT Admin')
+  @ApiOperation({ summary: 'Manually sync software inventory from discovery data' })
+  async sync(@Request() req: any) {
+    return this.softwareService.syncFromDiscovery(req.user.tenantId);
+  }
+
   @Get(':id')
   @Roles('Tenant Admin', 'IT Admin')
   @ApiOperation({ summary: 'Get software detail with version distribution and licenses' })
@@ -124,11 +158,12 @@ export class SoftwareController {
     return this.softwareService.getUsers(id, req.user.tenantId, page, limit);
   }
 
-  @Post('sync')
+  @Post(':id/enforce-blacklist')
   @Roles('Tenant Admin', 'IT Admin')
-  @ApiOperation({ summary: 'Manually sync software inventory from discovery data' })
-  async sync(@Request() req: any) {
-    return this.softwareService.syncFromDiscovery(req.user.tenantId);
+  @ApiOperation({ summary: 'Enqueue KILL_PROCESS / BLOCK_INSTALL on agents with this blacklisted software' })
+  async enforceBlacklist(@Request() req: any, @Param('id') id: string) {
+    const sw = await this.softwareService.findById(id, req.user.tenantId);
+    return this.softwareService.enforceBlacklistToAgents(req.user.tenantId, sw);
   }
 
   @Patch(':id')

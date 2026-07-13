@@ -1,5 +1,6 @@
-import { Controller, Get, Post, Patch, Delete, Body, Param, Query, UseGuards, Request } from '@nestjs/common';
-import { ApiTags, ApiBearerAuth, ApiOperation, ApiQuery } from '@nestjs/swagger';
+import { Controller, Get, Post, Patch, Delete, Body, Param, Query, UseGuards, Request, Res } from '@nestjs/common';
+import { ApiTags, ApiBearerAuth, ApiOperation, ApiQuery, ApiProduces } from '@nestjs/swagger';
+import type { Response } from 'express';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
@@ -84,7 +85,72 @@ export class AssetsController {
   @Get('attestation/pending')
   @Roles('Tenant Admin', 'IT Admin')
   @ApiOperation({ summary: 'List pending attestations' })
-  pendingAttestations(@Request() req: any) { return this.assetsService.getPendingAttestations(req.user.tenantId); }
+  pendingAttestations(@Request() req: any, @Query('campaign') campaign?: string) {
+    return this.assetsService.getPendingAttestations(req.user.tenantId, campaign);
+  }
+
+  @Get('attestation/campaigns')
+  @Roles('Tenant Admin', 'IT Admin')
+  @ApiOperation({ summary: 'List attestation campaigns with completion stats' })
+  attestationCampaigns(@Request() req: any) {
+    return this.assetsService.listAttestationCampaigns(req.user.tenantId);
+  }
+
+  @Post('attestation/campaigns')
+  @Roles('Tenant Admin', 'IT Admin')
+  @ApiOperation({ summary: 'Create attestation campaign (bulk assign certify requests)' })
+  createAttestationCampaign(
+    @Request() req: any,
+    @Body() body: { campaignName?: string; assetIds?: string[]; userIds?: string[] },
+  ) {
+    return this.assetsService.createAttestationCampaign(
+      req.user.tenantId,
+      body.campaignName || '',
+      { assetIds: body.assetIds, userIds: body.userIds },
+    );
+  }
+
+  @Post('attestation/remind')
+  @Roles('Tenant Admin', 'IT Admin')
+  @ApiOperation({ summary: 'Remind owners of pending attestations' })
+  remindAttestations(@Request() req: any, @Body() body: { campaignName?: string }) {
+    return this.assetsService.remindAttestations(req.user.tenantId, body?.campaignName);
+  }
+
+  @Post('attestation/:id/respond')
+  @Roles('*')
+  @ApiOperation({ summary: 'Respond to an attestation (CONFIRMED / LOST / TRANSFERRED)' })
+  respondAttestation(
+    @Request() req: any,
+    @Param('id') id: string,
+    @Body() body: { response: string; notes?: string },
+  ) {
+    return this.assetsService.respondAttestation(id, req.user.tenantId, body.response, body.notes);
+  }
+
+  @Post('depreciation/mass-run')
+  @Roles('Tenant Admin', 'IT Admin')
+  @ApiOperation({ summary: 'Recalculate currentValue for all assets with purchase price (queued)' })
+  massDepreciation(@Request() req: any, @Query('sync') sync?: string) {
+    if (sync === 'true') {
+      return this.assetsService.runMassDepreciation(req.user.tenantId);
+    }
+    return this.assetsService.enqueueMassDepreciation(req.user.tenantId);
+  }
+
+  @Get('depreciation/report')
+  @Roles('Tenant Admin', 'IT Admin')
+  @ApiOperation({ summary: 'Finance depreciation report' })
+  depreciationReport(@Request() req: any) {
+    return this.assetsService.financeDepreciationReport(req.user.tenantId);
+  }
+
+  @Get('lookup/rfid')
+  @Roles('*')
+  @ApiOperation({ summary: 'Lookup asset by RFID/NFC tag ID' })
+  lookupRfid(@Request() req: any, @Query('tag') tag: string) {
+    return this.assetsService.findByRfid(req.user.tenantId, tag);
+  }
 
   // ─── PARAMETERIZED ROUTES ─────────────────────────────────────────
 
@@ -132,9 +198,43 @@ export class AssetsController {
 
   @Get(':id/qr')
   @Roles('*')
-  @ApiOperation({ summary: 'Get asset QR and barcode telemetrics data' })
-  async getQrData(@Request() req: any, @Param('id') id: string) {
-    return this.assetsService.getQrData(id, req.user.tenantId);
+  @ApiOperation({ summary: 'Get asset QR code as PNG (scan URL) or JSON metadata' })
+  @ApiProduces('image/png', 'application/json')
+  @ApiQuery({ name: 'format', required: false, description: 'png (default) or json' })
+  async getQr(
+    @Request() req: any,
+    @Param('id') id: string,
+    @Query('format') format: string,
+    @Query('baseUrl') baseUrl: string,
+    @Res() res: Response,
+  ) {
+    const origin = baseUrl || process.env.APP_URL || process.env.FRONTEND_URL;
+    if (format === 'json') {
+      const data = await this.assetsService.getQrData(id, req.user.tenantId, origin);
+      return res.json(data);
+    }
+    const png = await this.assetsService.generateQrPng(id, req.user.tenantId, origin);
+    res.setHeader('Content-Type', 'image/png');
+    res.setHeader('Cache-Control', 'private, max-age=300');
+    res.setHeader('Content-Disposition', `inline; filename="asset-${id}-qr.png"`);
+    return res.send(png);
+  }
+
+  @Get(':id/barcode')
+  @Roles('*')
+  @ApiOperation({ summary: 'Get asset Code128 barcode as PNG' })
+  @ApiProduces('image/png')
+  async getBarcode(
+    @Request() req: any,
+    @Param('id') id: string,
+    @Res() res: Response,
+  ) {
+    const { buffer, barcode } = await this.assetsService.generateBarcodePng(id, req.user.tenantId);
+    res.setHeader('Content-Type', 'image/png');
+    res.setHeader('Cache-Control', 'private, max-age=300');
+    res.setHeader('X-Barcode-Value', barcode);
+    res.setHeader('Content-Disposition', `inline; filename="asset-${id}-barcode.png"`);
+    return res.send(buffer);
   }
 
   @Get(':id/relationships')
@@ -156,6 +256,13 @@ export class AssetsController {
   @ApiOperation({ summary: 'Calculate asset depreciation (straight-line or declining balance)' })
   async getDepreciation(@Request() req: any, @Param('id') id: string) {
     return this.assetsService.calculateDepreciation(id, req.user.tenantId);
+  }
+
+  @Get(':id/impact')
+  @Roles('*')
+  @ApiOperation({ summary: 'CMDB impact analysis — what breaks if this CI goes down' })
+  async getImpact(@Request() req: any, @Param('id') id: string) {
+    return this.assetsService.getImpactAnalysis(id, req.user.tenantId);
   }
 
   // ─── CHECK-IN / CHECK-OUT ──────────────────────────────────────────

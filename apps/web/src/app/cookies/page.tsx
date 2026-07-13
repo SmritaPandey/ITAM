@@ -11,32 +11,31 @@ export default function CookiePolicyPage() {
 
   const { theme, toggleTheme } = useTheme();
   const L = theme === "light";
-  const bg = L ? "#f9fafb" : "#020205";
-  const txt = L ? "#0f172a" : "#f3f4f6";
-  const muted = L ? "#475569" : "#8a8f98";
-  const border = L ? "rgba(15, 23, 42, 0.08)" : "rgba(255, 255, 255, 0.06)";
-  const card = L ? "rgba(255,255,255,0.7)" : "rgba(16, 22, 42, 0.65)";
-  const pTxt = L ? "#334155" : "#cbd5e1";
-  const codeColor = L ? "#0891b2" : "#22d3ee";
+  const bg = L ? "#f5f7f8" : "#070b10";
+  const txt = L ? "#0f172a" : "#f5f5f7";
+  const muted = L ? "#6b7280" : "#9f9fa0";
+  const border = L ? "rgba(15, 23, 42, 0.08)" : "rgba(255, 255, 255, 0.08)";
+  const card = L ? "#ffffff" : "rgba(18, 21, 26, 0.92)";
+  const pTxt = L ? "#475569" : "#cbd5e1";
+  const codeColor = L ? "#0e7490" : "#22d3ee";
 
   return (
-    <div style={{ minHeight: '100vh', background: bg, color: txt, fontFamily: "'Plus Jakarta Sans', 'Inter', system-ui, sans-serif", transition: 'background 0.5s, color 0.5s' }}>
+    <div style={{ minHeight: '100vh', background: bg, color: txt, fontFamily: "var(--font-body), 'DM Sans', system-ui, sans-serif", transition: 'background 0.4s, color 0.4s', overflowX: "hidden" }}>
       <Header theme={theme} onToggleTheme={toggleTheme} />
 
       <div style={{ position: "relative", overflowX: "hidden" }}>
-      {/* Background Ambient Glows */}
-      <div style={{ position: "absolute", top: "-10%", left: "50%", transform: "translateX(-50%)", width: "70%", height: "500px", background: "radial-gradient(ellipse at center, rgba(6,182,212,0.04) 0%, rgba(139,92,246,0.01) 50%, transparent 100%)", pointerEvents: "none", filter: "blur(100px)", zIndex: 0 }} />
+      <div aria-hidden style={{ position: "absolute", inset: "0 0 auto 0", height: 360, pointerEvents: "none", zIndex: 0, background: L ? "radial-gradient(ellipse 90% 70% at 50% -10%, rgba(6,182,212,0.12) 0%, transparent 55%), linear-gradient(180deg, #eef4f6 0%, #f5f7f8 70%)" : "radial-gradient(ellipse 90% 70% at 50% -10%, rgba(6,182,212,0.16) 0%, transparent 55%), linear-gradient(180deg, #0a1218 0%, #070b10 75%)" }} />
 
-      <div style={{ maxWidth: 840, margin: "0 auto", padding: "64px 24px 120px", paddingTop: 80, position: "relative", zIndex: 1 }}>
+      <div style={{ maxWidth: 840, margin: "0 auto", padding: "64px 24px 120px", paddingTop: 108, position: "relative", zIndex: 1 }}>
         <div style={{ marginBottom: 40 }}>
-          <div style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "6px 14px", borderRadius: 20, background: "rgba(6,182,212,0.05)", border: "1px solid rgba(6,182,212,0.15)", marginBottom: 16, fontSize: 11, fontWeight: 700, color: "#06b6d4", letterSpacing: "0.05em", textTransform: "uppercase" }}>
-            <Cookie size={11} /> Storage & First-Party Preferences
+          <div className="font-mono-label" style={{ display: "inline-block", padding: "8px 18px", borderRadius: 9999, background: L ? "rgba(15,23,42,0.04)" : "rgba(255,255,255,0.08)", border: `1px solid ${border}`, marginBottom: 16, fontSize: 11, color: muted }}>
+            Cookies · First-party storage
           </div>
-          <h1 style={{ fontSize: 40, fontWeight: 900, marginBottom: 8, letterSpacing: "-0.04em" }}>Cookie Policy</h1>
-          <p style={{ fontSize: 14, color: muted }}>Last updated: May 21, 2026 • Effective Date: May 21, 2026</p>
+          <h1 className="font-serif" style={{ fontSize: "clamp(36px, 5vw, 48px)", fontWeight: 400, marginBottom: 8, letterSpacing: "-0.02em", lineHeight: 0.95 }}>Cookie Policy</h1>
+          <p className="font-mono-label" style={{ fontSize: 11, color: muted, letterSpacing: "0.06em" }}>Updated May 21, 2026</p>
         </div>
 
-        <div style={{ background: card, backdropFilter: "blur(12px)", WebkitBackdropFilter: "blur(12px)", border: `1px solid ${border}`, borderRadius: 20, padding: "40px 48px", display: "flex", flexDirection: "column", gap: 32, lineHeight: 1.8, fontSize: 14, color: pTxt }}>
+        <div style={{ background: card, border: `1px solid ${border}`, borderRadius: 16, padding: "40px 48px", display: "flex", flexDirection: "column", gap: 32, lineHeight: 1.8, fontSize: 14, color: pTxt }}>
           
           <Section title="1. What Are Cookies & Session Identifiers?">
             Cookies are simple alphanumeric text strings saved onto your device by browser engines during website interactions. They assist services in remembering user parameters, login statuses, and preference details. 

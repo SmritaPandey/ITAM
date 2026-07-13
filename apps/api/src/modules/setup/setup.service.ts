@@ -45,11 +45,13 @@ export class SetupService {
       data: {
         name: data.organizationName,
         slug: data.organizationName.toLowerCase().replace(/[^a-z0-9]/g, '-').replace(/-+/g, '-'),
+        plan: process.env.DEPLOYMENT_MODE === 'onprem' ? 'ON_PREMISE' : 'STARTER',
         settings: {
           timezone: data.timezone || 'UTC',
           industry: data.industry || 'Technology',
           dateFormat: 'YYYY-MM-DD',
           businessHours: { start: '09:00', end: '18:00', days: [1, 2, 3, 4, 5] },
+          deploymentMode: process.env.DEPLOYMENT_MODE || 'saas',
         },
       },
     });

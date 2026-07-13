@@ -11,10 +11,10 @@ interface HeaderProps {
 }
 
 const NAV_SECTIONS = [
-  { label: "Platform", hash: "nerve-system" },
-  { label: "Security", hash: "immune-system" },
-  { label: "Pricing", hash: "pricing" },
+  { label: "Platform", hash: "platform" },
+  { label: "Security", hash: "security" },
   { label: "Modules", hash: "modules-grid" },
+  { label: "Pricing", hash: "pricing" },
 ];
 
 const NAV_PAGES = [
@@ -60,7 +60,7 @@ export default function Header({ theme, onToggleTheme }: HeaderProps) {
         transition: "background 0.3s"
       }}>
         <Link href="/" style={{ display: "flex", alignItems: "center", textDecoration: "none", color: "inherit" }}>
-          <Logo size={28} glow={!L} theme={theme} />
+          <Logo size={38} glow={!L} theme={theme} />
         </Link>
 
         {/* Desktop Navigation */}
@@ -82,8 +82,11 @@ export default function Header({ theme, onToggleTheme }: HeaderProps) {
             {L ? <Moon size={15} /> : <Sun size={15} />}
           </button>
 
-          <button onClick={() => router.push("/login")} style={{ padding: "8px 20px", borderRadius: 8, border: "none", background: "linear-gradient(135deg, #06b6d4, #0891b2)", color: "white", fontSize: 13, fontWeight: 800, cursor: "pointer", boxShadow: "0 4px 16px rgba(6, 182, 212, 0.2)", display: "flex", alignItems: "center", gap: 6, letterSpacing: "-0.01em" }}>
-            Sign In <ArrowRight size={13} />
+          <button onClick={() => router.push("/login")} style={{ padding: "8px 16px", borderRadius: 8, border: `1px solid ${border}`, background: "transparent", color: L ? "#0f172a" : "#f3f4f6", fontSize: 13, fontWeight: 500, cursor: "pointer", letterSpacing: "-0.01em" }}>
+            Login
+          </button>
+          <button onClick={() => router.push("/register")} style={{ padding: "8px 18px", borderRadius: 8, border: "none", background: L ? "#0f172a" : "#ffffff", color: L ? "#ffffff" : "#0f172a", fontSize: 13, fontWeight: 500, cursor: "pointer", display: "flex", alignItems: "center", gap: 6, letterSpacing: "-0.01em", transition: "opacity 0.2s ease" }}>
+            Start trial <ArrowRight size={13} />
           </button>
         </div>
 
@@ -153,8 +156,11 @@ export default function Header({ theme, onToggleTheme }: HeaderProps) {
             {L ? <Moon size={16} /> : <Sun size={16} />}
             {L ? "Dark Mode" : "Light Mode"}
           </button>
-          <button onClick={() => { setMobileOpen(false); router.push("/login"); }} style={{ width: "100%", padding: "14px", borderRadius: 10, border: "none", background: "linear-gradient(135deg, #06b6d4, #0891b2)", color: "white", fontSize: 15, fontWeight: 800, cursor: "pointer", boxShadow: "0 4px 16px rgba(6, 182, 212, 0.3)", display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}>
-            Sign In <ArrowRight size={16} />
+          <button onClick={() => { setMobileOpen(false); router.push("/login"); }} style={{ width: "100%", padding: "12px", borderRadius: 10, border: `1px solid ${border}`, background: "transparent", color: L ? "#0f172a" : "#f3f4f6", fontSize: 14, fontWeight: 700, cursor: "pointer" }}>
+            Login
+          </button>
+          <button onClick={() => { setMobileOpen(false); router.push("/register"); }} style={{ width: "100%", padding: "14px", borderRadius: 8, border: "none", background: L ? "#0f172a" : "#ffffff", color: L ? "#ffffff" : "#0f172a", fontSize: 15, fontWeight: 500, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}>
+            Start trial <ArrowRight size={16} />
           </button>
         </div>
       </div>

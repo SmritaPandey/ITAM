@@ -7,9 +7,10 @@ import {
   AlertTriangle, Zap, Check, ChevronDown, ChevronRight as ChevronRightIcon,
   Terminal
 } from "lucide-react";
-import { apiFetch, getToken, getApiBase } from "@/lib/api";
+import { apiFetch, getToken, getApiBase, discoveryApi } from "@/lib/api";
 import { useRealtimeEvents } from "@/lib/useRealtimeEvents";
 import { PageHelp, Tip } from "@/components/HelpSystem";
+import EmptyState from "@/components/EmptyState";
 
 const SCAN_TYPES = [
   { value: "PING_SWEEP", label: "Ping Sweep", desc: "ICMP host alive check" },
@@ -46,7 +47,7 @@ export default function DiscoveryPage() {
   const [customSubnet, setCustomSubnet] = useState("");
   const [scanType, setScanType] = useState("PING_SWEEP");
   const [loading, setLoading] = useState(true);
-  const [tab, setTab] = useState<"scans" | "pending" | "schedules" | "credentials" | "agents">("scans");
+  const [tab, setTab] = useState<"scans" | "pending" | "schedules" | "credentials" | "agents" | "ad" | "ot">("scans");
   const [selectedDevices, setSelectedDevices] = useState<Set<string>>(new Set());
   const [expandedDevice, setExpandedDevice] = useState<string | null>(null);
   const [enriching, setEnriching] = useState<string | null>(null);
@@ -58,16 +59,43 @@ export default function DiscoveryPage() {
   const [wizardStep, setWizardStep] = useState<1 | 2 | 3>(1);
   const [osDetected, setOsDetected] = useState<"macos" | "windows" | "linux">("macos");
   const [pairedAgent, setPairedAgent] = useState<any>(null);
+  const [downloadPackage, setDownloadPackage] = useState<"zip" | "desktop" | "service">("zip");
 
-  // SSH remote push deployment states
+  // AD / LDAP sync
+  const [adConfig, setAdConfig] = useState<any>(null);
+  const [adForm, setAdForm] = useState({
+    enabled: false, host: "", port: 389, useTls: false, bindDn: "", password: "",
+    baseDns: "", computerFilter: "", userFilter: "", schedule: "0 */6 * * *", credentialId: "",
+  });
+  const [adBusy, setAdBusy] = useState(false);
+  const [adMsg, setAdMsg] = useState("");
+
+  // OT probes
+  const [otCaps, setOtCaps] = useState<any>(null);
+  const [modbusTargets, setModbusTargets] = useState("192.168.1.50:502");
+  const [bacnetBroadcast, setBacnetBroadcast] = useState("255.255.255.255");
+  const [otBusy, setOtBusy] = useState(false);
+  const [otResult, setOtResult] = useState<any>(null);
+
+  // Agent UEM controls
+  const [uemFilePath, setUemFilePath] = useState("/var/log/qs-discovery-agent.log");
+  const [uemRing, setUemRing] = useState("ALL");
+  const [uemBusy, setUemBusy] = useState(false);
+  const [uemMsg, setUemMsg] = useState("");
+  const [scriptList, setScriptList] = useState<any[]>([]);
+  const [selectedScriptId, setSelectedScriptId] = useState("");
+
+  // Remote push deployment states (SSH / WinRM)
   const [remoteIp, setRemoteIp] = useState("");
   const [remoteCredId, setRemoteCredId] = useState("");
+  const [remoteDeployMethod, setRemoteDeployMethod] = useState<"ssh" | "winrm">("ssh");
   const [deployingAgent, setDeployingAgent] = useState(false);
   const [remoteLogs, setRemoteLogs] = useState<string[]>([]);
 
   // Bulk agent deploy states
   const [showBulkDeployModal, setShowBulkDeployModal] = useState(false);
   const [bulkDeployCredId, setBulkDeployCredId] = useState("");
+  const [bulkDeployMethod, setBulkDeployMethod] = useState<"ssh" | "winrm">("ssh");
   const [bulkDeploying, setBulkDeploying] = useState(false);
   const [bulkDeployResults, setBulkDeployResults] = useState<any>(null);
 
@@ -127,6 +155,41 @@ export default function DiscoveryPage() {
       else if (ua.includes("linux")) setOsDetected("linux");
     }
   }, []);
+
+  useEffect(() => {
+    if (tab === "ad") {
+      discoveryApi.getAdSync().then((cfg) => {
+        setAdConfig(cfg);
+        setAdForm({
+          enabled: !!cfg.enabled,
+          host: cfg.host || "",
+          port: cfg.port || 389,
+          useTls: !!cfg.useTls,
+          bindDn: cfg.bindDn || "",
+          password: "",
+          baseDns: Array.isArray(cfg.baseDns) ? cfg.baseDns.join("\n") : "",
+          computerFilter: cfg.computerFilter || "",
+          userFilter: cfg.userFilter || "",
+          schedule: cfg.schedule || "0 */6 * * *",
+          credentialId: cfg.credentialId || "",
+        });
+      }).catch(() => setAdConfig(null));
+    }
+    if (tab === "ot") {
+      discoveryApi.otCapabilities().then(setOtCaps).catch(() => setOtCaps(null));
+    }
+  }, [tab]);
+
+  useEffect(() => {
+    if (expandedAgent) {
+      apiFetch("/automation/scripts").then((rows) => {
+        const approved = (Array.isArray(rows) ? rows : []).filter((s: any) => s.approvalStatus === "APPROVED");
+        setScriptList(approved);
+      }).catch(() => setScriptList([]));
+      const agent = agents.find((a) => a.id === expandedAgent);
+      setUemRing((agent?.systemInfo as any)?.deployRing || "ALL");
+    }
+  }, [expandedAgent, agents]);
 
   // Poll for agent registrations when in Step 3
   useEffect(() => {
@@ -276,7 +339,7 @@ export default function DiscoveryPage() {
       else { credentials.password = credPassword; }
     } else if (credType === "SNMP_V2C" || credType === "SNMP") {
       credentials.community = credCommunity;
-    } else if (credType === "WMI") {
+    } else if (credType === "WMI" || credType === "WINRM") {
       credentials.username = credUsername;
       credentials.password = credPassword;
     }
@@ -355,27 +418,42 @@ export default function DiscoveryPage() {
       return;
     }
     setDeployingAgent(true);
-    setRemoteLogs([`[${new Date().toLocaleTimeString()}] 🚀 Initiating secure remote push deployment...`]);
+    const methodLabel = remoteDeployMethod === "winrm" ? "WinRM" : "SSH";
+    setRemoteLogs([`[${new Date().toLocaleTimeString()}] 🚀 Initiating ${methodLabel} remote push deployment...`]);
 
     try {
       const response = await apiFetch("/discovery/agents/deploy-remote", {
         method: "POST",
-        body: JSON.stringify({ targetIp: remoteIp, credentialId: remoteCredId || undefined }),
+        body: JSON.stringify({
+          targetIp: remoteIp,
+          credentialId: remoteCredId || undefined,
+          method: remoteDeployMethod,
+          platform: remoteDeployMethod === "winrm" ? "windows" : undefined,
+        }),
       });
 
-      if (response && response.success) {
-        const serverLogs = response.logs || [];
-        let currentLogs = [`[${new Date().toLocaleTimeString()}] 🚀 Initiating secure remote push deployment...`];
-        setRemoteLogs(currentLogs);
+      const ok = response && (response.success === true || response.status === "SUCCESS");
+      const serverLogs: string[] = response?.logs || [];
+      let currentLogs = [`[${new Date().toLocaleTimeString()}] 🚀 Initiating ${methodLabel} remote push deployment...`];
+      setRemoteLogs(currentLogs);
 
-        for (let i = 0; i < serverLogs.length; i++) {
-          await new Promise(resolve => setTimeout(resolve, 450));
-          currentLogs = [...currentLogs, serverLogs[i]];
-          setRemoteLogs(currentLogs);
-        }
+      for (let i = 0; i < serverLogs.length; i++) {
+        await new Promise(resolve => setTimeout(resolve, 350));
+        currentLogs = [...currentLogs, serverLogs[i]];
+        setRemoteLogs(currentLogs);
+      }
+
+      if (ok) {
+        setRemoteLogs(prev => [
+          ...prev,
+          `[${new Date().toLocaleTimeString()}] ✅ ${methodLabel} deploy SUCCESS on ${remoteIp}`,
+        ]);
         await refresh();
       } else {
-        setRemoteLogs(prev => [...prev, `[${new Date().toLocaleTimeString()}] ❌ Remote push execution failed: Server returned unsuccessful status.`]);
+        setRemoteLogs(prev => [
+          ...prev,
+          `[${new Date().toLocaleTimeString()}] ❌ ${methodLabel} deploy FAILED on ${remoteIp}: ${response?.error || "unsuccessful status"}`,
+        ]);
       }
     } catch (err: any) {
       setRemoteLogs(prev => [...prev, `[${new Date().toLocaleTimeString()}] ❌ API Network Error: ${err.message || err}`]);
@@ -387,7 +465,11 @@ export default function DiscoveryPage() {
   async function triggerBulkDeploy() {
     const selectedIps = pending
       .filter((d: any) => selectedDevices.has(d.id) && d.ipAddress)
-      .map((d: any) => ({ ip: d.ipAddress }));
+      .map((d: any) => ({
+        ip: d.ipAddress,
+        platform: d.osGuess || d.platform || d.deviceType || undefined,
+        method: bulkDeployMethod,
+      }));
     if (selectedIps.length === 0) { alert("No valid IP addresses in selected devices."); return; }
 
     setBulkDeploying(true);
@@ -395,12 +477,16 @@ export default function DiscoveryPage() {
     try {
       const response = await apiFetch("/discovery/agents/deploy-remote/bulk", {
         method: "POST",
-        body: JSON.stringify({ targets: selectedIps, defaultCredentialId: bulkDeployCredId || undefined }),
+        body: JSON.stringify({
+          targets: selectedIps,
+          defaultCredentialId: bulkDeployCredId || undefined,
+          method: bulkDeployMethod,
+        }),
       });
       setBulkDeployResults(response);
       await refresh();
     } catch (err: any) {
-      setBulkDeployResults({ total: selectedIps.length, succeeded: 0, failed: selectedIps.length, error: err.message });
+      setBulkDeployResults({ total: selectedIps.length, succeeded: 0, failed: selectedIps.length, error: err.message, results: [] });
     } finally {
       setBulkDeploying(false);
     }
@@ -546,21 +632,33 @@ export default function DiscoveryPage() {
     }
   }
 
-  async function downloadAgentZip() {
+  async function downloadAgentPackage(kind: "zip" | "desktop" | "service" = downloadPackage) {
     setDownloading(true);
     try {
       const token = getToken();
-      const res = await fetch(`${getApiBase()}/discovery/agents/download`, {
+      const path =
+        kind === "desktop"
+          ? "/discovery/agents/download/desktop"
+          : kind === "service"
+            ? "/discovery/agents/download/service"
+            : "/discovery/agents/download";
+      const filename =
+        kind === "desktop"
+          ? "qs-discovery-agent-desktop.zip"
+          : kind === "service"
+            ? "qs-discovery-agent-service.zip"
+            : "qs-discovery-agent.zip";
+      const res = await fetch(`${getApiBase()}${path}`, {
         headers: {
           Authorization: `Bearer ${token}`,
         },
       });
-      if (!res.ok) throw new Error("Failed to compile and download zip from server.");
+      if (!res.ok) throw new Error(`Failed to download ${kind} package from server.`);
       const blob = await res.blob();
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = "qs-discovery-agent.zip";
+      a.download = filename;
       document.body.appendChild(a);
       a.click();
       a.remove();
@@ -569,6 +667,145 @@ export default function DiscoveryPage() {
       alert(`Download failed: ${err.message}`);
     } finally {
       setDownloading(false);
+    }
+  }
+
+  async function downloadAgentZip() {
+    return downloadAgentPackage("zip");
+  }
+
+  async function saveAdConfig() {
+    setAdBusy(true);
+    setAdMsg("");
+    try {
+      const body: any = {
+        enabled: adForm.enabled,
+        host: adForm.host.trim(),
+        port: Number(adForm.port) || 389,
+        useTls: adForm.useTls,
+        bindDn: adForm.bindDn.trim(),
+        baseDns: adForm.baseDns.split(/[\n,;]+/).map((s) => s.trim()).filter(Boolean),
+        schedule: adForm.schedule || "0 */6 * * *",
+      };
+      if (adForm.computerFilter) body.computerFilter = adForm.computerFilter;
+      if (adForm.userFilter) body.userFilter = adForm.userFilter;
+      if (adForm.credentialId) body.credentialId = adForm.credentialId;
+      if (adForm.password) body.password = adForm.password;
+      const cfg = await discoveryApi.updateAdSync(body);
+      setAdConfig(cfg);
+      setAdMsg("AD sync configuration saved.");
+      setAdForm((f) => ({ ...f, password: "" }));
+    } catch (err: any) {
+      setAdMsg(err.message || "Failed to save AD config");
+    } finally {
+      setAdBusy(false);
+    }
+  }
+
+  async function runAdSyncNow() {
+    setAdBusy(true);
+    setAdMsg("");
+    try {
+      const result = await discoveryApi.runAdSync();
+      setAdMsg(result.status || `Synced ${result.computers ?? 0} computers, ${result.users ?? 0} users`);
+      const cfg = await discoveryApi.getAdSync();
+      setAdConfig(cfg);
+    } catch (err: any) {
+      setAdMsg(err.message || "AD sync failed");
+    } finally {
+      setAdBusy(false);
+    }
+  }
+
+  async function runModbusProbe() {
+    setOtBusy(true);
+    setOtResult(null);
+    try {
+      const targets = modbusTargets.split(/[\n,;]+/).map((line) => {
+        const [host, portStr] = line.trim().split(":");
+        return { host: host.trim(), port: portStr ? Number(portStr) : 502 };
+      }).filter((t) => t.host);
+      const result = await discoveryApi.probeModbus(targets);
+      setOtResult(result);
+      await refresh();
+    } catch (err: any) {
+      setOtResult({ error: err.message });
+    } finally {
+      setOtBusy(false);
+    }
+  }
+
+  async function runBacnetProbe() {
+    setOtBusy(true);
+    setOtResult(null);
+    try {
+      const result = await discoveryApi.probeBacnet({ broadcastAddress: bacnetBroadcast || "255.255.255.255" });
+      setOtResult(result);
+      await refresh();
+    } catch (err: any) {
+      setOtResult({ error: err.message });
+    } finally {
+      setOtBusy(false);
+    }
+  }
+
+  async function uemSetRing(agentId: string) {
+    setUemBusy(true);
+    setUemMsg("");
+    try {
+      await discoveryApi.setDeployRing(agentId, uemRing);
+      setUemMsg(`Deploy ring set to ${uemRing}`);
+      await refresh();
+    } catch (err: any) {
+      setUemMsg(err.message || "Failed to set deploy ring");
+    } finally {
+      setUemBusy(false);
+    }
+  }
+
+  async function uemPullLogs(agentId: string) {
+    setUemBusy(true);
+    setUemMsg("");
+    try {
+      const r = await discoveryApi.filePull(agentId, uemFilePath || "/var/log/qs-discovery-agent.log");
+      setUemMsg(r.message || `File pull queued (${r.pullId || "ok"}). Results appear after next heartbeat.`);
+    } catch (err: any) {
+      setUemMsg(err.message || "File pull failed");
+    } finally {
+      setUemBusy(false);
+    }
+  }
+
+  async function uemRemoteAssist(agentId: string) {
+    setUemBusy(true);
+    setUemMsg("");
+    try {
+      const r = await discoveryApi.remoteAssist(agentId);
+      setUemMsg(r.deepLink || r.message || JSON.stringify(r));
+      if (r.deepLink && typeof window !== "undefined") {
+        window.open(r.deepLink, "_blank");
+      }
+    } catch (err: any) {
+      setUemMsg(err.message || "Remote assist failed");
+    } finally {
+      setUemBusy(false);
+    }
+  }
+
+  async function uemRunScript(agentId: string) {
+    if (!selectedScriptId) {
+      setUemMsg("Select an approved script first");
+      return;
+    }
+    setUemBusy(true);
+    setUemMsg("");
+    try {
+      const r = await discoveryApi.runScript(agentId, selectedScriptId);
+      setUemMsg(r.message || `Script queued (${r.executionId})`);
+    } catch (err: any) {
+      setUemMsg(err.message || "Script run failed");
+    } finally {
+      setUemBusy(false);
     }
   }
 
@@ -680,6 +917,8 @@ export default function DiscoveryPage() {
           { key: "schedules" as const, label: "Schedules", icon: <Calendar size={12} />, count: schedules.length },
           { key: "credentials" as const, label: "Credential Vault", icon: <Key size={12} />, count: credentials.length },
           { key: "agents" as const, label: "Agents", icon: <Bot size={12} />, count: agents.length },
+          { key: "ad" as const, label: "AD / LDAP", icon: <Shield size={12} />, count: 0 },
+          { key: "ot" as const, label: "OT Probes", icon: <Zap size={12} />, count: 0 },
         ].map(t => (
           <button key={t.key} onClick={() => setTab(t.key)}
             className={`btn ${tab === t.key ? "btn-primary" : "btn-secondary"}`}
@@ -1146,16 +1385,17 @@ export default function DiscoveryPage() {
                     <option value="SSH_KEY">SSH (Private Key)</option>
                     <option value="SNMP_V2C">SNMP v2c</option>
                     <option value="WMI">WMI (Windows)</option>
+                    <option value="WINRM">WinRM (Windows)</option>
                   </select>
                 </div>
-                {(credType === "SSH" || credType === "SSH_KEY" || credType === "WMI") && (
+                {(credType === "SSH" || credType === "SSH_KEY" || credType === "WMI" || credType === "WINRM") && (
                   <div>
                     <label style={{ fontSize: 11, fontWeight: 600, color: "var(--text-secondary)", display: "block", marginBottom: 4 }}>Username</label>
-                    <input value={credUsername} onChange={e => setCredUsername(e.target.value)} placeholder={credType === "WMI" ? "DOMAIN\\Admin" : "root"}
+                    <input value={credUsername} onChange={e => setCredUsername(e.target.value)} placeholder={credType === "WMI" || credType === "WINRM" ? "DOMAIN\\Admin" : "root"}
                       style={{ width: "100%", padding: "8px 12px", background: "rgba(0,0,0,0.2)", border: "1px solid var(--border-primary)", borderRadius: 6, fontSize: 12, color: "#fff", outline: "none" }} />
                   </div>
                 )}
-                {(credType === "SSH" || credType === "WMI") && (
+                {(credType === "SSH" || credType === "WMI" || credType === "WINRM") && (
                   <div>
                     <label style={{ fontSize: 11, fontWeight: 600, color: "var(--text-secondary)", display: "block", marginBottom: 4 }}>Password</label>
                     <input type="password" value={credPassword} onChange={e => setCredPassword(e.target.value)} placeholder="••••••••"
@@ -1199,7 +1439,7 @@ export default function DiscoveryPage() {
               <div style={{ textAlign: "center", padding: 48, color: "var(--text-tertiary)" }}>
                 <Key size={36} style={{ margin: "0 auto 12px" }} />
                 <div style={{ fontSize: 14, fontWeight: 600 }}>No scan credentials</div>
-                <p style={{ fontSize: 12, marginBottom: 16 }}>Add SSH, SNMP, or WMI credentials for agentless scanning</p>
+                <p style={{ fontSize: 12, marginBottom: 16 }}>Add SSH, SNMP, WMI, or WinRM credentials for scanning and remote agent deploy</p>
                 {!showCredForm && (
                   <button className="btn btn-primary" onClick={() => setShowCredForm(true)} style={{ padding: "8px 20px", fontSize: 12 }}>
                     <Plus size={14} /> Add Credential
@@ -1277,7 +1517,7 @@ export default function DiscoveryPage() {
                   }}
                   style={{ fontSize: 11, padding: "6px 12px" }}
                 >
-                  📡 Remote SSH Push
+                  📡 Remote Push
                 </button>
                 <button
                   className={`btn ${setupMethod === "bash" ? "btn-primary" : "btn-secondary"}`}
@@ -1347,6 +1587,31 @@ export default function DiscoveryPage() {
                     </p>
                   </div>
 
+                  {/* Package type tabs — real download endpoints */}
+                  <div style={{ display: "flex", justifyContent: "center", gap: 8, marginBottom: 8 }}>
+                    {([
+                      { id: "desktop" as const, label: "Desktop App", hint: "/discovery/agents/download/desktop" },
+                      { id: "service" as const, label: "Service Installer", hint: "/discovery/agents/download/service" },
+                      { id: "zip" as const, label: "ZIP", hint: "/discovery/agents/download" },
+                    ]).map((pkg) => (
+                      <button
+                        key={pkg.id}
+                        type="button"
+                        onClick={() => setDownloadPackage(pkg.id)}
+                        className={`btn ${downloadPackage === pkg.id ? "btn-primary" : "btn-secondary"}`}
+                        style={{ fontSize: 11, padding: "8px 14px" }}
+                        title={pkg.hint}
+                      >
+                        {pkg.label}
+                      </button>
+                    ))}
+                  </div>
+                  <div style={{ textAlign: "center", fontSize: 11, color: "var(--text-tertiary)", marginBottom: 12 }}>
+                    {downloadPackage === "desktop" && "Electron tray app sources + paired config (build with npm run dist)."}
+                    {downloadPackage === "service" && "systemd / launchd / Windows service scripts + paired config."}
+                    {downloadPackage === "zip" && "Portable ZIP with launchers for macOS, Windows, and Linux."}
+                  </div>
+
                   {/* Huge Premium Primary Download Button for Detected OS */}
                   <div style={{
                     display: "flex",
@@ -1381,7 +1646,7 @@ export default function DiscoveryPage() {
                     <button
                       className="btn btn-primary"
                       onClick={async () => {
-                        await downloadAgentZip();
+                        await downloadAgentPackage(downloadPackage);
                         setWizardStep(2);
                       }}
                       disabled={downloading}
@@ -1409,7 +1674,7 @@ export default function DiscoveryPage() {
                         </>
                       ) : (
                         <>
-                          Download for {osDetected === "macos" ? "macOS" : osDetected === "windows" ? "Windows" : "Linux"} (Detected)
+                          Download {downloadPackage === "desktop" ? "Desktop App" : downloadPackage === "service" ? "Service Installer" : `ZIP for ${osDetected === "macos" ? "macOS" : osDetected === "windows" ? "Windows" : "Linux"}`}
                           <ArrowRight size={16} />
                         </>
                       )}
@@ -1846,16 +2111,56 @@ export default function DiscoveryPage() {
                 <div style={{ textAlign: "center", marginBottom: 24 }}>
                   <h4 style={{ fontSize: 16, fontWeight: 700, color: "var(--text-primary)", display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}>
                     <Server size={18} style={{ color: "var(--brand-400)" }} />
-                    Secure Remote SSH Push Agent Deployer
+                    Secure Remote Agent Push
                   </h4>
-                  <p style={{ fontSize: 12, color: "var(--text-secondary)", marginTop: 6, maxWidth: 500, margin: "6px auto 0" }}>
-                    Deploy the discovery agent remotely onto any target host in your network. The system will securely connect over SSH, stage files, verify the Node.js runtime, and register a persistent background daemon.
+                  <p style={{ fontSize: 12, color: "var(--text-secondary)", marginTop: 6, maxWidth: 520, margin: "6px auto 0" }}>
+                    Deploy the discovery agent remotely over SSH (Linux/macOS) or WinRM (Windows). The API stages the agent zip with a real enrollment JWT, then installs a persistent background task/service.
                   </p>
                 </div>
 
                 <div style={{ display: "grid", gridTemplateColumns: "1fr 1.5fr", gap: 24, alignItems: "start" }}>
                   {/* Form fields */}
                   <div style={{ display: "flex", flexDirection: "column", gap: 16, background: "rgba(0,0,0,0.1)", padding: 20, borderRadius: 12, border: "1px solid var(--border-primary)" }}>
+                    <div>
+                      <label style={{ display: "block", fontSize: 11, fontWeight: 700, textTransform: "uppercase", color: "var(--text-secondary)", marginBottom: 8 }}>
+                        Deploy Method
+                      </label>
+                      <div style={{ display: "flex", gap: 8 }}>
+                        {([
+                          { id: "ssh" as const, label: "SSH" },
+                          { id: "winrm" as const, label: "WinRM" },
+                        ]).map((m) => (
+                          <button
+                            key={m.id}
+                            type="button"
+                            disabled={deployingAgent}
+                            onClick={() => {
+                              setRemoteDeployMethod(m.id);
+                              setRemoteCredId("");
+                            }}
+                            style={{
+                              flex: 1,
+                              padding: "10px 12px",
+                              borderRadius: 8,
+                              border: remoteDeployMethod === m.id ? "1px solid rgba(6,182,212,0.5)" : "1px solid var(--border-primary)",
+                              background: remoteDeployMethod === m.id ? "rgba(6,182,212,0.15)" : "rgba(0,0,0,0.2)",
+                              color: remoteDeployMethod === m.id ? "var(--brand-300)" : "var(--text-secondary)",
+                              fontSize: 12,
+                              fontWeight: 700,
+                              cursor: "pointer",
+                            }}
+                          >
+                            {m.label}
+                          </button>
+                        ))}
+                      </div>
+                      <span style={{ fontSize: 10, color: "var(--text-tertiary)", marginTop: 6, display: "block" }}>
+                        {remoteDeployMethod === "winrm"
+                          ? "Requires WinRM on the target (Enable-PSRemoting) and pwsh/powershell on the API host."
+                          : "Requires SSH reachability and vault SSH credentials (password or key)."}
+                      </span>
+                    </div>
+
                     <div>
                       <label style={{ display: "block", fontSize: 11, fontWeight: 700, textTransform: "uppercase", color: "var(--text-secondary)", marginBottom: 8 }}>
                         Target Host IP Address / Domain
@@ -1881,7 +2186,7 @@ export default function DiscoveryPage() {
 
                     <div>
                       <label style={{ display: "block", fontSize: 11, fontWeight: 700, textTransform: "uppercase", color: "var(--text-secondary)", marginBottom: 8 }}>
-                        SSH Access Credentials (from Vault)
+                        {remoteDeployMethod === "winrm" ? "WinRM / WMI Credentials (from Vault)" : "SSH Access Credentials (from Vault)"}
                       </label>
                       <select
                         value={remoteCredId}
@@ -1898,9 +2203,19 @@ export default function DiscoveryPage() {
                           outline: "none"
                         }}
                       >
-                        <option value="">-- Use default SSH Keys / Public Auth --</option>
+                        <option value="">
+                          {remoteDeployMethod === "winrm"
+                            ? "-- Auto-pick WMI/WinRM credential --"
+                            : "-- Use default SSH Keys / Public Auth --"}
+                        </option>
                         {credentials
-                          .filter((c: any) => c.type && (c.type.startsWith("SSH") || c.type.includes("KEY")))
+                          .filter((c: any) => {
+                            if (!c.type) return false;
+                            if (remoteDeployMethod === "winrm") {
+                              return ["WMI", "WINRM", "WMI_PASSWORD"].includes(c.type) || c.type.includes("WMI") || c.type.includes("WINRM");
+                            }
+                            return c.type.startsWith("SSH") || c.type.includes("KEY");
+                          })
                           .map((c: any) => (
                             <option key={c.id} value={c.id}>
                               {c.name} ({c.type})
@@ -1940,7 +2255,7 @@ export default function DiscoveryPage() {
                       ) : (
                         <>
                           <Zap size={14} />
-                          Trigger SSH Remote Push Deploy
+                          Trigger {remoteDeployMethod === "winrm" ? "WinRM" : "SSH"} Remote Push Deploy
                         </>
                       )}
                     </button>
@@ -1979,18 +2294,18 @@ export default function DiscoveryPage() {
                     }}>
                       {remoteLogs.length === 0 ? (
                         <div style={{ color: "var(--text-tertiary)", textAlign: "center", padding: "100px 0", fontSize: 11 }}>
-                          Ready to deploy. Input target IP and click Deploy above to initiate SSH secure push.
+                          Ready to deploy. Choose SSH or WinRM, enter a target IP, then click Deploy.
                         </div>
                       ) : (
                         remoteLogs.map((line, idx) => {
                           let color = "var(--text-secondary)";
-                          if (line.includes("Success") || line.includes("successfully") || line.includes("complete") || line.includes("🎉") || line.includes("🟢")) {
+                          if (line.includes("Success") || line.includes("successfully") || line.includes("complete") || line.includes("🎉") || line.includes("🟢") || line.includes("[OK]") || line.includes("✅")) {
                             color = "#10b981"; // green
-                          } else if (line.includes("⚠️") || line.includes("Warning") || line.includes("No scan credential")) {
+                          } else if (line.includes("⚠️") || line.includes("Warning") || line.includes("[WARN]") || line.includes("No scan credential") || line.includes("[HINT]")) {
                             color = "#f59e0b"; // amber
-                          } else if (line.includes("❌") || line.includes("Failed") || line.includes("failed") || line.includes("Error")) {
+                          } else if (line.includes("❌") || line.includes("Failed") || line.includes("failed") || line.includes("Error") || line.includes("[FAIL]")) {
                             color = "#ef4444"; // red
-                          } else if (line.includes("🚀") || line.includes("📡") || line.includes(" Establishing ") || line.includes(" Attempting ")) {
+                          } else if (line.includes("🚀") || line.includes("📡") || line.includes(" Establishing ") || line.includes(" Attempting ") || line.includes("[INFO]")) {
                             color = "var(--brand-300)"; // cyan
                           }
                           return (
@@ -2035,6 +2350,7 @@ export default function DiscoveryPage() {
                       <th>IP Address</th>
                       <th>Platform</th>
                       <th>Version</th>
+                      <th>Ring</th>
                       <th>Status</th>
                       <th>Last Heartbeat</th>
                     </tr>
@@ -2066,6 +2382,7 @@ export default function DiscoveryPage() {
                             <td><code style={{ fontSize: 11, color: "var(--brand-400)" }}>{a.ipAddress}</code></td>
                             <td style={{ fontSize: 11 }}>{a.platform}</td>
                             <td style={{ fontSize: 11, fontFamily: "monospace" }}>{a.agentVersion}</td>
+                            <td><span className="badge cyan" style={{ fontSize: 9 }}>{(a.systemInfo as any)?.deployRing || "ALL"}</span></td>
                             <td>
                               <span className={`badge ${a.status === "ONLINE" ? "green" : a.status === "STALE" ? "amber" : "red"}`} style={{ fontSize: 10 }}>
                                 {a.status}
@@ -2077,7 +2394,7 @@ export default function DiscoveryPage() {
                           </tr>
                           {isExpanded && (
                             <tr>
-                              <td colSpan={7} style={{ background: "rgba(0,0,0,0.1)", padding: "20px 24px" }}>
+                              <td colSpan={8} style={{ background: "rgba(0,0,0,0.1)", padding: "20px 24px" }}>
                                 <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 24 }}>
                                   
                                   {/* Left: CPU, Memory, OS Specs */}
@@ -2198,6 +2515,47 @@ export default function DiscoveryPage() {
                                         </div>
                                       </div>
 
+                                      {/* UEM controls */}
+                                      <div style={{ marginTop: 8, borderTop: "1px solid rgba(255,255,255,0.06)", paddingTop: 12 }}>
+                                        <div style={{ fontSize: 11, fontWeight: 700, color: "var(--text-secondary)", marginBottom: 8, display: "flex", alignItems: "center", gap: 6 }}>
+                                          <Terminal size={12} /> UEM — Script / Deploy Ring / Logs
+                                        </div>
+                                        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                                          <div style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
+                                            <select value={uemRing} onChange={(e) => setUemRing(e.target.value)} onClick={(e) => e.stopPropagation()}
+                                              style={{ fontSize: 11, padding: "4px 8px", borderRadius: 6, background: "var(--bg-input)", border: "1px solid var(--border-primary)", color: "var(--text-primary)" }}>
+                                              <option value="PILOT">PILOT</option>
+                                              <option value="STAGED">STAGED</option>
+                                              <option value="ALL">ALL</option>
+                                            </select>
+                                            <button className="btn btn-secondary" style={{ fontSize: 10, padding: "4px 10px" }} disabled={uemBusy}
+                                              onClick={(e) => { e.stopPropagation(); uemSetRing(a.id); }}>Set ring</button>
+                                            <button className="btn btn-secondary" style={{ fontSize: 10, padding: "4px 10px" }} disabled={uemBusy}
+                                              onClick={(e) => { e.stopPropagation(); uemRemoteAssist(a.id); }}>Remote assist</button>
+                                          </div>
+                                          <div style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
+                                            <input value={uemFilePath} onChange={(e) => setUemFilePath(e.target.value)} onClick={(e) => e.stopPropagation()}
+                                              placeholder="Log path" style={{ flex: 1, minWidth: 140, fontSize: 11, padding: "4px 8px", borderRadius: 6, background: "var(--bg-input)", border: "1px solid var(--border-primary)", color: "var(--text-primary)" }} />
+                                            <button className="btn btn-secondary" style={{ fontSize: 10, padding: "4px 10px" }} disabled={uemBusy}
+                                              onClick={(e) => { e.stopPropagation(); uemPullLogs(a.id); }}>Pull file</button>
+                                          </div>
+                                          <div style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
+                                            <select value={selectedScriptId} onChange={(e) => setSelectedScriptId(e.target.value)} onClick={(e) => e.stopPropagation()}
+                                              style={{ flex: 1, minWidth: 140, fontSize: 11, padding: "4px 8px", borderRadius: 6, background: "var(--bg-input)", border: "1px solid var(--border-primary)", color: "var(--text-primary)" }}>
+                                              <option value="">Approved script…</option>
+                                              {scriptList.map((s: any) => (
+                                                <option key={s.id} value={s.id}>{s.name} ({s.platform})</option>
+                                              ))}
+                                            </select>
+                                            <button className="btn btn-secondary" style={{ fontSize: 10, padding: "4px 10px" }} disabled={uemBusy || !selectedScriptId}
+                                              onClick={(e) => { e.stopPropagation(); uemRunScript(a.id); }}>Run script</button>
+                                          </div>
+                                          {uemMsg && expandedAgent === a.id && (
+                                            <div style={{ fontSize: 10, color: "var(--text-tertiary)", wordBreak: "break-all" }}>{uemMsg}</div>
+                                          )}
+                                        </div>
+                                      </div>
+
                                       {/* Delete Agent */}
                                       <div style={{ marginTop: 8, borderTop: "1px solid rgba(255,255,255,0.06)", paddingTop: 12 }}>
                                         <button className="btn btn-secondary" style={{ padding: "4px 10px", fontSize: 10, color: "#ef4444", borderColor: "rgba(239,68,68,0.2)", display: "flex", alignItems: "center", gap: 4 }}
@@ -2220,6 +2578,137 @@ export default function DiscoveryPage() {
               </div>
             )}
           </div>
+        </div>
+      )}
+
+      {/* AD / LDAP Sync Tab */}
+      {tab === "ad" && (
+        <div className="card" style={{ padding: 24 }}>
+          <h3 style={{ fontSize: 15, fontWeight: 700, marginBottom: 6 }}>Active Directory / LDAP Sync</h3>
+          <p style={{ fontSize: 12, color: "var(--text-tertiary)", marginBottom: 16 }}>
+            Multi-OU computer and user sync via ldapts. Prefer vault credential IDs over plaintext passwords.
+          </p>
+          {adMsg && (
+            <div style={{ marginBottom: 12, fontSize: 12, padding: "8px 12px", borderRadius: 8, background: "var(--bg-elevated)", border: "1px solid var(--border-primary)" }}>
+              {adMsg}
+            </div>
+          )}
+          {adConfig?.lastSyncAt && (
+            <div style={{ fontSize: 11, color: "var(--text-tertiary)", marginBottom: 12 }}>
+              Last sync: {new Date(adConfig.lastSyncAt).toLocaleString()} — {adConfig.lastSyncStatus || "—"}
+            </div>
+          )}
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 16 }}>
+            <label style={{ fontSize: 12, display: "flex", flexDirection: "column", gap: 4 }}>
+              Host
+              <input value={adForm.host} onChange={(e) => setAdForm((f) => ({ ...f, host: e.target.value }))}
+                placeholder="dc.corp.local" style={{ padding: "8px 10px", borderRadius: 8, background: "var(--bg-input)", border: "1px solid var(--border-primary)", color: "var(--text-primary)" }} />
+            </label>
+            <label style={{ fontSize: 12, display: "flex", flexDirection: "column", gap: 4 }}>
+              Port
+              <input type="number" value={adForm.port} onChange={(e) => setAdForm((f) => ({ ...f, port: Number(e.target.value) }))}
+                style={{ padding: "8px 10px", borderRadius: 8, background: "var(--bg-input)", border: "1px solid var(--border-primary)", color: "var(--text-primary)" }} />
+            </label>
+            <label style={{ fontSize: 12, display: "flex", flexDirection: "column", gap: 4 }}>
+              Bind DN
+              <input value={adForm.bindDn} onChange={(e) => setAdForm((f) => ({ ...f, bindDn: e.target.value }))}
+                placeholder="CN=svc,OU=Service,DC=corp,DC=local" style={{ padding: "8px 10px", borderRadius: 8, background: "var(--bg-input)", border: "1px solid var(--border-primary)", color: "var(--text-primary)" }} />
+            </label>
+            <label style={{ fontSize: 12, display: "flex", flexDirection: "column", gap: 4 }}>
+              Password (optional if vault credential)
+              <input type="password" value={adForm.password} onChange={(e) => setAdForm((f) => ({ ...f, password: e.target.value }))}
+                placeholder="••••••••" style={{ padding: "8px 10px", borderRadius: 8, background: "var(--bg-input)", border: "1px solid var(--border-primary)", color: "var(--text-primary)" }} />
+            </label>
+            <label style={{ fontSize: 12, display: "flex", flexDirection: "column", gap: 4 }}>
+              Vault credential ID
+              <select value={adForm.credentialId} onChange={(e) => setAdForm((f) => ({ ...f, credentialId: e.target.value }))}
+                style={{ padding: "8px 10px", borderRadius: 8, background: "var(--bg-input)", border: "1px solid var(--border-primary)", color: "var(--text-primary)" }}>
+                <option value="">— none —</option>
+                {credentials.map((c: any) => (
+                  <option key={c.id} value={c.id}>{c.name} ({c.type})</option>
+                ))}
+              </select>
+            </label>
+            <label style={{ fontSize: 12, display: "flex", flexDirection: "column", gap: 4 }}>
+              Schedule (cron)
+              <input value={adForm.schedule} onChange={(e) => setAdForm((f) => ({ ...f, schedule: e.target.value }))}
+                style={{ padding: "8px 10px", borderRadius: 8, background: "var(--bg-input)", border: "1px solid var(--border-primary)", color: "var(--text-primary)" }} />
+            </label>
+          </div>
+          <label style={{ fontSize: 12, display: "flex", flexDirection: "column", gap: 4, marginBottom: 12 }}>
+            Base DNs / OUs (one per line)
+            <textarea value={adForm.baseDns} onChange={(e) => setAdForm((f) => ({ ...f, baseDns: e.target.value }))} rows={3}
+              placeholder={"OU=Workstations,DC=corp,DC=local\nOU=Servers,DC=corp,DC=local"}
+              style={{ padding: "8px 10px", borderRadius: 8, background: "var(--bg-input)", border: "1px solid var(--border-primary)", color: "var(--text-primary)", fontFamily: "inherit" }} />
+          </label>
+          <label style={{ fontSize: 12, display: "flex", alignItems: "center", gap: 8, marginBottom: 16 }}>
+            <input type="checkbox" checked={adForm.enabled} onChange={(e) => setAdForm((f) => ({ ...f, enabled: e.target.checked }))} />
+            Enable scheduled sync
+          </label>
+          <label style={{ fontSize: 12, display: "flex", alignItems: "center", gap: 8, marginBottom: 16 }}>
+            <input type="checkbox" checked={adForm.useTls} onChange={(e) => setAdForm((f) => ({ ...f, useTls: e.target.checked, port: e.target.checked ? 636 : 389 }))} />
+            Use LDAPS (TLS)
+          </label>
+          <div style={{ display: "flex", gap: 8 }}>
+            <button className="btn btn-primary" disabled={adBusy} onClick={saveAdConfig}>Save config</button>
+            <button className="btn btn-secondary" disabled={adBusy} onClick={runAdSyncNow}>
+              {adBusy ? <Loader2 size={14} style={{ animation: "spin 1s linear infinite" }} /> : <Play size={14} />} Run sync now
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* OT Probes Tab */}
+      {tab === "ot" && (
+        <div className="card" style={{ padding: 24 }}>
+          <h3 style={{ fontSize: 15, fontWeight: 700, marginBottom: 6 }}>OT / IoT Protocol Probes</h3>
+          <p style={{ fontSize: 12, color: "var(--text-tertiary)", marginBottom: 16 }}>
+            Modbus TCP and BACnet/IP Who-Is. Feature-flagged — no invented devices when disabled.
+          </p>
+          {otCaps && (
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 20 }}>
+              <div style={{ padding: 12, borderRadius: 8, background: "var(--bg-elevated)", border: "1px solid var(--border-primary)" }}>
+                <div style={{ fontSize: 12, fontWeight: 600 }}>Modbus TCP</div>
+                <span className={`badge ${otCaps.modbusTcp?.enabled ? "green" : "gray"}`} style={{ fontSize: 9 }}>
+                  {otCaps.modbusTcp?.enabled ? "Enabled" : "Disabled"}
+                </span>
+                <p style={{ fontSize: 11, color: "var(--text-tertiary)", marginTop: 6 }}>{otCaps.modbusTcp?.note}</p>
+              </div>
+              <div style={{ padding: 12, borderRadius: 8, background: "var(--bg-elevated)", border: "1px solid var(--border-primary)" }}>
+                <div style={{ fontSize: 12, fontWeight: 600 }}>BACnet/IP</div>
+                <span className={`badge ${otCaps.bacnetIp?.enabled ? "green" : "gray"}`} style={{ fontSize: 9 }}>
+                  {otCaps.bacnetIp?.enabled ? "Enabled" : "Disabled"}
+                </span>
+                <p style={{ fontSize: 11, color: "var(--text-tertiary)", marginTop: 6 }}>{otCaps.bacnetIp?.note}</p>
+              </div>
+            </div>
+          )}
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
+            <div>
+              <label style={{ fontSize: 12, display: "flex", flexDirection: "column", gap: 4, marginBottom: 8 }}>
+                Modbus targets (host:port per line)
+                <textarea value={modbusTargets} onChange={(e) => setModbusTargets(e.target.value)} rows={3}
+                  style={{ padding: "8px 10px", borderRadius: 8, background: "var(--bg-input)", border: "1px solid var(--border-primary)", color: "var(--text-primary)" }} />
+              </label>
+              <button className="btn btn-primary" disabled={otBusy} onClick={runModbusProbe}>Probe Modbus</button>
+            </div>
+            <div>
+              <label style={{ fontSize: 12, display: "flex", flexDirection: "column", gap: 4, marginBottom: 8 }}>
+                BACnet broadcast address
+                <input value={bacnetBroadcast} onChange={(e) => setBacnetBroadcast(e.target.value)}
+                  style={{ padding: "8px 10px", borderRadius: 8, background: "var(--bg-input)", border: "1px solid var(--border-primary)", color: "var(--text-primary)" }} />
+              </label>
+              <button className="btn btn-primary" disabled={otBusy} onClick={runBacnetProbe}>BACnet Who-Is</button>
+            </div>
+          </div>
+          {otResult && (
+            <pre style={{ marginTop: 16, fontSize: 11, padding: 12, borderRadius: 8, background: "rgba(0,0,0,0.25)", overflow: "auto", maxHeight: 240 }}>
+              {JSON.stringify(otResult, null, 2)}
+            </pre>
+          )}
+          {!otCaps && (
+            <EmptyState compact title="Loading capabilities…" description="Checking MODBUS_PROBE_ENABLED / BACNET_PROBE_ENABLED flags." />
+          )}
         </div>
       )}
 
@@ -2845,7 +3334,9 @@ export default function DiscoveryPage() {
               </div>
               <div>
                 <h3 style={{ fontSize: 16, fontWeight: 700, color: "var(--text-primary)" }}>Push Agent to {selectedDevices.size} Device{selectedDevices.size !== 1 ? "s" : ""}</h3>
-                <p style={{ fontSize: 11, color: "var(--text-tertiary)", marginTop: 2 }}>Deploy via SSH to selected network devices</p>
+                <p style={{ fontSize: 11, color: "var(--text-tertiary)", marginTop: 2 }}>
+                  Deploy via {bulkDeployMethod === "winrm" ? "WinRM" : "SSH"} to selected network devices
+                </p>
               </div>
             </div>
             <div style={{
@@ -2861,33 +3352,84 @@ export default function DiscoveryPage() {
                   borderBottom: "1px solid rgba(255,255,255,0.03)", fontSize: 12
                 }}>
                   <span style={{ fontFamily: "monospace", color: "var(--brand-400)", fontWeight: 600 }}>{d.ipAddress || "—"}</span>
-                  <span style={{ color: "var(--text-tertiary)" }}>{d.hostname || d.macAddress || ""}</span>
-                  <span className="badge cyan" style={{ fontSize: 9, marginLeft: "auto" }}>{d.deviceType || "Unknown"}</span>
+                  <span style={{ color: "var(--text-tertiary)", flex: 1, overflow: "hidden", textOverflow: "ellipsis" }}>{d.hostname || d.macAddress || ""}</span>
+                  <span className="badge cyan" style={{ fontSize: 9 }}>{d.deviceType || "Unknown"}</span>
                   {bulkDeployResults?.results && (() => {
                     const r = bulkDeployResults.results.find((x: any) => x.ip === d.ipAddress);
                     if (!r) return null;
-                    return r.status === "SUCCESS"
-                      ? <CheckCircle2 size={14} style={{ color: "#34d399" }} />
-                      : <XCircle size={14} style={{ color: "#f87171" }} />;
+                    const ok = r.status === "SUCCESS" || r.success === true;
+                    return (
+                      <span style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 10, fontWeight: 700, color: ok ? "#34d399" : "#f87171" }}>
+                        {ok ? <CheckCircle2 size={14} /> : <XCircle size={14} />}
+                        {ok ? "OK" : "FAIL"}
+                        {r.method ? <span style={{ color: "var(--text-tertiary)", fontWeight: 500 }}>({r.method})</span> : null}
+                      </span>
+                    );
                   })()}
                 </div>
               ))}
             </div>
             {!bulkDeployResults && (
-              <div style={{ marginBottom: 20 }}>
-                <label style={{ display: "block", fontSize: 11, fontWeight: 700, textTransform: "uppercase", color: "var(--text-secondary)", marginBottom: 8 }}>
-                  SSH Credentials
-                </label>
-                <select value={bulkDeployCredId} onChange={e => setBulkDeployCredId(e.target.value)} disabled={bulkDeploying}
-                  style={{ width: "100%", padding: "10px 12px", background: "rgba(0,0,0,0.2)", border: "1px solid var(--border-primary)", borderRadius: 8, fontSize: 12, color: "#fff", outline: "none" }}>
-                  <option value="">— Use default SSH Keys / Public Auth —</option>
-                  {credentials.filter((c: any) => c.type && (c.type.startsWith("SSH") || c.type.includes("KEY"))).map((c: any) => (
-                    <option key={c.id} value={c.id}>{c.name} ({c.type})</option>
-                  ))}
-                </select>
-                <p style={{ fontSize: 10, color: "var(--text-tertiary)", marginTop: 6 }}>
-                  These credentials will be used for all selected devices. Add credentials in the Credentials tab first.
-                </p>
+              <div style={{ marginBottom: 20, display: "flex", flexDirection: "column", gap: 14 }}>
+                <div>
+                  <label style={{ display: "block", fontSize: 11, fontWeight: 700, textTransform: "uppercase", color: "var(--text-secondary)", marginBottom: 8 }}>
+                    Deploy Method
+                  </label>
+                  <div style={{ display: "flex", gap: 8 }}>
+                    {([
+                      { id: "ssh" as const, label: "SSH" },
+                      { id: "winrm" as const, label: "WinRM" },
+                    ]).map((m) => (
+                      <button
+                        key={m.id}
+                        type="button"
+                        disabled={bulkDeploying}
+                        onClick={() => {
+                          setBulkDeployMethod(m.id);
+                          setBulkDeployCredId("");
+                        }}
+                        style={{
+                          flex: 1,
+                          padding: "10px 12px",
+                          borderRadius: 8,
+                          border: bulkDeployMethod === m.id ? "1px solid rgba(6,182,212,0.5)" : "1px solid var(--border-primary)",
+                          background: bulkDeployMethod === m.id ? "rgba(6,182,212,0.15)" : "rgba(0,0,0,0.2)",
+                          color: bulkDeployMethod === m.id ? "var(--brand-300)" : "var(--text-secondary)",
+                          fontSize: 12,
+                          fontWeight: 700,
+                          cursor: "pointer",
+                        }}
+                      >
+                        {m.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <div>
+                  <label style={{ display: "block", fontSize: 11, fontWeight: 700, textTransform: "uppercase", color: "var(--text-secondary)", marginBottom: 8 }}>
+                    {bulkDeployMethod === "winrm" ? "WinRM / WMI Credentials" : "SSH Credentials"}
+                  </label>
+                  <select value={bulkDeployCredId} onChange={e => setBulkDeployCredId(e.target.value)} disabled={bulkDeploying}
+                    style={{ width: "100%", padding: "10px 12px", background: "rgba(0,0,0,0.2)", border: "1px solid var(--border-primary)", borderRadius: 8, fontSize: 12, color: "#fff", outline: "none" }}>
+                    <option value="">
+                      {bulkDeployMethod === "winrm"
+                        ? "— Auto-pick WMI/WinRM credential —"
+                        : "— Use default SSH Keys / Public Auth —"}
+                    </option>
+                    {credentials.filter((c: any) => {
+                      if (!c.type) return false;
+                      if (bulkDeployMethod === "winrm") {
+                        return ["WMI", "WINRM", "WMI_PASSWORD"].includes(c.type) || c.type.includes("WMI") || c.type.includes("WINRM");
+                      }
+                      return c.type.startsWith("SSH") || c.type.includes("KEY");
+                    }).map((c: any) => (
+                      <option key={c.id} value={c.id}>{c.name} ({c.type})</option>
+                    ))}
+                  </select>
+                  <p style={{ fontSize: 10, color: "var(--text-tertiary)", marginTop: 6 }}>
+                    These credentials will be used for all selected devices. Add credentials in the Credentials tab first.
+                  </p>
+                </div>
               </div>
             )}
             {bulkDeployResults && (
@@ -2903,6 +3445,16 @@ export default function DiscoveryPage() {
                   {bulkDeployResults.failed === 0 ? "All agents deployed successfully!" : `${bulkDeployResults.succeeded} succeeded, ${bulkDeployResults.failed} failed`}
                 </div>
                 {bulkDeployResults.error && <div style={{ fontSize: 11, color: "#f87171", marginTop: 8 }}>{bulkDeployResults.error}</div>}
+                {Array.isArray(bulkDeployResults.results) && bulkDeployResults.results.some((r: any) => r.status !== "SUCCESS") && (
+                  <div style={{ marginTop: 12, textAlign: "left", maxHeight: 140, overflow: "auto" }}>
+                    {bulkDeployResults.results.filter((r: any) => r.status !== "SUCCESS").map((r: any) => (
+                      <div key={r.ip} style={{ fontSize: 11, color: "#f87171", padding: "4px 0", borderTop: "1px solid rgba(248,113,113,0.15)" }}>
+                        <strong style={{ fontFamily: "monospace" }}>{r.ip}</strong>
+                        {r.method ? ` [${r.method}]` : ""}: {r.error || "deploy failed"}
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             )}
             <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>

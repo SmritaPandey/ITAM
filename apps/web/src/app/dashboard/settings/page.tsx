@@ -13,6 +13,7 @@ const SECTIONS: SettingsSection[] = [
   { id: "general", label: "General", icon: <Settings size={16} /> },
   { id: "workspace", label: "Workspace Customization", icon: <Palette size={16} /> },
   { id: "account", label: "Account", icon: <User size={16} /> },
+  { id: "license", label: "Product License", icon: <Key size={16} /> },
   { id: "billing", label: "Billing & Plan", icon: <CreditCard size={16} /> },
   { id: "invoices", label: "Invoices", icon: <Receipt size={16} /> },
   { id: "notifications", label: "Notifications", icon: <Bell size={16} /> },
@@ -28,11 +29,14 @@ const ALL_MODULES = [
   { key: "ALL_ASSETS", name: "All Assets", desc: "Unified repository tracking all physical, digital, and cloud-hosted configuration items.", category: "Asset Management" },
   { key: "IT_ASSETS", name: "IT Assets", desc: "Deep IT inventory tracing hardware specs, CPU, RAM, disk space, serials, and OS details.", category: "Asset Management" },
   { key: "NON_IT_ASSETS", name: "Non-IT Assets", desc: "Asset tracker for furniture, facility machinery, office equipment, and other non-digital items.", category: "Asset Management" },
+  { key: "FACILITY", name: "Facility & EAM", desc: "Floor plans, preventive maintenance, spares, and consumable reorder points.", category: "Asset Management", tier: "Professional" },
   { key: "CMDB", name: "CMDB", desc: "Visual topology maps and dependency chain mapping across services and physical servers.", category: "Asset Management", tier: "Professional" },
   { key: "TICKETS", name: "Tickets", desc: "Core service desk incident management system supporting SLA tracking and automated assigning.", category: "Core Features" },
   { key: "WORK_ORDERS", name: "Work Orders", desc: "Technician work assignments, scheduled preventive maintenance, and part inventory updates.", category: "Operations", tier: "Professional" },
   { key: "DISCOVERY", name: "Discovery", desc: "Subnet scanning engine discovering SNMP, WMI, and cloud systems to auto-populate inventory.", category: "Operations", tier: "Professional" },
   { key: "PATCH_MGMT", name: "Patch Mgmt", desc: "Cross-platform OS patching system showing update status and scheduling software updates.", category: "Operations", tier: "Professional" },
+  { key: "SOFTWARE_DEPLOYMENT", name: "Software Deploy", desc: "Distribute packages and deploy rings across remote endpoints.", category: "Operations", tier: "Professional" },
+  { key: "REMOTE_TERMINAL", name: "Remote Terminal", desc: "Agent remote shell and assist deep-links for endpoints.", category: "Operations", tier: "Enterprise" },
   { key: "NETWORK", name: "Network (NMS)", desc: "ICMP responses, network interface traffic graphs, switch port mappings, and offline alarms.", category: "Operations", tier: "Professional" },
   { key: "SECURITY_SCAN", name: "Security Scan", desc: "Vulnerability analysis scanners auditing open ports, SSL expiry, and missing patch CVEs.", category: "Operations", tier: "Professional" },
   { key: "COMPLIANCE", name: "Compliance", desc: "Automated regulatory checklists auditing security controls for SOC2, ISO27001, and HIPAA.", category: "Operations", tier: "Enterprise" },
@@ -41,7 +45,10 @@ const ALL_MODULES = [
   { key: "PROBLEMS", name: "Problems", desc: "Problem ticket correlation managing root cause analysis folders and known error libraries.", category: "Operations", tier: "Enterprise" },
   { key: "FLEET", name: "Fleet / GPS", desc: "Real-time vehicle GPS tracker showing geo-fences, driver safety alerts, and fuel card logs.", category: "Monitoring", tier: "Enterprise" },
   { key: "CCTV", name: "CCTV", desc: "Contextual video cameras linked directly to locations, server racks, and security incidents.", category: "Monitoring", tier: "Professional" },
-  { key: "VDI", name: "VDI", desc: "Cloud virtual desktop orchestrator provisioning isolated dev environments with WebRTC access.", category: "Monitoring", tier: "Enterprise" },
+  { key: "VDI", name: "VDI", desc: "Cloud virtual desktop orchestrator provisioning isolated dev environments with console access.", category: "Monitoring", tier: "Enterprise" },
+  { key: "NAC", name: "NAC", desc: "Network access control policies with quarantine and CoA hooks.", category: "Monitoring", tier: "Enterprise" },
+  { key: "ALERTS", name: "Alerts", desc: "Unified AlertEvent console across fleet, NMS, CCTV, and security.", category: "Monitoring", tier: "Professional" },
+  { key: "INTELLIGENCE", name: "Intelligence", desc: "AI risk scoring and next-best-action recommendations.", category: "Core Features", tier: "Enterprise" },
   { key: "AUTOMATION", name: "Automation", desc: "Low-code system runbooks automatically resolving incident alerts via agent CLI hooks.", category: "Management", tier: "Enterprise" },
   { key: "LICENSES", name: "Licenses", desc: "Software license key allocation matrices automatically triggering warning alerts on overages.", category: "Management", tier: "Professional" },
   { key: "KNOWLEDGE_BASE", name: "Knowledge Base", desc: "Self-service article publisher featuring rich markdown tools and interactive user FAQ widgets.", category: "Management", tier: "Professional" },
@@ -59,6 +66,7 @@ export default function SettingsPage() {
     orgName: "", domain: "", timezone: "Asia/Kolkata",
     dateFormat: "DD/MM/YYYY", autoDiscovery: true, snmpEnabled: true, agentEnabled: true,
     wmiEnabled: false, emailAlerts: true, slackEnabled: false, webhookUrl: "",
+    slackWebhookUrl: "", teamsWebhookUrl: "",
     sessionTimeout: 30, mfaEnforced: false, passwordExpiry: 90, ipWhitelist: "",
     scanInterval: 60, snmpCommunity: "public", agentPort: 8443,
     agentStartOnBoot: false,
@@ -83,6 +91,151 @@ export default function SettingsPage() {
   const [allowedModules, setAllowedModules] = useState<string[]>([]);
   const [activeModules, setActiveModules] = useState<string[]>([]);
   const [userDisabledModules, setUserDisabledModules] = useState<string[]>([]);
+  const [cloudConnectors, setCloudConnectors] = useState<any[]>([]);
+  const [cloudForm, setCloudForm] = useState({
+    name: "",
+    provider: "AWS",
+    accessKeyId: "",
+    secretAccessKey: "",
+    clientSecret: "",
+    subscriptionId: "",
+    regions: "us-east-1",
+    serviceAccountJson: "",
+  });
+  const [cloudBusy, setCloudBusy] = useState(false);
+  const [cloudMsg, setCloudMsg] = useState("");
+  const [mfaStatus, setMfaStatus] = useState<any>(null);
+  const [mfaEnroll, setMfaEnroll] = useState<any>(null);
+  const [mfaCode, setMfaCode] = useState("");
+  const [mfaBusy, setMfaBusy] = useState(false);
+  const [ssoConfigs, setSsoConfigs] = useState<any[]>([]);
+  const [ssoForm, setSsoForm] = useState({ entityId: "", ssoUrl: "", certificate: "", groupRoleMap: "{}", enabled: false });
+  const [emailIngest, setEmailIngest] = useState<any[]>([]);
+  const [emailForm, setEmailForm] = useState({ host: "", port: 993, username: "", password: "", folder: "INBOX" });
+  const [productLicense, setProductLicense] = useState<any>(null);
+  const [licenseKeyInput, setLicenseKeyInput] = useState("");
+  const [licenseFileText, setLicenseFileText] = useState("");
+  const [licenseBusy, setLicenseBusy] = useState(false);
+  const [licenseMsg, setLicenseMsg] = useState("");
+
+  async function loadProductLicense() {
+    try {
+      setProductLicense(await apiFetch("/product-licenses/instance/status"));
+    } catch {
+      setProductLicense(null);
+    }
+  }
+
+  async function loadSso() {
+    try {
+      const rows = await apiFetch("/auth/sso/configs");
+      setSsoConfigs(Array.isArray(rows) ? rows : []);
+    } catch { setSsoConfigs([]); }
+  }
+  async function loadEmailIngest() {
+    try {
+      const rows = await apiFetch("/tickets/email-ingest");
+      setEmailIngest(Array.isArray(rows) ? rows : []);
+    } catch { setEmailIngest([]); }
+  }
+  async function loadMfa() {
+    try {
+      setMfaStatus(await apiFetch("/auth/mfa/status"));
+    } catch { setMfaStatus({ mfaEnabled: false }); }
+  }
+
+  async function loadCloudConnectors() {
+    try {
+      const rows = await apiFetch("/cloud-connectors");
+      setCloudConnectors(Array.isArray(rows) ? rows : []);
+    } catch {
+      setCloudConnectors([]);
+    }
+  }
+
+  useEffect(() => {
+    if (activeSection === "integrations") loadCloudConnectors();
+    if (activeSection === "license") loadProductLicense();
+    if (activeSection === "security") {
+      loadMfa();
+      loadSso();
+      loadEmailIngest();
+    }
+  }, [activeSection]);
+
+  function emptyCloudForm() {
+    return {
+      name: "",
+      provider: "AWS",
+      accessKeyId: "",
+      secretAccessKey: "",
+      clientSecret: "",
+      subscriptionId: "",
+      regions: "us-east-1",
+      serviceAccountJson: "",
+    };
+  }
+
+  async function createCloudConnector() {
+    setCloudBusy(true);
+    setCloudMsg("");
+    try {
+      let credentials: Record<string, string> = {};
+      let regions = cloudForm.regions.split(",").map((r) => r.trim()).filter(Boolean);
+      if (cloudForm.provider === "AWS") {
+        credentials = {
+          accessKeyId: cloudForm.accessKeyId,
+          secretAccessKey: cloudForm.secretAccessKey,
+        };
+      } else if (cloudForm.provider === "AZURE") {
+        credentials = {
+          tenantId: cloudForm.accessKeyId,
+          clientId: cloudForm.secretAccessKey,
+          clientSecret: cloudForm.clientSecret,
+          subscriptionId: cloudForm.subscriptionId,
+        };
+        if (cloudForm.subscriptionId) regions = [cloudForm.subscriptionId];
+      } else if (cloudForm.provider === "GCP") {
+        credentials = { serviceAccountJson: cloudForm.serviceAccountJson };
+      }
+      await apiFetch("/cloud-connectors", {
+        method: "POST",
+        body: JSON.stringify({
+          name: cloudForm.name || `${cloudForm.provider} Connector`,
+          provider: cloudForm.provider,
+          regions,
+          credentials,
+        }),
+      });
+      setCloudForm(emptyCloudForm());
+      setCloudMsg("Connector saved.");
+      await loadCloudConnectors();
+    } catch (err: any) {
+      setCloudMsg(err?.message || "Failed to create connector");
+    } finally {
+      setCloudBusy(false);
+    }
+  }
+
+  async function syncCloudConnector(id: string) {
+    setCloudBusy(true);
+    setCloudMsg("");
+    try {
+      const result = await apiFetch(`/cloud-connectors/${id}/sync`, { method: "POST" });
+      setCloudMsg(`Synced ${result.upserted ?? 0} assets from ${result.provider}.`);
+      await loadCloudConnectors();
+    } catch (err: any) {
+      setCloudMsg(err?.message || "Sync failed");
+    } finally {
+      setCloudBusy(false);
+    }
+  }
+
+  async function deleteCloudConnector(id: string) {
+    if (!confirm("Delete this cloud connector?")) return;
+    await apiFetch(`/cloud-connectors/${id}`, { method: "DELETE" });
+    await loadCloudConnectors();
+  }
 
   useEffect(() => {
     apiFetch("/settings")
@@ -177,8 +330,16 @@ export default function SettingsPage() {
   async function handleUpgrade(plan: string) {
     setUpgrading(true);
     try {
-      await apiFetch("/settings/upgrade", { method: "POST", body: JSON.stringify({ plan, billingCycle: "MONTHLY", currency }) });
-      // Reload subscription data
+      const result = await apiFetch("/settings/upgrade", {
+        method: "POST",
+        body: JSON.stringify({ plan, billingCycle: "MONTHLY", currency }),
+      });
+      // Redirect to Stripe Checkout (or other hosted checkout) when URL is returned
+      if (result?.checkoutUrl) {
+        window.location.href = result.checkoutUrl;
+        return;
+      }
+      // Reload subscription data when no hosted checkout (pending / Razorpay order-only)
       const sub = await apiFetch("/settings/subscription");
       setSubscription(sub);
       const acc = await apiFetch("/settings/account");
@@ -200,7 +361,7 @@ export default function SettingsPage() {
           <h1 className="page-title">Settings</h1>
           <p className="page-subtitle">System configuration, billing, and preferences</p>
         </div>
-        {!["account", "billing", "invoices"].includes(activeSection) && (
+        {!["account", "billing", "invoices", "license"].includes(activeSection) && (
           <button className="btn btn-primary" onClick={handleSave} disabled={saving}>
             {saved ? <><CheckCircle2 size={14} /> Saved!</> : <><Save size={14} /> {saving ? "Saving..." : "Save Changes"}</>}
           </button>
@@ -432,6 +593,134 @@ export default function SettingsPage() {
                 <div style={{ color: "var(--text-tertiary)", fontSize: 13 }}>Loading account details...</div>
               )}
             </>
+          )}
+
+          {activeSection === "license" && (
+            <div>
+              <h2 style={{ fontSize: 18, fontWeight: 700, color: "var(--text-primary)", marginBottom: 8 }}>Product License</h2>
+              <p style={{ fontSize: 13, color: "var(--text-tertiary)", marginBottom: 24 }}>
+                On-prem and enterprise installs activate a NeurQ-signed entitlement (online key or offline .lic file).
+              </p>
+
+              {productLicense && (
+                <div style={{
+                  padding: 16, borderRadius: 12, marginBottom: 20,
+                  border: `1px solid ${productLicense.valid ? "#10b98155" : "#f59e0b55"}`,
+                  background: productLicense.valid ? "#10b98112" : "#f59e0b12",
+                }}>
+                  <div style={{ fontWeight: 700, color: "var(--text-primary)", marginBottom: 8 }}>
+                    Status: {productLicense.status}
+                    {productLicense.deploymentMode === "saas" && " (SaaS — no local product license required)"}
+                  </div>
+                  {productLicense.message && (
+                    <p style={{ fontSize: 13, color: "var(--text-secondary)", marginBottom: 8 }}>{productLicense.message}</p>
+                  )}
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, fontSize: 13, color: "var(--text-secondary)" }}>
+                    <div>Plan: <strong style={{ color: "var(--text-primary)" }}>{productLicense.plan}</strong></div>
+                    <div>Expires: <strong style={{ color: "var(--text-primary)" }}>{productLicense.expiresAt ? new Date(productLicense.expiresAt).toLocaleDateString() : "—"}</strong></div>
+                    <div>Max users: <strong style={{ color: "var(--text-primary)" }}>{productLicense.maxUsers < 0 ? "Unlimited" : productLicense.maxUsers}</strong></div>
+                    <div>Max assets: <strong style={{ color: "var(--text-primary)" }}>{productLicense.maxAssets < 0 ? "Unlimited" : productLicense.maxAssets}</strong></div>
+                    <div style={{ gridColumn: "1 / -1" }}>Key: <code>{productLicense.licenseKey || "—"}</code></div>
+                    {Array.isArray(productLicense.allowedModules) && productLicense.allowedModules.length > 0 && (
+                      <div style={{ gridColumn: "1 / -1" }}>
+                        Modules: {productLicense.allowedModules.slice(0, 12).join(", ")}
+                        {productLicense.allowedModules.length > 12 ? ` +${productLicense.allowedModules.length - 12} more` : ""}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {productLicense?.deploymentMode === "onprem" && (
+                <div style={{ display: "grid", gap: 20 }}>
+                  <div style={{ padding: 16, borderRadius: 12, border: "1px solid var(--border-primary)", background: "var(--bg-elevated)" }}>
+                    <h3 style={{ fontSize: 14, fontWeight: 700, color: "var(--text-primary)", marginBottom: 10 }}>Activate online</h3>
+                    <p style={{ fontSize: 12, color: "var(--text-tertiary)", marginBottom: 10 }}>
+                      Requires LICENSE_SERVER_URL pointing at NeurQ SaaS.
+                    </p>
+                    <div style={{ display: "flex", gap: 8 }}>
+                      <input
+                        value={licenseKeyInput}
+                        onChange={(e) => setLicenseKeyInput(e.target.value)}
+                        placeholder="QS-XXXX-XXXX-XXXX-XXXX"
+                        style={{ flex: 1, padding: "8px 10px", borderRadius: 8, border: "1px solid var(--border-primary)", background: "var(--bg-input)", color: "var(--text-primary)", fontSize: 13, fontFamily: "monospace" }}
+                      />
+                      <button
+                        disabled={licenseBusy || !licenseKeyInput.trim()}
+                        onClick={async () => {
+                          setLicenseBusy(true); setLicenseMsg("");
+                          try {
+                            await apiFetch("/product-licenses/instance/activate-key", {
+                              method: "POST",
+                              headers: { "Content-Type": "application/json" },
+                              body: JSON.stringify({ licenseKey: licenseKeyInput.trim() }),
+                            });
+                            setLicenseMsg("License activated.");
+                            await loadProductLicense();
+                          } catch (err: any) {
+                            setLicenseMsg(err?.message || "Activation failed");
+                          } finally {
+                            setLicenseBusy(false);
+                          }
+                        }}
+                        style={{ padding: "8px 14px", borderRadius: 8, border: "none", background: "#06b6d4", color: "#fff", fontWeight: 600, fontSize: 13, cursor: "pointer" }}
+                      >
+                        {licenseBusy ? "…" : "Activate"}
+                      </button>
+                    </div>
+                  </div>
+
+                  <div style={{ padding: 16, borderRadius: 12, border: "1px solid var(--border-primary)", background: "var(--bg-elevated)" }}>
+                    <h3 style={{ fontSize: 14, fontWeight: 700, color: "var(--text-primary)", marginBottom: 10 }}>Upload offline .lic</h3>
+                    <textarea
+                      value={licenseFileText}
+                      onChange={(e) => setLicenseFileText(e.target.value)}
+                      placeholder="Paste .lic JSON contents or base64 blob…"
+                      rows={6}
+                      style={{ width: "100%", padding: 10, borderRadius: 8, border: "1px solid var(--border-primary)", background: "var(--bg-input)", color: "var(--text-primary)", fontSize: 12, fontFamily: "monospace", marginBottom: 10 }}
+                    />
+                    <input
+                      type="file"
+                      accept=".lic,.json,application/json,text/plain"
+                      onChange={async (e) => {
+                        const file = e.target.files?.[0];
+                        if (!file) return;
+                        setLicenseFileText(await file.text());
+                      }}
+                      style={{ marginBottom: 10, fontSize: 12, color: "var(--text-secondary)" }}
+                    />
+                    <button
+                      disabled={licenseBusy || !licenseFileText.trim()}
+                      onClick={async () => {
+                        setLicenseBusy(true); setLicenseMsg("");
+                        try {
+                          await apiFetch("/product-licenses/instance/upload", {
+                            method: "POST",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({ content: licenseFileText.trim() }),
+                          });
+                          setLicenseMsg("License file applied.");
+                          await loadProductLicense();
+                        } catch (err: any) {
+                          setLicenseMsg(err?.message || "Upload failed");
+                        } finally {
+                          setLicenseBusy(false);
+                        }
+                      }}
+                      style={{ padding: "8px 14px", borderRadius: 8, border: "none", background: "#06b6d4", color: "#fff", fontWeight: 600, fontSize: 13, cursor: "pointer" }}
+                    >
+                      Apply license file
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {licenseMsg && (
+                <p style={{ marginTop: 16, fontSize: 13, color: licenseMsg.toLowerCase().includes("fail") ? "#ef4444" : "#10b981" }}>
+                  {licenseMsg}
+                </p>
+              )}
+            </div>
           )}
 
           {activeSection === "billing" && (
@@ -817,6 +1106,122 @@ export default function SettingsPage() {
                   <Field label="Password Expiry (days)" value={String(settings.passwordExpiry)} onChange={v => setSettings({ ...settings, passwordExpiry: Number(v) })} />
                 </div>
                 <Field label="IP Whitelist (comma separated)" value={settings.ipWhitelist} onChange={v => setSettings({ ...settings, ipWhitelist: v })} placeholder="10.0.0.0/8, 192.168.1.0/24" />
+
+                {/* Personal MFA enroll */}
+                <div style={{ padding: 16, borderRadius: 12, border: "1px solid var(--border-primary)", background: "var(--bg-elevated)" }}>
+                  <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 8 }}>Your MFA (TOTP)</div>
+                  <p style={{ fontSize: 12, color: "var(--text-tertiary)", marginBottom: 12 }}>
+                    {mfaStatus?.mfaEnabled ? "MFA is enabled on your account." : "Enroll an authenticator app for login challenges."}
+                  </p>
+                  {!mfaStatus?.mfaEnabled && !mfaEnroll && (
+                    <button className="btn btn-primary" style={{ fontSize: 12 }} disabled={mfaBusy} onClick={async () => {
+                      setMfaBusy(true);
+                      try {
+                        const data = await apiFetch("/auth/mfa/enroll", { method: "POST", body: "{}" });
+                        setMfaEnroll(data);
+                      } catch (e) { alert(String(e)); }
+                      setMfaBusy(false);
+                    }}>Enroll MFA</button>
+                  )}
+                  {mfaEnroll && (
+                    <div style={{ display: "grid", gap: 10 }}>
+                      {mfaEnroll.qrDataUrl && <img src={mfaEnroll.qrDataUrl} alt="MFA QR" width={160} height={160} />}
+                      <code style={{ fontSize: 11, wordBreak: "break-all" }}>{mfaEnroll.secret}</code>
+                      <Field label="Enter code from app" value={mfaCode} onChange={setMfaCode} placeholder="123456" />
+                      <button className="btn btn-primary" style={{ fontSize: 12 }} disabled={mfaBusy} onClick={async () => {
+                        setMfaBusy(true);
+                        try {
+                          await apiFetch("/auth/mfa/verify-enroll", { method: "POST", body: JSON.stringify({ code: mfaCode }) });
+                          setMfaEnroll(null); setMfaCode("");
+                          const st = await apiFetch("/auth/mfa/status");
+                          setMfaStatus(st);
+                        } catch (e) { alert(String(e)); }
+                        setMfaBusy(false);
+                      }}>Verify & enable</button>
+                    </div>
+                  )}
+                  {mfaStatus?.mfaEnabled && (
+                    <div style={{ display: "flex", gap: 8, alignItems: "end" }}>
+                      <Field label="Code to disable" value={mfaCode} onChange={setMfaCode} placeholder="123456" />
+                      <button className="btn btn-secondary" style={{ fontSize: 12, color: "#ef4444" }} onClick={async () => {
+                        try {
+                          await apiFetch("/auth/mfa/disable", { method: "POST", body: JSON.stringify({ code: mfaCode }) });
+                          setMfaStatus({ mfaEnabled: false }); setMfaCode("");
+                        } catch (e) { alert(String(e)); }
+                      }}>Disable MFA</button>
+                    </div>
+                  )}
+                </div>
+
+                {/* SAML SSO config */}
+                <div style={{ padding: 16, borderRadius: 12, border: "1px solid var(--border-primary)", background: "var(--bg-elevated)" }}>
+                  <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 8 }}>Enterprise SAML</div>
+                  <div style={{ display: "grid", gap: 10, marginBottom: 12 }}>
+                    {ssoConfigs.map((c: any) => (
+                      <div key={c.id} style={{ display: "flex", justifyContent: "space-between", fontSize: 12, padding: 10, background: "var(--bg-card)", borderRadius: 8 }}>
+                        <span>{c.provider} {c.enabled ? "· enabled" : "· disabled"} {c.hasCertificate ? "· cert ✓" : ""}</span>
+                        <button className="btn btn-secondary" style={{ fontSize: 11, padding: "4px 8px", color: "#ef4444" }} onClick={async () => {
+                          await apiFetch(`/auth/sso/configs/${c.id}`, { method: "DELETE" });
+                          loadSso();
+                        }}>Delete</button>
+                      </div>
+                    ))}
+                  </div>
+                  <div style={{ display: "grid", gap: 8 }}>
+                    <Field label="Entity ID" value={ssoForm.entityId} onChange={v => setSsoForm({ ...ssoForm, entityId: v })} />
+                    <Field label="IdP SSO URL" value={ssoForm.ssoUrl} onChange={v => setSsoForm({ ...ssoForm, ssoUrl: v })} />
+                    <Field label="IdP Certificate (PEM or base64)" value={ssoForm.certificate} onChange={v => setSsoForm({ ...ssoForm, certificate: v })} />
+                    <Field label="Group→Role map JSON" value={ssoForm.groupRoleMap} onChange={v => setSsoForm({ ...ssoForm, groupRoleMap: v })} placeholder='{"Admins":"Tenant Admin"}' />
+                    <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12 }}>
+                      <input type="checkbox" checked={ssoForm.enabled} onChange={e => setSsoForm({ ...ssoForm, enabled: e.target.checked })} /> Enable
+                    </label>
+                    <button className="btn btn-primary" style={{ fontSize: 12 }} onClick={async () => {
+                      try {
+                        let groupRoleMap = {};
+                        try { groupRoleMap = JSON.parse(ssoForm.groupRoleMap || "{}"); } catch { /* */ }
+                        await apiFetch("/auth/sso/configs", {
+                          method: "POST",
+                          body: JSON.stringify({
+                            provider: "SAML",
+                            enabled: ssoForm.enabled,
+                            entityId: ssoForm.entityId,
+                            ssoUrl: ssoForm.ssoUrl,
+                            certificate: ssoForm.certificate,
+                            groupRoleMap,
+                          }),
+                        });
+                        setSsoForm({ entityId: "", ssoUrl: "", certificate: "", groupRoleMap: "{}", enabled: false });
+                        loadSso();
+                      } catch (e) { alert(String(e)); }
+                    }}>Save SAML config</button>
+                  </div>
+                </div>
+
+                {/* Email ingest */}
+                <div style={{ padding: 16, borderRadius: 12, border: "1px solid var(--border-primary)", background: "var(--bg-elevated)" }}>
+                  <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 8 }}>Email → Ticket ingest (IMAP)</div>
+                  {emailIngest.map((c: any) => (
+                    <div key={c.id} style={{ fontSize: 12, marginBottom: 8, display: "flex", justifyContent: "space-between" }}>
+                      <span>{c.username}@{c.host}:{c.port} {c.enabled ? "· on" : "· off"}</span>
+                      <button className="btn btn-secondary" style={{ fontSize: 11, padding: "4px 8px" }} onClick={async () => {
+                        try { await apiFetch(`/tickets/email-ingest/${c.id}/poll`, { method: "POST", body: "{}" }); alert("Poll complete"); }
+                        catch (e) { alert(String(e)); }
+                      }}>Poll now</button>
+                    </div>
+                  ))}
+                  <div style={{ display: "grid", gap: 8, marginTop: 8 }}>
+                    <Field label="IMAP host" value={emailForm.host} onChange={v => setEmailForm({ ...emailForm, host: v })} />
+                    <Field label="Username" value={emailForm.username} onChange={v => setEmailForm({ ...emailForm, username: v })} />
+                    <Field label="Password" value={emailForm.password} onChange={v => setEmailForm({ ...emailForm, password: v })} />
+                    <button className="btn btn-primary" style={{ fontSize: 12 }} onClick={async () => {
+                      try {
+                        await apiFetch("/tickets/email-ingest", { method: "POST", body: JSON.stringify(emailForm) });
+                        setEmailForm({ host: "", port: 993, username: "", password: "", folder: "INBOX" });
+                        loadEmailIngest();
+                      } catch (e) { alert(String(e)); }
+                    }}>Add mailbox</button>
+                  </div>
+                </div>
               </div>
             </>
           )}
@@ -1134,32 +1539,157 @@ export default function SettingsPage() {
 
           {activeSection === "integrations" && (
             <>
-              <h2 style={{ fontSize: 16, fontWeight: 700, marginBottom: 20 }}>Integrations</h2>
+              <h2 style={{ fontSize: 16, fontWeight: 700, marginBottom: 6 }}>Integrations</h2>
+              <p style={{ fontSize: 12.5, color: "var(--text-tertiary)", marginBottom: 20 }}>
+                Connect QS Asset to your existing tools. Configured webhook integrations deliver real-time alerts and notifications.
+              </p>
+
+              {/* Live webhook integrations */}
+              <div style={{ display: "grid", gap: 12, marginBottom: 24 }}>
+                <div style={{ padding: 16, background: "var(--bg-elevated)", borderRadius: 10, border: "1px solid var(--border-primary)" }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 12 }}>
+                    <span style={{ fontSize: 22 }}>💬</span>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontSize: 13, fontWeight: 600 }}>Slack</div>
+                      <span className={`badge ${settings.slackWebhookUrl ? "green" : "gray"}`} style={{ fontSize: 9 }}>
+                        {settings.slackWebhookUrl ? "Connected" : "Not Configured"}
+                      </span>
+                    </div>
+                  </div>
+                  <Field label="Slack Incoming Webhook URL" value={settings.slackWebhookUrl} onChange={v => setSettings({ ...settings, slackWebhookUrl: v })} placeholder="https://hooks.slack.com/services/..." />
+                </div>
+
+                <div style={{ padding: 16, background: "var(--bg-elevated)", borderRadius: 10, border: "1px solid var(--border-primary)" }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 12 }}>
+                    <span style={{ fontSize: 22 }}>🟦</span>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontSize: 13, fontWeight: 600 }}>Microsoft Teams</div>
+                      <span className={`badge ${settings.teamsWebhookUrl ? "green" : "gray"}`} style={{ fontSize: 9 }}>
+                        {settings.teamsWebhookUrl ? "Connected" : "Not Configured"}
+                      </span>
+                    </div>
+                  </div>
+                  <Field label="Teams Incoming Webhook URL" value={settings.teamsWebhookUrl} onChange={v => setSettings({ ...settings, teamsWebhookUrl: v })} placeholder="https://outlook.office.com/webhook/..." />
+                </div>
+
+                <div style={{ padding: 16, background: "var(--bg-elevated)", borderRadius: 10, border: "1px solid var(--border-primary)" }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 12 }}>
+                    <span style={{ fontSize: 22 }}>🔗</span>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontSize: 13, fontWeight: 600 }}>Generic Webhook</div>
+                      <span className={`badge ${settings.webhookUrl ? "green" : "gray"}`} style={{ fontSize: 9 }}>
+                        {settings.webhookUrl ? "Connected" : "Not Configured"}
+                      </span>
+                    </div>
+                  </div>
+                  <Field label="Webhook URL" value={settings.webhookUrl} onChange={v => setSettings({ ...settings, webhookUrl: v })} placeholder="https://hooks.example.com/alerts" />
+                </div>
+              </div>
+
+              <div style={{ fontSize: 12, fontWeight: 700, color: "var(--text-tertiary)", textTransform: "uppercase", letterSpacing: "0.04em", marginBottom: 12 }}>Cloud Connectors</div>
+              <p style={{ fontSize: 12.5, color: "var(--text-tertiary)", marginBottom: 12 }}>
+                Sync cloud compute into the asset inventory: AWS EC2, Azure VMs (ARM), and GCP Compute Engine.
+                Active Directory / LDAP sync is configured on the Discovery page under the <strong>AD / LDAP</strong> tab.
+              </p>
+              {cloudMsg && (
+                <div style={{ marginBottom: 12, fontSize: 12, color: "var(--text-secondary)", padding: "8px 12px", borderRadius: 8, background: "var(--bg-elevated)", border: "1px solid var(--border-primary)" }}>
+                  {cloudMsg}
+                </div>
+              )}
+              <div style={{ display: "grid", gap: 10, marginBottom: 16 }}>
+                {cloudConnectors.length === 0 ? (
+                  <div style={{ fontSize: 12, color: "var(--text-tertiary)" }}>No cloud connectors configured yet.</div>
+                ) : cloudConnectors.map((c) => (
+                  <div key={c.id} style={{ padding: 14, background: "var(--bg-elevated)", borderRadius: 10, border: "1px solid var(--border-primary)", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 }}>
+                    <div>
+                      <div style={{ fontSize: 13, fontWeight: 600 }}>{c.name}</div>
+                      <div style={{ fontSize: 11, color: "var(--text-tertiary)" }}>
+                        {c.provider} • {c.enabled ? "Enabled" : "Disabled"}
+                        {c.lastSyncAt ? ` • Last sync ${new Date(c.lastSyncAt).toLocaleString()}` : ""}
+                        {c.lastSyncStatus ? ` • ${c.lastSyncStatus}` : ""}
+                      </div>
+                    </div>
+                    <div style={{ display: "flex", gap: 8 }}>
+                      <button className="btn btn-secondary" disabled={cloudBusy} onClick={() => syncCloudConnector(c.id)} style={{ fontSize: 11, padding: "6px 10px" }}>Sync</button>
+                      <button className="btn btn-secondary" onClick={() => deleteCloudConnector(c.id)} style={{ fontSize: 11, padding: "6px 10px", color: "#ef4444" }}>Delete</button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <div style={{ padding: 16, background: "var(--bg-elevated)", borderRadius: 10, border: "1px solid var(--border-primary)", marginBottom: 24 }}>
+                <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 12 }}>Add connector</div>
+                <div style={{ display: "grid", gap: 10 }}>
+                  <Field label="Name" value={cloudForm.name} onChange={(v) => setCloudForm((p) => ({ ...p, name: v }))} placeholder="Prod AWS" />
+                  <div>
+                    <label style={{ display: "block", fontSize: 12, fontWeight: 500, color: "var(--text-secondary)", marginBottom: 6 }}>Provider</label>
+                    <select value={cloudForm.provider} onChange={(e) => setCloudForm((p) => ({ ...p, provider: e.target.value }))}
+                      style={{ width: "100%", padding: "8px 12px", background: "var(--bg-input)", border: "1px solid var(--border-primary)", borderRadius: 8, color: "var(--text-primary)", fontSize: 13 }}>
+                      <option value="AWS">AWS</option>
+                      <option value="AZURE">Azure</option>
+                      <option value="GCP">GCP</option>
+                    </select>
+                  </div>
+                  {cloudForm.provider === "AWS" && (
+                    <>
+                      <Field label="Access Key ID" value={cloudForm.accessKeyId} onChange={(v) => setCloudForm((p) => ({ ...p, accessKeyId: v }))} placeholder="AKIA..." />
+                      <Field label="Secret Access Key" value={cloudForm.secretAccessKey} onChange={(v) => setCloudForm((p) => ({ ...p, secretAccessKey: v }))} placeholder="••••••••" />
+                      <Field label="Regions (comma-separated)" value={cloudForm.regions} onChange={(v) => setCloudForm((p) => ({ ...p, regions: v }))} placeholder="us-east-1,eu-west-1" />
+                    </>
+                  )}
+                  {cloudForm.provider === "AZURE" && (
+                    <>
+                      <Field label="Tenant ID" value={cloudForm.accessKeyId} onChange={(v) => setCloudForm((p) => ({ ...p, accessKeyId: v }))} placeholder="xxxxxxxx-xxxx-..." />
+                      <Field label="Client ID" value={cloudForm.secretAccessKey} onChange={(v) => setCloudForm((p) => ({ ...p, secretAccessKey: v }))} placeholder="app registration client id" />
+                      <Field label="Client Secret" value={cloudForm.clientSecret} onChange={(v) => setCloudForm((p) => ({ ...p, clientSecret: v }))} placeholder="••••••••" />
+                      <Field label="Subscription ID" value={cloudForm.subscriptionId} onChange={(v) => setCloudForm((p) => ({ ...p, subscriptionId: v }))} placeholder="subscription uuid" />
+                    </>
+                  )}
+                  {cloudForm.provider === "GCP" && (
+                    <div>
+                      <label style={{ display: "block", fontSize: 12, fontWeight: 500, color: "var(--text-secondary)", marginBottom: 6 }}>Service Account JSON</label>
+                      <textarea
+                        value={cloudForm.serviceAccountJson}
+                        onChange={(e) => setCloudForm((p) => ({ ...p, serviceAccountJson: e.target.value }))}
+                        placeholder='{"type":"service_account","project_id":"...","private_key":"...","client_email":"..."}'
+                        rows={6}
+                        style={{ width: "100%", padding: "8px 12px", background: "var(--bg-input)", border: "1px solid var(--border-primary)", borderRadius: 8, color: "var(--text-primary)", fontSize: 12, fontFamily: "monospace" }}
+                      />
+                    </div>
+                  )}
+                  <button
+                    className="btn btn-primary"
+                    disabled={
+                      cloudBusy ||
+                      (cloudForm.provider === "AWS" && !cloudForm.accessKeyId) ||
+                      (cloudForm.provider === "AZURE" && (!cloudForm.accessKeyId || !cloudForm.clientSecret || !cloudForm.subscriptionId)) ||
+                      (cloudForm.provider === "GCP" && !cloudForm.serviceAccountJson)
+                    }
+                    onClick={createCloudConnector}
+                    style={{ justifySelf: "start" }}
+                  >
+                    {cloudBusy ? "Saving..." : "Save Connector"}
+                  </button>
+                </div>
+              </div>
+
+              <div style={{ fontSize: 12, fontWeight: 700, color: "var(--text-tertiary)", textTransform: "uppercase", letterSpacing: "0.04em", marginBottom: 12 }}>On the Roadmap</div>
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
                 {[
-                  { name: "Active Directory", icon: "🏢" },
                   { name: "ServiceNow", icon: "🎫" },
                   { name: "Jira", icon: "📋" },
-                  { name: "Slack", icon: "💬" },
-                  { name: "AWS Cloud", icon: "☁️" },
-                  { name: "Azure AD", icon: "🔷" },
+                  { name: "Okta SSO", icon: "🔐" },
                 ].map(i => (
                   <div key={i.name} style={{
                     padding: 14, background: "var(--bg-elevated)", borderRadius: 10,
-                    border: "1px solid var(--border-primary)", display: "flex", justifyContent: "space-between", alignItems: "center",
+                    border: "1px solid var(--border-primary)", display: "flex", justifyContent: "space-between", alignItems: "center", opacity: 0.7,
                   }}>
                     <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
                       <span style={{ fontSize: 22 }}>{i.icon}</span>
                       <div>
                         <div style={{ fontSize: 13, fontWeight: 600 }}>{i.name}</div>
-                        <span className="badge gray" style={{ fontSize: 9 }}>Not Configured</span>
+                        <span className="badge gray" style={{ fontSize: 9 }}>Planned</span>
                       </div>
                     </div>
-                    <button className="btn btn-secondary" style={{ padding: "4px 10px", fontSize: 11, opacity: 0.6, cursor: "default" }}
-                      disabled
-                      title={`${i.name} integration is planned for a future release`}>
-                      Coming Soon
-                    </button>
                   </div>
                 ))}
               </div>

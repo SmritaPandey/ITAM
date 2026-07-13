@@ -57,7 +57,7 @@ function VerifyEmailContent() {
           display: "flex",
           justifyContent: "center",
         }}>
-          <LogoIcon size={56} />
+          <LogoIcon size={68} />
         </div>
 
         {status === "loading" && (

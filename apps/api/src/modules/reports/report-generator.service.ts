@@ -10,26 +10,32 @@ export class ReportGeneratorService {
   /**
    * Generate a report and return data in a format ready for PDF/CSV/XLSX export
    */
-  async generate(tenantId: string, type: string, options?: { startDate?: string; endDate?: string; format?: string }) {
+  async generate(tenantId: string, type: string, options?: { startDate?: string; endDate?: string; format?: string; filters?: any }) {
     const startDate = options?.startDate ? new Date(options.startDate) : new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
     const endDate = options?.endDate ? new Date(options.endDate) : new Date();
 
     switch (type) {
-      case 'assets': return this.generateAssetReport(tenantId, startDate, endDate);
-      case 'tickets': return this.generateTicketReport(tenantId, startDate, endDate);
+      case 'assets': return this.generateAssetReport(tenantId, startDate, endDate, options?.filters);
+      case 'tickets': return this.generateTicketReport(tenantId, startDate, endDate, options?.filters);
       case 'licenses': return this.generateLicenseReport(tenantId);
       case 'network': return this.generateNetworkReport(tenantId);
       case 'patches': return this.generatePatchReport(tenantId);
       case 'audit': return this.generateAuditReport(tenantId, startDate, endDate);
       case 'executive': return this.generateExecutiveReport(tenantId, startDate, endDate);
       case 'compliance': return this.generateComplianceReport(tenantId);
+      case 'business-services': return this.generateBusinessServiceReport(tenantId);
       default: return { error: `Unknown report type: ${type}` };
     }
   }
 
-  private async generateAssetReport(tenantId: string, start: Date, end: Date) {
+  private async generateAssetReport(tenantId: string, start: Date, end: Date, filters?: any) {
+    const where: any = { tenantId, deletedAt: null };
+    if (filters?.status) where.status = filters.status;
+    if (filters?.category) where.category = filters.category;
+    if (filters?.departmentId) where.departmentId = filters.departmentId;
+
     const assets = await this.prisma.asset.findMany({
-      where: { tenantId, deletedAt: null },
+      where,
       include: {
         assetType: { select: { name: true } },
         department: { select: { name: true } },
@@ -65,9 +71,14 @@ export class ReportGeneratorService {
     };
   }
 
-  private async generateTicketReport(tenantId: string, start: Date, end: Date) {
+  private async generateTicketReport(tenantId: string, start: Date, end: Date, filters?: any) {
+    const where: any = { tenantId, createdAt: { gte: start, lte: end } };
+    if (filters?.status) where.status = filters.status;
+    if (filters?.priority) where.priority = filters.priority;
+    if (filters?.departmentId) where.departmentId = filters.departmentId;
+
     const tickets = await this.prisma.ticket.findMany({
-      where: { tenantId, createdAt: { gte: start, lte: end } },
+      where,
       include: {
         requester: { select: { firstName: true, lastName: true } },
         assignedTo: { select: { firstName: true, lastName: true } },
@@ -204,18 +215,47 @@ export class ReportGeneratorService {
   }
 
   private async generateExecutiveReport(tenantId: string, start: Date, end: Date) {
-    const [assets, tickets, licenses, network, patches] = await Promise.all([
+    const [assets, tickets, licenses, network, patches, services] = await Promise.all([
       this.generateAssetReport(tenantId, start, end),
       this.generateTicketReport(tenantId, start, end),
       this.generateLicenseReport(tenantId),
       this.generateNetworkReport(tenantId),
       this.generatePatchReport(tenantId),
+      this.generateBusinessServiceReport(tenantId),
     ]);
+
+    const sections = {
+      assets: assets.summary,
+      tickets: tickets.summary,
+      licenses: licenses.summary,
+      network: network.summary,
+      patches: patches.summary,
+      businessServices: services.summary,
+    };
 
     return {
       title: 'Executive Dashboard Report',
       generatedAt: new Date().toISOString(),
-      sections: { assets: assets.summary, tickets: tickets.summary, licenses: licenses.summary, network: network.summary, patches: patches.summary },
+      summary: {
+        totalAssets: (assets.summary as any)?.totalAssets ?? 0,
+        openTickets: (tickets.summary as any)?.open ?? (tickets.summary as any)?.totalTickets ?? 0,
+        licenseSpend: (licenses.summary as any)?.totalSpend ?? 0,
+        servicesHealthy: (services.summary as any)?.healthy ?? 0,
+        servicesTotal: (services.summary as any)?.total ?? 0,
+      },
+      sections,
+      headers: ['KPI', 'Value'],
+      rows: [
+        ['Total Assets', String((assets.summary as any)?.totalAssets ?? 0)],
+        ['Active Assets', String((assets.summary as any)?.activeAssets ?? 0)],
+        ['Open / Total Tickets', `${(tickets.summary as any)?.open ?? '—'} / ${(tickets.summary as any)?.totalTickets ?? (tickets.summary as any)?.total ?? '—'}`],
+        ['License Spend', String((licenses.summary as any)?.totalSpend ?? 0)],
+        ['Network Devices', String((network.summary as any)?.totalDevices ?? (network.summary as any)?.total ?? 0)],
+        ['Patch Compliance %', String((patches.summary as any)?.compliancePct ?? (patches.summary as any)?.overall ?? '—')],
+        ['Business Services Healthy', `${(services.summary as any)?.healthy ?? 0}/${(services.summary as any)?.total ?? 0}`],
+        ['Period Start', start.toISOString().slice(0, 10)],
+        ['Period End', end.toISOString().slice(0, 10)],
+      ],
     };
   }
 
@@ -284,6 +324,63 @@ export class ReportGeneratorService {
     return Buffer.from(buffer);
   }
 
+  /**
+   * Generate PDF buffer from report data (summary + tabular rows).
+   */
+  async toPDF(report: any): Promise<Buffer> {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const PDFDocument = require('pdfkit');
+    const chunks: Buffer[] = [];
+    const doc = new PDFDocument({ margin: 40, size: 'LETTER' });
+    doc.on('data', (c: Buffer) => chunks.push(c));
+
+    const done = new Promise<Buffer>((resolve) => {
+      doc.on('end', () => resolve(Buffer.concat(chunks)));
+    });
+
+    doc.fontSize(16).fillColor('#0f172a').text(report.title || 'QS Assets Report', { underline: true });
+    doc.moveDown(0.4);
+    doc.fontSize(9).fillColor('#64748b');
+    doc.text(`Generated: ${report.generatedAt || new Date().toISOString()}`);
+    doc.moveDown(0.6);
+
+    if (report.summary && typeof report.summary === 'object') {
+      doc.fontSize(11).fillColor('#0f172a').text('Summary', { underline: true });
+      doc.moveDown(0.3);
+      doc.fontSize(9).fillColor('#334155');
+      for (const [key, value] of Object.entries(report.summary)) {
+        if (value == null || typeof value === 'object') continue;
+        doc.text(`${key}: ${String(value)}`);
+      }
+      doc.moveDown(0.6);
+    }
+
+    const headers: string[] = Array.isArray(report.headers) ? report.headers : [];
+    const rows: any[][] = Array.isArray(report.rows) ? report.rows : [];
+    if (headers.length > 0) {
+      doc.fontSize(11).fillColor('#0f172a').text('Details', { underline: true });
+      doc.moveDown(0.3);
+      doc.fontSize(8).fillColor('#475569');
+      // Compact header line
+      doc.text(headers.slice(0, 8).join(' | '), { width: 520 });
+      doc.moveDown(0.2);
+      for (const row of rows.slice(0, 200)) {
+        if (doc.y > 720) doc.addPage();
+        doc.text(
+          (row || []).slice(0, 8).map((c: any) => String(c ?? '')).join(' | '),
+          { width: 520 },
+        );
+      }
+      if (rows.length > 200) {
+        doc.moveDown(0.4);
+        doc.text(`… ${rows.length - 200} more rows truncated`);
+      }
+    }
+
+    doc.end();
+    return done;
+  }
+
   // ─── Helpers ──────────────────────────────────────────────────
 
   private groupBy(items: any[], key: string): Record<string, any[]> {
@@ -307,5 +404,38 @@ export class ReportGeneratorService {
     const hours = Math.floor((seconds % 86400) / 3600);
     if (days > 0) return `${days}d ${hours}h`;
     return `${hours}h ${Math.floor((seconds % 3600) / 60)}m`;
+  }
+
+  private async generateBusinessServiceReport(tenantId: string) {
+    const services = await this.prisma.businessService.findMany({
+      where: { tenantId },
+      include: {
+        assets: {
+          include: { asset: { select: { name: true, status: true, assetTag: true } } },
+        },
+      },
+      orderBy: { name: 'asc' },
+    });
+
+    return {
+      title: 'Business Service Health Report',
+      generatedAt: new Date().toISOString(),
+      summary: {
+        total: services.length,
+        healthy: services.filter((s) => s.status === 'HEALTHY').length,
+        degraded: services.filter((s) => s.status === 'DEGRADED').length,
+        outage: services.filter((s) => s.status === 'OUTAGE').length,
+      },
+      headers: ['Service', 'Status', 'Criticality', 'Assets', 'Asset Details'],
+      rows: services.map((s) => [
+        s.name,
+        s.status,
+        s.criticality,
+        String(s.assets.length),
+        s.assets
+          .map((l) => `${l.asset?.name || '?'}(${l.asset?.status || '?'})`)
+          .join('; '),
+      ]),
+    };
   }
 }

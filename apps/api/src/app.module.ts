@@ -6,6 +6,7 @@ import { APP_INTERCEPTOR, APP_GUARD } from '@nestjs/core';
 import { ThrottlerGuard } from '@nestjs/throttler';
 import { PrismaModule } from './common/database/prisma.module';
 import { AuditLogInterceptor } from './common/interceptors/audit-log.interceptor';
+import { TenantRlsInterceptor } from './common/interceptors/tenant-rls.interceptor';
 import { SecurityMiddleware } from './common/middleware/security.middleware';
 import { AuthModule } from './modules/auth/auth.module';
 import { UsersModule } from './modules/users/users.module';
@@ -28,6 +29,7 @@ import { FleetModule } from './modules/fleet/fleet.module';
 import { ServiceCatalogModule } from './modules/service-catalog/service-catalog.module';
 import { HealthModule } from './modules/health/health.module';
 import { EventBusModule } from './common/events/event-bus.module';
+import { QueueModule } from './common/queue/queue.module';
 import { KnowledgeBaseModule } from './modules/knowledge-base/knowledge-base.module';
 import { SetupModule } from './modules/setup/setup.module';
 import { WorkOrdersModule } from './modules/work-orders/work-orders.module';
@@ -42,6 +44,14 @@ import { AdminModule } from './modules/admin/admin.module';
 import { AnalyticsModule } from './modules/analytics/analytics.module';
 import { AiModule } from './modules/ai/ai.module';
 import { AlertsModule } from './modules/alerts/alerts.module';
+import { VulnerabilitiesModule } from './modules/vulnerabilities/vulnerabilities.module';
+import { IotModule } from './modules/iot/iot.module';
+import { CloudConnectorsModule } from './modules/cloud-connectors/cloud-connectors.module';
+import { SearchModule } from './modules/search/search.module';
+import { EamModule } from './modules/eam/eam.module';
+import { CmdbModule } from './modules/cmdb/cmdb.module';
+import { ProductLicenseModule } from './modules/product-license/product-license.module';
+import { ModuleGuard } from './common/guards/module.guard';
 
 @Module({
   imports: [
@@ -63,6 +73,12 @@ import { AlertsModule } from './modules/alerts/alerts.module';
 
     // Event Bus (global)
     EventBusModule,
+
+    // Redis / BullMQ job queues
+    QueueModule,
+
+    // Product entitlement (SaaS issue + on-prem activate)
+    ProductLicenseModule,
 
     // Feature modules
     AuthModule,
@@ -111,9 +127,29 @@ import { AlertsModule } from './modules/alerts/alerts.module';
 
     // Alerting & Notifications
     AlertsModule,
+
+    // Vulnerability / CVE engine (NVD)
+    VulnerabilitiesModule,
+
+    // IoT / MQTT ingest
+    IotModule,
+
+    // Cloud connectors (AWS / Azure)
+    CloudConnectorsModule,
+
+    // EAM — maintenance, spares, consumables, facility
+    EamModule,
+
+    // CMDB — business services & health rollup
+    CmdbModule,
+
+    // Global search (Meilisearch + Postgres fallback)
+    SearchModule,
   ],
   providers: [
+    ModuleGuard,
     { provide: APP_INTERCEPTOR, useClass: AuditLogInterceptor },
+    { provide: APP_INTERCEPTOR, useClass: TenantRlsInterceptor },
     { provide: APP_GUARD, useClass: ThrottlerGuard },
   ],
 })

@@ -4,9 +4,10 @@ import {
   Bell, Shield, AlertTriangle, AlertOctagon, CheckCircle2, Clock,
   RefreshCw, Loader2, Filter, Plus, Trash2, ChevronDown, Activity,
   Mail, Globe, Server, Eye, EyeOff, Info, Zap, ShieldCheck,
-  ToggleLeft, ToggleRight, X, Check, BellRing, Hash, Timer,
+  ToggleLeft, ToggleRight, X, Check, BellRing, Hash, Timer, ShieldX, XCircle,
 } from "lucide-react";
 import { apiFetch } from "@/lib/api";
+import EmptyState from "@/components/EmptyState";
 
 /* ═══════════════════════════════════════════════════════════════
    Constants & Types
@@ -31,11 +32,12 @@ const CHANNEL_OPTIONS = [
   { key: "in_app", label: "In-App" },
   { key: "email", label: "Email" },
   { key: "webhook", label: "Webhook" },
-  { key: "syslog", label: "Syslog" },
+  { key: "slack", label: "Slack" },
+  { key: "syslog", label: "Syslog / SIEM" },
 ];
 
 const CHANNEL_TYPE_META: Record<string, { icon: any; color: string }> = {
-  in_app:  { icon: Bell,   color: "#a78bfa" },
+  in_app:  { icon: Bell,   color: "#22d3ee" },
   email:   { icon: Mail,   color: "#38bdf8" },
   webhook: { icon: Globe,  color: "#34d399" },
   slack:   { icon: Globe,  color: "#34d399" },
@@ -331,6 +333,40 @@ export default function AlertsPage() {
       fetchAlerts();
     } catch (e: any) { alert(e.message); }
     finally { setActionLoading(p => ({ ...p, [id]: false })); }
+  }
+
+  function getThreatChangeId(alert: any): string | null {
+    const meta = alert.metadata || {};
+    return meta.changeId || meta.endpointChangeId || null;
+  }
+
+  function isActionableThreat(alert: any): boolean {
+    if (alert.resolved || alert.status === "RESOLVED") return false;
+    if (getThreatChangeId(alert)) return true;
+    const threatCats = ["USB_DEVICE", "UNAUTHORIZED_ACCESS", "PROCESS_BLOCKED", "PORT_CHANGE", "SECURITY"];
+    return threatCats.includes(alert.category) && alert.source === "Compliance";
+  }
+
+  async function threatAction(alertItem: any, action: "approve" | "quarantine" | "block") {
+    const changeId = getThreatChangeId(alertItem);
+    if (!changeId) {
+      window.alert("No linked endpoint change for this alert.");
+      return;
+    }
+    const id = alertItem.id || alertItem._id;
+    setActionLoading(p => ({ ...p, [id]: true }));
+    try {
+      await apiFetch(`/compliance/changes/${changeId}/${action}`, {
+        method: "PATCH",
+        body: JSON.stringify({ note: `${action} from Alerts UI` }),
+      });
+      await apiFetch(`/alerts/${id}/resolve`, { method: "PATCH" }).catch(() => {});
+      fetchAlerts();
+    } catch (e: any) {
+      window.alert(e.message || `Failed to ${action} threat`);
+    } finally {
+      setActionLoading(p => ({ ...p, [id]: false }));
+    }
   }
 
   async function acknowledgeAll() {
@@ -678,7 +714,35 @@ export default function AlertsPage() {
 
                           {/* Actions */}
                           {!isResolved && (
-                            <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
+                            <div style={{ display: "flex", gap: 6, flexShrink: 0, flexWrap: "wrap", justifyContent: "flex-end" }}>
+                              {isActionableThreat(alert) && getThreatChangeId(alert) && (
+                                <>
+                                  <button className="btn btn-secondary" style={{ fontSize: 11, padding: "5px 10px", color: "#10b981" }}
+                                    disabled={!!actionLoading[id]}
+                                    onClick={() => threatAction(alert, "approve")}>
+                                    {actionLoading[id]
+                                      ? <Loader2 size={12} style={{ animation: "spin 1s linear infinite" }} />
+                                      : <><CheckCircle2 size={12} /> Approve</>
+                                    }
+                                  </button>
+                                  <button className="btn btn-secondary" style={{ fontSize: 11, padding: "5px 10px", color: "#f59e0b" }}
+                                    disabled={!!actionLoading[id]}
+                                    onClick={() => threatAction(alert, "quarantine")}>
+                                    {actionLoading[id]
+                                      ? <Loader2 size={12} style={{ animation: "spin 1s linear infinite" }} />
+                                      : <><ShieldX size={12} /> Quarantine</>
+                                    }
+                                  </button>
+                                  <button className="btn btn-secondary" style={{ fontSize: 11, padding: "5px 10px", color: "#ef4444" }}
+                                    disabled={!!actionLoading[id]}
+                                    onClick={() => threatAction(alert, "block")}>
+                                    {actionLoading[id]
+                                      ? <Loader2 size={12} style={{ animation: "spin 1s linear infinite" }} />
+                                      : <><XCircle size={12} /> Block</>
+                                    }
+                                  </button>
+                                </>
+                              )}
                               {!isAcked && (
                                 <button className="btn btn-secondary" style={{ fontSize: 11, padding: "5px 10px" }}
                                   disabled={!!actionLoading[id]}
@@ -923,15 +987,11 @@ export default function AlertsPage() {
           {channelsLoading ? (
             <LoadingState />
           ) : channels.length === 0 ? (
-            <div className="card">
-              <div className="empty-state">
-                <BellRing size={48} style={{ color: "var(--brand-400)", opacity: 0.5, marginBottom: 16 }} />
-                <h3 style={{ fontSize: 16, fontWeight: 700, marginBottom: 6 }}>No Channels Configured</h3>
-                <p style={{ fontSize: 12, color: "var(--text-tertiary)", maxWidth: 400 }}>
-                  Notification channels will appear here once configured by an administrator.
-                </p>
-              </div>
-            </div>
+            <EmptyState
+              icon={<BellRing size={48} />}
+              title="No channels configured"
+              description="Notification channels appear here once configured by an administrator."
+            />
           ) : (
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(300px, 1fr))", gap: 16 }}>
               {channels.map((channel, i) => {
@@ -965,12 +1025,26 @@ export default function AlertsPage() {
                         }}>
                           Active
                         </span>
+                      ) : typeLower === "siem" ? (
+                        <span style={{
+                          fontSize: 10, padding: "3px 10px", borderRadius: 9999,
+                          background: "rgba(245,158,11,0.12)", color: "#f59e0b", fontWeight: 700,
+                        }}>
+                          Not configured
+                        </span>
+                      ) : typeLower === "syslog" ? (
+                        <span style={{
+                          fontSize: 10, padding: "3px 10px", borderRadius: 9999,
+                          background: "rgba(16,185,129,0.1)", color: "#10b981", fontWeight: 700,
+                        }}>
+                          Available
+                        </span>
                       ) : (
                         <span style={{
                           fontSize: 10, padding: "3px 10px", borderRadius: 9999,
                           background: "rgba(107,114,128,0.1)", color: "#6b7280", fontWeight: 700,
                         }}>
-                          Coming Soon
+                          Disabled
                         </span>
                       )}
                     </div>

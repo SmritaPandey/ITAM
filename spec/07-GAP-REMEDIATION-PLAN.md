@@ -1,359 +1,216 @@
-# AssetCommand — Gap Remediation & Enhancement Plan
+# QS Assets — Gap Remediation & Execution Tracker
 
-> **Date:** May 13, 2026 | **Status:** Implementation Plan | **Author:** AI Engineering
+| Field | Value |
+|-------|-------|
+| **Product** | QS Assets |
+| **Last reviewed** | 2026-07-13 |
+| **Status** | Active execution tracker |
+| **Owners** | Platform Eng · Product |
+| **Related** | [00](00-SPEC-INDEX.md)–[06](06-DASHBOARDS-API-DELIVERABLES.md), [08](08-ORG-FLOWS.md) |
 
----
-
-## Executive Summary
-
-This plan addresses **all major gaps** between the 14-module product spec and the current implementation. Work is organized into **5 phases**, ordered by impact and dependency — each phase builds on the previous.
-
-**Key principle:** No mocks. Every feature delivers **real, working functionality**.
-
----
-
-## Phase 1: Real-Time Engine & Notification Delivery
-
-**Impact: CRITICAL** — Foundation for everything else. Every module benefits from WebSocket push and real notification delivery.
-
-### 1A. WebSocket Gateway (Socket.io)
-
-**File:** `apps/api/src/common/websocket/events.gateway.ts`
-
-Real-time push for:
-- Dashboard stats auto-refresh (every 30s)
-- Network device status changes (instant)
-- Agent heartbeats (live online/offline)
-- Automation rule executions (live feed)
-- Scan progress updates (live %)
-- Ticket assignments (instant notification)
-
-**Implementation:**
-- NestJS `@nestjs/websockets` + `socket.io` adapter
-- JWT auth via handshake — only authenticated users receive events
-- Room-based isolation: each tenant gets its own room (`tenant:<id>`)
-- The existing `EventBusService` wildcards (`*`) will forward to WebSocket rooms
-- Frontend: new `useRealtimeEvents()` hook using `socket.io-client`
-
-**Key Innovation:** The EventBus already emits `*` events — we just bridge them to WebSocket. Zero changes to existing modules needed.
-
-**New files:**
-```
-apps/api/src/common/websocket/
-├── events.gateway.ts          # Socket.io gateway with JWT auth
-├── websocket.module.ts        # NestJS module
-└── websocket.adapter.ts       # IoAdapter for CORS handling
-
-apps/web/src/lib/
-├── useRealtimeEvents.ts       # React hook for WebSocket events
-└── socket.ts                  # Socket.io client singleton
-```
-
-**Dependencies:** `@nestjs/websockets`, `@nestjs/platform-socket.io`, `socket.io`, `socket.io-client`
+> **Do not confuse with historical plan.** The May 2026 five-phase gap plan is **complete** (archived below). Current work is **Phases 1–10** of the enterprise competitive build. Check boxes as acceptance tests pass; then flip capability rows in [01](01-PRODUCT-OVERVIEW.md) to **Shipped**.
 
 ---
 
-### 1B. Email Notification Delivery (Nodemailer)
+## Historical — Phases 1–5 (DONE)
 
-**File:** `apps/api/src/modules/notifications/email.service.ts`
+Completed foundation work from the prior remediation plan:
 
-Currently notifications are in-app only. Add real SMTP email delivery:
-- Configurable SMTP per tenant (via Settings page)
-- HTML email templates (ticket assigned, device down, license expiring, patch overdue)
-- Fallback to `console.log` if SMTP not configured
-- Rate limiting: max 100 emails/hour per tenant
-- Queue-based: emails pushed to a Bull/Redis queue, processed async
+| Phase | Scope | Outcome |
+|-------|-------|---------|
+| **H1** | Socket.io gateway + email/Slack/Teams/webhook notifications | Done — EventBus → WS; Nodemailer path |
+| **H2** | SNMP poll, topology, traps, NMS UI charts | Done — `net-snmp`, DeviceMetricsHistory, trap receiver |
+| **H3** | ONVIF discovery, camera proxy/HLS, VDI hypervisor hooks | Done — monitoring cameras + VDI sync |
+| **H4** | Report PDF/XLSX generator + schedules model | Done — pdfkit/exceljs paths |
+| **H5** | GitHub Actions CI + critical tests | Done — `.github/workflows/ci.yml` |
 
-**Wire into existing code:**
-- `NotificationChannelsService.send()` — add `EMAIL` type handler
-- `AutomationService.actionSendNotification()` — trigger email alongside in-app
-- Settings page: add SMTP configuration form
-
-**New files:**
-```
-apps/api/src/modules/notifications/
-├── email.service.ts           # Nodemailer SMTP service
-├── email-templates.ts         # HTML email templates
-└── email-queue.service.ts     # Bull queue processor
-```
-
-**Dependencies:** `nodemailer`, `@types/nodemailer`, `bull` (optional, can use in-memory queue)
+Architectural decisions retained: Node SNMP (not Go); EventBus over Kafka; Socket.io over raw WS.
 
 ---
 
-### 1C. Multi-Channel Notification Dispatch
+## Current wave — Phases 1–10
 
-Wire the existing `NotificationChannelsService` to actually dispatch on **all events** from the automation engine:
+### Phase 1 — Platform foundation (Docker + data)
 
-- **Slack:** Already implemented (webhook POST) ✅
-- **Teams:** Already implemented (MessageCard POST) ✅ 
-- **Webhook:** Already implemented ✅
-- **Email:** NEW — via Nodemailer (Phase 1B)
-- **SMS:** Stub with Twilio-ready interface (log only until API key provided)
+- [ ] `docker compose up`: PostGIS + Redis (+ Meilisearch) healthy
+- [ ] `apps/api/.env` `DATABASE_URL` correct; `.env.example` covers vault, Redis, NVD, payments, SSO, MQTT, NetFlow, syslog
+- [ ] `prisma migrate deploy` + `generate` + `db:seed` succeed
+- [ ] Redis-backed Bull queues for scans, NVD ingest, AD sync, NetFlow rollups
+- [ ] Postgres **RLS** policies + Prisma middleware `SET app.current_tenant`
+- [ ] Smoke: API boot, login, create asset
 
-**Enhancement:** Add digest mode — instead of instant notification per event, aggregate events into hourly/daily digest emails.
-
----
-
-## Phase 2: Network Monitoring (Real SNMP + Advanced NMS)
-
-**Impact: HIGH** — Transforms the NMS page from "ping + port scan" to real network monitoring.
-
-### 2A. SNMP Polling Service
-
-**File:** `apps/api/src/common/scanners/snmp.scanner.ts`
-
-Using the `net-snmp` npm package (pure Node.js, no Go needed):
-
-**What it polls:**
-- **System info:** sysDescr, sysName, sysUpTime, sysContact, sysLocation (OIDs 1.3.6.1.2.1.1.*)
-- **Interfaces:** ifIndex, ifDescr, ifType, ifSpeed, ifAdminStatus, ifOperStatus, ifInOctets, ifOutOctets (OIDs 1.3.6.1.2.1.2.2.1.*)
-- **CPU load:** (vendor-specific: Cisco 1.3.6.1.4.1.9.9.109, generic HOST-MIB 1.3.6.1.2.1.25.3.3.1.2)
-- **Memory:** hrStorageDescr, hrStorageUsed, hrStorageSize (OIDs 1.3.6.1.2.1.25.2.3.1.*)
-- **ARP table:** for MAC→IP mapping
-
-**Storage:** Results stored in `MonitoredDevice.metrics` JSON column — no schema changes needed.
-
-**Scheduled polling:** 
-- Cron every 5 minutes for all SNMP-enabled devices
-- Store 24h of metrics history in a new `DeviceMetricsHistory` model (append-only)
-- Frontend: real bandwidth charts from actual ifInOctets/ifOutOctets deltas
-
-**New files:**
-```
-apps/api/src/common/scanners/
-└── snmp.scanner.ts            # SNMP v1/v2c/v3 poller
-
-apps/api/src/modules/monitoring/
-└── snmp-poller.service.ts     # Scheduled SNMP polling service
-```
-
-**Schema addition:**
-```prisma
-model DeviceMetricsHistory {
-  id          String   @id @default(uuid()) @db.Uuid
-  tenantId    String   @map("tenant_id") @db.Uuid
-  deviceId    String   @map("device_id") @db.Uuid
-  metrics     Json     // { cpu, ram, ifInOctets, ifOutOctets, latency, uptime }
-  collectedAt DateTime @default(now()) @map("collected_at")
-
-  @@index([deviceId, collectedAt])
-  @@map("device_metrics_history")
-}
-```
-
-**Dependencies:** `net-snmp`
+**Exit:** Local stack green; RLS verified; seed demo tenant usable.
 
 ---
 
-### 2B. Network Topology Auto-Generation
+### Phase 2 — ITAM + EAM
 
-Enhance the existing `getTopology()` to build **real** topology:
-- Parse ARP tables from SNMP to identify neighbors
-- Use LLDP/CDP data (if available via SNMP) for physical topology
-- Store topology edges as `AssetRelationship` entries (type: `CONNECTED_TO`)
-- Frontend: interactive D3.js or canvas-based topology map with drag-and-drop
+**ITAM**
 
----
+- [x] Mass depreciation job + finance report (straight-line / declining)
+- [x] Checkout/check-in + attestation campaigns (bulk assign, remind, certify)
+- [x] Software metering last-used from agent; harvest → ticket + reclaim
+- [x] License blacklist/whitelist → agent enforce
+- [x] CMDB impact analysis API + UI graph drilldown
+- [x] `BusinessService` CSDM-lite + health rollup dashboard
 
-### 2C. SNMP Trap Receiver
+**EAM**
 
-**File:** `apps/api/src/modules/monitoring/trap-receiver.service.ts`
+- [x] Models: `MaintenanceSchedule`, `MaintenanceWorkOrder`, `SparePart`, `SparePartTransaction`, `Consumable`
+- [x] Calendar + condition PM → auto work orders
+- [x] Spare consume + min-stock → `AlertEvent`
+- [x] Site `floorPlanUrl` + asset pin `{x,y}` facility UI
+- [x] RFID/NFC tag field + `/scan` lookup
+- [x] Facility Manager dashboard widgets live
 
-Listen on UDP port 162 for SNMP traps:
-- Parse trap OIDs and map to human-readable events
-- Auto-create notifications for linkDown, authenticationFailure, etc.
-- Feed into automation engine via `eventBus.emitMonitoringEvent()`
-- Store trap history in audit log
-
----
-
-### 2D. NMS Frontend Enhancements
-
-Upgrade the network page with:
-- **Real-time bandwidth chart** using WebSocket-pushed SNMP data (no more simulated curves)
-- **Device detail drawer** showing SNMP-collected interfaces, CPU/RAM gauges, uptime
-- **Topology view tab** with interactive SVG/Canvas map
-- **Trap event stream** — live SNMP trap feed
-- **Interface utilization heatmap** — color-coded by load
+**Exit:** [08](08-ORG-FLOWS.md) non-IT labeling + facility flows pass.
 
 ---
 
-## Phase 3: CCTV & VDI Real Device Integration
+### Phase 3 — Discovery + UEM
 
-**Impact: MEDIUM** — Converts demo pages into functional monitoring.
+- [x] AD/LDAP multi-OU sync (`ldapts`), vault creds, schedule, conflict merge
+- [x] Azure Compute/Resource Graph + GCP Compute connectors (no stubs)
+- [x] MQTT (exists) + Modbus TCP + BACnet/IP probes behind feature flags
+- [x] Agent UEM: ScriptLibrary run, deploy rings, log file pull; RDP/SSH deep-link assist
+- [x] Discovery UI tabs: Desktop App / Service Installer / ZIP with real downloads
+- [x] Agentless WMI/SSH always fill Hardware/OS on success
 
-### 3A. ONVIF Camera Discovery
-
-**File:** `apps/api/src/common/scanners/onvif.scanner.ts`
-
-Using the `onvif` npm package:
-- Auto-discover ONVIF cameras on the LAN
-- Retrieve device info: manufacturer, model, firmware, serial
-- Get RTSP stream URLs (main + sub stream)
-- Get PTZ capabilities
-- Probe for snapshot URLs
-- Health check: periodic RTSP probe (connect + disconnect)
-
-**Register discovered cameras as MonitoredDevice type=CAMERA** with real config data.
-
-**Dependencies:** `onvif`
+**Exit:** [08](08-ORG-FLOWS.md) 10k onboard + multi-cloud playbooks pass smoke.
 
 ---
 
-### 3B. RTSP Snapshot Proxy
+### Phase 4 — NMS (OpManager class)
 
-**File:** `apps/api/src/modules/monitoring/camera-proxy.controller.ts`
+- [x] Syslog UDP ingest → alerts + optional auto-ticket
+- [x] NetFlow/sFlow/IPFIX UDP → `FlowRecord` / rollups; Top Talkers charts
+- [x] Config backup versions, baseline diff, drift alerts, approve+push where possible
+- [x] LLDP/CDP neighbor enrichment into topology
+- [x] NOC dashboard: topology + alarms + top interfaces + trap/syslog stream
 
-Since browsers can't play RTSP directly, create an API endpoint that:
-- Connects to camera RTSP URL
-- Captures a JPEG snapshot (using ffmpeg or camera's HTTP snapshot URL)
-- Returns it as `image/jpeg`
-- Caches snapshots for 10s to avoid hammering cameras
-
-**Frontend:** Replace the "LIVE FEED" placeholder with actual camera snapshot thumbnails, auto-refreshing every 10s.
+**Exit:** [08](08-ORG-FLOWS.md) NOC incident playbook pass.
 
 ---
 
-### 3C. VDI Hypervisor Integration Stubs
+### Phase 5 — Patch + Vulnerability
 
-Create integration interfaces for:
-- **VMware Horizon:** REST API client (`/rest/monitor/sessions`)
-- **Citrix:** OData API client
-- **Azure Virtual Desktop:** Microsoft Graph API client
+- [ ] Live catalogs: winget REST + apt/brew metadata sync
+- [ ] Deploy policies: pilot → staged → all; windows; **rollback** UI
+- [ ] Air-gap patch bundle ZIP export/import
+- [ ] Agent authenticated inventory → CVE match; critical auto-ticket
+- [ ] Risk score CVE-primary
+- [ ] CIS evidence packs → compliance PDF/CSV
 
-Initial implementation: VMware Horizon REST API (most common).
-
----
-
-## Phase 4: Report Engine & Export
-
-**Impact: MEDIUM** — Enterprise customers need export capabilities.
-
-### 4A. Server-Side Report Generation
-
-**File:** `apps/api/src/modules/reports/report-generator.service.ts`
-
-Using `pdfkit` for PDF and `exceljs` for XLSX:
-
-**Report types with real data:**
-1. **Asset Inventory** — Full asset register with types, locations, values, depreciation
-2. **Patch Compliance** — Missing patches per endpoint, CVE severity breakdown
-3. **Ticket SLA Performance** — Response/resolution times vs SLA targets
-4. **License Utilization** — Usage vs entitlement, cost analysis, renewal forecast
-5. **Network Health** — Device uptime, SNMP metrics summary, top talkers
-6. **Executive Dashboard** — Combined KPIs across all modules
-7. **Audit Trail** — Full audit log with SHA-256 hash chain verification
-8. **Compliance Report** — Endpoint policy violations, change detection summary
-
-**API endpoints:**
-```
-GET  /reports/generate/:type?format=pdf|xlsx|csv
-POST /reports/scheduled         # Create scheduled report
-GET  /reports/scheduled         # List scheduled reports
-```
-
-**Scheduled delivery:** Use `@nestjs/schedule` cron + Nodemailer to email reports on schedule.
-
-**Dependencies:** `pdfkit`, `exceljs`
+**Exit:** [08](08-ORG-FLOWS.md) Patch Tuesday playbook pass.
 
 ---
 
-### 4B. Frontend Report Builder
+### Phase 6 — ITSM
 
-Enhance the reports page with:
-- **Generate button** per report template that downloads PDF/XLSX
-- **Schedule modal** — pick frequency (daily/weekly/monthly), format, recipients
-- **Custom date range** filter for all reports
-- **Preview mode** — render report as HTML before downloading
+- [ ] Change multi-level approval + CAB calendar
+- [ ] SSDLC 9-step change type with UAT/VAPT gates + attachments
+- [ ] SLA escalation cron → notify + reassign
+- [ ] CSAT survey on resolve (`TicketCsat`)
+- [ ] Workflow rules builder UI over `AutomationRule` (complete form, not SN canvas)
+- [ ] IMAP inbound email → ticket
+- [ ] Service catalog approvals enforced; KB suggest on ticket
 
----
-
-## Phase 5: DevOps, Testing & CI/CD
-
-**Impact: MEDIUM** — Production hardening.
-
-### 5A. GitHub Actions CI/CD
-
-**File:** `.github/workflows/ci.yml`
-
-```yaml
-Pipeline:
-  - Lint (ESLint)
-  - Type check (tsc --noEmit)
-  - Unit tests (Jest)
-  - Build API (nest build)
-  - Build Web (next build)
-  - Deploy API to Railway (on main push)
-  - Deploy Web to Vercel (on main push)
-```
-
-### 5B. Critical Path Tests
-
-**Test coverage targets:**
-
-| Module | Test Type | Priority |
-|--------|-----------|----------|
-| Auth (login/register/refresh/logout) | E2E | 🔴 Critical |
-| Asset CRUD + search | Unit + E2E | 🔴 Critical |
-| Ticket lifecycle (create→assign→resolve→close) | E2E | 🔴 Critical |
-| Automation rule evaluation | Unit | 🟡 High |
-| Discovery scan flow | Unit | 🟡 High |
-| WebSocket event delivery | Integration | 🟡 High |
-| SNMP poller | Unit (mocked) | 🟢 Medium |
+**Exit:** [08](08-ORG-FLOWS.md) CAB change + employee self-service pass.
 
 ---
 
-## Implementation Order & Timeline
+### Phase 7 — Security, NAC, Auth
 
-| # | Phase | Estimated Effort | Files Changed | New Dependencies |
-|---|-------|-----------------|---------------|------------------|
-| 1A | WebSocket Gateway | ~4 hours | 5 new, 3 modified | socket.io, @nestjs/websockets |
-| 1B | Email Notifications | ~3 hours | 4 new, 2 modified | nodemailer |
-| 1C | Notification Dispatch | ~2 hours | 2 modified | — |
-| 2A | SNMP Polling | ~5 hours | 3 new, 1 schema, 2 modified | net-snmp |
-| 2B | Topology Auto-Gen | ~3 hours | 2 modified | — |
-| 2C | SNMP Trap Receiver | ~3 hours | 1 new, 1 modified | — |
-| 2D | NMS Frontend | ~4 hours | 1 modified (network page) | — |
-| 3A | ONVIF Discovery | ~3 hours | 2 new, 1 modified | onvif |
-| 3B | RTSP Snapshot Proxy | ~2 hours | 1 new, 1 modified | — |
-| 3C | VDI Integration | ~3 hours | 2 new | — |
-| 4A | Report Generator | ~4 hours | 2 new, 1 modified | pdfkit, exceljs |
-| 4B | Report Frontend | ~3 hours | 1 modified | — |
-| 5A | CI/CD Pipeline | ~2 hours | 1 new | — |
-| 5B | Test Suite | ~4 hours | 8 new | — |
+- [ ] MFA TOTP enroll + login challenge
+- [ ] SAML 2.0 ACS + OIDC + Google/MS; group→role map
+- [ ] Threat Approve/Quarantine/Block + WebSocket push
+- [ ] NAC RADIUS CoA / switch webhook; agent firewall fallback
+- [ ] Nightly audit hash-chain verify job; SIEM syslog/webhook export
 
-**Total estimated: ~45 hours across 5 phases**
+**Exit:** Auth/NAC acceptance tests in [04](04-SSDLC-COMPLIANCE-SECURITY.md) green.
 
 ---
 
-## Architectural Decisions
+### Phase 8 — Fleet, CCTV, VDI, Reports
 
-### Why Node.js for SNMP (not Go)?
-The spec recommended Go for SNMP polling, but:
-1. `net-snmp` npm package handles v1/v2c/v3 efficiently
-2. Keeps the codebase in one language — simpler ops, simpler deployment
-3. NestJS `@Cron` + async/await handles polling elegantly
-4. For <500 devices, Node.js performance is more than sufficient
-5. Go can be extracted later if scale demands it (modular monolith principle)
+- [ ] Fleet geofence entry/exit, speeding, idle alerts
+- [ ] Traccar protocol ingest endpoint
+- [ ] Fleet maintenance due from EAM schedules
+- [ ] CCTV multi-camera video wall; tamper/offline alerts
+- [ ] VDI session metrics charts (Horizon/Proxmox)
+- [ ] Parameterized reports + scheduled email PDF/XLSX
+- [ ] Custom report from saved filters
+- [ ] Meilisearch Cmd+K global search
 
-### Why not Kafka/NATS for events?
-The current `EventEmitter`-based EventBus is sufficient for single-process deployment. Adding Kafka/NATS adds operational complexity without benefit at current scale. The EventBus interface is already abstracted — swapping to NATS later requires only changing `EventBusService`, not any consumers.
-
-### Why Socket.io (not raw WebSocket)?
-- Auto-reconnection with exponential backoff
-- Room-based broadcasting (tenant isolation)
-- Fallback to HTTP long-polling
-- Built-in NestJS adapter (`@nestjs/platform-socket.io`)
+**Exit:** Role dashboards 3/4/6/8 widgets fed by real data paths.
 
 ---
 
-## Risk Mitigation
+### Phase 9 — Full UI/UX audit & role dashboards
 
-| Risk | Mitigation |
-|------|-----------|
-| SNMP polling overwhelms DB | Batch upserts, 5min interval, only store delta metrics |
-| WebSocket memory leak | Heartbeat ping/pong, auto-disconnect stale clients, max 100 clients/tenant |
-| ONVIF cameras vary widely | Graceful fallback: if ONVIF fails, fall back to basic ICMP health check |
-| PDF generation memory | Stream PDFs (pdfkit supports streaming), don't buffer entire report in memory |
-| Email delivery failures | Queue + retry with exponential backoff, dead letter after 3 attempts |
+- [ ] Walk every route under `apps/web/src/app`; fix empty wiring
+- [ ] Remove “Coming soon” where backend exists
+- [ ] Implement all 8 role dashboards from [06](06-DASHBOARDS-API-DELIVERABLES.md)
+- [ ] PageHeader / EmptyState consistency; module gating by plan
+- [ ] PWA meta for `/scan`
+
+**Exit:** UI audit checklist in [06](06-DASHBOARDS-API-DELIVERABLES.md) pass/fail complete.
+
+---
+
+### Phase 10 — Verify + live deploy
+
+**Verify**
+
+- [ ] `tsc` API + web clean
+- [ ] Unit tests: discovery enrich, CVE match, NetFlow parse, MFA login
+- [ ] E2E smoke: health, auth, asset CRUD, scan job, QR lookup, vuln dry-run, checkout
+
+**Deploy**
+
+- [ ] Railway login → env → `prisma migrate deploy` → redeploy API
+- [ ] Vercel `NEXT_PUBLIC_API_URL`, CORS, OAuth redirects → prod web
+- [ ] `DEPLOY.md` runbook (no secrets)
+- [ ] Post-deploy: `/health`, login, agent download, one agentless scan
+
+**Exit:** Production healthy; launch acceptance below met.
+
+---
+
+## Launch acceptance (wave complete)
+
+- [ ] Specs accurate living PRDs; every Must-ship row has passing test or honest demo path
+- [ ] Docker Postgres/Redis healthy; migrations + seed work
+- [ ] Org can: discover (agentless+agent+AD+cloud), label non-IT (QR/RFID), run PM/spares, monitor (SNMP+syslog+flows when exporters exist), patch with rings, triage CVEs, ITSM with CAB, MFA/SAML, role dashboards
+- [ ] No stubbed Azure/SAML/syslog/license-tab/automation defaults left
+- [ ] Railway API + Vercel web redeployed with correct CORS/OAuth
+
+### Enterprise on-prem + license hybrid
+
+- [x] `DEPLOYMENT_MODE=onprem` gates public signup; first-boot seeds owner + tenant admin
+- [x] `ProductLicense` + Ed25519 signed `.lic`; online activate + offline upload
+- [x] SaaS `/admin` create tenant + `/admin/licenses` issue/revoke/renew/download
+- [x] BYO `EXTERNAL_DATABASE_URL` / `EXTERNAL_REDIS_URL` documented in DEPLOY.md + compose
+- [x] Settings → Product License UI; expired license blocks discovery/scans, allows admin renew
+- [ ] Smoke: issue license on SaaS → apply on on-prem compose → modules/seats enforce
+
+---
+
+## Explicit non-goals
+
+- Qualys proprietary vuln signature engine / ME full patch research lab
+- ServiceNow IntegrationHub-class Flow Designer canvas
+- App-store notarization without customer code-signing certs
+- Rewriting agent in Go
+- Kafka/NATS as primary bus (Future-only)
+- Permanent remote SuperAdmin into customer on-prem databases
+
+---
+
+## How to update this tracker
+
+1. Complete work → run module acceptance tests in specs 01–06 and playbooks in 08.
+2. Check the box here.
+3. Move capability status **In-build → Shipped** in [01](01-PRODUCT-OVERVIEW.md).
+4. Bump **Last reviewed** on touched specs.
+5. Never edit the Cursor plan file; this document is the living tracker.

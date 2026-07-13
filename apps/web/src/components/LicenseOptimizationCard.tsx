@@ -82,7 +82,7 @@ export default function LicenseOptimizationCard() {
       </div>
 
       <div style={{ padding: '12px 20px', borderTop: '1px solid var(--border-primary)', background: 'rgba(255,255,255,0.01)' }}>
-        <Link href="/dashboard/software/utilization" style={{ fontSize: 12, color: 'var(--brand-400)', textDecoration: "none", fontWeight: 500, display: "flex", alignItems: "center", gap: 6 }}>
+        <Link href="/dashboard/licenses" style={{ fontSize: 12, color: 'var(--brand-400)', textDecoration: "none", fontWeight: 500, display: "flex", alignItems: "center", gap: 6 }}>
           Full Optimization Report <ArrowRight size={12} />
         </Link>
       </div>

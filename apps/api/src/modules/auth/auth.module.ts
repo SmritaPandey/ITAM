@@ -4,6 +4,9 @@ import { PassportModule } from '@nestjs/passport';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { AuthService } from './auth.service';
 import { AuthController } from './auth.controller';
+import { SsoService } from './sso.service';
+import { SsoController } from './sso.controller';
+import { MfaService } from './mfa.service';
 import { EmailVerificationService } from './email-verification.service';
 import { JwtStrategy } from './strategies/jwt.strategy';
 import { LocalStrategy } from './strategies/local.strategy';
@@ -49,7 +52,6 @@ tryRegisterOAuth();
           logger.warn('⚠️  WARNING: JWT_SECRET is not set — using insecure fallback. DO NOT run this configuration in production!');
         }
         const rawExpiry = configService.get<string>('JWT_EXPIRATION') || '4h';
-        // Ensure minimum 1h expiry for production stability (15m or 900s causes constant 401s)
         const isShortExpiry = (val: string): boolean => {
           const str = val.trim().toLowerCase();
           if (/^\d+$/.test(str)) {
@@ -73,14 +75,16 @@ tryRegisterOAuth();
       inject: [ConfigService],
     }),
   ],
-  controllers: [AuthController],
+  controllers: [AuthController, SsoController],
   providers: [
     AuthService,
+    SsoService,
+    MfaService,
     EmailVerificationService,
     JwtStrategy,
     LocalStrategy,
     ...oauthProviders,
   ],
-  exports: [AuthService, EmailVerificationService],
+  exports: [AuthService, EmailVerificationService, SsoService, MfaService],
 })
 export class AuthModule {}

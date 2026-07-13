@@ -9,7 +9,7 @@ import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
   PieChart, Pie, Cell, AreaChart, Area
 } from "recharts";
-import { apiFetch } from "@/lib/api";
+import { apiFetch, api } from "@/lib/api";
 import SafeChart from "@/components/SafeChart";
 
 const SEV_COLORS: Record<string, string> = { Critical: "red", High: "amber", Medium: "purple", Low: "gray" };
@@ -32,6 +32,11 @@ export default function PatchesPage() {
   const [schedRecurring, setSchedRecurring] = useState("");
   const [rollingBack, setRollingBack] = useState(false);
   const [upcomingSchedules, setUpcomingSchedules] = useState<any[]>([]);
+  const [policies, setPolicies] = useState<any[]>([]);
+  const [showPolicies, setShowPolicies] = useState(false);
+  const [policyForm, setPolicyForm] = useState({ name: "", autoPromote: false, scheduleCron: "" });
+  const [deployRing, setDeployRing] = useState("ALL");
+  const [importing, setImporting] = useState(false);
 
   function refresh() {
     apiFetch("/patches").then(setApiData).catch(console.error).finally(() => setLoading(false));
@@ -39,6 +44,7 @@ export default function PatchesPage() {
       setComplianceTimeline(d.timeline || []);
     }).catch(() => {});
     apiFetch("/patches/schedules/upcoming").then(setUpcomingSchedules).catch(() => {});
+    api.listPatchPolicies().then((p) => setPolicies(Array.isArray(p) ? p : [])).catch(() => {});
   }
   useEffect(() => { refresh(); }, []);
 
@@ -58,9 +64,65 @@ export default function PatchesPage() {
   const categoryData = Object.entries(catMap).map(([name, value], i) => ({ name, value, color: catColors[i % catColors.length] }));
 
   async function deployPatch(id: string) {
-    await apiFetch(`/patches/${id}/deploy`, { method: "POST" });
+    await api.deployPatch(id, { ring: deployRing });
     setSelectedPatch(null);
     refresh();
+  }
+
+  async function promoteRing(id: string) {
+    try {
+      const r = await api.promotePatchRing(id);
+      setScanResult({ message: r.promoted ? `Promoted ${r.from} → ${r.to}` : r.message });
+      refresh();
+    } catch {
+      setScanResult({ error: "Promote failed" });
+    }
+  }
+
+  async function exportBundle() {
+    try {
+      const blob = await api.exportPatchBundle();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `patch-bundle-${new Date().toISOString().slice(0, 10)}.zip`;
+      a.click();
+      URL.revokeObjectURL(url);
+      setScanResult({ message: "Air-gap patch bundle downloaded" });
+    } catch {
+      setScanResult({ error: "Bundle export failed" });
+    }
+  }
+
+  async function importBundle(file: File) {
+    setImporting(true);
+    try {
+      const r = await api.importPatchBundle(file);
+      setScanResult({
+        message: `Imported bundle: ${r.catalogImported || 0} catalog, ${r.patchesImported || 0} patches, ${r.policiesImported || 0} policies`,
+      });
+      refresh();
+    } catch {
+      setScanResult({ error: "Bundle import failed" });
+    } finally {
+      setImporting(false);
+    }
+  }
+
+  async function createPolicy() {
+    if (!policyForm.name.trim()) return;
+    try {
+      await api.createPatchPolicy({
+        name: policyForm.name.trim(),
+        autoPromote: policyForm.autoPromote,
+        scheduleCron: policyForm.scheduleCron || undefined,
+      });
+      setPolicyForm({ name: "", autoPromote: false, scheduleCron: "" });
+      refresh();
+      setScanResult({ message: "Deploy policy created" });
+    } catch {
+      setScanResult({ error: "Failed to create policy" });
+    }
   }
 
   async function runScan() {
@@ -72,6 +134,18 @@ export default function PatchesPage() {
       refresh();
     } catch (err) {
       setScanResult({ error: "Scan failed" });
+    } finally {
+      setScanning(false);
+    }
+  }
+
+  async function syncCatalog() {
+    setScanning(true);
+    try {
+      const result = await apiFetch("/patches/catalog/sync", { method: "POST" });
+      setScanResult({ message: `Catalog synced: ${result.upserted || 0} items` });
+    } catch {
+      setScanResult({ error: "Catalog sync failed" });
     } finally {
       setScanning(false);
     }
@@ -139,15 +213,71 @@ export default function PatchesPage() {
           <h1 className="page-title">Patch Management</h1>
           <p className="page-subtitle">{apiData.total} patches tracked • {apiData.compliance}% compliance</p>
         </div>
-        <div style={{ display: "flex", gap: 8 }}>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
           <button className="btn btn-secondary" onClick={runScan} disabled={scanning}>
             {scanning ? <><Loader2 size={14} style={{ animation: "spin 1s linear infinite" }} /> Scanning...</> : <><Scan size={14} /> Scan Now</>}
           </button>
+          <button className="btn btn-secondary" onClick={syncCatalog} disabled={scanning}>
+            Sync Catalog
+          </button>
+          <button className="btn btn-secondary" onClick={() => setShowPolicies(!showPolicies)}>
+            Deploy Rings
+          </button>
+          <button className="btn btn-secondary" onClick={exportBundle}>
+            <Download size={14} /> Export Bundle
+          </button>
+          <label className="btn btn-secondary" style={{ cursor: importing ? "wait" : "pointer", margin: 0 }}>
+            {importing ? <Loader2 size={14} style={{ animation: "spin 1s linear infinite" }} /> : <Download size={14} />}
+            {importing ? " Importing…" : " Import Bundle"}
+            <input type="file" accept=".zip" style={{ display: "none" }} disabled={importing}
+              onChange={(e) => { const f = e.target.files?.[0]; if (f) importBundle(f); e.target.value = ""; }} />
+          </label>
           <button className="btn btn-primary" onClick={deployAll} disabled={deploying || apiData.pending === 0}>
             {deploying ? <><Loader2 size={14} style={{ animation: "spin 1s linear infinite" }} /> Deploying...</> : <><Rocket size={14} /> Deploy All Pending ({apiData.pending})</>}
           </button>
         </div>
       </div>
+
+      {showPolicies && (
+        <div className="card" style={{ marginBottom: 16, padding: 16 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+            <h3 style={{ margin: 0, fontSize: 14, fontWeight: 700 }}>Pilot → Staged → All policies</h3>
+            <span style={{ fontSize: 11, color: "var(--text-tertiary)" }}>{policies.length} policies</span>
+          </div>
+          <div style={{ display: "flex", gap: 8, marginBottom: 12, flexWrap: "wrap" }}>
+            <input placeholder="Policy name" value={policyForm.name} onChange={(e) => setPolicyForm({ ...policyForm, name: e.target.value })}
+              style={{ flex: 1, minWidth: 160, padding: "8px 10px", borderRadius: 8, border: "1px solid var(--border-primary)", background: "var(--bg-elevated)", color: "var(--text-primary)", fontSize: 13 }} />
+            <input placeholder="Cron (optional)" value={policyForm.scheduleCron} onChange={(e) => setPolicyForm({ ...policyForm, scheduleCron: e.target.value })}
+              style={{ width: 160, padding: "8px 10px", borderRadius: 8, border: "1px solid var(--border-primary)", background: "var(--bg-elevated)", color: "var(--text-primary)", fontSize: 13 }} />
+            <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, color: "var(--text-secondary)" }}>
+              <input type="checkbox" checked={policyForm.autoPromote} onChange={(e) => setPolicyForm({ ...policyForm, autoPromote: e.target.checked })} />
+              Auto-promote
+            </label>
+            <button className="btn btn-primary" onClick={createPolicy}>Create</button>
+          </div>
+          {policies.length === 0 ? (
+            <p style={{ fontSize: 12, color: "var(--text-tertiary)", margin: 0 }}>No policies yet. Create one, then deploy patches with ring = PILOT.</p>
+          ) : (
+            <div style={{ display: "grid", gap: 8 }}>
+              {policies.map((p: any) => (
+                <div key={p.id} style={{ display: "flex", justifyContent: "space-between", padding: "8px 12px", borderRadius: 8, background: "var(--bg-elevated)", border: "1px solid var(--border-primary)" }}>
+                  <div>
+                    <div style={{ fontSize: 13, fontWeight: 600 }}>{p.name}</div>
+                    <div style={{ fontSize: 11, color: "var(--text-tertiary)" }}>
+                      Pilot: {(p.pilotAssetIds || []).length} · Staged: {(p.stagedAssetIds || []).length}
+                      {p.autoPromote ? " · auto-promote" : ""}
+                      {p.scheduleCron ? ` · ${p.scheduleCron}` : ""}
+                    </div>
+                  </div>
+                  <button className="btn btn-secondary" style={{ padding: "4px 8px" }} onClick={async () => {
+                    await api.deletePatchPolicy(p.id); refresh();
+                  }}>Delete</button>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Scan Result Banner */}
       {scanResult && (
@@ -297,6 +427,7 @@ export default function PatchesPage() {
                 <Row label="Scan Source" value={selectedPatch.scanSource || "Manual"} />
                 <Row label="Last Scan" value={selectedPatch.lastScanAt ? new Date(selectedPatch.lastScanAt).toLocaleString() : "Never"} />
                 <Row label="Deployed Date" value={selectedPatch.deployedDate ? new Date(selectedPatch.deployedDate).toLocaleDateString() : "Not deployed"} />
+                <Row label="Deploy Ring" value={selectedPatch.deployRing || "ALL"} />
                 {selectedPatch.scheduledAt && <Row label="Scheduled For" value={new Date(selectedPatch.scheduledAt).toLocaleString()} />}
                 {selectedPatch.maintenanceEnd && <Row label="Window Ends" value={new Date(selectedPatch.maintenanceEnd).toLocaleString()} />}
                 {selectedPatch.rolledBackAt && <Row label="Rolled Back" value={new Date(selectedPatch.rolledBackAt).toLocaleString()} />}
@@ -305,8 +436,22 @@ export default function PatchesPage() {
               {/* Action Buttons */}
               <div style={{ display: "grid", gap: 8, marginTop: 20 }}>
                 {selectedPatch.status !== "Deployed" && selectedPatch.status !== "Scheduled" && (
-                  <button className="btn btn-primary" style={{ width: "100%" }} onClick={() => deployPatch(selectedPatch.id)}>
-                    <Play size={14} /> Deploy Now
+                  <>
+                    <label style={{ fontSize: 12, fontWeight: 600, color: "var(--text-secondary)" }}>Deploy ring</label>
+                    <select value={deployRing} onChange={(e) => setDeployRing(e.target.value)}
+                      style={{ padding: "8px 10px", borderRadius: 8, border: "1px solid var(--border-primary)", background: "var(--bg-elevated)", color: "var(--text-primary)", fontSize: 13 }}>
+                      <option value="PILOT">PILOT</option>
+                      <option value="STAGED">STAGED</option>
+                      <option value="ALL">ALL</option>
+                    </select>
+                    <button className="btn btn-primary" style={{ width: "100%" }} onClick={() => deployPatch(selectedPatch.id)}>
+                      <Play size={14} /> Deploy Now ({deployRing})
+                    </button>
+                  </>
+                )}
+                {selectedPatch.deployRing && selectedPatch.deployRing !== "ALL" && (
+                  <button className="btn btn-secondary" style={{ width: "100%" }} onClick={() => promoteRing(selectedPatch.id)}>
+                    <Rocket size={14} /> Promote Ring
                   </button>
                 )}
                 {selectedPatch.status !== "Deployed" && selectedPatch.status !== "Scheduled" && (
@@ -314,7 +459,7 @@ export default function PatchesPage() {
                     <CalendarClock size={14} /> Schedule Deployment Window
                   </button>
                 )}
-                {(selectedPatch.status === "Deployed" || selectedPatch.status === "PENDING_DEPLOYMENT") && (
+                {(selectedPatch.status === "Deployed" || selectedPatch.status === "PENDING_DEPLOYMENT" || selectedPatch.rollbackAvailable) && (
                   <button className="btn btn-secondary" style={{ width: "100%", color: "#f59e0b", borderColor: "rgba(245,158,11,0.3)" }} onClick={() => rollbackPatch(selectedPatch.id)} disabled={rollingBack}>
                     {rollingBack ? <><Loader2 size={14} style={{ animation: "spin 1s linear infinite" }} /> Rolling back...</> : <><RotateCcw size={14} /> Rollback Patch</>}
                   </button>

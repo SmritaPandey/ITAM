@@ -64,6 +64,8 @@ echo ""
 
 export SERVER_IP
 export SEED_DB
+export DEPLOYMENT_MODE="${DEPLOYMENT_MODE:-onprem}"
+export DISABLE_PUBLIC_SIGNUP="${DISABLE_PUBLIC_SIGNUP:-true}"
 
 docker compose -f docker-compose.prod.yml up -d --build
 
@@ -109,7 +111,8 @@ echo "║                                                         ║"
 if [ "$SEED_DB" = "true" ]; then
 echo "║  Login:      admin@acme.com / Admin@123                  ║"
 else
-echo "║  Setup:      http://$SERVER_IP:3100/setup               "
+echo "║  On-prem:    OWNER_EMAIL / TENANT_ADMIN_EMAIL from env   ║"
+echo "║  License:    Settings → Product License (.lic or key)   ║"
 fi
 echo "║                                                         ║"
 echo "║  To scan LAN:                                           ║"

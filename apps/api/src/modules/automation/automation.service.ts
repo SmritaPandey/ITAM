@@ -392,4 +392,74 @@ export class AutomationService implements OnModuleInit {
     ]);
     return { total, active, paused, draft: total - active - paused, totalExecutions, recentSuccesses, recentFailures };
   }
+
+  /** Metadata for the workflow rule form builder (triggers / conditions / actions). */
+  getTriggersActionsMetadata() {
+    return {
+      triggers: [
+        { module: 'Ticket', events: ['created', 'updated', 'sla_breach', 'sla_warning', 'escalated', 'resolved'] },
+        { module: 'Asset', events: ['created', 'updated', 'status_changed', 'assigned'] },
+        { module: 'Discovery', events: ['device_found', 'scan_completed', 'agent_offline'] },
+        { module: 'Monitoring', events: ['device_offline', 'threshold_breach', 'alert_fired'] },
+        { module: 'Patch', events: ['available', 'deployed', 'failed'] },
+        { module: 'License', events: ['expiring', 'over_allocated'] },
+        { module: 'Nac', events: ['device_quarantined', 'device_unquarantined'] },
+        { module: 'Change', events: ['submitted', 'approved', 'rejected', 'completed'] },
+      ],
+      conditions: [
+        { key: 'priority', label: 'Priority equals', type: 'enum', values: ['LOW', 'MEDIUM', 'HIGH', 'CRITICAL'] },
+        { key: 'status', label: 'Status equals', type: 'string' },
+        { key: 'category', label: 'Category equals', type: 'string' },
+        { key: 'severity', label: 'Severity equals', type: 'enum', values: ['INFO', 'WARNING', 'CRITICAL'] },
+        { key: 'score', label: 'Score less than', type: 'number' },
+      ],
+      actions: [
+        {
+          type: 'send_notification',
+          label: 'Send in-app notification',
+          module: 'Notifications',
+          configFields: [
+            { key: 'title', label: 'Title', type: 'string' },
+            { key: 'message', label: 'Message', type: 'text' },
+            { key: 'severity', label: 'Severity', type: 'enum', values: ['INFO', 'ALERT', 'WARNING'] },
+          ],
+        },
+        {
+          type: 'create_ticket',
+          label: 'Create ticket',
+          module: 'Tickets',
+          configFields: [
+            { key: 'subject', label: 'Subject', type: 'string' },
+            { key: 'description', label: 'Description', type: 'text' },
+            { key: 'priority', label: 'Priority', type: 'enum', values: ['LOW', 'MEDIUM', 'HIGH', 'CRITICAL'] },
+            { key: 'category', label: 'Category', type: 'string' },
+          ],
+        },
+        {
+          type: 'update_asset',
+          label: 'Update asset status',
+          module: 'Assets',
+          configFields: [
+            { key: 'status', label: 'New status', type: 'enum', values: ['ACTIVE', 'INACTIVE', 'MAINTENANCE', 'RETIRED'] },
+          ],
+        },
+        {
+          type: 'send_webhook',
+          label: 'Send webhook',
+          module: 'Integrations',
+          configFields: [{ key: 'url', label: 'Webhook URL', type: 'string' }],
+        },
+        {
+          type: 'send_email',
+          label: 'Send email',
+          module: 'Notifications',
+          configFields: [
+            { key: 'to', label: 'Recipients (comma-separated)', type: 'string' },
+            { key: 'subject', label: 'Subject', type: 'string' },
+            { key: 'body', label: 'Body', type: 'text' },
+          ],
+        },
+      ],
+    };
+  }
 }

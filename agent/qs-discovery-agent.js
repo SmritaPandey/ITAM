@@ -59,6 +59,15 @@ let configEmail = '';
 let configPassword = '';
 let agentId = ''; // Declared early for config loading
 const configPath = path.join(__dirname, 'config.json');
+const AGENT_DATA_DIR = __dirname;
+let softwarePolicyState = { blacklist: [], whitelist: [], updatedAt: null };
+let blockedSoftwareList = [];
+try {
+  const polPath = path.join(AGENT_DATA_DIR, 'software-policy.json');
+  if (fs.existsSync(polPath)) softwarePolicyState = JSON.parse(fs.readFileSync(polPath, 'utf8'));
+  const blPath = path.join(AGENT_DATA_DIR, 'blocked-software.json');
+  if (fs.existsSync(blPath)) blockedSoftwareList = JSON.parse(fs.readFileSync(blPath, 'utf8'));
+} catch { /* ignore */ }
 
 if (fs.existsSync(configPath)) {
   try {
@@ -2372,9 +2381,76 @@ async function sendHeartbeat() {
             } catch (err) {
               log('error', `Failed to execute active USB storage block: ${err.message}`);
             }
+          } else if (act.type === 'SOFTWARE_POLICY') {
+            const bl = Array.isArray(act.blacklist) ? act.blacklist : [];
+            softwarePolicyState = {
+              blacklist: bl,
+              whitelist: Array.isArray(act.whitelist) ? act.whitelist : [],
+              updatedAt: act.updatedAt || new Date().toISOString(),
+            };
+            try {
+              fs.writeFileSync(path.join(AGENT_DATA_DIR, 'software-policy.json'), JSON.stringify(softwarePolicyState, null, 2));
+            } catch { /* ignore */ }
+            log('security', `Software policy updated — ${bl.length} blacklisted package(s)`);
+            for (const item of bl) {
+              const processName = item.processName || `${(item.name || 'unknown').split(/\s+/)[0]}.exe`;
+              if (processName && /^[a-zA-Z0-9._\-]+$/.test(processName)) {
+                try {
+                  if (os.platform() === 'win32') {
+                    execSync(`taskkill /F /IM "${processName}"`, { timeout: 5000, stdio: 'ignore' });
+                  } else {
+                    execSync(`killall -9 "${processName.replace(/\.exe$/i, '')}"`, { timeout: 5000, stdio: 'ignore' });
+                  }
+                  log('success', `Terminated blacklisted process "${processName}"`);
+                } catch { /* not running */ }
+              }
+            }
+          } else if (act.type === 'BLOCK_INSTALL') {
+            const softwareName = act.softwareName || act.processName || 'unknown';
+            if (!blockedSoftwareList.find((s) => s.name === softwareName)) {
+              blockedSoftwareList.push({
+                name: softwareName,
+                processName: act.processName,
+                reason: act.reason || 'BLACKLISTED',
+                at: new Date().toISOString(),
+              });
+            }
+            try {
+              fs.writeFileSync(path.join(AGENT_DATA_DIR, 'blocked-software.json'), JSON.stringify(blockedSoftwareList, null, 2));
+            } catch { /* ignore */ }
+            log('security', `BLOCK_INSTALL recorded for "${softwareName}" — future installs will be flagged`);
+            if (act.processName && /^[a-zA-Z0-9._\-]+$/.test(act.processName)) {
+              try {
+                if (os.platform() === 'win32') {
+                  execSync(`taskkill /F /IM "${act.processName}"`, { timeout: 5000, stdio: 'ignore' });
+                } else {
+                  execSync(`killall -9 "${String(act.processName).replace(/\.exe$/i, '')}"`, { timeout: 5000, stdio: 'ignore' });
+                }
+              } catch { /* ignore */ }
+            }
+          } else if (act.type === 'UNINSTALL_SOFTWARE') {
+            const softwareName = act.softwareName || '';
+            log('security', `UNINSTALL_SOFTWARE requested for "${softwareName}"`);
+            try {
+              if (os.platform() === 'win32' && softwareName) {
+                execSync(
+                  `powershell -NoProfile -Command "Get-Package -Name '*${softwareName.replace(/'/g, '')}*' -ErrorAction SilentlyContinue | Uninstall-Package -Force"`,
+                  { timeout: 120000, stdio: 'ignore' },
+                );
+                log('success', `Uninstall attempted for "${softwareName}"`);
+              } else if (os.platform() === 'darwin' && softwareName) {
+                log('info', `macOS uninstall of "${softwareName}" — use package manager / MDM; recorded for admin follow-up`);
+              } else if (softwareName) {
+                log('info', `Linux uninstall of "${softwareName}" — recorded; use apt/yum via REMOTE_COMMAND if needed`);
+              }
+            } catch (err) {
+              log('error', `UNINSTALL_SOFTWARE failed: ${err.message}`);
+            }
           } else if (act.type === 'ALERT') {
             const { category, summary, details } = act;
             log('security', `[ALERT DETECTED] Category: ${category} | Summary: ${summary} | Details: ${JSON.stringify(details)}`);
+          } else if (act.type === 'APPROVE_CHANGE') {
+            log('success', `✅ Admin APPROVED change ${act.changeId || ''} (${act.category || 'unknown'}): ${act.summary || 'n/a'}. Enforcement lifted for this item.`);
           } else if (act.type === 'QUARANTINE_DEVICE') {
             log('security', `🔒 QUARANTINE: Server ordered soft quarantine — reason: ${act.reason}`);
             log('security', `🔒 Blocking all outbound traffic except to QS Asset server...`);
@@ -2430,6 +2506,112 @@ async function sendHeartbeat() {
               });
             } catch (err) {
               log('error', `Service installation failed: ${err.message}`);
+            }
+          } else if (act.type === 'EXECUTE_SCRIPT') {
+            const { executionId, scriptName, scriptContent, platform: scriptPlatform, timeoutSeconds } = act;
+            log('info', `📜 EXECUTE_SCRIPT: Running approved script "${scriptName || executionId}"...`);
+            try {
+              if (!scriptContent || typeof scriptContent !== 'string') {
+                log('error', 'EXECUTE_SCRIPT blocked: empty script content');
+                continue;
+              }
+              const blockedPatterns = [
+                /rm\s+(-[a-z]*)?\s*-[a-z]*r[a-z]*\s+(-[a-z]*)?\s*\//i,
+                /format\s+c:/i,
+                /:\(\)\{.*:\|.*&.*\}.*:/,
+                /dd\s+if=.*of=\/dev/i,
+                /curl.*\|\s*(?:ba)?sh/i,
+                /wget.*\|\s*(?:ba)?sh/i,
+              ];
+              if (blockedPatterns.some((p) => p.test(scriptContent))) {
+                log('error', `❌ EXECUTE_SCRIPT BLOCKED: Dangerous content in "${scriptName}"`);
+                continue;
+              }
+              const tmpDir = os.tmpdir();
+              const isWin = os.platform() === 'win32';
+              const ext =
+                (scriptPlatform || '').toUpperCase() === 'POWERSHELL' || (scriptPlatform || '').toUpperCase() === 'PS1'
+                  ? '.ps1'
+                  : isWin
+                    ? '.cmd'
+                    : '.sh';
+              const scriptFile = path.join(tmpDir, `qs-script-${Date.now()}${ext}`);
+              fs.writeFileSync(scriptFile, scriptContent, { mode: 0o700 });
+              let output = '';
+              let exitCode = 0;
+              try {
+                if (ext === '.ps1') {
+                  output = execSync(`powershell -NoProfile -ExecutionPolicy Bypass -File "${scriptFile}"`, {
+                    timeout: (timeoutSeconds || 300) * 1000,
+                    encoding: 'utf8',
+                    maxBuffer: 2 * 1024 * 1024,
+                  });
+                } else if (isWin) {
+                  output = execSync(`cmd /c "${scriptFile}"`, {
+                    timeout: (timeoutSeconds || 300) * 1000,
+                    encoding: 'utf8',
+                    maxBuffer: 2 * 1024 * 1024,
+                  });
+                } else {
+                  output = execSync(`bash "${scriptFile}"`, {
+                    timeout: (timeoutSeconds || 300) * 1000,
+                    encoding: 'utf8',
+                    maxBuffer: 2 * 1024 * 1024,
+                  });
+                }
+              } catch (execErr) {
+                exitCode = execErr.status || 1;
+                output = (execErr.stdout || '') + (execErr.stderr || execErr.message || '');
+              }
+              try { fs.unlinkSync(scriptFile); } catch {}
+              log(exitCode === 0 ? 'success' : 'error', `EXECUTE_SCRIPT finished exit=${exitCode}`);
+              try {
+                await request('POST', '/discovery/agents/command-result', {
+                  agentId: agentId,
+                  command: `SCRIPT:${scriptName || executionId}`,
+                  output: String(output).substring(0, 10000),
+                  exitCode,
+                  timestamp: new Date().toISOString(),
+                  executionId,
+                });
+              } catch {}
+            } catch (err) {
+              log('error', `EXECUTE_SCRIPT failed: ${err.message}`);
+            }
+          } else if (act.type === 'FILE_PULL') {
+            const { pullId, path: filePath, maxBytes } = act;
+            log('info', `📂 FILE_PULL: Reading ${filePath}...`);
+            try {
+              if (!filePath || filePath.includes('..')) {
+                log('error', 'FILE_PULL blocked: invalid path');
+                continue;
+              }
+              let content = '';
+              let truncated = false;
+              let error = null;
+              try {
+                const stat = fs.statSync(filePath);
+                const limit = maxBytes || 256 * 1024;
+                const fd = fs.openSync(filePath, 'r');
+                const buf = Buffer.alloc(Math.min(stat.size, limit));
+                fs.readSync(fd, buf, 0, buf.length, 0);
+                fs.closeSync(fd);
+                content = buf.toString('utf8');
+                truncated = stat.size > limit;
+              } catch (readErr) {
+                error = readErr.message;
+              }
+              await request('POST', '/discovery/agents/file-pull-result', {
+                agentId: agentId,
+                pullId,
+                path: filePath,
+                content,
+                truncated,
+                error,
+              });
+              log(error ? 'error' : 'success', error ? `FILE_PULL failed: ${error}` : `FILE_PULL uploaded ${content.length} bytes`);
+            } catch (err) {
+              log('error', `FILE_PULL failed: ${err.message}`);
             }
           } else if (act.type === 'INSTALL_PACKAGE') {
             const { packageName, packageUrl, packageType, silent } = act;
@@ -2505,6 +2687,31 @@ async function sendHeartbeat() {
               }
             } catch (err) {
               log('error', `Failed to install package "${packageName}": ${err.message}`);
+            }
+          } else if (act.type === 'UNINSTALL_PACKAGE') {
+            const pkg = act.winget || act.packageId || act.packageName || act.brew || act.apt;
+            log('info', `🗑️ SOFTWARE UNINSTALL: Removing "${pkg}"...`);
+            try {
+              if (!pkg || /[;&|`$(){}\[\]<>!]/.test(String(pkg))) {
+                log('error', `UNINSTALL_PACKAGE BLOCKED: invalid package id`);
+              } else {
+                const platform = os.platform();
+                let uninstallCmd = '';
+                if (platform === 'win32') {
+                  const id = act.winget || act.packageId || pkg;
+                  uninstallCmd = `winget uninstall --id "${id}" --silent --accept-source-agreements 2>nul || choco uninstall "${pkg}" -y 2>nul`;
+                } else if (platform === 'darwin') {
+                  const brewId = act.brew || act.packageName || pkg;
+                  uninstallCmd = `brew uninstall "${brewId}" 2>/dev/null || true`;
+                } else {
+                  const aptId = act.apt || act.packageName || pkg;
+                  uninstallCmd = `sudo apt-get remove -y "${aptId}" 2>/dev/null || sudo yum remove -y "${aptId}" 2>/dev/null || true`;
+                }
+                execSync(uninstallCmd, { timeout: 300000 });
+                log('success', `✅ Package "${pkg}" uninstall attempted.`);
+              }
+            } catch (err) {
+              log('error', `Failed to uninstall package: ${err.message}`);
             }
           } else if (act.type === 'UNINSTALL_SERVICE') {
             log('info', '🛑 Server requested removal of persistent background service...');
@@ -2587,7 +2794,7 @@ async function sendHeartbeat() {
               log('success', `✅ REMOTE COMMAND output:\n${result.substring(0, 2000)}`);
               // Report result back to server
               try {
-                await request(`${API_BASE}/discovery/agents/command-result`, 'POST', {
+                await request('POST', '/discovery/agents/command-result', {
                   agentId: agentId,
                   command: command,
                   output: result.substring(0, 10000),
@@ -2598,7 +2805,7 @@ async function sendHeartbeat() {
             } catch (err) {
               log('error', `❌ REMOTE COMMAND failed: ${err.message}`);
               try {
-                await request(`${API_BASE}/discovery/agents/command-result`, 'POST', {
+                await request('POST', '/discovery/agents/command-result', {
                   agentId: agentId,
                   command: command,
                   output: err.stderr || err.message,

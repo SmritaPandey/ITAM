@@ -6,7 +6,7 @@ import {
   Shield, Crown, Lock, Settings, DollarSign, Percent, Clock, 
   Wrench, Sparkles, Activity, FileText, CheckCircle2, XCircle, 
   Trash2, HelpCircle, Server, Eye, EyeOff, LayoutGrid, CreditCard, 
-  Coins, Gift, Calendar, AlertTriangle
+  Coins, Gift, Calendar, AlertTriangle, Plus, X
 } from "lucide-react";
 
 const PLAN_COLORS: Record<string, string> = { STARTER: "#64748b", PROFESSIONAL: "#06b6d4", ENTERPRISE: "#8b5cf6", ON_PREMISE: "#f59e0b" };
@@ -85,6 +85,16 @@ export default function TenantsPage() {
   const [trialEndsAt, setTrialEndsAt] = useState("");
   const [endDate, setEndDate] = useState("");
   const [subNotes, setSubNotes] = useState("");
+  const [showCreate, setShowCreate] = useState(false);
+  const [creating, setCreating] = useState(false);
+  const [createForm, setCreateForm] = useState({
+    name: "",
+    plan: "PROFESSIONAL",
+    adminEmail: "",
+    adminFullName: "",
+    adminPassword: "",
+  });
+  const [createResult, setCreateResult] = useState<any>(null);
 
   function load(q?: string) {
     setLoading(true);
@@ -175,6 +185,32 @@ export default function TenantsPage() {
     setSelected(null); load(search);
   }
 
+  async function createTenant(e: React.FormEvent) {
+    e.preventDefault();
+    setCreating(true);
+    try {
+      const res = await apiFetch("/admin/tenants", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: createForm.name,
+          plan: createForm.plan,
+          adminEmail: createForm.adminEmail,
+          adminFullName: createForm.adminFullName || undefined,
+          adminPassword: createForm.adminPassword || undefined,
+        }),
+      });
+      setCreateResult(res);
+      setShowCreate(false);
+      setCreateForm({ name: "", plan: "PROFESSIONAL", adminEmail: "", adminFullName: "", adminPassword: "" });
+      load(search);
+    } catch (err: any) {
+      alert(err?.message || "Failed to create tenant");
+    } finally {
+      setCreating(false);
+    }
+  }
+
   function handleOverrideChange(moduleKey: string, status: "DEFAULT" | "ALLOW" | "BLOCK") {
     if (status === "ALLOW") {
       setCustomAllowedModules(prev => {
@@ -207,8 +243,24 @@ export default function TenantsPage() {
             <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search tenants..."
               style={{ padding: "8px 12px 8px 32px", borderRadius: 8, border: "1px solid var(--border-primary)", background: "var(--bg-input)", color: "var(--text-primary)", fontSize: 13, width: 240, outline: "none" }} />
           </div>
+          <button type="button" onClick={() => setShowCreate(true)} style={{ display: "flex", alignItems: "center", gap: 6, padding: "8px 14px", borderRadius: 8, border: "none", background: "#06b6d4", color: "#fff", fontWeight: 600, fontSize: 13, cursor: "pointer" }}>
+            <Plus size={14} /> Create tenant
+          </button>
         </form>
       </div>
+
+      {createResult && (
+        <div style={{ marginBottom: 16, padding: 14, borderRadius: 12, border: "1px solid #10b98155", background: "#10b98112", display: "flex", justifyContent: "space-between", gap: 12 }}>
+          <div style={{ fontSize: 13, color: "var(--text-secondary)" }}>
+            <strong style={{ color: "var(--text-primary)" }}>Tenant created:</strong> {createResult.tenant?.name}
+            {" · "}Admin {createResult.admin?.email}
+            {createResult.temporaryPassword && (
+              <> · Temp password: <code>{createResult.temporaryPassword}</code></>
+            )}
+          </div>
+          <button onClick={() => setCreateResult(null)} style={{ background: "none", border: "none", cursor: "pointer", color: "var(--text-tertiary)" }}><X size={14} /></button>
+        </div>
+      )}
 
       {/* Table */}
       <div style={{ background: "var(--bg-card)", border: "1px solid var(--border-primary)", borderRadius: 12, overflow: "hidden" }}>
@@ -755,6 +807,55 @@ export default function TenantsPage() {
             )}
           </div>
         </>
+      )}
+
+      {showCreate && (
+        <div
+          style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000 }}
+          onClick={() => setShowCreate(false)}
+        >
+          <form
+            onClick={(e) => e.stopPropagation()}
+            onSubmit={createTenant}
+            style={{ width: 440, maxWidth: "92vw", background: "var(--bg-card)", border: "1px solid var(--border-primary)", borderRadius: 14, padding: 24 }}
+          >
+            <h2 style={{ fontSize: 16, fontWeight: 700, color: "var(--text-primary)", margin: "0 0 16px" }}>Create tenant</h2>
+            {[
+              { key: "name", label: "Organization name", type: "text", required: true },
+              { key: "adminEmail", label: "Tenant Admin email", type: "email", required: true },
+              { key: "adminFullName", label: "Admin full name", type: "text" },
+              { key: "adminPassword", label: "Admin password (optional — auto-generated if empty)", type: "text" },
+            ].map((field) => (
+              <label key={field.key} style={{ display: "block", marginBottom: 12, fontSize: 12, color: "var(--text-secondary)" }}>
+                {field.label}
+                <input
+                  required={field.required}
+                  type={field.type}
+                  value={(createForm as any)[field.key]}
+                  onChange={(e) => setCreateForm((f) => ({ ...f, [field.key]: e.target.value }))}
+                  style={{ display: "block", width: "100%", marginTop: 4, padding: "8px 10px", borderRadius: 8, border: "1px solid var(--border-primary)", background: "var(--bg-input)", color: "var(--text-primary)", fontSize: 13 }}
+                />
+              </label>
+            ))}
+            <label style={{ display: "block", marginBottom: 16, fontSize: 12, color: "var(--text-secondary)" }}>
+              Plan
+              <select
+                value={createForm.plan}
+                onChange={(e) => setCreateForm((f) => ({ ...f, plan: e.target.value }))}
+                style={{ display: "block", width: "100%", marginTop: 4, padding: "8px 10px", borderRadius: 8, border: "1px solid var(--border-primary)", background: "var(--bg-input)", color: "var(--text-primary)", fontSize: 13 }}
+              >
+                <option value="STARTER">STARTER</option>
+                <option value="PROFESSIONAL">PROFESSIONAL</option>
+                <option value="ENTERPRISE">ENTERPRISE</option>
+                <option value="ON_PREMISE">ON_PREMISE</option>
+              </select>
+            </label>
+            <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
+              <button type="button" onClick={() => setShowCreate(false)} style={{ padding: "8px 14px", borderRadius: 8, border: "1px solid var(--border-primary)", background: "transparent", color: "var(--text-secondary)", cursor: "pointer" }}>Cancel</button>
+              <button type="submit" disabled={creating} style={{ padding: "8px 14px", borderRadius: 8, border: "none", background: "#06b6d4", color: "#fff", fontWeight: 600, cursor: "pointer" }}>{creating ? "Creating…" : "Create"}</button>
+            </div>
+          </form>
+        </div>
       )}
     </div>
   );

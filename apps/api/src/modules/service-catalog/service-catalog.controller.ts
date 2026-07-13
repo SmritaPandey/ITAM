@@ -22,18 +22,40 @@ export class ServiceCatalogController {
     return this.service.getCatalog(req.user.tenantId);
   }
 
-  @Get(':id')
-  @Roles('*')
-  @ApiOperation({ summary: 'Get a single catalog item by ID' })
-  async getItem(@Request() req: any, @Param('id') id: string) {
-    return this.service.getItem(req.user.tenantId, id);
-  }
-
   @Post()
   @Roles('Tenant Admin')
   @ApiOperation({ summary: 'Create a new catalog item' })
   async createItem(@Request() req: any, @Body() body: any) {
     return this.service.createItem(req.user.tenantId, body);
+  }
+
+  @Post('requests/:ticketId/approve')
+  @Roles('Tenant Admin', 'IT Admin', 'Manager')
+  @ApiOperation({ summary: 'Approve a pending catalog service request' })
+  async approveRequest(
+    @Request() req: any,
+    @Param('ticketId') ticketId: string,
+    @Body() body: { comment?: string },
+  ) {
+    return this.service.approveRequest(req.user.tenantId, ticketId, req.user.sub, body?.comment);
+  }
+
+  @Post('requests/:ticketId/reject')
+  @Roles('Tenant Admin', 'IT Admin', 'Manager')
+  @ApiOperation({ summary: 'Reject a pending catalog service request' })
+  async rejectRequest(
+    @Request() req: any,
+    @Param('ticketId') ticketId: string,
+    @Body() body: { reason?: string },
+  ) {
+    return this.service.rejectRequest(req.user.tenantId, ticketId, req.user.sub, body?.reason);
+  }
+
+  @Get(':id')
+  @Roles('*')
+  @ApiOperation({ summary: 'Get a single catalog item by ID' })
+  async getItem(@Request() req: any, @Param('id') id: string) {
+    return this.service.getItem(req.user.tenantId, id);
   }
 
   @Patch(':id')

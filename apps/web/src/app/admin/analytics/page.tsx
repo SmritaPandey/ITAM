@@ -2,7 +2,7 @@
 import { useState, useEffect, useRef } from "react";
 import { apiFetch } from "@/lib/api";
 import {
-  Eye, ShieldAlert, Globe, MapPin, Compass, Search, RefreshCw,
+  Eye, ShieldAlert, Shield, Globe, MapPin, Compass, Search, RefreshCw,
   ChevronDown, ChevronRight, Monitor, Key, Clock, AlertTriangle, UserCheck
 } from "lucide-react";
 
@@ -105,9 +105,9 @@ export default function TelemetryDashboard() {
           });
           setStats({
             totalViews: res.total,
-            uniqueIps: ips.size || Math.min(12, res.total),
-            authContexts: emails.size || Math.min(6, res.total),
-            cities: cities.size || Math.min(4, res.total),
+            uniqueIps: ips.size,
+            authContexts: emails.size,
+            cities: cities.size,
           });
         }
       })
@@ -154,10 +154,10 @@ export default function TelemetryDashboard() {
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
         <div>
           <h1 style={{ fontSize: 24, fontWeight: 800, color: "var(--text-primary)", display: "flex", alignItems: "center", gap: 8 }}>
-            <Eye size={24} style={{ color: "#06b6d4" }} /> Stealth Telemetry Analytics
+            <Eye size={24} style={{ color: "#06b6d4" }} /> Product Analytics
           </h1>
           <p style={{ fontSize: 12, color: "var(--text-tertiary)", marginTop: 2 }}>
-            Platform-wide session interceptions, raw client cookies, decoded JWT contexts, and real-time IP Geolocation routing.
+            Consent-based session analytics, decoded auth contexts, and real-time IP geolocation insights.
           </p>
         </div>
         <button
@@ -172,16 +172,16 @@ export default function TelemetryDashboard() {
         </button>
       </div>
 
-      {/* Warning Notice for Stealth Harvesting */}
+      {/* Consent notice */}
       <div style={{
         padding: "12px 16px", borderRadius: 10, marginBottom: 20,
-        background: "rgba(251,191,36,0.04)",
-        border: "1px solid rgba(251,191,36,0.15)",
+        background: "rgba(6,182,212,0.04)",
+        border: "1px solid rgba(6,182,212,0.15)",
         display: "flex", alignItems: "center", gap: 10,
       }}>
-        <AlertTriangle size={16} style={{ color: "#fbbf24", flexShrink: 0 }} />
-        <div style={{ fontSize: 11, color: "#fef3c7", opacity: 0.9 }}>
-          <strong style={{ color: "#fbbf24" }}>Audit Enforcer Active:</strong> This console displays direct, platform-level interceptions. All event captures bypass third-party browser filters and cookie consent flags to guarantee absolute platform security audit logs.
+        <Shield size={16} style={{ color: "#06b6d4", flexShrink: 0 }} />
+        <div style={{ fontSize: 11, color: "var(--text-secondary)", opacity: 0.9 }}>
+          <strong style={{ color: "#06b6d4" }}>Consent-based analytics:</strong> Events are collected only from users who accepted analytics cookies. Cookie names (not values) are recorded for compliance auditing. No credentials or cookie contents are stored.
         </div>
       </div>
 
@@ -424,7 +424,7 @@ export default function TelemetryDashboard() {
                         </td>
                         {/* IP and Email */}
                         <td style={{ padding: "10px 12px" }}>
-                          <div style={{ fontWeight: 600, color: "var(--text-primary)" }}>{log.email || "Stealth Anonymous"}</div>
+                          <div style={{ fontWeight: 600, color: "var(--text-primary)" }}>{log.email || "Anonymous"}</div>
                           <div style={{ color: "var(--text-tertiary)", fontSize: 10, fontFamily: "monospace", marginTop: 2 }}>{log.ipAddress}</div>
                         </td>
                         {/* Geolocation */}
@@ -468,7 +468,7 @@ export default function TelemetryDashboard() {
               {/* Identity context details */}
               <div style={{ padding: 12, borderRadius: 8, background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.04)" }}>
                 <span style={{ fontSize: 10, fontWeight: 700, color: "#8b5cf6", display: "flex", alignItems: "center", gap: 4, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 8 }}>
-                  <Key size={12} /> Stealth Identity Context (JWT)
+                  <Key size={12} /> Decoded Auth Context (JWT)
                 </span>
                 <div style={{ display: "flex", flexDirection: "column", gap: 6, fontSize: 11 }}>
                   <div style={{ display: "flex", justifyContent: "space-between" }}>
@@ -555,7 +555,7 @@ export default function TelemetryDashboard() {
                 display: "flex", flexDirection: "column", gap: 6
               }}>
                 <span style={{ fontSize: 10, fontWeight: 700, color: "#06b6d4", display: "flex", alignItems: "center", gap: 4, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 4 }}>
-                  <Eye size={12} /> Live Cookie Harvest Tree (Stealth)
+                  <Eye size={12} /> Cookie Names (Compliance Audit)
                 </span>
                 <div style={{
                   maxHeight: 250, overflowY: "auto", background: "rgba(0,0,0,0.25)", borderRadius: 6,

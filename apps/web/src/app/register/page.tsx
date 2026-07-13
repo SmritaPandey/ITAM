@@ -1,5 +1,5 @@
 "use client";
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { LogoIcon } from "@/components/Logo";
 import {
@@ -50,14 +50,21 @@ export default function RegisterPage() {
   const [touched, setTouched] = useState<Record<string, boolean>>({});
   const [acceptedTerms, setAcceptedTerms] = useState(false);
   const [oauthProviders] = useState<{ google: boolean; microsoft: boolean }>({ google: true, microsoft: true });
+  const [signupDisabled, setSignupDisabled] = useState<boolean | null>(null);
 
   const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4100/api/v1";
   const pwStrength = useMemo(() => getPasswordStrength(form.password), [form.password]);
 
-  function update(field: string, value: string) { setForm(f => ({ ...f, [field]: value })); setError(""); }
-  function touch(field: string) { setTouched(t => ({ ...t, [field]: true })); }
+  useEffect(() => {
+    fetch(`${API}/product-licenses/deployment`)
+      .then((r) => r.json())
+      .then((d) => {
+        const disabled = !!d.publicSignupDisabled || d.deploymentMode === "onprem";
+        setSignupDisabled(disabled);
+      })
+      .catch(() => setSignupDisabled(false));
+  }, [API]);
 
-  // Field-level validation
   const errors = useMemo(() => ({
     company: touched.company ? validateCompany(form.company) : null,
     name: touched.name ? validateName(form.name) : null,
@@ -69,6 +76,31 @@ export default function RegisterPage() {
   const canSubmit = form.company.length >= 2 && form.name.trim().length >= 2 &&
     validateEmail(form.email) && form.password.length >= 8 &&
     form.password === form.confirmPassword && acceptedTerms && !loading;
+
+  if (signupDisabled === true) {
+    return (
+      <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", padding: 24, background: "var(--bg-base)" }}>
+        <div style={{ maxWidth: 420, textAlign: "center" }}>
+          <LogoIcon size={60} />
+          <h1 style={{ fontSize: 22, fontWeight: 800, marginTop: 16, color: "var(--text-primary)" }}>Registration disabled</h1>
+          <p style={{ fontSize: 14, color: "var(--text-secondary)", marginTop: 8 }}>
+            This deployment does not allow public self-signup. Contact your administrator for an account, or sign in if you already have one.
+          </p>
+          <button
+            onClick={() => router.push("/login")}
+            style={{ marginTop: 20, padding: "10px 18px", borderRadius: 8, border: "none", background: "#06b6d4", color: "#fff", fontWeight: 600, cursor: "pointer" }}
+          >
+            Go to login
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  function update(field: string, value: string) { setForm(f => ({ ...f, [field]: value })); setError(""); }
+  function touch(field: string) { setTouched(t => ({ ...t, [field]: true })); }
+
+  // Field-level validation (hooks above)
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -139,7 +171,7 @@ export default function RegisterPage() {
         {/* Header */}
         <div style={{ textAlign: "center", marginBottom: 28 }}>
           <div onClick={() => router.push("/")} style={{ display: "inline-flex", alignItems: "center", gap: 10, cursor: "pointer", marginBottom: 18 }} title="Back to homepage">
-            <LogoIcon size={36} />
+            <LogoIcon size={44} />
             <span style={{ fontSize: 24, fontWeight: 900, color: "#f1f5f9", letterSpacing: "-0.04em", fontFamily: "'Outfit', 'Inter', sans-serif", background: "linear-gradient(to right, #f1f5f9 65%, #22d3ee 100%)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent" }}>QS Asset</span>
           </div>
           <h1 style={{ fontSize: 24, fontWeight: 800, color: "#f1f5f9", marginBottom: 6, letterSpacing: "-0.03em" }}>Create Your Workspace</h1>

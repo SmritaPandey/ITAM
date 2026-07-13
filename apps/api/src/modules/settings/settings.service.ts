@@ -62,6 +62,8 @@ export class SettingsService {
     'scanInterval',
     'snmpCommunity',
     'agentPort',
+    // Active Directory / LDAP sync
+    'adSync',
     // Notification settings
     'emailAlerts',
     'slackEnabled',
@@ -292,7 +294,13 @@ export class SettingsService {
     });
   }
 
-  async requestUpgrade(tenantId: string, plan: string, billingCycle?: string, currency?: string) {
+  async requestUpgrade(
+    tenantId: string,
+    plan: string,
+    billingCycle?: string,
+    currency?: string,
+    providerPreference?: string,
+  ) {
     const validPlans = ['STARTER', 'PROFESSIONAL', 'ENTERPRISE'];
     if (!validPlans.includes(plan)) throw new NotFoundException('Invalid plan');
 
@@ -305,7 +313,8 @@ export class SettingsService {
     // This method creates a *pending* upgrade request, not an immediate switch.
 
     const pricing = await this.getPricingSettings();
-    const isUSD = (currency || 'INR').toUpperCase() === 'USD';
+    const currencyCode = (currency || 'INR').toUpperCase();
+    const isUSD = currencyCode === 'USD';
 
     const getPlanPrice = (pName: string) => {
       const p = pName.toLowerCase();
@@ -315,6 +324,9 @@ export class SettingsService {
     };
 
     const effectiveMrr = getPlanPrice(plan) * (1 - cycleDiscount / 100);
+    const monthsPerCycle: Record<string, number> = { MONTHLY: 1, QUARTERLY: 3, ANNUAL: 12, CUSTOM: 1 };
+    const chargeAmount = Math.round(effectiveMrr * (monthsPerCycle[cycle] || 1));
+
     const existing = await this.prisma.subscription.findFirst({ where: { tenantId } });
 
     if (existing) {
@@ -342,7 +354,7 @@ export class SettingsService {
       });
     }
 
-    return {
+    const result: Record<string, any> = {
       success: true,
       plan,
       billingCycle: cycle,
@@ -350,6 +362,129 @@ export class SettingsService {
       // Upgrade is pending — actual plan activation happens after payment confirmation
       status: 'PENDING_UPGRADE',
       message: `Upgrade to ${plan} (${cycle}) is pending payment confirmation${cycleDiscount > 0 ? ` — ${cycleDiscount}% billing discount will be applied` : ''}. Your plan will be activated once payment is verified.`,
+      checkoutUrl: null as string | null,
+      orderId: null as string | null,
+      provider: null as string | null,
     };
+
+    if (chargeAmount > 0) {
+      const checkout = await this.createCheckoutSession({
+        tenantId,
+        plan,
+        cycle,
+        amount: chargeAmount,
+        currency: currencyCode,
+        providerPreference,
+      });
+      Object.assign(result, checkout);
+      if (checkout.checkoutUrl || checkout.orderId) {
+        result.message = `Upgrade to ${plan} (${cycle}) — complete payment to activate your plan.`;
+      }
+    }
+
+    return result;
+  }
+
+  /**
+   * Create Stripe Checkout Session or Razorpay Order when payment env keys are configured.
+   * Prefers Stripe when both are available unless providerPreference is set.
+   */
+  private async createCheckoutSession(opts: {
+    tenantId: string;
+    plan: string;
+    cycle: string;
+    amount: number;
+    currency: string;
+    providerPreference?: string;
+  }): Promise<{ checkoutUrl: string | null; orderId: string | null; provider: string | null; razorpayKeyId?: string }> {
+    const preferred = (opts.providerPreference || '').toLowerCase();
+    const stripeKey = process.env.STRIPE_SECRET_KEY;
+    const razorpayKeyId = process.env.RAZORPAY_KEY_ID;
+    const razorpayKeySecret = process.env.RAZORPAY_KEY_SECRET;
+    const hasStripe = !!stripeKey;
+    const hasRazorpay = !!(razorpayKeyId && razorpayKeySecret);
+
+    let useProvider: 'stripe' | 'razorpay' | null = null;
+    if (preferred === 'stripe' && hasStripe) useProvider = 'stripe';
+    else if ((preferred === 'razorpay' || preferred === 'payg') && hasRazorpay) useProvider = 'razorpay';
+    else if (hasStripe) useProvider = 'stripe';
+    else if (hasRazorpay) useProvider = 'razorpay';
+
+    if (!useProvider) {
+      return { checkoutUrl: null, orderId: null, provider: null };
+    }
+
+    const appUrl = (process.env.APP_URL || 'http://localhost:3100').replace(/\/$/, '');
+    const amountMinor = Math.round(opts.amount * 100); // cents / paise
+
+    try {
+      if (useProvider === 'stripe') {
+        const StripeMod = await import('stripe');
+        const Stripe = (StripeMod as any).default || StripeMod;
+        const stripe = new Stripe(stripeKey!);
+        const session = await stripe.checkout.sessions.create({
+          mode: 'payment',
+          success_url: `${appUrl}/dashboard/settings?section=billing&upgrade=success`,
+          cancel_url: `${appUrl}/dashboard/settings?section=billing&upgrade=cancelled`,
+          line_items: [
+            {
+              quantity: 1,
+              price_data: {
+                currency: opts.currency.toLowerCase(),
+                unit_amount: amountMinor,
+                product_data: {
+                  name: `QS Assets ${opts.plan} (${opts.cycle})`,
+                  description: `Plan upgrade to ${opts.plan} — ${opts.cycle} billing`,
+                },
+              },
+            },
+          ],
+          metadata: {
+            tenantId: opts.tenantId,
+            plan: opts.plan,
+            billingCycle: opts.cycle,
+          },
+          payment_intent_data: {
+            metadata: {
+              tenantId: opts.tenantId,
+              plan: opts.plan,
+              billingCycle: opts.cycle,
+            },
+          },
+        });
+
+        return {
+          checkoutUrl: session.url,
+          orderId: session.id,
+          provider: 'stripe',
+        };
+      }
+
+      // Razorpay order
+      const RazorpayMod = await import('razorpay');
+      const Razorpay = (RazorpayMod as any).default || RazorpayMod;
+      const razorpay = new Razorpay({ key_id: razorpayKeyId!, key_secret: razorpayKeySecret! });
+      const order = await razorpay.orders.create({
+        amount: amountMinor,
+        currency: opts.currency.toUpperCase(),
+        receipt: `upgrade_${opts.tenantId.slice(0, 8)}_${Date.now()}`.slice(0, 40),
+        notes: {
+          tenantId: opts.tenantId,
+          plan: opts.plan,
+          billingCycle: opts.cycle,
+        },
+      });
+
+      return {
+        checkoutUrl: null,
+        orderId: order.id,
+        provider: 'razorpay',
+        razorpayKeyId: razorpayKeyId!,
+      };
+    } catch (err) {
+      // Keep PENDING_UPGRADE even if payment provider call fails
+      console.error(`[Settings] Failed to create ${useProvider} checkout:`, err);
+      return { checkoutUrl: null, orderId: null, provider: useProvider };
+    }
   }
 }

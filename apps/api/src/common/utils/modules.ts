@@ -16,8 +16,10 @@ export const MODULE_CATALOG = {
   // Professional Modules
   CMDB: 'CMDB',
   WORK_ORDERS: 'Work Orders',
+  FACILITY: 'Facility & EAM',
   DISCOVERY: 'Discovery',
   PATCH_MGMT: 'Patch Mgmt',
+  SOFTWARE_DEPLOYMENT: 'Software Deploy',
   NETWORK: 'Network (NMS)',
   SECURITY_SCAN: 'Security Scan',
   LICENSES: 'Licenses',
@@ -25,6 +27,7 @@ export const MODULE_CATALOG = {
   REPORTS: 'Reports',
   AUDIT_LOGS: 'Audit Logs',
   CCTV: 'CCTV',
+  ALERTS: 'Alerts',
 
   // Enterprise / On-Premise Modules
   COMPLIANCE: 'Compliance',
@@ -34,6 +37,9 @@ export const MODULE_CATALOG = {
   FLEET: 'Fleet / GPS',
   VDI: 'VDI',
   AUTOMATION: 'Automation',
+  NAC: 'NAC',
+  INTELLIGENCE: 'Intelligence',
+  REMOTE_TERMINAL: 'Remote Terminal',
 };
 
 export type ModuleKey = keyof typeof MODULE_CATALOG;
@@ -55,8 +61,10 @@ const PROFESSIONAL_MODULES: ModuleKey[] = [
   ...STARTER_MODULES,
   'CMDB',
   'WORK_ORDERS',
+  'FACILITY',
   'DISCOVERY',
   'PATCH_MGMT',
+  'SOFTWARE_DEPLOYMENT',
   'NETWORK',
   'SECURITY_SCAN',
   'LICENSES',
@@ -64,6 +72,7 @@ const PROFESSIONAL_MODULES: ModuleKey[] = [
   'REPORTS',
   'AUDIT_LOGS',
   'CCTV',
+  'ALERTS',
 ];
 
 const ENTERPRISE_MODULES: ModuleKey[] = [
@@ -75,6 +84,9 @@ const ENTERPRISE_MODULES: ModuleKey[] = [
   'FLEET',
   'VDI',
   'AUTOMATION',
+  'NAC',
+  'INTELLIGENCE',
+  'REMOTE_TERMINAL',
 ];
 
 /**

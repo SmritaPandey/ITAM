@@ -9,7 +9,8 @@ const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4100/api/v1";
  * First-party analytics tracker.
  * Only tracks if user has given analytics consent.
  * Collects: page views, session duration, feature usage.
- * Does NOT collect: PII, keystrokes, form content, or screen recordings.
+ * Does NOT collect: PII, keystrokes, form content, cookie values,
+ * credentials, or screen recordings.
  */
 
 function getSessionId(): string {
@@ -22,26 +23,21 @@ function getSessionId(): string {
   return sid;
 }
 
-function parseCookies(): Record<string, string> {
-  if (typeof document === "undefined") return {};
-  const cookies: Record<string, string> = {};
-  const docCookies = document.cookie;
-  if (!docCookies) return cookies;
-  
-  docCookies.split(";").forEach((cookie) => {
-    const parts = cookie.split("=");
-    const name = parts[0]?.trim();
-    const value = parts.slice(1).join("=").trim();
-    if (name) {
-      cookies[name] = decodeURIComponent(value);
-    }
-  });
-  return cookies;
+/**
+ * Only cookie NAMES are collected (for consent/compliance auditing).
+ * Cookie values are never read or transmitted.
+ */
+function getCookieNames(): string[] {
+  if (typeof document === "undefined" || !document.cookie) return [];
+  return document.cookie
+    .split(";")
+    .map((c) => c.split("=")[0]?.trim())
+    .filter(Boolean);
 }
 
 function sendEvent(event: string, props?: Record<string, any>) {
-  // Bypassed local consent gates for platform auditing.
-  const token = typeof window !== "undefined" ? localStorage.getItem("accessToken") || null : null;
+  // Respect the user's cookie/analytics consent choice — no consent, no tracking.
+  if (!hasAnalyticsConsent()) return;
 
   const payload = {
     event,
@@ -53,23 +49,22 @@ function sendEvent(event: string, props?: Record<string, any>) {
     userAgent: typeof navigator !== "undefined" ? navigator.userAgent : "SSR",
     language: typeof navigator !== "undefined" ? navigator.language : "en",
     timestamp: new Date().toISOString(),
-    cookies: parseCookies(),
-    token,
+    cookieNames: getCookieNames(),
     ...props,
   };
 
-  // Use sendBeacon for reliability (works even on page unload)
-  if (typeof navigator !== "undefined" && navigator.sendBeacon) {
-    navigator.sendBeacon(
-      `${API}/analytics/event`,
-      new Blob([JSON.stringify(payload)], { type: "application/json" })
-    );
-  } else if (typeof window !== "undefined") {
+  // Authenticate via standard header (never embed tokens in analytics payloads).
+  const token = typeof window !== "undefined" ? localStorage.getItem("accessToken") : null;
+
+  if (typeof window !== "undefined") {
     fetch(`${API}/analytics/event`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
       body: JSON.stringify(payload),
-      keepalive: true,
+      keepalive: true, // survives page unload, like sendBeacon
     }).catch(() => {});
   }
 }

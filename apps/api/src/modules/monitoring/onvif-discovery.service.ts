@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import * as dgram from 'dgram';
 import * as http from 'http';
+import { randomUUID } from 'crypto';
 import { PrismaService } from '../../common/database/prisma.service';
 import { EventBusService } from '../../common/events/event-bus.service';
 
@@ -66,11 +67,25 @@ export class OnvifDiscoveryService {
    * Sends a multicast UDP probe and collects responses for `timeoutMs`.
    */
   async discoverCameras(timeoutMs = 5000): Promise<OnvifDevice[]> {
+    const waitMs = Math.min(Math.max(timeoutMs, 1000), 30000);
+
     return new Promise((resolve) => {
       const devices: OnvifDevice[] = [];
       const seenAddrs = new Set<string>();
-
+      let finished = false;
       const socket = dgram.createSocket({ type: 'udp4', reuseAddr: true });
+
+      const finish = () => {
+        if (finished) return;
+        finished = true;
+        try {
+          socket.close();
+        } catch {
+          /* ignore */
+        }
+        this.logger.log(`WS-Discovery completed: ${devices.length} ONVIF cameras found`);
+        resolve(devices);
+      };
 
       socket.on('message', (msg) => {
         try {
@@ -80,11 +95,17 @@ export class OnvifDiscoveryService {
             seenAddrs.add(device.address);
             devices.push(device);
           }
-        } catch { /* Ignore non-ONVIF responses */ }
+        } catch {
+          /* Ignore non-ONVIF responses */
+        }
       });
 
       socket.on('error', (err) => {
-        this.logger.warn(`WS-Discovery error: ${err.message}`);
+        this.logger.warn(
+          `WS-Discovery socket error (multicast ${WS_DISCOVERY_MULTICAST}:${WS_DISCOVERY_PORT}): ${err.message}. ` +
+            `Ensure UDP ${WS_DISCOVERY_PORT} is allowed and the host is on the camera LAN.`,
+        );
+        finish();
       });
 
       socket.bind(() => {
@@ -92,25 +113,24 @@ export class OnvifDiscoveryService {
           socket.setBroadcast(true);
           socket.setMulticastTTL(128);
 
-          // Generate unique message ID
           const uuid = this.generateUuid();
           const probe = WS_DISCOVERY_PROBE.replace('__UUID__', uuid);
           const buf = Buffer.from(probe);
 
           socket.send(buf, 0, buf.length, WS_DISCOVERY_PORT, WS_DISCOVERY_MULTICAST, (err) => {
-            if (err) this.logger.warn(`Failed to send WS-Discovery probe: ${err.message}`);
+            if (err) {
+              this.logger.warn(
+                `Failed to send WS-Discovery probe to ${WS_DISCOVERY_MULTICAST}:${WS_DISCOVERY_PORT}: ${err.message}`,
+              );
+            }
           });
         } catch (err: any) {
-          this.logger.warn(`WS-Discovery bind error: ${err.message}`);
+          this.logger.warn(`WS-Discovery bind/send error: ${err.message}`);
+          finish();
         }
       });
 
-      // Collect responses for the timeout duration
-      setTimeout(() => {
-        try { socket.close(); } catch { /* ignore */ }
-        this.logger.log(`WS-Discovery completed: ${devices.length} ONVIF cameras found`);
-        resolve(devices);
-      }, timeoutMs);
+      setTimeout(finish, waitMs);
     });
   }
 
@@ -175,7 +195,9 @@ export class OnvifDiscoveryService {
 
       return { manufacturer, model, firmwareVersion, hardwareId, address: host, port, xaddrs: `http://${host}:${port}/onvif/device_service`, scopes: [] };
     } catch (err: any) {
-      this.logger.warn(`Failed to get ONVIF device info from ${host}:${port}: ${err.message}`);
+      this.logger.warn(
+        `Failed to get ONVIF device info from ${host}:${port}/onvif/device_service: ${err.message}`,
+      );
       return { address: host, port, xaddrs: `http://${host}:${port}/onvif/device_service`, scopes: [] };
     }
   }
@@ -204,7 +226,9 @@ export class OnvifDiscoveryService {
       const uriMatch = response.match(/<[\w:]*Uri[^>]*>([^<]+)/);
       return uriMatch ? uriMatch[1] : null;
     } catch (err: any) {
-      this.logger.warn(`Failed to get stream URI from ${host}: ${err.message}`);
+      this.logger.warn(
+        `Failed to get stream URI from ${host}:${port}/onvif/media_service (profile=${profileToken}): ${err.message}`,
+      );
       return null;
     }
   }
@@ -234,7 +258,10 @@ export class OnvifDiscoveryService {
         data: {
           tenantId,
           type: 'CAMERA',
-          name: cam.name || info.manufacturer ? `${info.manufacturer || ''} ${info.model || ''} (${cam.address})`.trim() : cam.address,
+          name: cam.name
+            || (info.manufacturer
+              ? `${info.manufacturer || ''} ${info.model || ''} (${cam.address})`.trim()
+              : cam.address),
           ipAddress: cam.address,
           status: 'ONLINE',
           lastSeen: new Date(),
@@ -282,23 +309,30 @@ export class OnvifDiscoveryService {
         headers['Authorization'] = 'Basic ' + Buffer.from(`${username}:${password}`).toString('base64');
       }
 
-      const req = http.request({ hostname: host, port, path, method: 'POST', headers, timeout: 5000 }, (res) => {
-        let data = '';
-        res.on('data', chunk => { data += chunk; });
-        res.on('end', () => resolve(data));
-      });
+      const req = http.request(
+        { hostname: host, port, path, method: 'POST', headers, timeout: 8000 },
+        (res) => {
+          let data = '';
+          res.on('data', (chunk) => {
+            data += chunk;
+          });
+          res.on('end', () => resolve(data));
+        },
+      );
 
-      req.on('error', reject);
-      req.on('timeout', () => { req.destroy(); reject(new Error('ONVIF request timeout')); });
+      req.on('error', (err) => {
+        reject(new Error(`ONVIF SOAP request to ${host}:${port}${path} failed: ${err.message}`));
+      });
+      req.on('timeout', () => {
+        req.destroy();
+        reject(new Error(`ONVIF SOAP request to ${host}:${port}${path} timed out after 8s`));
+      });
       req.write(body);
       req.end();
     });
   }
 
   private generateUuid(): string {
-    return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
-      const r = (Math.random() * 16) | 0;
-      return (c === 'x' ? r : (r & 0x3) | 0x8).toString(16);
-    });
+    return randomUUID();
   }
 }

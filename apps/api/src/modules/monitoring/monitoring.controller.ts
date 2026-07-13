@@ -1,5 +1,8 @@
-import { Controller, Get, Post, Patch, Delete, Body, Param, Query, UseGuards, Request } from '@nestjs/common';
+import { Controller, Get, Post, Patch, Delete, Body, Param, Query, UseGuards, Request, Res, NotFoundException } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
+import * as express from 'express';
+import * as fs from 'fs';
+import * as path from 'path';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
@@ -8,9 +11,13 @@ import { SnmpPollerService } from './snmp-poller.service';
 import { SnmpTrapReceiverService } from './snmp-trap-receiver.service';
 import { OnvifDiscoveryService } from './onvif-discovery.service';
 import { VdiHypervisorService } from './vdi-hypervisor.service';
+import { CameraHlsService } from './camera-hls.service';
+import { SyslogReceiverService } from './syslog-receiver.service';
+import { NetflowCollectorService } from './netflow-collector.service';
 import { ModuleGuard } from '../../common/guards/module.guard';
 import { CreateDeviceDto } from './dto/create-device.dto';
 import { RequireModule } from '../../common/decorators/require-module.decorator';
+import { PrismaService } from '../../common/database/prisma.service';
 
 @ApiTags('monitoring')
 @ApiBearerAuth()
@@ -23,6 +30,10 @@ export class MonitoringController {
     private trapReceiver: SnmpTrapReceiverService,
     private onvifDiscovery: OnvifDiscoveryService,
     private vdiHypervisor: VdiHypervisorService,
+    private cameraHls: CameraHlsService,
+    private syslogReceiver: SyslogReceiverService,
+    private netflowCollector: NetflowCollectorService,
+    private prisma: PrismaService,
   ) {}
 
   // ─── CCTV ─────────────────────────────────────────────────────
@@ -33,6 +44,30 @@ export class MonitoringController {
   @ApiOperation({ summary: 'List CCTV cameras with stats' })
   async getCameras(@Request() req: any) {
     return this.service.getCameras(req.user.tenantId);
+  }
+
+  @RequireModule('CCTV')
+  @Get('cameras/hls/status')
+  @Roles('Tenant Admin', 'IT Admin')
+  @ApiOperation({ summary: 'Check if ffmpeg is available for RTSP→HLS streaming' })
+  async hlsStatus() {
+    return this.cameraHls.isFfmpegAvailable();
+  }
+
+  @RequireModule('CCTV')
+  @Get('cameras/video-wall')
+  @Roles('Tenant Admin', 'IT Admin')
+  @ApiOperation({ summary: 'Get CCTV video wall layout + cameras' })
+  async getVideoWall(@Request() req: any) {
+    return this.service.getVideoWall(req.user.tenantId);
+  }
+
+  @RequireModule('CCTV')
+  @Post('cameras/video-wall')
+  @Roles('Tenant Admin', 'IT Admin')
+  @ApiOperation({ summary: 'Save CCTV video wall layout' })
+  async saveVideoWall(@Request() req: any, @Body() body: any) {
+    return this.service.saveVideoWall(req.user.tenantId, body);
   }
 
   @RequireModule('CCTV')
@@ -57,6 +92,46 @@ export class MonitoringController {
   @ApiOperation({ summary: 'Discover ONVIF cameras on the network via WS-Discovery' })
   async discoverCameras(@Request() req: any) {
     return this.onvifDiscovery.discoverAndRegister(req.user.tenantId);
+  }
+
+  @RequireModule('CCTV')
+  @Post('cameras/:id/hls')
+  @Roles('Tenant Admin', 'IT Admin')
+  @ApiOperation({ summary: 'Start ffmpeg RTSP→HLS for a camera (returns playlist URL or streamingAvailable:false)' })
+  async startHls(@Request() req: any, @Param('id') id: string) {
+    return this.cameraHls.startHls(id, req.user.tenantId);
+  }
+
+  @RequireModule('CCTV')
+  @Delete('cameras/:id/hls')
+  @Roles('Tenant Admin', 'IT Admin')
+  @ApiOperation({ summary: 'Stop HLS ffmpeg process for a camera' })
+  async stopHls(@Request() req: any, @Param('id') id: string) {
+    return this.cameraHls.stopHls(id, req.user.tenantId);
+  }
+
+  @RequireModule('CCTV')
+  @Get('cameras/:id/hls/:file')
+  @Roles('Tenant Admin', 'IT Admin')
+  @ApiOperation({ summary: 'Serve HLS playlist or segment for a camera' })
+  async serveHls(
+    @Request() req: any,
+    @Param('id') id: string,
+    @Param('file') file: string,
+    @Res() res: express.Response,
+  ) {
+    // Ensure camera belongs to tenant
+    await this.service.getCameraStream(id, req.user.tenantId);
+    const resolved = this.cameraHls.resolveHlsFile(id, file);
+    if (!resolved) throw new NotFoundException('HLS segment not found');
+
+    const ext = path.extname(resolved).toLowerCase();
+    if (ext === '.m3u8') res.setHeader('Content-Type', 'application/vnd.apple.mpegurl');
+    else if (ext === '.ts') res.setHeader('Content-Type', 'video/mp2t');
+    else res.setHeader('Content-Type', 'application/octet-stream');
+
+    res.setHeader('Cache-Control', 'no-cache');
+    fs.createReadStream(resolved).pipe(res);
   }
 
   // ─── Network (NMS) ───────────────────────────────────────────
@@ -132,6 +207,112 @@ export class MonitoringController {
   @ApiOperation({ summary: 'Auto-create monitored devices from existing assets with IPs' })
   async autoDiscover(@Request() req: any) {
     return this.service.autoDiscoverFromAssets(req.user.tenantId);
+  }
+
+  @RequireModule('NETWORK')
+  @Get('network/syslog')
+  @Roles('Tenant Admin', 'IT Admin')
+  @ApiOperation({ summary: 'List recent syslog events for this tenant' })
+  async getSyslog(
+    @Request() req: any,
+    @Query('limit') limit?: string,
+    @Query('severityMax') severityMax?: string,
+  ) {
+    return this.syslogReceiver.getEvents(req.user.tenantId, {
+      limit: limit ? Number(limit) : 100,
+      severityMax: severityMax !== undefined ? Number(severityMax) : undefined,
+    });
+  }
+
+  @RequireModule('NETWORK')
+  @Get('network/flows/top-talkers')
+  @Roles('Tenant Admin', 'IT Admin')
+  @ApiOperation({ summary: 'Top talkers from NetFlow/sFlow rollups' })
+  async getTopTalkers(
+    @Request() req: any,
+    @Query('hours') hours?: string,
+    @Query('limit') limit?: string,
+  ) {
+    return this.netflowCollector.getTopTalkers(req.user.tenantId, {
+      hours: hours ? Number(hours) : 24,
+      limit: limit ? Number(limit) : 20,
+    });
+  }
+
+  @RequireModule('NETWORK')
+  @Get('network/flows/stats')
+  @Roles('Tenant Admin', 'IT Admin')
+  @ApiOperation({ summary: 'NetFlow collector stats for this tenant' })
+  async getFlowStats(@Request() req: any) {
+    return this.netflowCollector.getStats(req.user.tenantId);
+  }
+
+  @RequireModule('NETWORK')
+  @Get('noc/dashboard')
+  @Roles('Tenant Admin', 'IT Admin')
+  @ApiOperation({ summary: 'NOC dashboard: topology, alarms, top interfaces, traps, syslog' })
+  async getNocDashboard(@Request() req: any) {
+    const tenantId = req.user.tenantId;
+    const [topology, alarms, traps, syslog, topTalkers, devices] = await Promise.all([
+      this.service.getTopology(tenantId),
+      this.service.getAlerts(tenantId),
+      this.trapReceiver.getRecentTraps(tenantId, 50),
+      this.syslogReceiver.getEvents(tenantId, { limit: 50 }),
+      this.netflowCollector.getTopTalkers(tenantId, { hours: 24, limit: 10 }),
+      this.prisma.monitoredDevice.findMany({
+        where: { tenantId, type: 'NETWORK_DEVICE' },
+        select: { id: true, name: true, ipAddress: true, status: true, metrics: true, config: true },
+      }),
+    ]);
+
+    // Top interfaces from stored SNMP interface data on devices
+    const interfaces: Array<{
+      deviceId: string;
+      deviceName: string;
+      name: string;
+      status: string;
+      inOctets: number;
+      outOctets: number;
+      speed?: number;
+    }> = [];
+
+    for (const d of devices) {
+      const ifaces = (d.config as any)?.interfaces;
+      if (!Array.isArray(ifaces)) continue;
+      for (const iface of ifaces) {
+        interfaces.push({
+          deviceId: d.id,
+          deviceName: d.name,
+          name: iface.name || iface.ifDescr || `if-${iface.index || '?'}`,
+          status: iface.status || iface.operStatus || 'unknown',
+          inOctets: Number(iface.inOctets || iface.ifInOctets || 0),
+          outOctets: Number(iface.outOctets || iface.ifOutOctets || 0),
+          speed: iface.speed ? Number(iface.speed) : undefined,
+        });
+      }
+    }
+
+    interfaces.sort((a, b) => (b.inOctets + b.outOctets) - (a.inOctets + a.outOctets));
+
+    return {
+      topology,
+      alarms,
+      topInterfaces: interfaces.slice(0, 20),
+      recentTraps: traps,
+      recentSyslog: syslog.events,
+      topTalkers: topTalkers.talkers,
+      deviceSummary: {
+        total: devices.length,
+        online: devices.filter((d) => d.status === 'ONLINE').length,
+        warning: devices.filter((d) => d.status === 'WARNING').length,
+        offline: devices.filter((d) => d.status === 'OFFLINE').length,
+      },
+      collectors: {
+        syslog: this.syslogReceiver.getStats(),
+        netflow: await this.netflowCollector.getStats(tenantId),
+        traps: this.trapReceiver.getStats(),
+      },
+    };
   }
 
   // ─── Nmap Deep Scanning ────────────────────────────────────────
@@ -222,6 +403,22 @@ export class MonitoringController {
   }
 
   @RequireModule('VDI')
+  @Get('vdi/metrics/history')
+  @Roles('Tenant Admin', 'IT Admin')
+  @ApiOperation({ summary: 'Get VDI session metrics history for charts' })
+  async getVdiMetricsHistory(@Request() req: any, @Query('hours') hours?: string) {
+    return this.service.getVdiMetricsHistory(req.user.tenantId, Number(hours) || 24);
+  }
+
+  @RequireModule('VDI')
+  @Post('vdi/metrics/poll')
+  @Roles('Tenant Admin')
+  @ApiOperation({ summary: 'Snapshot current VDI metrics into DeviceMetricsHistory' })
+  async pollVdiMetrics(@Request() req: any) {
+    return this.service.pollVdiSessionMetrics(req.user.tenantId);
+  }
+
+  @RequireModule('VDI')
   @Get('vdi/hypervisors')
   @Roles('Tenant Admin')
   @ApiOperation({ summary: 'Get configured hypervisors for this tenant' })
@@ -232,9 +429,17 @@ export class MonitoringController {
   @RequireModule('VDI')
   @Post('vdi/sync')
   @Roles('Tenant Admin')
-  @ApiOperation({ summary: 'Sync VMs from a hypervisor (VMware Horizon / Proxmox)' })
+  @ApiOperation({ summary: 'Sync VMs from a hypervisor (VMware Horizon / Proxmox / Hyper-V WinRM)' })
   async syncHypervisor(@Request() req: any, @Body() body: any) {
     return this.vdiHypervisor.syncHypervisor(req.user.tenantId, body);
+  }
+
+  @RequireModule('VDI')
+  @Get('vdi/:id/console')
+  @Roles('Tenant Admin', 'IT Admin')
+  @ApiOperation({ summary: 'Get console launch URL (Proxmox noVNC ticket / Horizon HTML Access / Hyper-V RDP hint)' })
+  async getConsoleUrl(@Request() req: any, @Param('id') id: string) {
+    return this.vdiHypervisor.getConsoleUrl(id, req.user.tenantId);
   }
 
   // ─── Device CRUD ──────────────────────────────────────────────

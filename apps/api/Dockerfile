@@ -1,6 +1,10 @@
 FROM node:20.19-alpine AS builder
 WORKDIR /app
 
+# Bust Railway layer cache when source changes meaningfully
+ARG CACHE_BUST=20260713-enterprise
+RUN echo "cachebust=$CACHE_BUST"
+
 COPY package.json ./
 COPY prisma ./prisma/
 
@@ -10,7 +14,8 @@ RUN npm install --include=dev
 RUN npx prisma generate
 
 COPY . .
-RUN npx nest build
+# Prefer tsc output (dist/main.js or dist/src/main.js); fail loudly on type errors
+RUN npx nest build && (test -f dist/main.js -o -f dist/src/main.js || (echo "missing main.js" && find dist -name '*.js' | head -40 && exit 1))
 
 # --- Production stage ---
 FROM node:20.19-alpine

@@ -1,308 +1,192 @@
-# SSDLC, Compliance, Security & Standards
+# QS Assets — SSDLC, Compliance & Security
 
-## SSDLC (Secure Software Development Lifecycle)
-
-Every feature, patch, and release of AssetCommand MUST follow this lifecycle:
-
-### Phase 1: Requirements & Threat Analysis
-- Gather functional + security requirements simultaneously
-- Identify assets, data flows, trust boundaries
-- Define security acceptance criteria for each feature
-- Classify data sensitivity levels (Public, Internal, Confidential, Restricted)
-- Compliance requirements mapping (which ISO/NIST controls does this feature touch?)
-
-### Phase 2: Architecture & Threat Modeling
-- Create data flow diagrams (DFDs) for new features
-- Apply STRIDE threat model (Spoofing, Tampering, Repudiation, Information Disclosure, DoS, Elevation of Privilege)
-- Document attack surfaces and trust boundaries
-- Design mitigations for each identified threat
-- Architecture review with security checklist
-- Output: Threat Model Document + Mitigation Plan
-
-### Phase 3: Secure Coding
-- Follow OWASP Secure Coding Guidelines
-- OWASP Top 10 prevention built into framework (NestJS guards, validators)
-- Input validation on ALL user inputs (Zod schemas)
-- Parameterized queries only (Prisma handles this)
-- Output encoding for XSS prevention
-- Authentication/authorization checks on every endpoint
-- Secrets management (never hardcoded, always from Vault)
-- Dependency scanning (npm audit, Snyk)
-- Code review checklist includes security items
-- Peer review mandatory for all PRs
-
-### Phase 4: Security Testing
-| Test Type | Tool | When |
-|-----------|------|------|
-| **SAST** | SonarQube / Semgrep | Every PR (CI pipeline) |
-| **SCA** | Snyk / npm audit / Trivy | Every PR + daily scheduled |
-| **DAST** | OWASP ZAP | Pre-release (staging environment) |
-| **Secret Scanning** | GitLeaks / TruffleHog | Every commit (pre-commit hook + CI) |
-| **Container Scanning** | Trivy | Every Docker build |
-| **IaC Scanning** | Checkov / tfsec | Every infra change |
-| **Penetration Testing** | Manual + automated | Quarterly + major releases |
-| **Fuzzing** | Custom + AFL | Critical parsers (SNMP, GPS protocols) |
-
-### Phase 5: Secure Deployment
-- Signed container images (Docker Content Trust / Cosign)
-- Immutable infrastructure (containers rebuilt, not patched in place)
-- Least-privilege service accounts
-- Network segmentation (pod-to-pod policies in K8s)
-- TLS everywhere (even internal service communication)
-- Security headers (CSP, HSTS, X-Frame-Options, etc.)
-- Environment-specific configs (no dev secrets in prod)
-- Blue-green or canary deployment strategy
-- Automated rollback on health check failure
-
-### Phase 6: Monitoring & Incident Response
-- Runtime Application Self-Protection (RASP) hooks
-- Anomaly detection on API usage patterns
-- Automated alerting on security events
-- Incident response playbook for common scenarios
-- Post-incident review and lessons learned
-- CVE monitoring for all dependencies (automated)
+| Field | Value |
+|-------|-------|
+| **Product** | QS Assets |
+| **Last reviewed** | 2026-07-13 |
+| **Status** | Living PRD |
+| **Depends on** | [03](03-ARCHITECTURE-AND-TECH-STACK.md) |
 
 ---
 
-## Compliance Framework Alignment
+## SSDLC (mandatory for every feature / patch / release)
 
-### ITIL 4 Practices Implementation
+### 1. Requirements & threat analysis
 
-| ITIL Practice | AssetCommand Module | Implementation |
-|---------------|-------------------|----------------|
-| **Incident Management** | ITSM Ticketing | Auto-classification, SLA timers, escalation, Known Error linking |
-| **Problem Management** | ITSM Ticketing | Root cause analysis tracking, Known Error Database (KEDB), trend analysis |
-| **Change Enablement** | Change Request Module | Risk-based approval workflows (standard/normal/emergency), CAB integration, automated pre-approved changes |
-| **Release Management** | Patch Management | Release calendar, deployment windows, rollback procedures, post-implementation review |
-| **Service Request Management** | Self-Service Portal | Service catalog, request templates, automated fulfillment for standard requests |
-| **Service Configuration Management** | CMDB | CI lifecycle, relationship mapping, automated discovery sync, impact analysis |
-| **IT Asset Management** | ITAM + EAM | Full lifecycle tracking, financial management, compliance, depreciation |
-| **Monitoring and Event Management** | NMS + Automation Engine | Threshold-based alerts, event correlation, auto-ticket creation |
-| **Knowledge Management** | Knowledge Base | Searchable KB, article versioning, linked to tickets, self-service resolution |
+- Capture functional + security acceptance criteria together.
+- Classify data: Public / Internal / Confidential / Restricted.
+- Map touched controls (ISO 27001, NIST CSF, CIS, ITIL evidence).
 
-### ISO Standards Mapping
+### 2. Architecture & threat modeling
 
-#### ISO 27001 (Information Security Management)
-| Annex A Control | AssetCommand Feature |
-|----------------|---------------------|
-| A.5 — Organizational Controls | RBAC, policies, tenant isolation |
-| A.6 — People Controls | User management, access reviews, MFA enforcement |
-| A.7 — Physical Controls | Facility asset tracking (EAM), CCTV management |
-| A.8.1 — Asset Inventory | CMDB + ITAM + EAM (complete asset registry) |
-| A.8.2 — Asset Classification | Asset tagging, sensitivity classification |
-| A.8.7 — Malware Protection | Security posture monitoring via agent |
-| A.8.8 — Vulnerability Management | Patch management + vulnerability scanning |
-| A.8.9 — Configuration Management | CMDB + config baseline compliance |
-| A.8.15 — Logging | Comprehensive audit logging (every action) |
-| A.8.16 — Monitoring | NMS + VDI monitoring + automation alerts |
+- DFDs for new trust boundaries (agent, SSO, NAC, payment webhooks).
+- STRIDE on auth, discovery credentials, SNMP/NetFlow UDP, script execution.
+- Mitigations documented before merge of high-risk modules.
 
-#### ISO 20000 (IT Service Management)
-- Service catalog and request management
-- Incident, problem, change management workflows
-- SLA management and reporting
-- Capacity and availability monitoring
-- Supplier/vendor management
-- Continual improvement tracking
+### 3. Secure coding
 
-#### ISO 22301 (Business Continuity)
-- Asset criticality classification
-- Disaster recovery asset tracking
-- Backup/restore verification for on-prem
-- Redundancy mapping in CMDB
+- OWASP ASVS-aligned practices via Nest guards + validators.
+- Parameterized DB access only (Prisma).
+- No secrets in repo; vault/env only.
+- AuthZ check on every controller method (roles / module gates).
+- Dependency hygiene: `npm audit` in CI; fix critical before release.
 
-#### ISO 31000 (Risk Management)
-- Risk scoring for vulnerabilities
-- Asset risk classification
-- Compliance risk dashboards
-- Risk treatment tracking
+### 4. Security testing (CI gates)
 
-### NIST Framework Mapping
+| Gate | Tooling | When | Status |
+|------|---------|------|--------|
+| Lint + typecheck | ESLint, `tsc --noEmit` | Every PR | Shipped (`.github/workflows/ci.yml`) |
+| Unit tests | Jest (API critical paths) | Every PR | Shipped / expand In-build |
+| Build | `nest build`, `next build` | Every PR | Shipped |
+| SCA | `npm audit` / advisory fail on critical | Every PR | In-build harden |
+| Secret scan | gitleaks / equivalent | Every PR | In-build |
+| SAST | Semgrep or Sonar | Pre-release | In-build |
+| DAST | ZAP against staging | Pre-release | In-build |
+| Container scan | Trivy on API image | Release | In-build |
 
-#### NIST Cybersecurity Framework (CSF)
-| Function | AssetCommand Coverage |
-|----------|---------------------|
-| **Identify** | Asset inventory (CMDB), risk assessment, vulnerability scanning |
-| **Protect** | Patch management, access control (RBAC), encryption monitoring, security posture |
-| **Detect** | Network monitoring (NMS), anomaly detection, rogue device detection, CCTV |
-| **Respond** | Incident ticketing (ITSM), automation engine (auto-remediation), notification engine |
-| **Recover** | Asset lifecycle management, backup monitoring, disaster recovery tracking |
+**Release blocker:** open Critical CVE in direct deps; failing hash-chain verify; RLS regression; MFA bypass.
 
-#### NIST SP 800-53 Controls
-- AC (Access Control): RBAC, MFA, session management
-- AU (Audit): Comprehensive audit logging with tamper protection
-- CM (Configuration Management): CMDB, baseline compliance
-- IA (Identification & Authentication): SSO, LDAP, MFA, API keys
-- IR (Incident Response): Ticketing, automation, escalation
-- RA (Risk Assessment): Vulnerability scoring, compliance dashboards
-- SA (System & Services Acquisition): License management, vendor tracking
-- SC (System & Communications Protection): TLS, encryption, network segmentation
-- SI (System & Information Integrity): Patch management, malware monitoring
+### 5. Secure deployment
 
-### IEEE Standards Compliance
+- TLS to clients; Railway/Vercel managed certs.
+- Least-privilege DB user; separate agent deploy tokens.
+- Security headers on web (CSP, HSTS, frame deny).
+- Immutable image deploys; migrate forward with Prisma.
+- Rollback plan documented in `DEPLOY.md`.
 
-| Standard | Application |
-|----------|------------|
-| **IEEE 830** | Software Requirements Specification (SRS) document structure |
-| **IEEE 1471** | Architecture description (views, viewpoints, concerns) |
-| **IEEE 12207** | Software lifecycle processes (development, maintenance, retirement) |
-| **IEEE 29148** | Requirements engineering lifecycle |
+### 6. Monitoring & IR
+
+- Health endpoints: `/health`, `/ready`, `/live`, `/detailed`.
+- Alert on auth anomalies, agent mass offline, trap storms.
+- Incident playbook: revoke API keys, rotate SSO certs, quarantine via NAC/agent.
+- Post-incident: audit export + lessons in change record.
 
 ---
 
-## Audit Logging System
+## Authentication & identity
 
-### What Gets Logged (Everything)
-Every user action, system event, and data change is captured:
+| Capability | Status |
+|------------|--------|
+| Email/password + bcrypt | Shipped |
+| JWT access + refresh rotation | Shipped |
+| Google / Microsoft OAuth | Shipped |
+| `SsoConfig` per tenant (SAML, OIDC, Google, Microsoft) | Shipped model |
+| OIDC authorization code + group→role map | In-build (service started) |
+| SAML 2.0 ACS (real assertion consumer) | In-build |
+| MFA TOTP enroll + login challenge | In-build (`User.mfaEnabled` / `mfaSecret` fields exist) |
+| API keys with scopes | Shipped |
+| Email verification / password reset | Shipped |
 
-```typescript
-interface AuditLogEntry {
-  id: string;                    // UUID
-  tenantId: string;              // Tenant context
-  timestamp: Date;               // UTC, millisecond precision
-  actor: {
-    userId: string;              // Who performed the action
-    username: string;
-    role: string;
-    ipAddress: string;
-    userAgent: string;
-    sessionId: string;
-  };
-  action: string;                // e.g., "asset.create", "ticket.update", "user.login"
-  resource: {
-    type: string;                // e.g., "Asset", "Ticket", "User"
-    id: string;                  // Resource identifier
-    name: string;                // Human-readable name
-  };
-  details: {
-    before: object | null;       // Previous state (for updates)
-    after: object | null;        // New state (for creates/updates)
-    metadata: object;            // Additional context
-  };
-  outcome: 'success' | 'failure';
-  severity: 'info' | 'warning' | 'critical';
-  module: string;                // Source module
-}
-```
+### Acceptance tests — auth
 
-### Log Protection
-- Append-only storage (no update/delete operations)
-- Cryptographic hash chain (each entry references previous hash)
-- Separate database/table with restricted access
-- Log integrity verification job (daily)
-- Retention policy: configurable (default 7 years for compliance)
-- Export capability for external SIEM ingestion
-
-### Audited Actions Include
-- All CRUD operations on any entity
-- Authentication events (login, logout, failed login, MFA)
-- Authorization events (permission denied, role changes)
-- Configuration changes (system settings, automation rules)
-- Discovery scan executions and results
-- Patch deployment actions
-- Ticket lifecycle events
-- Report generation and export
-- Data export/download actions
-- API key creation/revocation
-- Credential vault access
-- CCTV viewing sessions
+1. Password login issues access+refresh; refresh rotates; logout revokes.
+2. MFA-enrolled user cannot complete login without valid TOTP.
+3. SAML ACS with test IdP maps group to SUPER_ADMIN/IT_ADMIN role.
+4. OIDC Google/MS with groupRoleMap applies role on first login.
+5. Cross-tenant JWT rejected on resource access.
 
 ---
 
-## Data Security
+## Authorization & tenancy
 
-### Encryption
-| Layer | Method |
-|-------|--------|
-| **In Transit** | TLS 1.3 (all communications) |
-| **At Rest** | AES-256 (database, file storage) |
-| **Sensitive Fields** | Application-level encryption (credentials, API keys, personal data) |
-| **Backups** | Encrypted with separate key |
-| **Search Index** | Encrypted at rest |
+- Role-based module gates in web + API.
+- Tenant isolation: app filters **and** Postgres RLS (Required In-build).
+- Script execution requires ScriptLibrary APPROVED.
+- Threat actions Approve / Quarantine / Block audited + WS to admins.
 
-### Data Classification
-| Level | Examples | Handling |
-|-------|---------|---------|
-| **Restricted** | Scan credentials, API secrets, encryption keys | Vault storage, HSM-backed, no logging of values |
-| **Confidential** | User PII, financial data, vulnerability details | Encrypted fields, access-logged, role-restricted |
-| **Internal** | Asset inventory, ticket details, configs | Standard RLS, audit logged |
-| **Public** | Knowledge base articles, service catalog | No special handling |
+### NAC
 
-### Privacy
-- GDPR/DPDP Act compliance: data subject access, right to deletion
-- Data minimization: collect only necessary information
-- Consent management for tracking features
-- Data anonymization for analytics
-- Configurable data retention policies per data class
-- PII masking in logs and reports
+| Capability | Status |
+|------------|--------|
+| VLAN policies / segments / RADIUS config models | Shipped |
+| Quarantine via agent firewall fallback | Shipped / In-build |
+| RADIUS CoA / switch webhook when config enabled | In-build |
+
+### Acceptance tests — authZ / NAC
+
+1. USER role cannot call admin or other-tenant routes (403).
+2. Quarantine sets policy; CoA called when RADIUS configured; else agent firewall rule applied.
+3. RLS: SET wrong tenant GUC → zero rows.
 
 ---
 
-## Integrations
+## Audit hash chain
 
-### Native Integrations
-| System | Integration Type | Purpose |
-|--------|-----------------|---------|
-| **Active Directory / Azure AD** | LDAP/LDAPS, Graph API | User sync, computer import, SSO |
-| **Microsoft 365** | Graph API | License tracking, user provisioning |
-| **Google Workspace** | Admin SDK | User sync, device management |
-| **Slack** | Webhooks + Bot API | Ticket notifications, approval workflows |
-| **Microsoft Teams** | Bot Framework + Webhooks | Notifications, ticket creation from chat |
-| **Email (SMTP/IMAP)** | SMTP for sending, IMAP for ticket creation | Email notifications, email-to-ticket |
-| **AWS / Azure / GCP** | Cloud APIs | Cloud asset discovery |
-| **VMware vCenter** | REST API | VM inventory, VDI monitoring |
-| **Citrix** | OData/REST API | VDI session monitoring |
-| **JIRA** | REST API | Bi-directional ticket sync |
-| **PagerDuty** | Events API | Incident escalation |
+**As-built:** `AuditLog.hash` / `prevHash` SHA-256 chain via interceptor; `GET` verify endpoint.
 
-### Generic Integration Layer
-- **Webhooks:** Outgoing webhooks for any event (configurable)
-- **REST API:** Full CRUD API for all modules (OpenAPI 3.0 documented)
-- **GraphQL API:** Flexible queries for dashboard and reporting integrations
-- **SNMP Trap Forwarding:** Forward processed traps to external NMS
-- **Syslog Forwarding:** Forward events to external SIEM
-- **CSV/Excel Scheduled Export:** Automated data exports
-- **Custom Connectors:** Plugin architecture for building custom integrations
+| Requirement | Status |
+|-------------|--------|
+| Append-only audit rows with hash | Shipped |
+| Verify API breaks on tamper | Shipped |
+| Nightly verify job + alert on failure | In-build |
+| SIEM export (syslog/webhook) | In-build |
+
+### Acceptance tests — audit
+
+1. Create asset → audit row with prevHash linking to prior.
+2. Tamper hash in DB → verify reports FAIL.
+3. Nightly job emits AlertEvent on FAIL.
 
 ---
 
-## User Experience Requirements
+## Compliance frameworks
 
-### Design Principles (ManageEngine-Inspired)
-- Clean, professional enterprise UI (not consumer-flashy)
-- Information density: show maximum useful data without clutter
-- Consistent navigation: left sidebar + top bar + breadcrumbs
-- Context-sensitive actions: right-click menus, bulk action bars
-- Keyboard shortcuts for power users
-- Responsive: works on 1280px+ screens, graceful degradation on tablets
+### ITIL 4 mapping
 
-### Dashboard System
-- Role-based default dashboards (IT Admin sees different view than Fleet Manager)
-- Drag-and-drop widget customization
-- 50+ pre-built widgets (counters, charts, tables, maps, gauges)
-- Real-time auto-refresh (configurable interval)
-- Full-screen NOC/kiosk mode
-- Dark and light themes
-- Dashboard sharing and cloning
-- Print-optimized views for reports
+| Practice | Module | Status |
+|----------|--------|--------|
+| Incident | Tickets | Shipped |
+| Problem | Problems | Shipped |
+| Change enablement | Changes + CAB/SSDLC | In-build depth |
+| Release | Patches | In-build rings |
+| Service request | Catalog + portal | Shipped / In-build approvals |
+| Service configuration | CMDB | Shipped / impact In-build |
+| IT asset mgmt | ITAM/EAM | Shipped / EAM In-build |
+| Monitoring & event | NMS + Alerts + Automation | Shipped / syslog-NetFlow In-build |
 
-### Search
-- Global search bar (Cmd/Ctrl+K) searching across ALL modules
-- Asset search with filters (type, status, location, department, tags)
-- Ticket search with status/priority/assignee filters
-- Saved search queries
-- Recent items quick access
-- Natural language search (Phase 2 — AI-powered)
+### CIS / ISO / NIST evidence
 
-### Bulk Operations
-- Multi-select with checkboxes on all list views
-- Bulk update (change status, assign, tag, move department)
-- Bulk delete with confirmation
-- Bulk export (selected items to CSV/Excel)
-- Bulk import with validation preview
+| Deliverable | Status |
+|-------------|--------|
+| Endpoint policies + change detection | Shipped |
+| CIS benchmark collectors (agent/SSH) | In-build |
+| Evidence pack PDF/CSV export | In-build |
+| Compliance dashboard scores | Shipped / deepen In-build |
 
-### Multi-Language Support (Phase 2)
-- i18n framework built-in from day 1
-- Default: English
-- Phase 2: Hindi, Spanish, French, German, Japanese, Arabic
-- RTL layout support for Arabic
-- Date/time/number format localization
+### Acceptance tests — compliance
+
+1. Export CIS evidence pack for a host with collector results.
+2. Compliance report includes control IDs + pass/fail + asset refs.
+3. Change SSDLC type stores UAT/VAPT evidence attachments.
+
+---
+
+## SSDLC 9-step change type (product feature)
+
+Used when customers patch **their** systems via QS Assets change mgmt:
+
+1. Request → 2. Review → 3. Approval → 4. Build → 5. UAT → 6. VAPT → 7. Patch-fix → 8. Deploy → 9. Compliance logging.
+
+Gates: cannot close until mandatory checklist fields + attachments present ([01](01-PRODUCT-OVERVIEW.md) M6, [07](07-GAP-REMEDIATION-PLAN.md) Phase 6).
+
+---
+
+## Data protection
+
+- Soft delete where applicable; hard delete audited.
+- Encryption in transit (TLS); at rest via cloud provider volumes.
+- PII minimization in logs (no passwords, truncate tokens).
+- Payment webhooks signature-verified (Stripe/Razorpay as configured).
+
+---
+
+## Module acceptance checklist
+
+- [ ] MFA TOTP enroll + challenge
+- [ ] SAML ACS + OIDC group map
+- [ ] RLS policies live on tenant tables
+- [ ] Audit verify job nightly
+- [ ] CI fails on critical audit/type/test regressions
+- [ ] CIS evidence export
+- [ ] NAC CoA or documented agent fallback
+- [ ] Threat actions realtime to admins

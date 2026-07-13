@@ -1,4 +1,4 @@
-import { Injectable, Logger, UnauthorizedException, ForbiddenException } from '@nestjs/common';
+import { Injectable, Logger, UnauthorizedException, ForbiddenException, Inject, forwardRef } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import * as bcrypt from 'bcryptjs';
@@ -6,6 +6,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { UsersService } from '../users/users.service';
 import { PrismaService } from '../../common/database/prisma.service';
 import { EmailVerificationService } from './email-verification.service';
+import { isPublicSignupDisabled } from '../../common/deployment-mode';
 
 export interface JwtPayload {
   sub: string;       // userId
@@ -92,44 +93,8 @@ export class AuthService {
   }
 
   async login(user: any, ip?: string, userAgent?: string): Promise<AuthTokens> {
-    const role = await this.prisma.role.findUnique({ where: { id: user.roleId } });
-    const permissions = (role?.permissions as string[]) || [];
-
-    const payload: JwtPayload = {
-      sub: user.id,
-      email: user.email,
-      tenantId: user.tenantId,
-      role: role?.name || 'employee',
-      permissions,
-      isSuperAdmin: user.isSuperAdmin || false,
-    };
-
-    const accessToken = this.jwtService.sign(payload);
-
-    // Create refresh token
-    const refreshTokenValue = uuidv4();
-    const refreshTokenHash = await bcrypt.hash(refreshTokenValue, 10);
-    const refreshExpiry = this.configService.get<string>('JWT_REFRESH_EXPIRATION', '7d');
-    const expiresAt = new Date();
-    expiresAt.setDate(expiresAt.getDate() + parseInt(refreshExpiry));
-
-    await this.prisma.refreshToken.create({
-      data: {
-        userId: user.id,
-        tokenHash: refreshTokenHash,
-        expiresAt,
-        ipAddress: ip,
-        userAgent,
-      },
-    });
-
-    // Update last login
-    await this.prisma.user.update({
-      where: { id: user.id },
-      data: { lastLoginAt: new Date(), lastLoginIp: ip },
-    });
-
-    return { accessToken, refreshToken: refreshTokenValue };
+    // MFA is handled by AuthController via MfaService.beginChallenge before this is called.
+    return this.issueTokens(user, ip, userAgent);
   }
 
   async logout(userId: string): Promise<void> {
@@ -149,13 +114,11 @@ export class AuthService {
     for (const rt of tokens) {
       const isMatch = await bcrypt.compare(token, rt.tokenHash);
       if (isMatch) {
-        // Revoke the used token (rotation)
         await this.prisma.refreshToken.update({
           where: { id: rt.id },
           data: { revokedAt: new Date() },
         });
-        // Issue new tokens
-        return this.login(rt.user, ip, userAgent);
+        return this.issueTokens(rt.user, ip, userAgent);
       }
     }
     throw new UnauthorizedException('Invalid or expired refresh token');
@@ -186,6 +149,12 @@ export class AuthService {
     email: string;
     password: string;
   }) {
+    if (isPublicSignupDisabled()) {
+      throw new ForbiddenException(
+        'Public self-registration is disabled on this deployment. Contact your administrator for an invite.',
+      );
+    }
+
     // Check if email already exists
     const existing = await this.prisma.user.findFirst({
       where: { email: dto.email.toLowerCase() },
@@ -391,6 +360,8 @@ export class AuthService {
     firstName: string;
     lastName: string;
     avatarUrl?: string | null;
+    tenantIdHint?: string;
+    preferredRole?: string;
   }): Promise<AuthTokens & { isNewUser: boolean }> {
     const email = profile.email.toLowerCase();
 
@@ -405,33 +376,88 @@ export class AuthService {
     });
 
     if (user) {
-      // Existing OAuth user — just login
-      const tokens = await this.login(user);
+      const tokens = await this.issueTokens(user);
       return { ...tokens, isNewUser: false };
     }
 
     // 2. Try to find by email (user registered via email, now linking OAuth)
     user = await this.prisma.user.findFirst({
-      where: { email, deletedAt: null },
+      where: {
+        email,
+        deletedAt: null,
+        ...(profile.tenantIdHint ? { tenantId: profile.tenantIdHint } : {}),
+      },
       include: { role: true },
     });
 
     if (user) {
-      // Link OAuth to existing account
       await this.prisma.user.update({
         where: { id: user.id },
         data: {
           oauthProvider: profile.provider,
           oauthProviderId: profile.providerId,
-          emailVerified: true, // OAuth proves email ownership
+          emailVerified: true,
           avatarUrl: profile.avatarUrl || user.avatarUrl,
         },
       });
-      const tokens = await this.login(user);
+      if (profile.preferredRole) {
+        const role = await this.prisma.role.findFirst({
+          where: { tenantId: user.tenantId, name: profile.preferredRole },
+        });
+        if (role) {
+          await this.prisma.user.update({ where: { id: user.id }, data: { roleId: role.id } });
+          user.roleId = role.id;
+          user.role = role;
+        }
+      }
+      const tokens = await this.issueTokens(user);
       return { ...tokens, isNewUser: false };
     }
 
+    // 2b. SAML into an existing tenant — provision user under that tenant
+    if (profile.tenantIdHint && (profile.provider === 'saml' || profile.provider === 'SAML')) {
+      const tenant = await this.prisma.tenant.findUnique({ where: { id: profile.tenantIdHint } });
+      if (!tenant) throw new UnauthorizedException('SAML tenant not found');
+
+      let role = profile.preferredRole
+        ? await this.prisma.role.findFirst({
+            where: { tenantId: tenant.id, name: profile.preferredRole },
+          })
+        : null;
+      if (!role) {
+        role = await this.prisma.role.findFirst({
+          where: { tenantId: tenant.id, name: { in: ['Employee', 'IT Admin', 'Tenant Admin'] } },
+          orderBy: { name: 'asc' },
+        });
+      }
+      if (!role) throw new UnauthorizedException('No role available for SAML user provisioning');
+
+      user = await this.prisma.user.create({
+        data: {
+          tenantId: tenant.id,
+          email,
+          firstName: profile.firstName || email.split('@')[0],
+          lastName: profile.lastName || '',
+          roleId: role.id,
+          status: 'ACTIVE',
+          emailVerified: true,
+          oauthProvider: profile.provider,
+          oauthProviderId: profile.providerId,
+          avatarUrl: profile.avatarUrl || null,
+        },
+        include: { role: true },
+      });
+      const tokens = await this.issueTokens(user);
+      return { ...tokens, isNewUser: true };
+    }
+
     // 3. New user — create full tenant workspace (same as registerTenant)
+    if (isPublicSignupDisabled()) {
+      throw new ForbiddenException(
+        'Public self-registration is disabled on this deployment. An administrator must invite your account.',
+      );
+    }
+
     const companyName = `${profile.firstName}'s Organization`;
     const slug = companyName
       .toLowerCase()
@@ -574,13 +600,47 @@ export class AuthService {
       return { tenant, user: newUser };
     });
 
-    // Login the newly created user
+    // Login the newly created user (SSO/OAuth bypasses local MFA — IdP is trusted)
     const freshUser = await this.prisma.user.findUnique({
       where: { id: result.user.id },
       include: { role: true },
     });
-    const tokens = await this.login(freshUser!);
+    const tokens = await this.issueTokens(freshUser!);
     return { ...tokens, isNewUser: true };
+  }
+
+  /** Issue JWT pair without MFA challenge (used by OAuth/SAML and after MFA verify). */
+  async issueTokens(user: any, ip?: string, userAgent?: string): Promise<AuthTokens> {
+    const role = user.role || await this.prisma.role.findUnique({ where: { id: user.roleId } });
+    const permissions = (role?.permissions as string[]) || [];
+    const payload: JwtPayload = {
+      sub: user.id,
+      email: user.email,
+      tenantId: user.tenantId,
+      role: role?.name || 'employee',
+      permissions,
+      isSuperAdmin: user.isSuperAdmin || false,
+    };
+    const accessToken = this.jwtService.sign(payload);
+    const refreshTokenValue = uuidv4();
+    const refreshTokenHash = await bcrypt.hash(refreshTokenValue, 10);
+    const refreshExpiry = this.configService.get<string>('JWT_REFRESH_EXPIRATION', '7d');
+    const expiresAt = new Date();
+    expiresAt.setDate(expiresAt.getDate() + parseInt(refreshExpiry) || 7);
+    await this.prisma.refreshToken.create({
+      data: {
+        userId: user.id,
+        tokenHash: refreshTokenHash,
+        expiresAt,
+        ipAddress: ip,
+        userAgent,
+      },
+    });
+    await this.prisma.user.update({
+      where: { id: user.id },
+      data: { lastLoginAt: new Date(), lastLoginIp: ip },
+    });
+    return { accessToken, refreshToken: refreshTokenValue };
   }
 
   async forgotPassword(email: string): Promise<{ message: string }> {
@@ -662,24 +722,6 @@ export class AuthService {
       isSuperAdmin: false,
     };
     return this.jwtService.sign(payload, { expiresIn: '3650d' });
-  }
-
-  // TEMPORARY: Emergency password reset — remove after use
-  async emergencyPasswordReset(email: string, newPassword: string) {
-    const user = await this.prisma.user.findFirst({
-      where: { email: email.toLowerCase().trim(), deletedAt: null },
-      select: { id: true, email: true, firstName: true, lastName: true },
-    });
-    if (!user) throw new UnauthorizedException('User not found');
-
-    const hash = await bcrypt.hash(newPassword, 12);
-    await this.prisma.user.update({
-      where: { id: user.id },
-      data: { passwordHash: hash, status: 'ACTIVE', emailVerified: true },
-    });
-
-    this.logger.log(`Emergency password reset completed for ${user.email}`);
-    return { success: true, email: user.email, name: `${user.firstName} ${user.lastName}` };
   }
 }
 

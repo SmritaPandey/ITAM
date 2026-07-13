@@ -22,3 +22,6 @@ heartbeat-buffer.jsonl
 .node_temp.tar.gz
 .node_temp_dir/
 .node_temp.zip
+
+# Packaging build outputs
+packaging/**/dist/

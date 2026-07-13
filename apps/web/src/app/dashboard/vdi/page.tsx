@@ -1,11 +1,13 @@
 "use client";
 import { useEffect, useState } from "react";
 import {
-  Monitor, Cpu, MemoryStick, Power, CheckCircle2, RefreshCw, Loader2, AlertTriangle, Trash2, Search
+  Monitor, Cpu, MemoryStick, Power, CheckCircle2, RefreshCw, Loader2, AlertTriangle, Trash2, Search, ExternalLink
 } from "lucide-react";
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip } from "recharts";
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, LineChart, Line, Legend } from "recharts";
 import { apiFetch } from "@/lib/api";
 import SafeChart from "@/components/SafeChart";
+import PageHeader from "@/components/PageHeader";
+import EmptyState from "@/components/EmptyState";
 
 export default function VDIPage() {
   const [data, setData] = useState<any>({ data: [], total: 0, running: 0, stopped: 0, avgCpu: 0, avgRam: 0 });
@@ -24,6 +26,38 @@ export default function VDIPage() {
   const [purpose, setPurpose] = useState("");
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState("");
+  const [consoleLoading, setConsoleLoading] = useState(false);
+  const [consoleMsg, setConsoleMsg] = useState("");
+  const [metricsHistory, setMetricsHistory] = useState<any[]>([]);
+
+  async function handleOpenConsole(vmId: string) {
+    setConsoleLoading(true);
+    setConsoleMsg("");
+    try {
+      const result = await apiFetch(`/monitoring/vdi/${vmId}/console`);
+      if (!result.available) {
+        setConsoleMsg(result.reason || "Console not available for this VM.");
+        return;
+      }
+      if (result.type === "rdp" && result.hint) {
+        setConsoleMsg(result.hint);
+        if (result.url?.startsWith("rdp://")) {
+          window.open(result.url, "_blank");
+        }
+        return;
+      }
+      if (result.url) {
+        window.open(result.url, "_blank", "noopener,noreferrer");
+        if (result.hint) setConsoleMsg(result.hint);
+      } else {
+        setConsoleMsg(result.hint || "No console URL returned.");
+      }
+    } catch (err: any) {
+      setConsoleMsg(err?.message || "Failed to open console.");
+    } finally {
+      setConsoleLoading(false);
+    }
+  }
 
   async function handleDeleteVM(id: string) {
     if (!confirm("Delete this VM?")) return;
@@ -38,6 +72,9 @@ export default function VDIPage() {
 
   function refresh() {
     apiFetch("/monitoring/vdi").then(setData).catch(console.error).finally(() => setLoading(false));
+    apiFetch("/monitoring/vdi/metrics/history?hours=24")
+      .then((d) => setMetricsHistory(d.series || []))
+      .catch(() => setMetricsHistory([]));
   }
   useEffect(() => { refresh(); }, []);
 
@@ -108,16 +145,17 @@ export default function VDIPage() {
 
   return (
     <>
-      <div className="page-header">
-        <div>
-          <h1 className="page-title">Virtual Desktop Infrastructure</h1>
-          <p className="page-subtitle">{data.total} virtual machines across {resourceUsage.length} hosts</p>
-        </div>
-        <div style={{ display: "flex", gap: 8 }}>
-          <button className="btn btn-secondary" onClick={refresh}><RefreshCw size={14} /> Sync</button>
-          <button className="btn btn-primary" onClick={() => setIsModalOpen(true)}><Power size={14} /> New VM</button>
-        </div>
-      </div>
+      <PageHeader
+        eyebrow="Virtualization"
+        title="Virtual Desktop Infrastructure"
+        description={`${data.total} virtual machines • Session metrics & console launch`}
+        actions={
+          <div style={{ display: "flex", gap: 8 }}>
+            <button className="btn btn-secondary" onClick={refresh}><RefreshCw size={14} /> Sync</button>
+            <button className="btn btn-primary" onClick={() => setIsModalOpen(true)}><Power size={14} /> New VM</button>
+          </div>
+        }
+      />
 
       {/* Search Bar */}
       <div style={{ display: "flex", gap: 10, marginBottom: 16, alignItems: "center" }}>
@@ -151,6 +189,38 @@ export default function VDIPage() {
 </SafeChart>
       </div>
 
+      {/* Session metrics history from DeviceMetricsHistory */}
+      <div className="card" style={{ marginBottom: 16 }}>
+        <div className="card-header" style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+          <div className="card-title">Session Metrics (24h)</div>
+          <button
+            className="btn btn-secondary"
+            style={{ padding: "4px 10px", fontSize: 11 }}
+            onClick={() => apiFetch("/monitoring/vdi/metrics/poll", { method: "POST" }).then(() => refresh())}
+          >
+            Snapshot now
+          </button>
+        </div>
+        {metricsHistory.length === 0 ? (
+          <div style={{ padding: 24, textAlign: "center", color: "var(--text-tertiary)", fontSize: 12 }}>
+            No history yet. Metrics are polled every 5 minutes into DeviceMetricsHistory.
+          </div>
+        ) : (
+          <SafeChart height={200}>
+            <LineChart data={metricsHistory}>
+              <CartesianGrid strokeDasharray="3 3" stroke="rgba(42,49,80,0.5)" vertical={false} />
+              <XAxis dataKey="time" tick={{ fill: "#64748b", fontSize: 10 }} axisLine={false} tickLine={false} />
+              <YAxis domain={[0, 100]} tick={{ fill: "#64748b", fontSize: 11 }} axisLine={false} tickLine={false} />
+              <Tooltip contentStyle={{ background: "#1a1f35", border: "1px solid #2a3150", borderRadius: 8, fontSize: 12 }} />
+              <Legend />
+              <Line type="monotone" dataKey="avgCpu" stroke="#06b6d4" name="Avg CPU %" dot={false} strokeWidth={2} />
+              <Line type="monotone" dataKey="avgRam" stroke="#8b5cf6" name="Avg RAM %" dot={false} strokeWidth={2} />
+              <Line type="monotone" dataKey="sessions" stroke="#10b981" name="Sessions" dot={false} strokeWidth={2} />
+            </LineChart>
+          </SafeChart>
+        )}
+      </div>
+
       {/* VM Table */}
       <div className="card" style={{ padding: 0, overflow: "hidden" }}>
         <table className="data-table">
@@ -167,10 +237,14 @@ export default function VDIPage() {
                        (cfg.host || vm.location || "").toLowerCase().includes(q);
               });
               if (filteredVMs.length === 0) return (
-                <tr><td colSpan={9} style={{ textAlign: "center", padding: 60, color: "var(--text-tertiary)" }}>
-                  <Monitor size={36} style={{ margin: "0 auto 12px", opacity: 0.3 }} />
-                  <div style={{ fontSize: 14, fontWeight: 600, color: "var(--text-primary)" }}>{searchQuery ? "No matching virtual machines" : "No virtual machines configured yet"}</div>
-                  <div style={{ fontSize: 12, marginTop: 4 }}>{searchQuery ? "Try adjusting your search query." : "Click New VM to provision a virtual desktop."}</div>
+                <tr><td colSpan={9} style={{ padding: 0, border: "none" }}>
+                  <EmptyState
+                    compact
+                    icon={<Monitor size={28} />}
+                    title={searchQuery ? "No matching virtual machines" : "No virtual machines yet"}
+                    description={searchQuery ? "Try adjusting your search query." : "Sync a hypervisor or provision a VM to see session metrics."}
+                    action={!searchQuery ? { label: "New VM", onClick: () => setIsModalOpen(true) } : undefined}
+                  />
                 </td></tr>
               );
               return filteredVMs.map((vm: any) => {
@@ -232,7 +306,22 @@ export default function VDIPage() {
                   <VRow label="Uptime" value={met.uptime || "—"} />
                   <VRow label="Last Seen" value={selectedVM.lastSeen ? new Date(selectedVM.lastSeen).toLocaleString() : "Never"} />
                 </div>
-                <div style={{ marginTop: 20 }}>
+                <div style={{ marginTop: 20, display: "grid", gap: 10 }}>
+                  {consoleMsg && (
+                    <div style={{ fontSize: 11, color: "var(--text-secondary)", padding: "8px 12px", borderRadius: 8, background: "var(--bg-elevated)", border: "1px solid var(--border-primary)", lineHeight: 1.5 }}>
+                      {consoleMsg}
+                    </div>
+                  )}
+                  <button
+                    className="btn btn-primary"
+                    style={{ width: "100%", padding: "10px 16px", display: "flex", alignItems: "center", justifyContent: "center", gap: 8, fontSize: 13, fontWeight: 600 }}
+                    disabled={consoleLoading}
+                    onClick={() => handleOpenConsole(selectedVM.id)}
+                  >
+                    {consoleLoading
+                      ? <><Loader2 size={14} style={{ animation: "spin 1s linear infinite" }} /> Opening...</>
+                      : <><ExternalLink size={14} /> Open Console</>}
+                  </button>
                   <button
                     className="btn btn-secondary"
                     style={{ width: "100%", padding: "10px 16px", display: "flex", alignItems: "center", justifyContent: "center", gap: 8, color: "#ef4444", borderColor: "rgba(239,68,68,0.3)", fontSize: 13, fontWeight: 600 }}

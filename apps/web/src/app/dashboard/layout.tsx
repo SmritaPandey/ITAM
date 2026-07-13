@@ -2,12 +2,12 @@
 import { useEffect, useState, useRef } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import {
-  LayoutDashboard, Monitor, Server, Truck, Ticket, Network, Shield, ShieldCheck,
+  LayoutDashboard, Monitor, Server, Truck, Ticket, Network, Shield, ShieldCheck, ShieldAlert,
   Settings, Bell, Search, ChevronDown, Camera, MonitorPlay,
   BarChart3, Zap, Users, Building2, Package, LogOut, User,
   AlertTriangle, CheckCircle2, Info, Clock, X, Radar, Key, FileText, BookOpen,
   Headphones, UserCircle, Wrench, Scan, ShoppingCart, GitBranch, AlertOctagon,
-  Sun, Moon, Menu, Lock, CheckCircle, Terminal, Download, Layers, Brain
+  Sun, Moon, Menu, Lock, CheckCircle, Terminal, Download, Layers, Brain, MapPin, Activity
 } from "lucide-react";
 
 import { apiFetch, safeFetch, getToken } from "@/lib/api";
@@ -19,17 +19,23 @@ import AiCopilot from "@/components/AiCopilot";
 
 const nameToModuleKeyMap: Record<string, string> = {
   "Dashboard": "DASHBOARD",
+  "Intelligence": "INTELLIGENCE",
   "My Portal": "MY_PORTAL",
   "All Assets": "ALL_ASSETS",
   "IT Assets": "IT_ASSETS",
   "Non-IT Assets": "NON_IT_ASSETS",
+  "Facility": "FACILITY",
   "CMDB": "CMDB",
   "Tickets": "TICKETS",
   "Work Orders": "WORK_ORDERS",
   "Discovery": "DISCOVERY",
   "Patch Mgmt": "PATCH_MGMT",
+  "Software Deploy": "SOFTWARE_DEPLOYMENT",
+  "Remote Terminal": "REMOTE_TERMINAL",
   "Network (NMS)": "NETWORK",
+  "NOC": "NETWORK",
   "Security Scan": "SECURITY_SCAN",
+  "Vulnerabilities": "SECURITY_SCAN",
   "Compliance": "COMPLIANCE",
   "Procurement": "PROCUREMENT",
   "Changes": "CHANGES",
@@ -37,10 +43,11 @@ const nameToModuleKeyMap: Record<string, string> = {
   "Fleet / GPS": "FLEET",
   "CCTV": "CCTV",
   "VDI": "VDI",
+  "NAC": "NAC",
+  "Alerts": "ALERTS",
   "Automation": "AUTOMATION",
   "Licenses": "LICENSES",
   "Software Inventory": "IT_ASSETS",
-  "Software Deploy": "SOFTWARE_DEPLOYMENT",
   "Knowledge Base": "KNOWLEDGE_BASE",
   "Service Catalog": "SERVICE_CATALOG",
   "Reports": "REPORTS",
@@ -52,11 +59,14 @@ const nameToModuleKeyMap: Record<string, string> = {
 
 const hrefToModuleKeyMap: Record<string, string> = {
   "/dashboard/cmdb": "CMDB",
+  "/dashboard/facility": "FACILITY",
   "/dashboard/work-orders": "WORK_ORDERS",
   "/dashboard/discovery": "DISCOVERY",
   "/dashboard/patches": "PATCH_MGMT",
   "/dashboard/network": "NETWORK",
+  "/dashboard/network/noc": "NETWORK",
   "/dashboard/scanning": "SECURITY_SCAN",
+  "/dashboard/vulnerabilities": "SECURITY_SCAN",
   "/dashboard/compliance": "COMPLIANCE",
   "/dashboard/procurement": "PROCUREMENT",
   "/dashboard/changes": "CHANGES",
@@ -64,6 +74,10 @@ const hrefToModuleKeyMap: Record<string, string> = {
   "/dashboard/fleet": "FLEET",
   "/dashboard/cctv": "CCTV",
   "/dashboard/vdi": "VDI",
+  "/dashboard/nac": "NAC",
+  "/dashboard/alerts": "ALERTS",
+  "/dashboard/intelligence": "INTELLIGENCE",
+  "/dashboard/remote-terminal": "REMOTE_TERMINAL",
   "/dashboard/automation": "AUTOMATION",
   "/dashboard/licenses": "LICENSES",
   "/dashboard/software": "IT_ASSETS",
@@ -262,7 +276,7 @@ const MODULE_METADATA: Record<string, {
     tier: "Enterprise",
     desc: "Provision, manage, and remote-session directly into cloud and on-premise VDIs.",
     benefits: [
-      "WebRTC direct session frame",
+      "Console access",
       "Resource allocation sliders",
       "Host group scaling rules",
       "VDI health telemetry reporting",
@@ -301,6 +315,61 @@ const MODULE_METADATA: Record<string, {
       "Success/failure reporting",
     ],
   },
+  FACILITY: {
+    name: "Facility & EAM",
+    tier: "Professional",
+    desc: "Floor plans, preventive maintenance, spares, and consumables for non-IT assets.",
+    benefits: [
+      "Site floor plan overlays",
+      "PM schedules & work orders",
+      "Spare part min-stock alerts",
+      "Consumable reorder points",
+    ],
+  },
+  NAC: {
+    name: "Network Access Control",
+    tier: "Enterprise",
+    desc: "Quarantine and CoA policies for unmanaged or non-compliant endpoints.",
+    benefits: [
+      "Policy-based isolation",
+      "RADIUS CoA / switch webhooks",
+      "Agent firewall fallback",
+      "Audit of NAC actions",
+    ],
+  },
+  ALERTS: {
+    name: "Unified Alerts",
+    tier: "Professional",
+    desc: "Cross-module AlertEvent console for fleet, NMS, CCTV, and security.",
+    benefits: [
+      "Acknowledge & resolve workflow",
+      "Severity filtering",
+      "Source drill-down",
+      "Realtime notification feed",
+    ],
+  },
+  INTELLIGENCE: {
+    name: "AI Intelligence",
+    tier: "Enterprise",
+    desc: "Risk scoring, patch priority, and next-best-action recommendations.",
+    benefits: [
+      "Top risk assets",
+      "License optimization",
+      "Compliance insights",
+      "Smart action queue",
+    ],
+  },
+  REMOTE_TERMINAL: {
+    name: "Remote Terminal",
+    tier: "Enterprise",
+    desc: "Agent-backed remote shell and assist deep-links for endpoints.",
+    benefits: [
+      "Remote command sessions",
+      "RDP/SSH deep-links",
+      "Session audit trail",
+      "Agent file pull",
+    ],
+  },
 };
 
 const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4100/api/v1";
@@ -320,6 +389,7 @@ const navSections = [
       { name: "All Assets", icon: Package, href: "/dashboard/assets", badge: null },
       { name: "IT Assets", icon: Monitor, href: "/dashboard/it-assets", badge: null },
       { name: "Non-IT Assets", icon: Building2, href: "/dashboard/non-it-assets", badge: null },
+      { name: "Facility", icon: MapPin, href: "/dashboard/facility", badge: null },
       { name: "CMDB", icon: Server, href: "/dashboard/cmdb", badge: null },
       { name: "Software Inventory", icon: Layers, href: "/dashboard/software", badge: null },
     ],
@@ -334,7 +404,9 @@ const navSections = [
       { name: "Software Deploy", icon: Download, href: "/dashboard/software-deploy", badge: null },
       { name: "Remote Terminal", icon: Terminal, href: "/dashboard/remote-terminal", badge: null },
       { name: "Network (NMS)", icon: Network, href: "/dashboard/network", badge: null },
+      { name: "NOC", icon: Activity, href: "/dashboard/network/noc", badge: null },
       { name: "Security Scan", icon: Scan, href: "/dashboard/scanning", badge: null },
+      { name: "Vulnerabilities", icon: ShieldAlert, href: "/dashboard/vulnerabilities", badge: null },
       { name: "Compliance", icon: ShieldCheck, href: "/dashboard/compliance", badge: null },
       { name: "Procurement", icon: ShoppingCart, href: "/dashboard/procurement", badge: null },
       { name: "Changes", icon: GitBranch, href: "/dashboard/changes", badge: null },
@@ -523,19 +595,25 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   }
 
   async function markAllRead() {
-    await apiFetch("/notifications/read-all", { method: "POST" });
+    // Optimistically clear, then persist. Roll back the count on failure.
+    const prevUnread = unreadCount;
     setNotifications(prev => prev.map(n => ({ ...n, isRead: true })));
     setUnreadCount(0);
+    try {
+      await apiFetch("/notifications/read-all", { method: "POST" });
+    } catch {
+      setUnreadCount(prevUnread);
+    }
   }
 
 
   // Global search across API
-  const [searchResults, setSearchResults] = useState<{ nav: any[]; assets: any[]; tickets: any[]; users: any[] }>({ nav: [], assets: [], tickets: [], users: [] });
+  const [searchResults, setSearchResults] = useState<{ nav: any[]; assets: any[]; tickets: any[]; users: any[]; services: any[] }>({ nav: [], assets: [], tickets: [], users: [], services: [] });
   const [searching, setSearching] = useState(false);
 
   useEffect(() => {
     if (!searchQuery.trim() || searchQuery.length < 2) {
-      setSearchResults({ nav: [], assets: [], tickets: [], users: [] });
+      setSearchResults({ nav: [], assets: [], tickets: [], users: [], services: [] });
       return;
     }
     const q = searchQuery.toLowerCase();
@@ -543,13 +621,21 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
     const timer = setTimeout(() => {
       setSearching(true);
-      Promise.all([
-        safeFetch(`/assets?search=${encodeURIComponent(searchQuery)}&limit=5`).then(d => d || { data: [] }),
-        safeFetch(`/tickets?search=${encodeURIComponent(searchQuery)}&limit=5`).then(d => d || { data: [] }),
-        safeFetch(`/users?search=${encodeURIComponent(searchQuery)}&limit=5`).then(d => d || { data: [] }),
-      ]).then(([a, t, u]) => {
-        setSearchResults({ nav, assets: a.data || [], tickets: t.data || [], users: u.data || [] });
-      }).finally(() => setSearching(false));
+      safeFetch(`/search?q=${encodeURIComponent(searchQuery)}&limit=5`)
+        .then((global) => {
+          const g = global || { assets: [], tickets: [], users: [], services: [] };
+          setSearchResults({
+            nav,
+            assets: g.assets || [],
+            tickets: g.tickets || [],
+            users: (g.users || []).map((u: any) => ({
+              ...u,
+              name: u.name || `${u.firstName || ""} ${u.lastName || ""}`.trim(),
+            })),
+            services: g.services || [],
+          });
+        })
+        .finally(() => setSearching(false));
     }, 300);
     return () => clearTimeout(timer);
   }, [searchQuery]);
@@ -563,10 +649,19 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     }
   }
 
+  const moduleAllowed = (key: string | null) => {
+    if (!key || !allowedModules) return true;
+    if (allowedModules.includes(key)) return true;
+    // Backward-compat: Facility unlocked by WORK_ORDERS; Alerts by NETWORK/FLEET/CCTV
+    if (key === "FACILITY" && allowedModules.includes("WORK_ORDERS")) return true;
+    if (key === "ALERTS" && allowedModules.some((m) => ["NETWORK", "FLEET", "CCTV", "SECURITY_SCAN"].includes(m))) return true;
+    return false;
+  };
+
   const isRouteIntercepted =
     interceptedModuleKey &&
     allowedModules &&
-    !allowedModules.includes(interceptedModuleKey);
+    !moduleAllowed(interceptedModuleKey);
 
   if (!user) return null;
 
@@ -581,8 +676,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       <aside className={`sidebar${mobileSidebarOpen ? " sidebar-open" : ""}`}>
         <div className="sidebar-brand">
           <a href="/dashboard" style={{ display: "flex", alignItems: "center", gap: 8, textDecoration: "none", color: "inherit" }} onClick={(e) => { e.preventDefault(); router.push("/dashboard"); }}>
-            <LogoIcon size={32} />
-            <span className="sidebar-brand-text">QS Asset</span>
+            <LogoIcon size={40} />
+            <span className="sidebar-brand-text">QS Assets</span>
           </a>
         </div>
         <nav className="sidebar-nav">
@@ -591,7 +686,9 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
               const key = nameToModuleKeyMap[item.name];
               if (!key) return true;
               if (!activeModules) return true;
-              return activeModules.includes(key);
+              if (activeModules.includes(key)) return true;
+              if (key === "FACILITY" && activeModules.includes("WORK_ORDERS")) return true;
+              return false;
             });
 
             if (filteredItems.length === 0) return null;
@@ -935,7 +1032,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                 <div style={{ padding: 24, textAlign: "center", color: "var(--text-tertiary)", fontSize: 13 }}>
                   Searching...
                 </div>
-              ) : (searchResults.nav.length + searchResults.assets.length + searchResults.tickets.length + searchResults.users.length) === 0 ? (
+              ) : (searchResults.nav.length + searchResults.assets.length + searchResults.tickets.length + searchResults.users.length + searchResults.services.length) === 0 ? (
                 <div style={{ padding: 24, textAlign: "center", color: "var(--text-tertiary)", fontSize: 13 }}>
                   No results for &quot;{searchQuery}&quot;
                 </div>
@@ -1005,6 +1102,23 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                           <User size={14} style={{ color: "#10b981" }} />
                           <span>{u.firstName} {u.lastName}</span>
                           <span style={{ marginLeft: "auto", fontSize: 11, color: "var(--text-tertiary)" }}>{u.email}</span>
+                        </button>
+                      ))}
+                    </>
+                  )}
+                  {searchResults.services.length > 0 && (
+                    <>
+                      <div style={{ padding: "8px 8px 4px", fontSize: 10, color: "var(--text-tertiary)", textTransform: "uppercase", letterSpacing: 1 }}>Business services</div>
+                      {searchResults.services.map((s: any) => (
+                        <button key={s.id} onClick={() => { router.push(`/dashboard/cmdb`); setShowSearch(false); setSearchQuery(""); }}
+                          style={{
+                            width: "100%", padding: "8px 12px", background: "none", border: "none",
+                            display: "flex", alignItems: "center", gap: 10, borderRadius: 8,
+                            color: "var(--text-primary)", fontSize: 13, cursor: "pointer", fontFamily: "inherit",
+                          }}>
+                          <Server size={14} style={{ color: "#8b5cf6" }} />
+                          <span>{s.name}</span>
+                          <span style={{ marginLeft: "auto", fontSize: 11, color: "var(--text-tertiary)" }}>{s.status || "CI"}</span>
                         </button>
                       ))}
                     </>

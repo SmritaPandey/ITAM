@@ -1,9 +1,16 @@
-import { Controller, Get, Post, Put, Patch, Delete, Body, Param, Query, UseGuards, Request } from '@nestjs/common';
+import { Controller, Get, Post, Put, Patch, Delete, Body, Param, Query, UseGuards, Request, BadRequestException } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { NacService } from './nac.service';
+
+function assertAgentId(agentId: string) {
+  if (!agentId || agentId === 'undefined' || agentId === 'null') {
+    throw new BadRequestException('Valid agentId is required');
+  }
+  return agentId;
+}
 
 @ApiTags('nac')
 @ApiBearerAuth()
@@ -32,7 +39,7 @@ export class NacController {
   @Roles('Tenant Admin')
   @ApiOperation({ summary: 'Reassess a specific device posture' })
   async reassessPosture(@Request() req: any, @Param('agentId') agentId: string) {
-    return this.nacService.reassessPosture(req.user.tenantId, agentId);
+    return this.nacService.reassessPosture(req.user.tenantId, assertAgentId(agentId));
   }
 
   // ─── VLAN Policies ──────────────────────────────────────
@@ -118,9 +125,24 @@ export class NacController {
   // ─── Quarantine ─────────────────────────────────────────
   @Post('quarantine/:agentId')
   @Roles('Tenant Admin')
-  @ApiOperation({ summary: 'Quarantine a non-compliant device' })
+  @ApiOperation({ summary: 'Quarantine a non-compliant device (CoA or agent firewall)' })
   async quarantineDevice(@Request() req: any, @Param('agentId') agentId: string, @Body() body: { reason: string }) {
-    return this.nacService.quarantineDevice(req.user.tenantId, agentId, body.reason);
+    return this.nacService.quarantineDevice(req.user.tenantId, assertAgentId(agentId), body.reason);
+  }
+
+  @Post('coa/disconnect/:agentId')
+  @Roles('Tenant Admin')
+  @ApiOperation({ summary: 'Send disconnect/CoA for a device (RADIUS or switch webhook)' })
+  async coaDisconnect(
+    @Request() req: any,
+    @Param('agentId') agentId: string,
+    @Body() body: { reason?: string },
+  ) {
+    return this.nacService.quarantineDevice(
+      req.user.tenantId,
+      assertAgentId(agentId),
+      body.reason || 'Manual disconnect',
+    );
   }
 
   // Alias route — frontend calls /posture/:id/quarantine
@@ -128,13 +150,13 @@ export class NacController {
   @Roles('Tenant Admin')
   @ApiOperation({ summary: 'Quarantine a device (alias route)' })
   async quarantineDeviceAlias(@Request() req: any, @Param('agentId') agentId: string, @Body() body: { reason: string }) {
-    return this.nacService.quarantineDevice(req.user.tenantId, agentId, body.reason);
+    return this.nacService.quarantineDevice(req.user.tenantId, assertAgentId(agentId), body.reason);
   }
 
   @Post('unquarantine/:agentId')
   @Roles('Tenant Admin')
   @ApiOperation({ summary: 'Release a device from quarantine' })
   async unquarantineDevice(@Request() req: any, @Param('agentId') agentId: string) {
-    return this.nacService.unquarantineDevice(req.user.tenantId, agentId);
+    return this.nacService.unquarantineDevice(req.user.tenantId, assertAgentId(agentId));
   }
 }

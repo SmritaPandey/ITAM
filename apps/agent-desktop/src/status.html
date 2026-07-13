@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>QS Discovery Agent</title>
+  <style>
+    :root {
+      --bg: #0f1219;
+      --panel: #171b26;
+      --text: #e8eaef;
+      --muted: #8b93a7;
+      --online: #10b981;
+      --offline: #ef4444;
+      --paused: #f59e0b;
+      --accent: #5c62ec;
+      --border: rgba(255, 255, 255, 0.08);
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: "Segoe UI", ui-sans-serif, system-ui, sans-serif;
+      background: radial-gradient(120% 80% at 10% 0%, #1a2035 0%, var(--bg) 55%);
+      color: var(--text);
+      min-height: 100vh;
+      padding: 24px;
+    }
+    h1 {
+      font-size: 18px;
+      font-weight: 600;
+      letter-spacing: 0.01em;
+      margin-bottom: 4px;
+    }
+    .sub {
+      color: var(--muted);
+      font-size: 12px;
+      margin-bottom: 20px;
+    }
+    .card {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 16px;
+    }
+    .row {
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 10px 0;
+      border-bottom: 1px solid var(--border);
+      font-size: 13px;
+    }
+    .row:last-child { border-bottom: none; }
+    .label { color: var(--muted); }
+    .value { text-align: right; font-weight: 500; word-break: break-all; }
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-weight: 600;
+    }
+    .dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--offline);
+    }
+    .badge.online .dot { background: var(--online); }
+    .badge.paused .dot { background: var(--paused); }
+    .badge.offline .dot { background: var(--offline); }
+    button {
+      margin-top: 16px;
+      width: 100%;
+      border: none;
+      border-radius: 10px;
+      padding: 11px 14px;
+      background: var(--accent);
+      color: white;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    button:hover { filter: brightness(1.08); }
+    button:disabled {
+      opacity: 0.55;
+      cursor: default;
+      filter: none;
+    }
+  </style>
+</head>
+<body>
+  <h1>QS Discovery Agent</h1>
+  <p class="sub">Tray companion status</p>
+
+  <div class="card">
+    <div class="row">
+      <span class="label">Status</span>
+      <span class="value">
+        <span id="status" class="badge offline"><span class="dot"></span><span id="statusText">Offline</span></span>
+      </span>
+    </div>
+    <div class="row">
+      <span class="label">Last heartbeat</span>
+      <span class="value" id="heartbeat">Never</span>
+    </div>
+    <div class="row">
+      <span class="label">Server</span>
+      <span class="value" id="server">—</span>
+    </div>
+    <div class="row">
+      <span class="label">Account</span>
+      <span class="value" id="email">—</span>
+    </div>
+  </div>
+
+  <button id="openDash" type="button">Open Status Dashboard</button>
+
+  <script>
+    function render(s) {
+      if (!s) return;
+      const badge = document.getElementById('status');
+      const text = document.getElementById('statusText');
+      badge.className = 'badge ' + (s.state || 'offline');
+      text.textContent =
+        s.state === 'online' ? 'Online' : s.state === 'paused' ? 'Paused' : 'Offline';
+      document.getElementById('heartbeat').textContent = s.lastHeartbeatLabel || 'Never';
+      document.getElementById('server').textContent = s.server || '—';
+      document.getElementById('email').textContent = s.email || '—';
+    }
+
+    document.getElementById('openDash').addEventListener('click', () => {
+      window.agentDesktop?.openDashboard();
+    });
+
+    window.agentDesktop?.getStatus().then(render);
+    window.agentDesktop?.onStatus(render);
+  </script>
+</body>
+</html>

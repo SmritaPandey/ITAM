@@ -1,10 +1,11 @@
 "use client";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Search, Plus, Filter, Download, RefreshCw, ChevronLeft, ChevronRight, Upload, Layers } from "lucide-react";
+import { Search, Plus, Filter, Download, RefreshCw, ChevronLeft, ChevronRight, Upload, Layers, ScanLine, Calculator, ClipboardCheck, Bell } from "lucide-react";
 import CreateAssetPanel from "@/components/CreateAssetPanel";
 import ImportAssetsPanel from "@/components/ImportAssetsPanel";
-import { apiFetch } from "@/lib/api";
+import EmptyState from "@/components/EmptyState";
+import { apiFetch, itamApi } from "@/lib/api";
 
 const STATUS_BADGE: Record<string, string> = {
   ACTIVE: "green", DISCOVERED: "blue", IN_MAINTENANCE: "amber",
@@ -20,6 +21,9 @@ export default function AssetsPage() {
   const [loading, setLoading] = useState(true);
   const [showCreate, setShowCreate] = useState(false);
   const [showImport, setShowImport] = useState(false);
+  const [financeSummary, setFinanceSummary] = useState<any>(null);
+  const [pendingAttest, setPendingAttest] = useState(0);
+  const [itamBusy, setItamBusy] = useState("");
 
   function load(p = page, s = search, st = statusFilter) {
     setLoading(true);
@@ -30,9 +34,59 @@ export default function AssetsPage() {
       .then(setAssets).catch(console.error).finally(() => setLoading(false));
   }
 
-  useEffect(() => { load(1); }, []);
+  function loadItam() {
+    Promise.all([
+      itamApi.depreciationReport().catch(() => null),
+      itamApi.pendingAttestations().catch(() => []),
+    ]).then(([report, pending]) => {
+      setFinanceSummary(report);
+      setPendingAttest(Array.isArray(pending) ? pending.length : 0);
+    });
+  }
+
+  useEffect(() => { load(1); loadItam(); }, []);
 
   function handleSearch(e: React.FormEvent) { e.preventDefault(); setPage(1); load(1, search, statusFilter); }
+
+  async function runMassDepreciation() {
+    setItamBusy("depreciation");
+    try {
+      const result = await itamApi.massDepreciation(true);
+      alert(`Depreciation updated ${result?.updated ?? 0} of ${result?.total ?? 0} assets.`);
+      loadItam();
+    } catch (err: any) {
+      alert(err?.message || "Mass depreciation failed");
+    } finally {
+      setItamBusy("");
+    }
+  }
+
+  async function startAttestation() {
+    const name = prompt("Campaign name", `Q${Math.ceil((new Date().getMonth() + 1) / 3)} ${new Date().getFullYear()} Asset Verification`);
+    if (!name) return;
+    setItamBusy("attestation");
+    try {
+      const result = await itamApi.createAttestationCampaign({ campaignName: name });
+      alert(`Campaign "${result.campaign}" created for ${result.assetsRequested} assets.`);
+      loadItam();
+    } catch (err: any) {
+      alert(err?.message || "Failed to create campaign");
+    } finally {
+      setItamBusy("");
+    }
+  }
+
+  async function remindAttestation() {
+    setItamBusy("remind");
+    try {
+      const result = await itamApi.remindAttestations();
+      alert(`Sent ${result.reminded} attestation reminder(s).`);
+    } catch (err: any) {
+      alert(err?.message || "Remind failed");
+    } finally {
+      setItamBusy("");
+    }
+  }
 
   return (
     <>
@@ -41,7 +95,8 @@ export default function AssetsPage() {
           <h1 className="page-title">All Assets</h1>
           <p className="page-subtitle">{assets.total} total assets across all categories</p>
         </div>
-        <div style={{ display: "flex", gap: 8 }}>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+          <button className="btn btn-secondary" onClick={() => router.push('/scan')}><ScanLine size={14} /> Scan</button>
           <button className="btn btn-secondary" onClick={() => router.push('/dashboard/assets/import')}><Upload size={14} /> Import CSV</button>
           <button className="btn btn-secondary" onClick={async () => {
             try {
@@ -61,12 +116,43 @@ export default function AssetsPage() {
         </div>
       </div>
 
-      {/* Filters */}
+      <div className="card" style={{ marginBottom: 16, padding: "14px 16px", display: "flex", gap: 16, flexWrap: "wrap", alignItems: "center", justifyContent: "space-between" }}>
+        <div style={{ display: "flex", gap: 20, flexWrap: "wrap", fontSize: 13, color: "var(--text-secondary)" }}>
+          <div>
+            <div style={{ fontSize: 11, color: "var(--text-tertiary)", textTransform: "uppercase", letterSpacing: 0.4 }}>Book value</div>
+            <div style={{ fontWeight: 700, color: "var(--text-primary)", fontSize: 16 }}>
+              {financeSummary ? `$${Number(financeSummary.totalBookValue || 0).toLocaleString()}` : "—"}
+            </div>
+          </div>
+          <div>
+            <div style={{ fontSize: 11, color: "var(--text-tertiary)", textTransform: "uppercase", letterSpacing: 0.4 }}>Depreciated</div>
+            <div style={{ fontWeight: 700, color: "var(--text-primary)", fontSize: 16 }}>
+              {financeSummary ? `$${Number(financeSummary.totalDepreciated || 0).toLocaleString()}` : "—"}
+            </div>
+          </div>
+          <div>
+            <div style={{ fontSize: 11, color: "var(--text-tertiary)", textTransform: "uppercase", letterSpacing: 0.4 }}>Pending attestations</div>
+            <div style={{ fontWeight: 700, color: pendingAttest ? "#f59e0b" : "var(--text-primary)", fontSize: 16 }}>{pendingAttest}</div>
+          </div>
+        </div>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+          <button className="btn btn-secondary" disabled={!!itamBusy} onClick={runMassDepreciation}>
+            <Calculator size={14} /> {itamBusy === "depreciation" ? "Running…" : "Run depreciation"}
+          </button>
+          <button className="btn btn-secondary" disabled={!!itamBusy} onClick={startAttestation}>
+            <ClipboardCheck size={14} /> {itamBusy === "attestation" ? "Creating…" : "Start attestation"}
+          </button>
+          <button className="btn btn-secondary" disabled={!!itamBusy || pendingAttest === 0} onClick={remindAttestation}>
+            <Bell size={14} /> {itamBusy === "remind" ? "Sending…" : "Remind owners"}
+          </button>
+        </div>
+      </div>
+
       <div className="card" style={{ marginBottom: 16, padding: "12px 16px", display: "flex", gap: 12, alignItems: "center" }}>
         <form onSubmit={handleSearch} style={{ flex: 1, display: "flex", gap: 8 }}>
           <div className="topbar-search" style={{ width: "100%", maxWidth: 400 }}>
             <Search size={14} style={{ color: "var(--text-tertiary)" }} />
-            <input placeholder="Search name, tag, serial, IP..." value={search} onChange={e => setSearch(e.target.value)} />
+            <input placeholder="Search name, tag, serial, IP, RFID..." value={search} onChange={e => setSearch(e.target.value)} />
           </div>
           <select value={statusFilter} onChange={e => { setStatusFilter(e.target.value); load(1, search, e.target.value); }}
             style={{
@@ -84,7 +170,15 @@ export default function AssetsPage() {
         <button className="btn btn-secondary" onClick={() => load(page, search, statusFilter)}><RefreshCw size={14} /></button>
       </div>
 
-      {/* Table */}
+      {!loading && assets.data?.length === 0 ? (
+        <EmptyState
+          icon={<Layers size={40} />}
+          title="No assets yet"
+          description="Create an asset manually, import a spreadsheet, or discover devices on your network."
+          action={{ label: "Go to Discovery", href: "/dashboard/discovery" }}
+          secondaryAction={{ label: "Add Asset", onClick: () => setShowCreate(true) }}
+        />
+      ) : (
       <div className="card" style={{ padding: 0, overflow: "hidden" }}>
         <table className="data-table">
           <thead>
@@ -102,8 +196,6 @@ export default function AssetsPage() {
           <tbody>
             {loading ? (
               <tr><td colSpan={8} style={{ textAlign: "center", padding: 40, color: "var(--text-tertiary)" }}>Loading...</td></tr>
-            ) : assets.data?.length === 0 ? (
-              <tr><td colSpan={8} style={{ textAlign: "center", padding: 40, color: "var(--text-tertiary)" }}>No assets found</td></tr>
             ) : assets.data?.map((a: any) => (
               <tr key={a.id} style={{ cursor: "pointer" }} onClick={() => router.push(`/dashboard/assets/${a.id}`)}>
                 <td>
@@ -115,7 +207,7 @@ export default function AssetsPage() {
                 <td><span className="badge cyan">{a.assetType?.name}</span></td>
                 <td><span className={`badge ${STATUS_BADGE[a.status] || "gray"}`}>{a.status.replace("_", " ")}</span></td>
                 <td>
-                  <span style={{ display: "inline-flex", alignItems: "center", gap: 4, background: "rgba(168, 85, 247, 0.1)", color: "#c084fc", padding: "2px 8px", borderRadius: 6, fontSize: 12 }}>
+                  <span style={{ display: "inline-flex", alignItems: "center", gap: 4, background: "rgba(6, 182, 212, 0.1)", color: "#22d3ee", padding: "2px 8px", borderRadius: 6, fontSize: 12 }}>
                     <Layers size={12} />
                     {a.softwareInstalls?.length || a._count?.softwareInstalls || 0}
                   </span>
@@ -135,7 +227,6 @@ export default function AssetsPage() {
           </tbody>
         </table>
 
-        {/* Pagination */}
         {assets.totalPages > 1 && (
           <div style={{
             display: "flex", justifyContent: "space-between", alignItems: "center",
@@ -155,6 +246,7 @@ export default function AssetsPage() {
           </div>
         )}
       </div>
+      )}
       <CreateAssetPanel open={showCreate} onClose={() => setShowCreate(false)} onCreated={() => load(1)} />
       <ImportAssetsPanel open={showImport} onClose={() => setShowImport(false)} onImported={() => load(1)} />
     </>

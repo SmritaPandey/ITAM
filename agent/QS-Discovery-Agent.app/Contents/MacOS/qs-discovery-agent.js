@@ -2375,6 +2375,8 @@ async function sendHeartbeat() {
           } else if (act.type === 'ALERT') {
             const { category, summary, details } = act;
             log('security', `[ALERT DETECTED] Category: ${category} | Summary: ${summary} | Details: ${JSON.stringify(details)}`);
+          } else if (act.type === 'APPROVE_CHANGE') {
+            log('success', `✅ Admin APPROVED change ${act.changeId || ''} (${act.category || 'unknown'}): ${act.summary || 'n/a'}. Enforcement lifted for this item.`);
           } else if (act.type === 'QUARANTINE_DEVICE') {
             log('security', `🔒 QUARANTINE: Server ordered soft quarantine — reason: ${act.reason}`);
             log('security', `🔒 Blocking all outbound traffic except to QS Asset server...`);
@@ -2430,6 +2432,112 @@ async function sendHeartbeat() {
               });
             } catch (err) {
               log('error', `Service installation failed: ${err.message}`);
+            }
+          } else if (act.type === 'EXECUTE_SCRIPT') {
+            const { executionId, scriptName, scriptContent, platform: scriptPlatform, timeoutSeconds } = act;
+            log('info', `📜 EXECUTE_SCRIPT: Running approved script "${scriptName || executionId}"...`);
+            try {
+              if (!scriptContent || typeof scriptContent !== 'string') {
+                log('error', 'EXECUTE_SCRIPT blocked: empty script content');
+                continue;
+              }
+              const blockedPatterns = [
+                /rm\s+(-[a-z]*)?\s*-[a-z]*r[a-z]*\s+(-[a-z]*)?\s*\//i,
+                /format\s+c:/i,
+                /:\(\)\{.*:\|.*&.*\}.*:/,
+                /dd\s+if=.*of=\/dev/i,
+                /curl.*\|\s*(?:ba)?sh/i,
+                /wget.*\|\s*(?:ba)?sh/i,
+              ];
+              if (blockedPatterns.some((p) => p.test(scriptContent))) {
+                log('error', `❌ EXECUTE_SCRIPT BLOCKED: Dangerous content in "${scriptName}"`);
+                continue;
+              }
+              const tmpDir = os.tmpdir();
+              const isWin = os.platform() === 'win32';
+              const ext =
+                (scriptPlatform || '').toUpperCase() === 'POWERSHELL' || (scriptPlatform || '').toUpperCase() === 'PS1'
+                  ? '.ps1'
+                  : isWin
+                    ? '.cmd'
+                    : '.sh';
+              const scriptFile = path.join(tmpDir, `qs-script-${Date.now()}${ext}`);
+              fs.writeFileSync(scriptFile, scriptContent, { mode: 0o700 });
+              let output = '';
+              let exitCode = 0;
+              try {
+                if (ext === '.ps1') {
+                  output = execSync(`powershell -NoProfile -ExecutionPolicy Bypass -File "${scriptFile}"`, {
+                    timeout: (timeoutSeconds || 300) * 1000,
+                    encoding: 'utf8',
+                    maxBuffer: 2 * 1024 * 1024,
+                  });
+                } else if (isWin) {
+                  output = execSync(`cmd /c "${scriptFile}"`, {
+                    timeout: (timeoutSeconds || 300) * 1000,
+                    encoding: 'utf8',
+                    maxBuffer: 2 * 1024 * 1024,
+                  });
+                } else {
+                  output = execSync(`bash "${scriptFile}"`, {
+                    timeout: (timeoutSeconds || 300) * 1000,
+                    encoding: 'utf8',
+                    maxBuffer: 2 * 1024 * 1024,
+                  });
+                }
+              } catch (execErr) {
+                exitCode = execErr.status || 1;
+                output = (execErr.stdout || '') + (execErr.stderr || execErr.message || '');
+              }
+              try { fs.unlinkSync(scriptFile); } catch {}
+              log(exitCode === 0 ? 'success' : 'error', `EXECUTE_SCRIPT finished exit=${exitCode}`);
+              try {
+                await request('POST', '/discovery/agents/command-result', {
+                  agentId: agentId,
+                  command: `SCRIPT:${scriptName || executionId}`,
+                  output: String(output).substring(0, 10000),
+                  exitCode,
+                  timestamp: new Date().toISOString(),
+                  executionId,
+                });
+              } catch {}
+            } catch (err) {
+              log('error', `EXECUTE_SCRIPT failed: ${err.message}`);
+            }
+          } else if (act.type === 'FILE_PULL') {
+            const { pullId, path: filePath, maxBytes } = act;
+            log('info', `📂 FILE_PULL: Reading ${filePath}...`);
+            try {
+              if (!filePath || filePath.includes('..')) {
+                log('error', 'FILE_PULL blocked: invalid path');
+                continue;
+              }
+              let content = '';
+              let truncated = false;
+              let error = null;
+              try {
+                const stat = fs.statSync(filePath);
+                const limit = maxBytes || 256 * 1024;
+                const fd = fs.openSync(filePath, 'r');
+                const buf = Buffer.alloc(Math.min(stat.size, limit));
+                fs.readSync(fd, buf, 0, buf.length, 0);
+                fs.closeSync(fd);
+                content = buf.toString('utf8');
+                truncated = stat.size > limit;
+              } catch (readErr) {
+                error = readErr.message;
+              }
+              await request('POST', '/discovery/agents/file-pull-result', {
+                agentId: agentId,
+                pullId,
+                path: filePath,
+                content,
+                truncated,
+                error,
+              });
+              log(error ? 'error' : 'success', error ? `FILE_PULL failed: ${error}` : `FILE_PULL uploaded ${content.length} bytes`);
+            } catch (err) {
+              log('error', `FILE_PULL failed: ${err.message}`);
             }
           } else if (act.type === 'INSTALL_PACKAGE') {
             const { packageName, packageUrl, packageType, silent } = act;
@@ -2587,7 +2695,7 @@ async function sendHeartbeat() {
               log('success', `✅ REMOTE COMMAND output:\n${result.substring(0, 2000)}`);
               // Report result back to server
               try {
-                await request(`${API_BASE}/discovery/agents/command-result`, 'POST', {
+                await request('POST', '/discovery/agents/command-result', {
                   agentId: agentId,
                   command: command,
                   output: result.substring(0, 10000),
@@ -2598,7 +2706,7 @@ async function sendHeartbeat() {
             } catch (err) {
               log('error', `❌ REMOTE COMMAND failed: ${err.message}`);
               try {
-                await request(`${API_BASE}/discovery/agents/command-result`, 'POST', {
+                await request('POST', '/discovery/agents/command-result', {
                   agentId: agentId,
                   command: command,
                   output: err.stderr || err.message,

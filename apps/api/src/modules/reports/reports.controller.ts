@@ -50,6 +50,32 @@ export class ReportsController {
     return this.service.getExecutiveDashboard(req.user.tenantId);
   }
 
+  @Get('business-services')
+  @Roles('Tenant Admin', 'IT Admin')
+  @ApiOperation({ summary: 'Business service health summary for reports' })
+  async getBusinessServiceHealth(@Request() req: any) {
+    return this.service.getBusinessServiceHealth(req.user.tenantId);
+  }
+
+  @Post('run')
+  @Roles('Tenant Admin', 'IT Admin')
+  @ApiOperation({ summary: 'Parameterized report builder — run now, optionally email' })
+  async runReport(
+    @Request() req: any,
+    @Body()
+    body: {
+      reportType: string;
+      startDate?: string;
+      endDate?: string;
+      format?: string;
+      filters?: Record<string, any>;
+      emailTo?: string[];
+      name?: string;
+    },
+  ) {
+    return this.service.runReport(req.user.tenantId, body);
+  }
+
   @Get('trends')
   @Roles('Tenant Admin', 'IT Admin')
   @ApiOperation({ summary: 'Monthly asset & ticket trends' })
@@ -80,7 +106,7 @@ export class ReportsController {
 
   @Get('download/:type')
   @Roles('Tenant Admin', 'IT Admin')
-  @ApiOperation({ summary: 'Download a report as CSV or XLSX' })
+  @ApiOperation({ summary: 'Download a report as CSV, XLSX, or PDF' })
   async downloadReport(
     @Request() req: any,
     @Res() res: Response,
@@ -88,14 +114,32 @@ export class ReportsController {
     @Query('format') format: string = 'csv',
     @Query('startDate') startDate?: string,
     @Query('endDate') endDate?: string,
+    @Query('status') status?: string,
+    @Query('category') category?: string,
+    @Query('priority') priority?: string,
   ) {
-    const report = await this.generator.generate(req.user.tenantId, type, { startDate, endDate });
-    const filename = `${type}_report_${new Date().toISOString().split('T')[0]}`;
+    const filters: Record<string, string> = {};
+    if (status) filters.status = status;
+    if (category) filters.category = category;
+    if (priority) filters.priority = priority;
 
-    if (format === 'xlsx') {
+    const report = await this.generator.generate(req.user.tenantId, type, {
+      startDate,
+      endDate,
+      filters,
+    });
+    const filename = `${type}_report_${new Date().toISOString().split('T')[0]}`;
+    const fmt = String(format || 'csv').toLowerCase();
+
+    if (fmt === 'xlsx' || fmt === 'xls') {
       const buffer = await this.generator.toXLSX(report);
       res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
       res.setHeader('Content-Disposition', `attachment; filename="${filename}.xlsx"`);
+      res.send(buffer);
+    } else if (fmt === 'pdf') {
+      const buffer = await this.generator.toPDF(report);
+      res.setHeader('Content-Type', 'application/pdf');
+      res.setHeader('Content-Disposition', `attachment; filename="${filename}.pdf"`);
       res.send(buffer);
     } else {
       const csv = this.generator.toCSV(report);
@@ -158,6 +202,39 @@ export class ReportsController {
   async deleteSchedule(@Request() req: any, @Param('id') id: string) {
     await this.prisma.scheduledReport.delete({ where: { id } });
     return { deleted: true };
+  }
+
+  // ─── Saved custom filters ─────────────────────────────────────
+
+  @Get('saved-filters')
+  @Roles('Tenant Admin', 'IT Admin')
+  @ApiOperation({ summary: 'List saved custom report filters' })
+  async listSavedFilters(@Request() req: any) {
+    return this.service.listSavedFilters(req.user.tenantId);
+  }
+
+  @Post('saved-filters')
+  @Roles('Tenant Admin', 'IT Admin')
+  @ApiOperation({ summary: 'Save a custom report filter preset' })
+  async saveFilter(
+    @Request() req: any,
+    @Body()
+    body: {
+      id?: string;
+      name: string;
+      reportType: string;
+      filters?: Record<string, any>;
+      format?: string;
+    },
+  ) {
+    return this.service.saveFilter(req.user.tenantId, body);
+  }
+
+  @Delete('saved-filters/:id')
+  @Roles('Tenant Admin', 'IT Admin')
+  @ApiOperation({ summary: 'Delete a saved report filter' })
+  async deleteSavedFilter(@Request() req: any, @Param('id') id: string) {
+    return this.service.deleteSavedFilter(req.user.tenantId, id);
   }
 
   private calculateNextRun(cronExpr: string): Date {

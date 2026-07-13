@@ -1,4 +1,4 @@
-import { Controller, Get, Query, UseGuards, Request } from '@nestjs/common';
+import { Controller, Get, Post, Query, UseGuards, Request, Body } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth, ApiOperation, ApiQuery } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
@@ -43,5 +43,15 @@ export class AuditLogsController {
   @ApiOperation({ summary: 'Verify audit log hash chain integrity' })
   async verify(@Request() req: any) {
     return this.service.verifyChain(req.user.tenantId);
+  }
+
+  @Post('siem/export')
+  @Roles('Tenant Admin', 'IT Admin')
+  @ApiOperation({ summary: 'Export recent audit events to SIEM syslog/webhook channels' })
+  async exportSiem(
+    @Request() req: any,
+    @Body() body?: { sinceHours?: number; limit?: number },
+  ) {
+    return this.service.exportToSiem(req.user.tenantId, body);
   }
 }

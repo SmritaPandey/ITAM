@@ -122,50 +122,46 @@ function HelpfulWidget({ articleId }: { articleId: string }) {
       alignItems: "center",
       gap: 12,
       padding: "32px 0",
-      borderTop: "1px solid var(--border-primary, rgba(255,255,255,0.06))",
+      borderTop: "1px solid var(--border-primary, rgba(15,23,42,0.08))",
       marginTop: 48,
       textAlign: "center"
     }}>
-      <span style={{ fontSize: 14, fontWeight: 700, color: "var(--text-secondary)" }}>
-        {voted ? "🎉 Thank you for helping us improve our documentation!" : "Was this article helpful?"}
+      <span className="font-mono-label" style={{ fontSize: 11, color: "var(--text-secondary, #6b7280)" }}>
+        {voted ? "Thanks — your feedback helps improve the docs." : "Was this article helpful?"}
       </span>
       {!voted && (
         <div style={{ display: "flex", gap: 12 }}>
           <button
             onClick={() => setVoted("yes")}
             style={{
-              padding: "8px 20px",
+              padding: "8px 18px",
               borderRadius: 8,
-              border: "1px solid var(--border-primary, rgba(255,255,255,0.08))",
-              background: "rgba(6, 182, 212, 0.08)",
-              color: "#06b6d4",
-              fontWeight: 700,
+              border: "1px solid rgba(15,23,42,0.12)",
+              background: "#0f172a",
+              color: "#ffffff",
+              fontWeight: 400,
               fontSize: 13,
               cursor: "pointer",
-              transition: "all 0.2s"
+              transition: "opacity 0.2s ease"
             }}
-            onMouseEnter={e => { e.currentTarget.style.background = "rgba(6, 182, 212, 0.15)"; }}
-            onMouseLeave={e => { e.currentTarget.style.background = "rgba(6, 182, 212, 0.08)"; }}
           >
-            👍 Yes, helpful
+            Yes, helpful
           </button>
           <button
             onClick={() => setVoted("no")}
             style={{
-              padding: "8px 20px",
+              padding: "8px 18px",
               borderRadius: 8,
-              border: "1px solid var(--border-primary, rgba(255,255,255,0.08))",
-              background: "rgba(255,255,255,0.02)",
-              color: "var(--text-secondary)",
-              fontWeight: 700,
+              border: "1px solid rgba(15,23,42,0.12)",
+              background: "transparent",
+              color: "var(--text-secondary, #6b7280)",
+              fontWeight: 400,
               fontSize: 13,
               cursor: "pointer",
-              transition: "all 0.2s"
+              transition: "all 0.2s ease"
             }}
-            onMouseEnter={e => { e.currentTarget.style.background = "rgba(255,255,255,0.06)"; }}
-            onMouseLeave={e => { e.currentTarget.style.background = "rgba(255,255,255,0.02)"; }}
           >
-            👎 Not helpful
+            Not helpful
           </button>
         </div>
       )}
@@ -918,12 +914,17 @@ export default function DocsPage() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   const L = theme === "light";
-  const bg = L ? "linear-gradient(160deg, #f8fafc 0%, #edf2f7 40%, #f7fafc 100%)" : "linear-gradient(160deg, #030308 0%, #090e1f 40%, #04050c 100%)";
-  const txt = L ? "#0f172a" : "#f1f5f9";
-  const muted = L ? "#475569" : "#94a3b8";
-  const border = L ? "rgba(15, 23, 42, 0.08)" : "rgba(255, 255, 255, 0.06)";
-  const card = L ? "rgba(255, 255, 255, 0.8)" : "rgba(13, 17, 34, 0.65)";
-  const activeBg = L ? "rgba(6, 182, 212, 0.08)" : "rgba(6, 182, 212, 0.12)";
+  const bg = L ? "#f5f7f8" : "#070b10";
+  const txt = L ? "#0f172a" : "#f5f5f7";
+  const muted = L ? "#6b7280" : "#9f9fa0";
+  const border = L ? "rgba(15, 23, 42, 0.08)" : "rgba(255, 255, 255, 0.08)";
+  const card = L ? "#ffffff" : "rgba(18, 21, 26, 0.92)";
+  const activeBg = L ? "rgba(15, 23, 42, 0.05)" : "rgba(255, 255, 255, 0.06)";
+  const voidBtn = L ? "#0f172a" : "#ffffff";
+  const voidTxt = L ? "#ffffff" : "#0f172a";
+  const wash = L
+    ? "radial-gradient(ellipse 90% 70% at 50% -10%, rgba(6,182,212,0.12) 0%, transparent 55%), linear-gradient(180deg, #eef4f6 0%, #f5f7f8 70%)"
+    : "radial-gradient(ellipse 90% 70% at 50% -10%, rgba(6,182,212,0.16) 0%, transparent 55%), linear-gradient(180deg, #0a1218 0%, #070b10 75%)";
 
   // Filter articles based on query matching title, category, or desc
   const filteredArticles = ARTICLES.filter(art => {
@@ -951,28 +952,41 @@ export default function DocsPage() {
       minHeight: '100vh',
       background: bg,
       color: txt,
-      fontFamily: "'Plus Jakarta Sans', 'Inter', system-ui, sans-serif",
-      transition: 'background 0.5s, color 0.5s',
+      fontFamily: "var(--font-body), 'DM Sans', system-ui, sans-serif",
+      transition: 'background 0.4s, color 0.4s',
       display: "flex",
-      flexDirection: "column"
+      flexDirection: "column",
+      overflowX: "hidden",
     }}>
+      <div aria-hidden style={{ position: "absolute", inset: "0 0 auto 0", height: 360, pointerEvents: "none", zIndex: 0, background: wash }} />
       {/* Global Application Header */}
       <Header theme={theme} onToggleTheme={toggleTheme} />
+
+      <div style={{ maxWidth: 1200, margin: "0 auto", width: "100%", padding: "100px 24px 24px", position: "relative", zIndex: 1 }}>
+        <div className="font-mono-label" style={{ fontSize: 11, color: muted, marginBottom: 12 }}>Documentation</div>
+        <h1 className="font-serif" style={{ fontSize: "clamp(32px, 4vw, 44px)", fontWeight: 400, lineHeight: 0.95, letterSpacing: "-0.02em", marginBottom: 8 }}>
+          Guides & <em style={{ fontStyle: "italic" }}>reference</em>
+        </h1>
+        <p style={{ fontSize: 15, fontWeight: 300, color: muted, maxWidth: 520, lineHeight: 1.5, marginBottom: 0 }}>
+          Deploy, discover, and operate QS Assets — from quick start to API auth.
+        </p>
+      </div>
 
       {/* Main Documentation Shell */}
       <div style={{
         flex: 1,
         width: "100%",
-        maxWidth: 1400,
+        maxWidth: 1200,
         margin: "0 auto",
-        padding: "100px 4% 60px",
+        padding: "28px 24px 60px",
         display: "flex",
-        gap: 32,
-        position: "relative"
+        gap: 20,
+        position: "relative",
+        zIndex: 1,
       }}>
         {/* --- 1. Left Sidebar Panel (Desktop) --- */}
         <aside className="docs-sidebar" style={{
-          width: 290,
+          width: 280,
           flexShrink: 0,
           background: card,
           border: `1px solid ${border}`,
@@ -985,9 +999,6 @@ export default function DocsPage() {
           position: "sticky",
           top: 100,
           overflowY: "auto",
-          backdropFilter: "blur(20px)",
-          WebkitBackdropFilter: "blur(20px)",
-          boxShadow: L ? "0 10px 30px rgba(0,0,0,0.02)" : "0 10px 40px rgba(0,0,0,0.15)",
         }}>
           {/* Search Box */}
           <div style={{ position: "relative" }}>
@@ -1000,16 +1011,16 @@ export default function DocsPage() {
               style={{
                 width: "100%",
                 padding: "10px 12px 10px 38px",
-                borderRadius: 10,
+                borderRadius: 8,
                 fontSize: 13,
                 fontFamily: "inherit",
-                background: L ? "rgba(0,0,0,0.03)" : "rgba(255,255,255,0.03)",
+                background: L ? "#f8fafc" : "rgba(0,0,0,0.35)",
                 border: `1px solid ${border}`,
                 color: txt,
                 outline: "none",
-                transition: "border-color 0.2s"
+                transition: "border-color 0.2s ease"
               }}
-              onFocus={e => { e.target.style.borderColor = "#06b6d4"; }}
+              onFocus={e => { e.target.style.borderColor = txt; }}
               onBlur={e => { e.target.style.borderColor = border; }}
             />
           </div>
@@ -1022,12 +1033,9 @@ export default function DocsPage() {
 
               return (
                 <div key={cat} style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                  <div style={{
-                    fontSize: 11,
-                    fontWeight: 800,
-                    color: "#06b6d4",
-                    textTransform: "uppercase",
-                    letterSpacing: "0.08em",
+                  <div className="font-mono-label" style={{
+                    fontSize: 10,
+                    color: muted,
                     paddingLeft: 8
                   }}>
                     {cat}
@@ -1044,32 +1052,32 @@ export default function DocsPage() {
                             padding: "9px 12px",
                             borderRadius: 8,
                             fontSize: 13.5,
-                            fontWeight: active ? 700 : 500,
-                            color: active ? "#06b6d4" : "var(--text-secondary)",
+                            fontWeight: active ? 500 : 400,
+                            color: active ? txt : muted,
                             background: active ? activeBg : "transparent",
                             border: "none",
                             cursor: "pointer",
                             fontFamily: "inherit",
-                            transition: "all 0.15s",
+                            transition: "all 0.2s ease",
                             display: "flex",
                             alignItems: "center",
                             justifyContent: "space-between"
                           }}
                           onMouseEnter={e => {
                             if (!active) {
-                              e.currentTarget.style.background = L ? "rgba(0,0,0,0.02)" : "rgba(255,255,255,0.02)";
+                              e.currentTarget.style.background = activeBg;
                               e.currentTarget.style.color = txt;
                             }
                           }}
                           onMouseLeave={e => {
                             if (!active) {
                               e.currentTarget.style.background = "transparent";
-                              e.currentTarget.style.color = "var(--text-secondary)";
+                              e.currentTarget.style.color = muted;
                             }
                           }}
                         >
                           {art.title}
-                          {active && <ChevronRight size={14} style={{ color: "#06b6d4" }} />}
+                          {active && <ChevronRight size={14} style={{ color: muted }} />}
                         </button>
                       );
                     })}
@@ -1096,13 +1104,12 @@ export default function DocsPage() {
             style={{
               width: "100%",
               padding: "14px 20px",
-              borderRadius: 14,
+              borderRadius: 8,
               border: "none",
-              background: "linear-gradient(135deg, #06b6d4, #0891b2)",
-              color: "white",
+              background: voidBtn,
+              color: voidTxt,
               fontSize: 14,
-              fontWeight: 800,
-              boxShadow: "0 10px 25px rgba(6,182,212,0.3)",
+              fontWeight: 500,
               display: "flex",
               alignItems: "center",
               justifyContent: "center",
@@ -1121,7 +1128,7 @@ export default function DocsPage() {
               style={{
                 position: "fixed",
                 inset: 0,
-                background: "rgba(0,0,0,0.6)",
+                background: "rgba(0,0,0,0.5)",
                 backdropFilter: "blur(6px)",
                 zIndex: 10000
               }}
@@ -1132,7 +1139,7 @@ export default function DocsPage() {
               bottom: 0,
               left: 0,
               width: "min(320px, 85vw)",
-              background: L ? "#ffffff" : "#080b16",
+              background: L ? "#ffffff" : "#0a0e1a",
               borderRight: `1px solid ${border}`,
               zIndex: 10001,
               padding: "24px 20px",
@@ -1142,7 +1149,7 @@ export default function DocsPage() {
               overflowY: "auto"
             }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                <span style={{ fontSize: 16, fontWeight: 800 }}>Documentation</span>
+                <span className="font-serif" style={{ fontSize: 22, fontWeight: 400 }}>Documentation</span>
                 <button
                   onClick={() => setMobileMenuOpen(false)}
                   style={{ background: "none", border: "none", color: muted, cursor: "pointer" }}
@@ -1162,10 +1169,10 @@ export default function DocsPage() {
                   style={{
                     width: "100%",
                     padding: "10px 12px 10px 38px",
-                    borderRadius: 10,
+                    borderRadius: 8,
                     fontSize: 13,
                     fontFamily: "inherit",
-                    background: L ? "rgba(0,0,0,0.03)" : "rgba(255,255,255,0.03)",
+                    background: L ? "#f8fafc" : "rgba(0,0,0,0.35)",
                     border: `1px solid ${border}`,
                     color: txt,
                     outline: "none"
@@ -1181,7 +1188,7 @@ export default function DocsPage() {
 
                   return (
                     <div key={cat} style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                      <div style={{ fontSize: 10, fontWeight: 800, color: "#06b6d4", textTransform: "uppercase", letterSpacing: "0.08em", paddingLeft: 8 }}>
+                      <div className="font-mono-label" style={{ fontSize: 10, color: muted, paddingLeft: 8 }}>
                         {cat}
                       </div>
                       <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
@@ -1196,8 +1203,8 @@ export default function DocsPage() {
                                 padding: "10px 12px",
                                 borderRadius: 8,
                                 fontSize: 13.5,
-                                fontWeight: active ? 700 : 500,
-                                color: active ? "#06b6d4" : "var(--text-secondary)",
+                                fontWeight: active ? 500 : 400,
+                                color: active ? txt : muted,
                                 background: active ? activeBg : "transparent",
                                 border: "none",
                                 cursor: "pointer",
@@ -1228,16 +1235,13 @@ export default function DocsPage() {
             border: `1px solid ${border}`,
             borderRadius: 16,
             padding: "40px 5%",
-            backdropFilter: "blur(20px)",
-            WebkitBackdropFilter: "blur(20px)",
-            boxShadow: L ? "0 10px 30px rgba(0,0,0,0.02)" : "0 10px 40px rgba(0,0,0,0.15)",
             display: "flex",
             flexDirection: "column",
             gap: 16
           }}
         >
           {/* Main Article Content Injected Dynamically */}
-          <div className="docs-article-body" style={{ minHeight: "60vh" }}>
+          <div className="docs-article-body" style={{ minHeight: "60vh", color: muted }}>
             {activeArticle.content}
           </div>
 
@@ -1251,7 +1255,39 @@ export default function DocsPage() {
 
       {/* Custom Global Scrollbars and Responsive Media Styles */}
       <style>{`
-        /* Web layout adjustments */
+        .docs-article-body h2 {
+          font-family: var(--font-serif), 'DM Serif Display', Georgia, serif !important;
+          font-weight: 400 !important;
+          font-size: clamp(26px, 3vw, 32px) !important;
+          line-height: 1.05 !important;
+          letter-spacing: -0.02em !important;
+          color: ${txt} !important;
+        }
+        .docs-article-body h3 {
+          font-family: var(--font-serif), 'DM Serif Display', Georgia, serif !important;
+          font-weight: 400 !important;
+          font-size: 20px !important;
+          color: ${txt} !important;
+        }
+        .docs-article-body p, .docs-article-body li {
+          font-weight: 300;
+          color: ${muted};
+        }
+        .docs-article-body strong {
+          font-weight: 500;
+          color: ${txt};
+        }
+        .docs-article-body table th {
+          font-family: var(--font-mono), monospace;
+          font-size: 11px;
+          text-transform: uppercase;
+          letter-spacing: 0.08em;
+          font-weight: 500;
+          color: ${muted};
+        }
+        .docs-article-body table td {
+          color: ${txt};
+        }
         @media (max-width: 1024px) {
           .docs-sidebar { display: none !important; }
           .docs-mobile-bar { display: block !important; }
@@ -1270,7 +1306,7 @@ export default function DocsPage() {
           border-radius: 99px;
         }
         .docs-sidebar::-webkit-scrollbar-thumb:hover {
-          background: #06b6d4;
+          background: ${muted};
         }
       `}</style>
     </div>

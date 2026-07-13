@@ -1,5 +1,6 @@
-import { Controller, Get, Post, Patch, Delete, Body, Param, Query, UseGuards, Request } from '@nestjs/common';
+import { Controller, Get, Post, Patch, Delete, Body, Param, Query, UseGuards, Request, Res } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth, ApiOperation, ApiQuery } from '@nestjs/swagger';
+import type { Response } from 'express';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
@@ -96,16 +97,30 @@ export class ComplianceController {
 
   @Patch('changes/:id/approve')
   @Roles('Tenant Admin', 'IT Admin')
-  @ApiOperation({ summary: 'Approve a detected change' })
+  @ApiOperation({ summary: 'Approve a detected change / threat (enqueues APPROVE_CHANGE for agent)' })
   async approveChange(@Request() req: any, @Param('id') id: string, @Body() body?: { note?: string }) {
     return this.complianceService.approveChange(id, req.user.tenantId, req.user.sub, body?.note);
   }
 
   @Patch('changes/:id/reject')
   @Roles('Tenant Admin', 'IT Admin')
-  @ApiOperation({ summary: 'Reject a detected change' })
+  @ApiOperation({ summary: 'Reject/block a detected change (enqueues KILL_PROCESS / BLOCK_USB / etc.)' })
   async rejectChange(@Request() req: any, @Param('id') id: string, @Body() body?: { note?: string }) {
     return this.complianceService.rejectChange(id, req.user.tenantId, req.user.sub, body?.note);
+  }
+
+  @Patch('changes/:id/quarantine')
+  @Roles('Tenant Admin', 'IT Admin')
+  @ApiOperation({ summary: 'Quarantine endpoint for a detected threat (enqueues QUARANTINE_DEVICE)' })
+  async quarantineChange(@Request() req: any, @Param('id') id: string, @Body() body?: { note?: string }) {
+    return this.complianceService.quarantineChange(id, req.user.tenantId, req.user.sub, body?.note);
+  }
+
+  @Patch('changes/:id/block')
+  @Roles('Tenant Admin', 'IT Admin')
+  @ApiOperation({ summary: 'Block a detected threat (enqueues KILL_PROCESS / BLOCK_USB / BLOCK_PORT)' })
+  async blockChange(@Request() req: any, @Param('id') id: string, @Body() body?: { note?: string }) {
+    return this.complianceService.blockChange(id, req.user.tenantId, req.user.sub, body?.note);
   }
 
   // ─── Agent Timeline ────────────────────────────────────────
@@ -150,5 +165,24 @@ export class ComplianceController {
   @ApiOperation({ summary: 'Get CIS Benchmark compliance report across all agents' })
   async cisBenchmarkReport(@Request() req: any) {
     return this.complianceService.getCisBenchmarkReport(req.user.tenantId);
+  }
+
+  @Get('cis-benchmark/evidence')
+  @Roles('Tenant Admin', 'IT Admin')
+  @ApiQuery({ name: 'format', required: false, enum: ['csv', 'pdf'] })
+  @ApiOperation({ summary: 'Export CIS evidence pack as CSV or PDF' })
+  async exportCisEvidence(
+    @Request() req: any,
+    @Res() res: Response,
+    @Query('format') format?: string,
+  ) {
+    const fmt = format === 'pdf' ? 'pdf' : 'csv';
+    const pack = await this.complianceService.exportCisEvidencePack(
+      req.user.tenantId,
+      fmt,
+    );
+    res.setHeader('Content-Type', pack.contentType);
+    res.setHeader('Content-Disposition', `attachment; filename="${pack.filename}"`);
+    res.send(pack.body);
   }
 }

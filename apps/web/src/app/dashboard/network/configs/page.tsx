@@ -51,6 +51,17 @@ export default function NetworkConfigPage() {
     refresh();
   }
 
+  async function checkDrift(deviceId: string) {
+    const result = await apiFetch(`/monitoring/network/configs/${deviceId}/check-drift`, { method: "POST", body: "{}" });
+    alert(result.message || (result.driftDetected ? "Drift detected" : "In sync"));
+    refresh();
+  }
+
+  async function approvePush(deviceId: string) {
+    const result = await apiFetch(`/monitoring/network/configs/${deviceId}/approve-push`, { method: "POST", body: "{}" });
+    alert(result.message || (result.success ? "Push succeeded" : "Push failed"));
+  }
+
   // Group configs by device
   const deviceGroups = configs.reduce((acc: any, c) => {
     if (!acc[c.deviceId]) acc[c.deviceId] = { name: c.deviceName, configs: [] };
@@ -132,13 +143,21 @@ export default function NetworkConfigPage() {
         {/* Version history panel */}
         {selectedDevice && (
           <div className="card" style={{ padding: 0, overflow: "hidden" }}>
-            <div className="card-header" style={{ padding: "12px 20px", display: "flex", justifyContent: "space-between" }}>
+            <div className="card-header" style={{ padding: "12px 20px", display: "flex", justifyContent: "space-between", flexWrap: "wrap", gap: 8 }}>
               <div className="card-title"><History size={14} style={{ marginRight: 6, verticalAlign: "middle" }} /> Version History</div>
-              {history.length >= 2 && (
-                <button className="btn btn-secondary" style={{ fontSize: 11 }} onClick={() => loadDiff(selectedDevice, history[history.length - 1]?.version, history[0]?.version)}>
-                  <GitCompare size={12} /> Compare Latest
+              <div style={{ display: "flex", gap: 6 }}>
+                <button className="btn btn-secondary" style={{ fontSize: 11 }} onClick={() => checkDrift(selectedDevice)}>
+                  <AlertTriangle size={12} /> Check Drift
                 </button>
-              )}
+                <button className="btn btn-secondary" style={{ fontSize: 11 }} onClick={() => approvePush(selectedDevice)}>
+                  <Shield size={12} /> Approve &amp; Push
+                </button>
+                {history.length >= 2 && (
+                  <button className="btn btn-secondary" style={{ fontSize: 11 }} onClick={() => loadDiff(selectedDevice, history[history.length - 1]?.version, history[0]?.version)}>
+                    <GitCompare size={12} /> Compare Latest
+                  </button>
+                )}
+              </div>
             </div>
             <div style={{ maxHeight: 400, overflowY: "auto" }}>
               {history.map((h: any) => (

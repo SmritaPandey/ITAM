@@ -2,13 +2,15 @@ import { Injectable, CanActivate, ExecutionContext, ForbiddenException, NotFound
 import { Reflector } from '@nestjs/core';
 import { PrismaService } from '../database/prisma.service';
 import { REQUIRE_MODULE_KEY } from '../decorators/require-module.decorator';
-import { getResolvedModules, ModuleKey, MODULE_CATALOG } from '../utils/modules';
+import { ModuleKey, MODULE_CATALOG } from '../utils/modules';
+import { ProductLicenseService } from '../../modules/product-license/product-license.service';
 
 @Injectable()
 export class ModuleGuard implements CanActivate {
   constructor(
     private reflector: Reflector,
     private prisma: PrismaService,
+    private productLicense: ProductLicenseService,
   ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
@@ -43,7 +45,10 @@ export class ModuleGuard implements CanActivate {
       throw new NotFoundException('Tenant not found');
     }
 
-    const allowedModules = getResolvedModules(tenant.plan, tenant.settings);
+    const allowedModules = await this.productLicense.getResolvedModulesAsync(
+      tenant.plan,
+      tenant.settings,
+    );
 
     if (!allowedModules.includes(requiredModule)) {
       const displayName = MODULE_CATALOG[requiredModule] || requiredModule;

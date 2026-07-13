@@ -30,6 +30,17 @@ export class LicensesController {
     return this.licensesService.getCompliance(req.user.tenantId);
   }
 
+  @Get('match')
+  @Roles('Tenant Admin', 'IT Admin')
+  @ApiOperation({ summary: 'Find licenses matching a software name (for linking)' })
+  async match(
+    @Request() req: any,
+    @Query('name') name?: string,
+    @Query('softwareCatalogId') softwareCatalogId?: string,
+  ) {
+    return this.licensesService.findMatching(req.user.tenantId, name || '', softwareCatalogId);
+  }
+
   @Get(':id')
   @Roles('Tenant Admin', 'IT Admin')
   @ApiOperation({ summary: 'Get license details' })
@@ -49,6 +60,24 @@ export class LicensesController {
   @ApiOperation({ summary: 'Update a license' })
   async update(@Request() req: any, @Param('id') id: string, @Body() body: any) {
     return this.licensesService.update(id, req.user.tenantId, body);
+  }
+
+  @Post(':id/link')
+  @Roles('Tenant Admin', 'IT Admin')
+  @ApiOperation({ summary: 'Link license to a software catalog entry' })
+  async link(
+    @Request() req: any,
+    @Param('id') id: string,
+    @Body() body: { softwareCatalogId: string },
+  ) {
+    return this.licensesService.linkToSoftware(id, req.user.tenantId, body.softwareCatalogId);
+  }
+
+  @Post(':id/unlink')
+  @Roles('Tenant Admin', 'IT Admin')
+  @ApiOperation({ summary: 'Unlink license from software catalog' })
+  async unlink(@Request() req: any, @Param('id') id: string) {
+    return this.licensesService.unlinkFromSoftware(id, req.user.tenantId);
   }
 
   @Get(':id/assignments')

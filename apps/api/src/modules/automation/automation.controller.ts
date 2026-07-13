@@ -63,4 +63,11 @@ export class AutomationController {
   async getExecutions(@Request() req: any, @Query('page') page = 1, @Query('limit') limit = 30) {
     return this.service.getExecutions(req.user.tenantId, page, limit);
   }
+
+  @Get('triggers-actions')
+  @Roles('Tenant Admin', 'IT Admin')
+  @ApiOperation({ summary: 'Metadata for workflow form builder (triggers, conditions, actions)' })
+  getTriggersActions() {
+    return this.service.getTriggersActionsMetadata();
+  }
 }

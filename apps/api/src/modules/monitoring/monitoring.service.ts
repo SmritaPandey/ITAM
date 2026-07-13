@@ -395,14 +395,14 @@ export class MonitoringService {
   @Cron(CronExpression.EVERY_5_MINUTES)
   async scheduledHealthCheck() {
     try {
-      // Batch-fetch all network devices across all active tenants in one query
+      // Batch-fetch network devices + cameras across all active tenants
       const allDevices = await this.prisma.monitoredDevice.findMany({
         where: {
-          type: 'NETWORK_DEVICE',
+          type: { in: ['NETWORK_DEVICE', 'CAMERA'] },
           ipAddress: { not: null },
           tenant: { status: 'ACTIVE' },
         },
-        select: { id: true, ipAddress: true, status: true, name: true, tenantId: true, metrics: true, config: true },
+        select: { id: true, ipAddress: true, status: true, name: true, tenantId: true, metrics: true, config: true, type: true },
       });
 
       if (allDevices.length === 0) return;
@@ -427,6 +427,7 @@ export class MonitoringService {
       // Build update operations and collect events to emit
       const updateOps: any[] = [];
       const events: { tenantId: string; event: string; data: any }[] = [];
+      const cameraAlerts: Array<{ tenantId: string; deviceId: string; name: string; ip?: string | null; kind: 'offline' | 'recovered' | 'tamper' }> = [];
 
       for (const { device, ping } of pingResults) {
         const newStatus = ping.alive ? 'ONLINE' : 'OFFLINE';
@@ -446,8 +447,8 @@ export class MonitoringService {
             }),
           );
 
-          // If linked to an asset, update asset status too
-          if (sourceAssetId) {
+          // If linked to an asset, update asset status too (network devices only)
+          if (sourceAssetId && device.type === 'NETWORK_DEVICE') {
             updateOps.push(
               this.prisma.asset.update({
                 where: { id: sourceAssetId },
@@ -457,9 +458,15 @@ export class MonitoringService {
           }
 
           if (newStatus === 'OFFLINE') {
-            events.push({ tenantId: device.tenantId, event: 'device_down', data: { deviceId: device.id, name: device.name, ipAddress: device.ipAddress } });
+            events.push({ tenantId: device.tenantId, event: 'device_down', data: { deviceId: device.id, name: device.name, ipAddress: device.ipAddress, type: device.type } });
+            if (device.type === 'CAMERA') {
+              cameraAlerts.push({ tenantId: device.tenantId, deviceId: device.id, name: device.name, ip: device.ipAddress, kind: 'offline' });
+            }
           } else {
-            events.push({ tenantId: device.tenantId, event: 'device_recovered', data: { deviceId: device.id, name: device.name, ipAddress: device.ipAddress } });
+            events.push({ tenantId: device.tenantId, event: 'device_recovered', data: { deviceId: device.id, name: device.name, ipAddress: device.ipAddress, type: device.type } });
+            if (device.type === 'CAMERA') {
+              cameraAlerts.push({ tenantId: device.tenantId, deviceId: device.id, name: device.name, ip: device.ipAddress, kind: 'recovered' });
+            }
           }
         } else if (ping.alive) {
           updateOps.push(
@@ -468,6 +475,17 @@ export class MonitoringService {
               data: { lastSeen: new Date(), metrics: { ...existingMetrics, latency: ping.latency, lastHealthCheck: new Date().toISOString() } },
             }),
           );
+        }
+
+        // Tamper: camera config.tamperDetected or signalLoss flag from ONVIF/NVR
+        if (device.type === 'CAMERA' && (config.tamperDetected === true || config.signalLoss === true)) {
+          cameraAlerts.push({
+            tenantId: device.tenantId,
+            deviceId: device.id,
+            name: device.name,
+            ip: device.ipAddress,
+            kind: 'tamper',
+          });
         }
       }
 
@@ -479,6 +497,40 @@ export class MonitoringService {
       // Emit events after transaction completes
       for (const evt of events) {
         this.eventBus.emitMonitoringEvent(evt.tenantId, evt.event, evt.data);
+      }
+
+      // CCTV offline / tamper → AlertEvent (deduped by title in last 30m)
+      for (const alert of cameraAlerts) {
+        if (alert.kind === 'recovered') continue;
+        const title =
+          alert.kind === 'tamper'
+            ? `Camera tamper: ${alert.name}`
+            : `Camera offline: ${alert.name}`;
+        const since = new Date(Date.now() - 30 * 60 * 1000);
+        const existing = await this.prisma.alertEvent.findFirst({
+          where: { tenantId: alert.tenantId, sourceId: alert.deviceId, title, createdAt: { gte: since } },
+        });
+        if (existing) continue;
+        await this.prisma.alertEvent.create({
+          data: {
+            tenantId: alert.tenantId,
+            severity: alert.kind === 'tamper' ? 'CRITICAL' : 'HIGH',
+            category: alert.kind === 'tamper' ? 'cctv_tamper' : 'cctv_offline',
+            title,
+            message:
+              alert.kind === 'tamper'
+                ? `Camera "${alert.name}" reported tamper/signal loss${alert.ip ? ` (${alert.ip})` : ''}.`
+                : `Camera "${alert.name}" is offline${alert.ip ? ` at ${alert.ip}` : ''}.`,
+            source: 'cctv',
+            sourceId: alert.deviceId,
+            metadata: { kind: alert.kind, ip: alert.ip },
+          },
+        });
+        this.eventBus.emitMonitoringEvent(alert.tenantId, alert.kind === 'tamper' ? 'camera_tamper' : 'camera_offline', {
+          cameraId: alert.deviceId,
+          name: alert.name,
+          ip: alert.ip,
+        });
       }
 
       this.logger.debug(`Health check: ${allDevices.length} devices checked across all tenants`);
@@ -546,6 +598,16 @@ export class MonitoringService {
         ? `Camera went offline. Last seen: ${camera.lastSeen?.toISOString() || 'unknown'}`
         : `Camera is ${camera.status}. Recording: ${(camera.config as any)?.recording ? 'Yes' : 'No'}`,
     });
+
+    const config = (camera.config as any) || {};
+    if (config.tamperDetected || config.signalLoss) {
+      events.unshift({
+        type: 'camera_tamper',
+        timestamp: new Date(),
+        status: 'TAMPER',
+        details: `Tamper/signal-loss flag set on camera config.`,
+      });
+    }
 
     return { cameraId: id, cameraName: camera.name, events, total: events.length };
   }
@@ -724,23 +786,174 @@ export class MonitoringService {
   }
 
   async getAlerts(tenantId: string) {
-    const devices = await this.prisma.monitoredDevice.findMany({
-      where: { tenantId, status: { in: ['OFFLINE', 'WARNING', 'CRITICAL'] } },
-      orderBy: { lastSeen: 'desc' },
-      take: 50,
-    });
+    const [devices, alertEvents] = await Promise.all([
+      this.prisma.monitoredDevice.findMany({
+        where: { tenantId, status: { in: ['OFFLINE', 'WARNING', 'CRITICAL'] } },
+        orderBy: { lastSeen: 'desc' },
+        take: 50,
+      }),
+      this.prisma.alertEvent.findMany({
+        where: {
+          tenantId,
+          resolved: false,
+          category: { in: ['NETWORK', 'SECURITY', 'SYSTEM'] },
+        },
+        orderBy: { createdAt: 'desc' },
+        take: 50,
+      }),
+    ]);
+
+    const deviceAlerts = devices.map((d) => ({
+      id: d.id,
+      deviceName: d.name,
+      type: d.type,
+      status: d.status,
+      severity: d.status === 'OFFLINE' ? 'critical' : d.status === 'CRITICAL' ? 'critical' : 'warning',
+      ip: d.ipAddress,
+      lastSeen: d.lastSeen,
+      message: `${d.name} is ${d.status.toLowerCase()}`,
+      source: 'device_status',
+    }));
+
+    const eventAlerts = alertEvents.map((a) => ({
+      id: a.id,
+      deviceName: a.title,
+      type: a.category,
+      status: a.severity,
+      severity: (a.severity || 'WARNING').toLowerCase(),
+      ip: a.sourceId || null,
+      lastSeen: a.createdAt,
+      message: a.message?.slice(0, 300) || a.title,
+      source: a.source,
+      acknowledged: a.acknowledged,
+    }));
+
+    const alerts = [...eventAlerts, ...deviceAlerts].slice(0, 80);
     return {
-      alerts: devices.map(d => ({
-        id: d.id,
-        deviceName: d.name,
-        type: d.type,
-        status: d.status,
-        severity: d.status === 'OFFLINE' ? 'critical' : d.status === 'CRITICAL' ? 'critical' : 'warning',
-        ip: d.ipAddress,
-        lastSeen: d.lastSeen,
-        message: `${d.name} is ${d.status.toLowerCase()}`,
-      })),
-      total: devices.length,
+      alerts,
+      total: alerts.length,
+      deviceAlertCount: deviceAlerts.length,
+      eventAlertCount: eventAlerts.length,
     };
+  }
+
+  // ─── CCTV Video Wall ────────────────────────────────────────────
+  async getVideoWall(tenantId: string) {
+    const tenant = await this.prisma.tenant.findUnique({ where: { id: tenantId } });
+    const settings = (tenant?.settings as any) || {};
+    const wall = settings.cctvVideoWall || {
+      columns: 2,
+      rows: 2,
+      cameraIds: [],
+      updatedAt: null,
+    };
+    const cameras = wall.cameraIds?.length
+      ? await this.prisma.monitoredDevice.findMany({
+          where: { tenantId, type: 'CAMERA', id: { in: wall.cameraIds } },
+        })
+      : [];
+    // Preserve layout order
+    const ordered = (wall.cameraIds || [])
+      .map((id: string) => cameras.find((c) => c.id === id))
+      .filter(Boolean);
+    return { layout: wall, cameras: ordered };
+  }
+
+  async saveVideoWall(
+    tenantId: string,
+    body: { columns?: number; rows?: number; cameraIds?: string[] },
+  ) {
+    const tenant = await this.prisma.tenant.findUnique({ where: { id: tenantId } });
+    const settings = (tenant?.settings as any) || {};
+    const layout = {
+      columns: Math.min(Math.max(body.columns || 2, 1), 6),
+      rows: Math.min(Math.max(body.rows || 2, 1), 4),
+      cameraIds: Array.isArray(body.cameraIds) ? body.cameraIds.slice(0, 24) : [],
+      updatedAt: new Date().toISOString(),
+    };
+    await this.prisma.tenant.update({
+      where: { id: tenantId },
+      data: { settings: { ...settings, cctvVideoWall: layout } },
+    });
+    return this.getVideoWall(tenantId);
+  }
+
+  /**
+   * Snapshot current VDI session metrics into DeviceMetricsHistory for charts.
+   */
+  async pollVdiSessionMetrics(tenantId: string) {
+    const vms = await this.prisma.monitoredDevice.findMany({
+      where: { tenantId, type: 'VIRTUAL_MACHINE', status: 'ONLINE' },
+    });
+    let stored = 0;
+    for (const vm of vms) {
+      const met = (vm.metrics as any) || {};
+      const cfg = (vm.config as any) || {};
+      await this.prisma.deviceMetricsHistory.create({
+        data: {
+          tenantId,
+          deviceId: vm.id,
+          metrics: {
+            cpu: met.cpu || 0,
+            ram: met.ram || 0,
+            disk: met.disk || 0,
+            sessions: cfg.assignedUser ? 1 : 0,
+            source: 'vdi-session-poll',
+          },
+        },
+      });
+      stored++;
+    }
+    return { stored, devices: vms.length };
+  }
+
+  async getVdiMetricsHistory(tenantId: string, hours = 24) {
+    const since = new Date(Date.now() - hours * 3600 * 1000);
+    const vms = await this.prisma.monitoredDevice.findMany({
+      where: { tenantId, type: 'VIRTUAL_MACHINE' },
+      select: { id: true, name: true },
+    });
+    const ids = vms.map((v) => v.id);
+    if (ids.length === 0) return { series: [], devices: [] };
+
+    const history = await this.prisma.deviceMetricsHistory.findMany({
+      where: { tenantId, deviceId: { in: ids }, collectedAt: { gte: since } },
+      orderBy: { collectedAt: 'asc' },
+      take: 2000,
+    });
+
+    // Aggregate avg cpu/ram per hour bucket across fleet
+    const buckets: Record<string, { cpu: number[]; ram: number[]; sessions: number[] }> = {};
+    for (const h of history) {
+      const d = new Date(h.collectedAt);
+      const key = `${d.getMonth() + 1}/${d.getDate()} ${String(d.getHours()).padStart(2, '0')}:00`;
+      if (!buckets[key]) buckets[key] = { cpu: [], ram: [], sessions: [] };
+      const m = (h.metrics as any) || {};
+      if (m.cpu != null) buckets[key].cpu.push(Number(m.cpu));
+      if (m.ram != null) buckets[key].ram.push(Number(m.ram));
+      if (m.sessions != null) buckets[key].sessions.push(Number(m.sessions));
+    }
+
+    const series = Object.entries(buckets).map(([time, b]) => ({
+      time,
+      avgCpu: b.cpu.length ? Math.round(b.cpu.reduce((a, c) => a + c, 0) / b.cpu.length) : 0,
+      avgRam: b.ram.length ? Math.round(b.ram.reduce((a, c) => a + c, 0) / b.ram.length) : 0,
+      sessions: b.sessions.length ? Math.round(b.sessions.reduce((a, c) => a + c, 0)) : 0,
+    }));
+
+    return { series, devices: vms, samples: history.length, hours };
+  }
+
+  @Cron(CronExpression.EVERY_5_MINUTES)
+  async scheduledVdiMetricsPoll() {
+    if (process.env.DISABLE_CRON_JOBS === 'true') return;
+    try {
+      const tenants = await this.prisma.tenant.findMany({ select: { id: true }, take: 100 });
+      for (const t of tenants) {
+        await this.pollVdiSessionMetrics(t.id);
+      }
+    } catch (err: any) {
+      this.logger.warn(`VDI metrics poll failed: ${err?.message}`);
+    }
   }
 }

@@ -10,6 +10,7 @@ import { apiFetch } from "@/lib/api";
 const STATUS_CONFIG: Record<string, { color: string; bg: string; badge: string; icon: any; label: string }> = {
   DRAFT:        { color: "#94a3b8", bg: "rgba(148,163,184,0.12)", badge: "gray", icon: <FileText size={12} />, label: "Draft" },
   SUBMITTED:    { color: "#3b82f6", bg: "rgba(59,130,246,0.12)", badge: "blue", icon: <Send size={12} />, label: "Submitted" },
+  CAB_REVIEW:   { color: "#a855f7", bg: "rgba(168,85,247,0.12)", badge: "purple", icon: <ShieldCheck size={12} />, label: "CAB Review" },
   APPROVED:     { color: "#10b981", bg: "rgba(16,185,129,0.12)", badge: "green", icon: <CheckCircle2 size={12} />, label: "Approved" },
   REJECTED:     { color: "#ef4444", bg: "rgba(239,68,68,0.12)", badge: "red", icon: <XCircle size={12} />, label: "Rejected" },
   IN_PROGRESS:  { color: "#f59e0b", bg: "rgba(245,158,11,0.12)", badge: "amber", icon: <Loader2 size={12} />, label: "In Progress" },
@@ -20,11 +21,27 @@ const STATUS_CONFIG: Record<string, { color: string; bg: string; badge: string; 
 };
 
 const PRIORITY_BADGE: Record<string, string> = { LOW: "green", MEDIUM: "amber", HIGH: "red", CRITICAL: "red" };
-const TYPE_ICON: Record<string, any> = { STANDARD: <FileText size={13} />, NORMAL: <GitBranch size={13} />, EMERGENCY: <Zap size={13} /> };
+const TYPE_ICON: Record<string, any> = { STANDARD: <FileText size={13} />, NORMAL: <GitBranch size={13} />, EMERGENCY: <Zap size={13} />, SSDLC: <ShieldCheck size={13} /> };
+
+const SSDLC_GATES = [
+  { key: "request", label: "1. Request" },
+  { key: "review", label: "2. Review" },
+  { key: "approval", label: "3. Approval" },
+  { key: "build", label: "4. Build" },
+  { key: "uat", label: "5. UAT" },
+  { key: "vapt", label: "6. VAPT" },
+  { key: "patchWindow", label: "7. Patch Window" },
+  { key: "deploy", label: "8. Deploy" },
+  { key: "complianceLogging", label: "9. Compliance Logging" },
+];
 
 const TRANSITIONS: Record<string, { label: string; to: string; color: string; bg: string }[]> = {
   DRAFT: [{ label: "Submit", to: "SUBMITTED", color: "#3b82f6", bg: "rgba(59,130,246,0.12)" }],
   SUBMITTED: [
+    { label: "Approve", to: "APPROVED", color: "#10b981", bg: "rgba(16,185,129,0.12)" },
+    { label: "Reject", to: "REJECTED", color: "#ef4444", bg: "rgba(239,68,68,0.12)" },
+  ],
+  CAB_REVIEW: [
     { label: "Approve", to: "APPROVED", color: "#10b981", bg: "rgba(16,185,129,0.12)" },
     { label: "Reject", to: "REJECTED", color: "#ef4444", bg: "rgba(239,68,68,0.12)" },
   ],
@@ -40,13 +57,19 @@ export default function ChangesPage() {
   const [changes, setChanges] = useState<any[]>([]);
   const [stats, setStats] = useState<any>(null);
   const [calendar, setCalendar] = useState<any[]>([]);
-  const [tab, setTab] = useState<"list" | "calendar">("list");
+  const [cabMeetings, setCabMeetings] = useState<any[]>([]);
+  const [tab, setTab] = useState<"list" | "calendar" | "cab">("list");
   const [statusFilter, setStatusFilter] = useState("");
   const [showCreate, setShowCreate] = useState(false);
+  const [showCab, setShowCab] = useState(false);
+  const [cabForm, setCabForm] = useState<any>({ title: "", scheduledAt: "", location: "", agenda: "" });
   const [form, setForm] = useState<any>({ type: "NORMAL", priority: "MEDIUM", risk: "MEDIUM" });
   const [selected, setSelected] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [ssdlcGates, setSsdlcGates] = useState<Record<string, boolean>>({});
+  const [uatEvidence, setUatEvidence] = useState("");
+  const [vaptEvidence, setVaptEvidence] = useState("");
 
   const handleDelete = async (id: string) => {
     if (!confirm("Delete this change request? This cannot be undone.")) return;
@@ -56,22 +79,74 @@ export default function ChangesPage() {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const [c, s, cal] = await Promise.all([apiFetch("/changes"), apiFetch("/changes/stats"), apiFetch("/changes/calendar")]);
-      setChanges(c); setStats(s); setCalendar(cal);
+      const [c, s, cal, cab] = await Promise.all([
+        apiFetch("/changes"),
+        apiFetch("/changes/stats"),
+        apiFetch("/changes/calendar"),
+        apiFetch("/changes/cab/meetings").catch(() => []),
+      ]);
+      setChanges(Array.isArray(c?.data) ? c.data : Array.isArray(c) ? c : []);
+      setStats(s);
+      setCalendar(Array.isArray(cal) ? cal : []);
+      setCabMeetings(Array.isArray(cab) ? cab : []);
     } catch (e) { console.error(e); }
     setLoading(false);
   }, []);
 
   useEffect(() => { load(); }, [load]);
 
+  useEffect(() => {
+    if (selected) {
+      setSsdlcGates((selected.ssdlcGates as any) || {});
+      setUatEvidence(selected.uatEvidence || "");
+      setVaptEvidence(selected.vaptEvidence || "");
+    }
+  }, [selected]);
+
   const submit = async (e: React.FormEvent) => {
     e.preventDefault(); setSaving(true);
-    try { await apiFetch("/changes", { method: "POST", body: JSON.stringify(form) }); setShowCreate(false); setForm({ type: "NORMAL", priority: "MEDIUM", risk: "MEDIUM" }); load(); } catch(e) { alert(String(e)); }
+    try {
+      const created = await apiFetch("/changes", { method: "POST", body: JSON.stringify(form) });
+      if (created?.id) {
+        await apiFetch(`/changes/${created.id}/submit`, { method: "POST", body: JSON.stringify({}) }).catch(() => {});
+      }
+      setShowCreate(false); setForm({ type: "NORMAL", priority: "MEDIUM", risk: "MEDIUM" }); load();
+    } catch (e) { alert(String(e)); }
     setSaving(false);
   };
 
   const transition = async (id: string, status: string) => {
-    try { await apiFetch(`/changes/${id}/status`, { method: "POST", body: JSON.stringify({ status }) }); load(); setSelected(null); } catch(e) { alert(String(e)); }
+    try {
+      if (status === "APPROVED") await apiFetch(`/changes/${id}/approve`, { method: "POST", body: JSON.stringify({}) });
+      else if (status === "REJECTED") await apiFetch(`/changes/${id}/reject`, { method: "POST", body: JSON.stringify({}) });
+      else if (status === "SUBMITTED") await apiFetch(`/changes/${id}/submit`, { method: "POST", body: JSON.stringify({}) });
+      else await apiFetch(`/changes/${id}/status`, { method: "POST", body: JSON.stringify({ status }) });
+      load(); setSelected(null);
+    } catch (e) { alert(String(e)); }
+  };
+
+  const saveSsdlc = async () => {
+    if (!selected) return;
+    try {
+      const updated = await apiFetch(`/changes/${selected.id}/ssdlc`, {
+        method: "PATCH",
+        body: JSON.stringify({ ssdlcGates, uatEvidence, vaptEvidence }),
+      });
+      setSelected(updated);
+      load();
+    } catch (e) { alert(String(e)); }
+  };
+
+  const createCab = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      const agenda = (cabForm.agenda || "").split(",").map((s: string) => s.trim()).filter(Boolean);
+      await apiFetch("/changes/cab/meetings", {
+        method: "POST",
+        body: JSON.stringify({ ...cabForm, agenda }),
+      });
+      setShowCab(false); setCabForm({ title: "", scheduledAt: "", location: "", agenda: "" }); load();
+    } catch (err) { alert(String(err)); }
   };
 
   const inputStyle: React.CSSProperties = {
@@ -90,6 +165,7 @@ export default function ChangesPage() {
         </div>
         <div style={{ display: "flex", gap: 8 }}>
           <button className="btn btn-secondary" onClick={() => load()}><RefreshCw size={14} /></button>
+          <button className="btn btn-secondary" onClick={() => setShowCab(true)}><Calendar size={14} /> New CAB</button>
           <button className="btn btn-primary" onClick={() => setShowCreate(true)}><Plus size={14} /> New Change Request</button>
         </div>
       </div>
@@ -116,13 +192,13 @@ export default function ChangesPage() {
       {/* Tabs + Filters */}
       <div className="card" style={{ marginBottom: 16, padding: "8px 12px", display: "flex", gap: 8, alignItems: "center", justifyContent: "space-between" }}>
         <div style={{ display: "flex", gap: 4 }}>
-          {(["list", "calendar"] as const).map(t => (
+          {(["list", "calendar", "cab"] as const).map(t => (
             <button key={t} onClick={() => setTab(t)} style={{
               padding: "6px 14px", borderRadius: 6, border: "none", fontSize: 12, fontWeight: 600,
               cursor: "pointer", fontFamily: "inherit", display: "inline-flex", alignItems: "center", gap: 6,
               background: tab === t ? "rgba(6,182,212,0.15)" : "transparent",
               color: tab === t ? "#22d3ee" : "var(--text-secondary)",
-            }}>{t === "list" ? <><GitBranch size={13} /> List</> : <><Calendar size={13} /> Calendar</>}</button>
+            }}>{t === "list" ? <><GitBranch size={13} /> List</> : t === "calendar" ? <><Calendar size={13} /> Calendar</> : <><ShieldCheck size={13} /> CAB</>}</button>
           ))}
         </div>
         <div style={{ display: "flex", gap: 4, alignItems: "center" }}>
@@ -234,6 +310,56 @@ export default function ChangesPage() {
               })}
             </div>
           )}
+
+          {/* ─── CAB Meetings ─── */}
+          {tab === "cab" && (
+            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+              {cabMeetings.length === 0 && (
+                <div className="card" style={{ textAlign: "center", padding: 40, color: "var(--text-tertiary)" }}>
+                  No CAB meetings scheduled. Create one to attach change requests to the agenda.
+                </div>
+              )}
+              {cabMeetings.map((m: any) => (
+                <div key={m.id} className="card" style={{ padding: "14px 20px" }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                    <div>
+                      <div style={{ fontWeight: 600, color: "var(--text-primary)" }}>{m.title}</div>
+                      <div style={{ fontSize: 12, color: "var(--text-tertiary)", marginTop: 4 }}>
+                        {new Date(m.scheduledAt).toLocaleString()}
+                        {m.location ? ` · ${m.location}` : ""}
+                        {` · ${m.status}`}
+                      </div>
+                    </div>
+                    <span className="badge purple">{Array.isArray(m.agenda) ? m.agenda.length : 0} changes</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </>
+      )}
+
+      {/* ─── CAB Create Modal ─── */}
+      {showCab && (
+        <>
+          <div onClick={() => setShowCab(false)} style={{ position: "fixed", inset: 0, background: "var(--modal-overlay)", zIndex: 2000 }} />
+          <div style={{
+            position: "fixed", top: "50%", left: "50%", transform: "translate(-50%, -50%)",
+            width: 480, background: "var(--bg-card)", border: "1px solid var(--border-primary)",
+            borderRadius: 16, zIndex: 2001, padding: 24,
+          }}>
+            <h3 style={{ fontSize: 16, fontWeight: 700, marginBottom: 16 }}>New CAB Meeting</h3>
+            <form onSubmit={createCab} style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+              <input required placeholder="Title *" value={cabForm.title} onChange={e => setCabForm({ ...cabForm, title: e.target.value })} style={inputStyle} />
+              <input required type="datetime-local" value={cabForm.scheduledAt} onChange={e => setCabForm({ ...cabForm, scheduledAt: e.target.value })} style={inputStyle} />
+              <input placeholder="Location" value={cabForm.location} onChange={e => setCabForm({ ...cabForm, location: e.target.value })} style={inputStyle} />
+              <input placeholder="Change IDs (comma-separated)" value={cabForm.agenda} onChange={e => setCabForm({ ...cabForm, agenda: e.target.value })} style={inputStyle} />
+              <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
+                <button type="button" className="btn btn-secondary" onClick={() => setShowCab(false)}>Cancel</button>
+                <button type="submit" className="btn btn-primary">Create</button>
+              </div>
+            </form>
+          </div>
         </>
       )}
 
@@ -255,7 +381,7 @@ export default function ChangesPage() {
               <input required placeholder="Title *" value={form.title || ""} onChange={e => setForm({ ...form, title: e.target.value })} style={inputStyle} />
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12 }}>
                 <select value={form.type} onChange={e => setForm({ ...form, type: e.target.value })} style={inputStyle}>
-                  {["STANDARD", "NORMAL", "EMERGENCY"].map(t => <option key={t} value={t}>{t}</option>)}
+                  {["STANDARD", "NORMAL", "EMERGENCY", "SSDLC"].map(t => <option key={t} value={t}>{t}</option>)}
                 </select>
                 <select value={form.priority} onChange={e => setForm({ ...form, priority: e.target.value })} style={inputStyle}>
                   {["LOW", "MEDIUM", "HIGH", "CRITICAL"].map(p => <option key={p} value={p}>{p}</option>)}
@@ -336,6 +462,43 @@ export default function ChangesPage() {
               <div style={{ marginBottom: 16 }}>
                 <div style={{ fontSize: 11, color: "var(--text-tertiary)", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 6 }}>Rollback Plan</div>
                 <div style={{ background: "var(--bg-card)", borderRadius: 8, padding: 12, fontSize: 13, color: "var(--text-secondary)", lineHeight: 1.5 }}>{selected.rollbackPlan}</div>
+              </div>
+            )}
+
+            {/* Approvals */}
+            {Array.isArray(selected.approvals) && selected.approvals.length > 0 && (
+              <div style={{ marginBottom: 16 }}>
+                <div style={{ fontSize: 11, color: "var(--text-tertiary)", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 8 }}>Approvals</div>
+                {selected.approvals.map((a: any) => (
+                  <div key={a.id} style={{ display: "flex", justifyContent: "space-between", padding: "8px 10px", background: "var(--bg-card)", borderRadius: 8, marginBottom: 6, fontSize: 12 }}>
+                    <span>Level {a.level}</span>
+                    <span style={{ color: a.status === "APPROVED" ? "#10b981" : a.status === "REJECTED" ? "#ef4444" : "#f59e0b", fontWeight: 600 }}>{a.status}</span>
+                  </div>
+                ))}
+                {["SUBMITTED", "CAB_REVIEW"].includes(selected.status) && (
+                  <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
+                    <button className="btn" style={{ background: "rgba(16,185,129,0.12)", color: "#10b981", fontSize: 12 }} onClick={() => transition(selected.id, "APPROVED")}>Approve</button>
+                    <button className="btn" style={{ background: "rgba(239,68,68,0.12)", color: "#ef4444", fontSize: 12 }} onClick={() => transition(selected.id, "REJECTED")}>Reject</button>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* SSDLC checklist */}
+            {(selected.type === "SSDLC" || selected.category === "SSDLC") && (
+              <div style={{ marginBottom: 16 }}>
+                <div style={{ fontSize: 11, color: "var(--text-tertiary)", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 8 }}>SSDLC 9-step gates</div>
+                <div style={{ display: "grid", gap: 6 }}>
+                  {SSDLC_GATES.map(g => (
+                    <label key={g.key} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12, color: "var(--text-secondary)" }}>
+                      <input type="checkbox" checked={!!ssdlcGates[g.key]} onChange={e => setSsdlcGates({ ...ssdlcGates, [g.key]: e.target.checked })} />
+                      {g.label}
+                    </label>
+                  ))}
+                </div>
+                <textarea placeholder="UAT evidence" value={uatEvidence} onChange={e => setUatEvidence(e.target.value)} rows={2} style={{ ...inputStyle, marginTop: 8, resize: "vertical" }} />
+                <textarea placeholder="VAPT evidence" value={vaptEvidence} onChange={e => setVaptEvidence(e.target.value)} rows={2} style={{ ...inputStyle, marginTop: 8, resize: "vertical" }} />
+                <button className="btn btn-secondary" style={{ marginTop: 8, fontSize: 12 }} onClick={saveSsdlc}>Save SSDLC evidence</button>
               </div>
             )}
 

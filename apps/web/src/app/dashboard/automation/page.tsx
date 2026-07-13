@@ -44,24 +44,33 @@ export default function AutomationPage() {
   const [showAddScript, setShowAddScript] = useState(false);
   const [scriptForm, setScriptForm] = useState({ name: "", description: "", scriptContent: "", platform: "BASH", category: "REMEDIATION", timeoutSeconds: 300 });
   const [showAdd, setShowAdd] = useState(false);
+  const [agents, setAgents] = useState<any[]>([]);
+  const [runScriptId, setRunScriptId] = useState<string | null>(null);
+  const [selectedAgentId, setSelectedAgentId] = useState("");
+  const [runningScript, setRunningScript] = useState(false);
   const [form, setForm] = useState({
     name: "", description: "", triggerModule: "Discovery", triggerEvent: "",
     condition: "", actionModule: "Notifications", actionType: "send_notification",
+    actionConfig: "{}",
   });
+  const [meta, setMeta] = useState<any>(null);
 
   async function refresh() {
     try {
-      const [r, s, e] = await Promise.all([
+      const [r, s, e, ag, m] = await Promise.all([
         apiFetch("/automation/rules?limit=50"),
         apiFetch("/automation/rules/stats"),
         apiFetch("/automation/executions?limit=50"),
+        apiFetch("/discovery/agents").catch(() => []),
+        apiFetch("/automation/triggers-actions").catch(() => null),
       ]);
       setRules(Array.isArray(r?.data) ? r.data : Array.isArray(r) ? r : []);
       setStats(s);
       setExecutions(Array.isArray(e?.data) ? e.data : Array.isArray(e) ? e : []);
-      // Load scripts
+      if (m) setMeta(m);
       const sc = await apiFetch("/automation/scripts");
       setScripts(Array.isArray(sc) ? sc : []);
+      setAgents(Array.isArray(ag) ? ag : Array.isArray(ag?.data) ? ag.data : []);
     } catch (err: any) { console.error("Automation refresh failed:", err); } finally { setLoading(false); }
   }
 
@@ -88,9 +97,25 @@ export default function AutomationPage() {
   async function handleAdd(e: React.FormEvent) {
     e.preventDefault();
     try {
-      await apiFetch("/automation/rules", { method: "POST", body: JSON.stringify({ ...form, status: "DRAFT" }) });
+      let actionConfig = {};
+      try { actionConfig = JSON.parse(form.actionConfig || "{}"); } catch { /* */ }
+      let condition = form.condition;
+      if (condition && !condition.trim().startsWith("{")) {
+        // allow key=value shorthand → JSON
+        const [k, ...rest] = condition.split("=");
+        if (k && rest.length) condition = JSON.stringify({ [k.trim()]: rest.join("=").trim().replace(/^['"]|['"]$/g, "") });
+      }
+      await apiFetch("/automation/rules", {
+        method: "POST",
+        body: JSON.stringify({
+          ...form,
+          condition: condition || "{}",
+          actionConfig,
+          status: "DRAFT",
+        }),
+      });
       setShowAdd(false);
-      setForm({ name: "", description: "", triggerModule: "Discovery", triggerEvent: "", condition: "", actionModule: "Notifications", actionType: "send_notification" });
+      setForm({ name: "", description: "", triggerModule: "Discovery", triggerEvent: "", condition: "", actionModule: "Notifications", actionType: "send_notification", actionConfig: "{}" });
       refresh();
     } catch (err: any) { alert(`Failed to create rule: ${err.message || err}`); }
   }
@@ -176,27 +201,77 @@ export default function AutomationPage() {
             </div>
             <div>
               <label style={{ fontSize: 11, fontWeight: 600, color: "var(--text-tertiary)", display: "block", marginBottom: 6 }}>Trigger Module</label>
-              <select value={form.triggerModule} onChange={e => setForm({ ...form, triggerModule: e.target.value })}
+              <select value={form.triggerModule} onChange={e => setForm({ ...form, triggerModule: e.target.value, triggerEvent: "" })}
                 style={{ width: "100%", padding: "10px 14px", borderRadius: 8, background: "var(--bg-primary)", border: "1px solid var(--border-primary)", color: "var(--text-primary)", fontSize: 13, fontFamily: "inherit", outline: "none" }}>
-                {["Discovery", "Monitoring", "Asset", "Ticket", "Patch", "License"].map(m => <option key={m} value={m}>{m}</option>)}
+                {(meta?.triggers || [{ module: "Discovery" }, { module: "Monitoring" }, { module: "Asset" }, { module: "Ticket" }, { module: "Patch" }, { module: "License" }]).map((t: any) => (
+                  <option key={t.module} value={t.module}>{t.module}</option>
+                ))}
               </select>
             </div>
             <div>
               <label style={{ fontSize: 11, fontWeight: 600, color: "var(--text-tertiary)", display: "block", marginBottom: 6 }}>Trigger Event</label>
-              <input placeholder="e.g. device_offline" value={form.triggerEvent} onChange={e => setForm({ ...form, triggerEvent: e.target.value })}
-                style={{ width: "100%", padding: "10px 14px", borderRadius: 8, background: "var(--bg-primary)", border: "1px solid var(--border-primary)", color: "var(--text-primary)", fontSize: 13, fontFamily: "inherit", outline: "none" }} />
+              {(() => {
+                const events = meta?.triggers?.find((t: any) => t.module === form.triggerModule)?.events;
+                return events?.length ? (
+                  <select value={form.triggerEvent} onChange={e => setForm({ ...form, triggerEvent: e.target.value })}
+                    style={{ width: "100%", padding: "10px 14px", borderRadius: 8, background: "var(--bg-primary)", border: "1px solid var(--border-primary)", color: "var(--text-primary)", fontSize: 13, fontFamily: "inherit", outline: "none" }}>
+                    <option value="">Select event…</option>
+                    {events.map((ev: string) => <option key={ev} value={ev}>{ev}</option>)}
+                  </select>
+                ) : (
+                  <input placeholder="e.g. device_offline" value={form.triggerEvent} onChange={e => setForm({ ...form, triggerEvent: e.target.value })}
+                    style={{ width: "100%", padding: "10px 14px", borderRadius: 8, background: "var(--bg-primary)", border: "1px solid var(--border-primary)", color: "var(--text-primary)", fontSize: 13, fontFamily: "inherit", outline: "none" }} />
+                );
+              })()}
             </div>
             <div>
-              <label style={{ fontSize: 11, fontWeight: 600, color: "var(--text-tertiary)", display: "block", marginBottom: 6 }}>Condition (Optional)</label>
-              <input placeholder="e.g. status == 'CRITICAL'" value={form.condition} onChange={e => setForm({ ...form, condition: e.target.value })}
-                style={{ width: "100%", padding: "10px 14px", borderRadius: 8, background: "var(--bg-primary)", border: "1px solid var(--border-primary)", color: "var(--text-primary)", fontSize: 13, fontFamily: "inherit", outline: "none" }} />
-            </div>
-            <div>
-              <label style={{ fontSize: 11, fontWeight: 600, color: "var(--text-tertiary)", display: "block", marginBottom: 6 }}>Action Module</label>
-              <select value={form.actionModule} onChange={e => setForm({ ...form, actionModule: e.target.value })}
-                style={{ width: "100%", padding: "10px 14px", borderRadius: 8, background: "var(--bg-primary)", border: "1px solid var(--border-primary)", color: "var(--text-primary)", fontSize: 13, fontFamily: "inherit", outline: "none" }}>
-                {["Notifications", "Tickets", "Assets", "CMDB"].map(m => <option key={m} value={m}>{m}</option>)}
+              <label style={{ fontSize: 11, fontWeight: 600, color: "var(--text-tertiary)", display: "block", marginBottom: 6 }}>Condition</label>
+              <select
+                value=""
+                onChange={e => {
+                  const c = meta?.conditions?.find((x: any) => x.key === e.target.value);
+                  if (c) setForm({ ...form, condition: `${c.key}=` });
+                }}
+                style={{ width: "100%", padding: "10px 14px", borderRadius: 8, background: "var(--bg-primary)", border: "1px solid var(--border-primary)", color: "var(--text-primary)", fontSize: 13, fontFamily: "inherit", outline: "none", marginBottom: 6 }}>
+                <option value="">Add condition field…</option>
+                {(meta?.conditions || []).map((c: any) => <option key={c.key} value={c.key}>{c.label}</option>)}
               </select>
+              <input placeholder='JSON or priority=HIGH' value={form.condition} onChange={e => setForm({ ...form, condition: e.target.value })}
+                style={{ width: "100%", padding: "10px 14px", borderRadius: 8, background: "var(--bg-primary)", border: "1px solid var(--border-primary)", color: "var(--text-primary)", fontSize: 13, fontFamily: "inherit", outline: "none" }} />
+            </div>
+            <div>
+              <label style={{ fontSize: 11, fontWeight: 600, color: "var(--text-tertiary)", display: "block", marginBottom: 6 }}>Action</label>
+              <select value={form.actionType} onChange={e => {
+                const a = meta?.actions?.find((x: any) => x.type === e.target.value);
+                const templates: Record<string, string> = {
+                  send_notification: JSON.stringify({ title: "Alert", message: "{{event}}", severity: "HIGH" }, null, 2),
+                  create_ticket: JSON.stringify({ subject: "Auto: {{event}}", priority: "HIGH", type: "INCIDENT" }, null, 2),
+                  send_webhook: JSON.stringify({ url: "https://hooks.example.com/...", method: "POST" }, null, 2),
+                  send_email: JSON.stringify({ to: "ops@example.com", subject: "Alert: {{event}}" }, null, 2),
+                  assign_ticket: JSON.stringify({ assignedToRole: "IT Admin" }, null, 2),
+                  escalate_ticket: JSON.stringify({ reason: "SLA risk" }, null, 2),
+                };
+                setForm({
+                  ...form,
+                  actionType: e.target.value,
+                  actionModule: a?.module || form.actionModule,
+                  actionConfig: templates[e.target.value] || form.actionConfig,
+                });
+              }}
+                style={{ width: "100%", padding: "10px 14px", borderRadius: 8, background: "var(--bg-primary)", border: "1px solid var(--border-primary)", color: "var(--text-primary)", fontSize: 13, fontFamily: "inherit", outline: "none" }}>
+                {(meta?.actions || [
+                  { type: "send_notification", label: "Send notification" },
+                  { type: "create_ticket", label: "Create ticket" },
+                  { type: "send_webhook", label: "Webhook" },
+                  { type: "send_email", label: "Email" },
+                ]).map((a: any) => <option key={a.type} value={a.type}>{a.label}</option>)}
+              </select>
+            </div>
+            <div style={{ gridColumn: "1 / -1" }}>
+              <label style={{ fontSize: 11, fontWeight: 600, color: "var(--text-tertiary)", display: "block", marginBottom: 6 }}>Action config (JSON)</label>
+              <textarea value={form.actionConfig} onChange={e => setForm({ ...form, actionConfig: e.target.value })} rows={3}
+                placeholder='{"title":"Alert","message":"..."}'
+                style={{ width: "100%", padding: "10px 14px", borderRadius: 8, background: "var(--bg-primary)", border: "1px solid var(--border-primary)", color: "var(--text-primary)", fontSize: 13, fontFamily: "inherit", outline: "none", resize: "vertical" }} />
             </div>
             <div style={{ gridColumn: "1 / -1", display: "flex", gap: 10, justifyContent: "flex-end", marginTop: 8 }}>
               <button type="button" className="btn btn-secondary" onClick={() => setShowAdd(false)}>Cancel</button>
@@ -524,7 +599,11 @@ export default function AutomationPage() {
                         </>
                       )}
                       {sc.approvalStatus === "APPROVED" && (
-                        <button onClick={async () => { try { await apiFetch(`/automation/scripts/${sc.id}/execute`, { method: "POST", body: JSON.stringify({ agentId: "default" }) }); refresh(); } catch (err: any) { alert(`Execution failed: ${err.message || err}`); } }}
+                        <button onClick={() => {
+                          setRunScriptId(sc.id);
+                          const online = agents.find((a: any) => a.status === "ONLINE");
+                          setSelectedAgentId(online?.id || agents[0]?.id || "");
+                        }}
                           className="btn btn-secondary" style={{ padding: "4px 12px", fontSize: 11, borderColor: "rgba(6,182,212,0.4)", color: "#22d3ee", background: "rgba(6,182,212,0.05)" }}>
                           <Play size={10} fill="currentColor" /> Run
                         </button>
@@ -540,7 +619,62 @@ export default function AutomationPage() {
             </div>
           )}
 
-          {/* Add Script Modal */}
+          {runScriptId && (
+            <>
+              <div onClick={() => !runningScript && setRunScriptId(null)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.65)", zIndex: 2000, backdropFilter: "blur(6px)" }} />
+              <div style={{ position: "fixed", top: "50%", left: "50%", transform: "translate(-50%, -50%)", width: 420, background: "var(--bg-card)", border: "1px solid var(--border-primary)", borderRadius: 16, boxShadow: "0 24px 80px rgba(0,0,0,0.6)", zIndex: 2001, padding: 24 }}>
+                <h3 style={{ margin: "0 0 8px", fontSize: 16, fontWeight: 700, color: "var(--text-primary)" }}>Run script on agent</h3>
+                <p style={{ margin: "0 0 16px", fontSize: 12, color: "var(--text-tertiary)", lineHeight: 1.5 }}>
+                  Choose a registered discovery agent to execute this script.
+                </p>
+                {agents.length === 0 ? (
+                  <div style={{ padding: 16, borderRadius: 10, background: "var(--bg-primary)", border: "1px solid var(--border-primary)", marginBottom: 16, fontSize: 13, color: "var(--text-secondary)" }}>
+                    No agents registered. Install an agent from Discovery first.
+                  </div>
+                ) : (
+                  <select
+                    value={selectedAgentId}
+                    onChange={e => setSelectedAgentId(e.target.value)}
+                    style={{ width: "100%", padding: "10px 12px", borderRadius: 8, border: "1px solid var(--border-primary)", background: "var(--bg-primary)", color: "var(--text-primary)", fontSize: 13, fontFamily: "inherit", outline: "none", marginBottom: 16 }}
+                  >
+                    {agents.map((a: any) => (
+                      <option key={a.id} value={a.id}>
+                        {a.hostname || a.id}{a.ipAddress ? ` (${a.ipAddress})` : ""} — {a.status || "UNKNOWN"}
+                      </option>
+                    ))}
+                  </select>
+                )}
+                <div style={{ display: "flex", justifyContent: "flex-end", gap: 10 }}>
+                  <button type="button" className="btn btn-secondary" disabled={runningScript} onClick={() => setRunScriptId(null)}>Cancel</button>
+                  <button
+                    type="button"
+                    className="btn btn-primary"
+                    disabled={runningScript || !selectedAgentId || agents.length === 0}
+                    onClick={async () => {
+                      if (!runScriptId || !selectedAgentId) return;
+                      setRunningScript(true);
+                      try {
+                        await apiFetch(`/automation/scripts/${runScriptId}/execute`, {
+                          method: "POST",
+                          body: JSON.stringify({ agentId: selectedAgentId }),
+                        });
+                        setRunScriptId(null);
+                        refresh();
+                      } catch (err: any) {
+                        alert(`Execution failed: ${err.message || err}`);
+                      } finally {
+                        setRunningScript(false);
+                      }
+                    }}
+                  >
+                    {runningScript ? <Loader2 size={14} style={{ animation: "spin 1s linear infinite" }} /> : <Play size={12} fill="currentColor" />}
+                    {runningScript ? " Running…" : " Execute"}
+                  </button>
+                </div>
+              </div>
+            </>
+          )}
+
           {showAddScript && (
             <>
               <div onClick={() => setShowAddScript(false)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.65)", zIndex: 2000, backdropFilter: "blur(6px)" }} />

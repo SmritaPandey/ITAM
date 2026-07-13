@@ -551,8 +551,13 @@ export class ComplianceService {
 
       results.push(record);
 
-      // Create notification for admins on warnings/criticals
-      if (severity !== 'INFO') {
+      // Create notification for admins on warnings/criticals / actionable threats
+      const isActionableThreat =
+        status === 'PENDING_REVIEW' ||
+        status === 'VIOLATION' ||
+        ['USB_DEVICE', 'UNAUTHORIZED_ACCESS', 'PROCESS_BLOCKED'].includes(change.category);
+
+      if (severity !== 'INFO' || isActionableThreat) {
         const admins = await this.prisma.user.findMany({
           where: {
             tenantId,
@@ -577,12 +582,76 @@ export class ComplianceService {
           });
         }
 
+        // Durable alert for Alerts UI (Approve / Quarantine / Block)
+        try {
+          const alertSeverity =
+            severity === 'CRITICAL' ? 'CRITICAL' : severity === 'WARNING' ? 'HIGH' : 'MEDIUM';
+          const threatAlert = await this.prisma.alertEvent.create({
+            data: {
+              tenantId,
+              severity: alertSeverity,
+              category: change.category,
+              title: change.summary,
+              message: `Agent "${hostname}" (${ipAddress}) — ${change.summary}. Status: ${status}.`,
+              source: 'Compliance',
+              sourceId: agentId,
+              metadata: {
+                changeId: record.id,
+                agentId,
+                hostname,
+                category: change.category,
+                status,
+                actionable: true,
+              },
+            },
+          });
+          this.eventBus.emitDomainEvent({
+            type: 'alert.created',
+            tenantId,
+            payload: {
+              alertId: threatAlert.id,
+              changeId: record.id,
+              category: change.category,
+              severity: alertSeverity,
+              title: change.summary,
+            },
+            timestamp: new Date(),
+          });
+        } catch (err: any) {
+          this.logger.warn(`Failed to create threat alert: ${err.message}`);
+        }
+
         this.eventBus.emitDomainEvent({
           type: 'compliance.change_detected',
           tenantId,
-          payload: { changeId: record.id, category: change.category, severity, hostname, summary: change.summary },
+          payload: {
+            changeId: record.id,
+            agentId,
+            category: change.category,
+            severity,
+            hostname,
+            summary: change.summary,
+            status,
+          },
           timestamp: new Date(),
         });
+
+        if (isActionableThreat) {
+          this.eventBus.emitDomainEvent({
+            type: 'compliance.threat_detected',
+            tenantId,
+            payload: {
+              changeId: record.id,
+              agentId,
+              category: change.category,
+              severity,
+              hostname,
+              summary: change.summary,
+              status,
+            },
+            timestamp: new Date(),
+          });
+        }
       }
 
       this.logger.log(`[${severity}] ${hostname}: ${change.summary} → ${status}`);
@@ -782,22 +851,225 @@ export class ComplianceService {
     return { data, total, page, limit };
   }
 
-  async approveChange(id: string, tenantId: string, userId: string, note?: string) {
-    const change = await this.prisma.endpointChange.findFirst({ where: { id, tenantId } });
-    if (!change) throw new NotFoundException('Change not found');
-    return this.prisma.endpointChange.update({
-      where: { id },
-      data: { status: 'APPROVED', reviewedById: userId, reviewedAt: new Date(), reviewNote: note || null },
+  private buildThreatAction(
+    decision: 'APPROVE' | 'QUARANTINE' | 'BLOCK',
+    change: { id: string; category: string; summary: string; newValue: any; severity: string },
+  ): Record<string, any> {
+    const val = (change.newValue as any) || {};
+    if (decision === 'APPROVE') {
+      return {
+        type: 'APPROVE_CHANGE',
+        changeId: change.id,
+        category: change.category,
+        summary: change.summary,
+        timestamp: new Date().toISOString(),
+      };
+    }
+    if (decision === 'QUARANTINE') {
+      return {
+        type: 'QUARANTINE_DEVICE',
+        reason: change.summary,
+        changeId: change.id,
+        allowServerOnly: true,
+        timestamp: new Date().toISOString(),
+      };
+    }
+    // BLOCK — pick enforcement action by threat category
+    if (change.category === 'PROCESS_BLOCKED') {
+      return {
+        type: 'KILL_PROCESS',
+        processName: val?.name || '',
+        pid: val?.pid || '',
+        command: val?.command || '',
+        changeId: change.id,
+        timestamp: new Date().toISOString(),
+      };
+    }
+    if (change.category === 'USB_DEVICE' || change.category === 'DISK_CHANGE') {
+      return {
+        type: 'BLOCK_USB',
+        deviceName: val?.name || 'Storage Drive',
+        serialNumber: val?.serial || '',
+        mountPoint: val?.mount || '',
+        changeId: change.id,
+        timestamp: new Date().toISOString(),
+      };
+    }
+    if (change.category === 'UNAUTHORIZED_ACCESS' && val?.port != null) {
+      return {
+        type: 'BLOCK_PORT',
+        port: val.port,
+        processName: val.process || '',
+        pid: val.pid || '',
+        changeId: change.id,
+        timestamp: new Date().toISOString(),
+      };
+    }
+    if (change.category === 'UNAUTHORIZED_ACCESS' && val?.name) {
+      return {
+        type: 'KILL_PROCESS',
+        processName: val.name || '',
+        pid: val.pid || '',
+        command: val.command || '',
+        changeId: change.id,
+        timestamp: new Date().toISOString(),
+      };
+    }
+    // Fallback: quarantine-level isolation for unknown critical threats
+    return {
+      type: 'QUARANTINE_DEVICE',
+      reason: change.summary,
+      changeId: change.id,
+      allowServerOnly: true,
+      timestamp: new Date().toISOString(),
+    };
+  }
+
+  private async enqueueAgentAction(agentId: string, tenantId: string, action: Record<string, any>) {
+    const agent = await this.prisma.agent.findFirst({ where: { id: agentId, tenantId } });
+    if (!agent) return;
+    const info = (agent.systemInfo as any) || {};
+    if (!Array.isArray(info._pendingActions)) info._pendingActions = [];
+    info._pendingActions.push(action);
+    if (action.type === 'QUARANTINE_DEVICE') {
+      info._quarantined = true;
+      info._quarantineReason = action.reason;
+      info._quarantinedAt = new Date().toISOString();
+    }
+    await this.prisma.agent.update({
+      where: { id: agentId },
+      data: { systemInfo: info },
     });
   }
 
-  async rejectChange(id: string, tenantId: string, userId: string, note?: string) {
+  private async writeThreatAudit(
+    tenantId: string,
+    userId: string,
+    action: string,
+    change: { id: string; summary: string; category: string; status: string },
+    note?: string,
+    agentAction?: Record<string, any>,
+  ) {
+    try {
+      await this.prisma.auditLog.create({
+        data: {
+          tenantId,
+          actorId: userId,
+          action,
+          module: 'COMPLIANCE',
+          resourceType: 'endpoint_change',
+          resourceId: change.id,
+          resourceName: change.summary,
+          outcome: 'SUCCESS',
+          severity: action.includes('QUARANTINE') || action.includes('BLOCK') ? 'WARNING' : 'INFO',
+          after: { status: change.status, note: note || null, agentAction: agentAction || null },
+          metadata: { category: change.category, note: note || null },
+        },
+      });
+    } catch (err: any) {
+      this.logger.warn(`Threat audit log failed: ${err.message}`);
+    }
+  }
+
+  async approveChange(id: string, tenantId: string, userId: string, note?: string) {
     const change = await this.prisma.endpointChange.findFirst({ where: { id, tenantId } });
     if (!change) throw new NotFoundException('Change not found');
-    return this.prisma.endpointChange.update({
+
+    const agentAction = this.buildThreatAction('APPROVE', change);
+    await this.enqueueAgentAction(change.agentId, tenantId, agentAction);
+
+    const updated = await this.prisma.endpointChange.update({
       where: { id },
-      data: { status: 'REJECTED', reviewedById: userId, reviewedAt: new Date(), reviewNote: note || null },
+      data: { status: 'APPROVED', reviewedById: userId, reviewedAt: new Date(), reviewNote: note || null },
     });
+
+    await this.writeThreatAudit(tenantId, userId, 'THREAT_APPROVE', { ...change, status: 'APPROVED' }, note, agentAction);
+    this.eventBus.emitDomainEvent({
+      type: 'compliance.threat_approved',
+      tenantId,
+      payload: { changeId: id, agentId: change.agentId, category: change.category, hostname: change.hostname },
+      timestamp: new Date(),
+    });
+    return updated;
+  }
+
+  async rejectChange(id: string, tenantId: string, userId: string, note?: string) {
+    // Reject = block/enforce (backward-compatible alias for blockChange)
+    return this.blockChange(id, tenantId, userId, note);
+  }
+
+  async quarantineChange(id: string, tenantId: string, userId: string, note?: string) {
+    const change = await this.prisma.endpointChange.findFirst({ where: { id, tenantId } });
+    if (!change) throw new NotFoundException('Change not found');
+
+    const agentAction = this.buildThreatAction('QUARANTINE', change);
+    await this.enqueueAgentAction(change.agentId, tenantId, agentAction);
+
+    const updated = await this.prisma.endpointChange.update({
+      where: { id },
+      data: {
+        status: 'REJECTED',
+        reviewedById: userId,
+        reviewedAt: new Date(),
+        reviewNote: note || 'Device quarantined',
+      },
+    });
+
+    await this.writeThreatAudit(
+      tenantId,
+      userId,
+      'THREAT_QUARANTINE',
+      { ...change, status: 'REJECTED' },
+      note,
+      agentAction,
+    );
+    this.eventBus.emitDomainEvent({
+      type: 'compliance.threat_quarantined',
+      tenantId,
+      payload: { changeId: id, agentId: change.agentId, category: change.category, hostname: change.hostname },
+      timestamp: new Date(),
+    });
+    return updated;
+  }
+
+  async blockChange(id: string, tenantId: string, userId: string, note?: string) {
+    const change = await this.prisma.endpointChange.findFirst({ where: { id, tenantId } });
+    if (!change) throw new NotFoundException('Change not found');
+
+    const agentAction = this.buildThreatAction('BLOCK', change);
+    await this.enqueueAgentAction(change.agentId, tenantId, agentAction);
+
+    const updated = await this.prisma.endpointChange.update({
+      where: { id },
+      data: {
+        status: 'REJECTED',
+        reviewedById: userId,
+        reviewedAt: new Date(),
+        reviewNote: note || 'Blocked by admin',
+      },
+    });
+
+    await this.writeThreatAudit(
+      tenantId,
+      userId,
+      'THREAT_BLOCK',
+      { ...change, status: 'REJECTED' },
+      note,
+      agentAction,
+    );
+    this.eventBus.emitDomainEvent({
+      type: 'compliance.threat_blocked',
+      tenantId,
+      payload: {
+        changeId: id,
+        agentId: change.agentId,
+        category: change.category,
+        hostname: change.hostname,
+        actionType: agentAction.type,
+      },
+      timestamp: new Date(),
+    });
+    return updated;
   }
 
   // ═══════════════════════════════════════════════════════════════
@@ -1384,6 +1656,89 @@ export class ComplianceService {
       totalAgents: results.length,
       averageScore: avgScore,
       agents: results,
+    };
+  }
+
+  /**
+   * CIS evidence pack — CSV rows or PDF buffer from real CIS assessments.
+   */
+  async exportCisEvidencePack(
+    tenantId: string,
+    format: 'csv' | 'pdf' = 'csv',
+  ): Promise<{ contentType: string; filename: string; body: string | Buffer }> {
+    const report = await this.getCisBenchmarkReport(tenantId);
+    const stamp = new Date().toISOString().slice(0, 10);
+    const rows: string[][] = [
+      ['Hostname', 'Agent ID', 'Score', 'Check ID', 'Check Name', 'Status', 'Detail', 'Assessed At'],
+    ];
+    for (const agent of report.agents || []) {
+      for (const check of agent.checks || []) {
+        rows.push([
+          agent.hostname || '',
+          agent.agentId || '',
+          String(agent.score ?? ''),
+          check.id || '',
+          check.name || '',
+          check.status || '',
+          (check.detail || '').replace(/[\r\n,]+/g, ' '),
+          agent.assessedAt || report.assessedAt,
+        ]);
+      }
+    }
+
+    if (format === 'csv') {
+      const csv = rows
+        .map((r) =>
+          r.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(','),
+        )
+        .join('\n');
+      return {
+        contentType: 'text/csv',
+        filename: `cis-evidence-${stamp}.csv`,
+        body: csv,
+      };
+    }
+
+    // PDF via pdfkit
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const PDFDocument = require('pdfkit');
+    const chunks: Buffer[] = [];
+    const doc = new PDFDocument({ margin: 40, size: 'LETTER' });
+    doc.on('data', (c: Buffer) => chunks.push(c));
+
+    const done = new Promise<Buffer>((resolve) => {
+      doc.on('end', () => resolve(Buffer.concat(chunks)));
+    });
+
+    doc.fontSize(16).text('CIS Benchmark Evidence Pack', { underline: true });
+    doc.moveDown(0.5);
+    doc.fontSize(10).fillColor('#333');
+    doc.text(`Generated: ${new Date().toISOString()}`);
+    doc.text(`Agents assessed: ${report.totalAgents}`);
+    doc.text(`Average score: ${report.averageScore}%`);
+    doc.moveDown();
+
+    for (const agent of report.agents || []) {
+      doc.fontSize(12).fillColor('#000').text(`${agent.hostname} — ${agent.score}%`, {
+        continued: false,
+      });
+      doc.fontSize(9).fillColor('#444');
+      for (const check of agent.checks || []) {
+        doc.text(
+          `  [${check.status}] ${check.id || ''} ${check.name}: ${check.detail || ''}`,
+          { width: 520 },
+        );
+      }
+      doc.moveDown(0.4);
+      if (doc.y > 700) doc.addPage();
+    }
+
+    doc.end();
+    const body = await done;
+    return {
+      contentType: 'application/pdf',
+      filename: `cis-evidence-${stamp}.pdf`,
+      body,
     };
   }
 }

@@ -4,7 +4,9 @@ import {
   FileText, Download, Printer, Shield, ShieldCheck, AlertTriangle,
   CheckCircle, Clock, BarChart3, RefreshCw, ChevronDown, ChevronRight, Eye
 } from "lucide-react";
-import { apiFetch } from "@/lib/api";
+import { apiFetch, apiFetchBlob } from "@/lib/api";
+import PageHeader from "@/components/PageHeader";
+import EmptyState from "@/components/EmptyState";
 
 /* ─── Types ─────────────────────────────────────────────────────── */
 
@@ -67,7 +69,7 @@ interface FullReport {
   generatedAt?: string;
 }
 
-type TabId = "security" | "cis" | "full";
+type TabId = "security" | "cis" | "full" | "builder" | "schedules";
 
 /* ─── Helpers ───────────────────────────────────────────────────── */
 
@@ -184,6 +186,27 @@ function ShimmerRow() {
 
 export default function ComplianceReportsPage() {
   const [activeTab, setActiveTab] = useState<TabId>("security");
+  const [builderType, setBuilderType] = useState("assets");
+  const [builderEmail, setBuilderEmail] = useState("");
+  const [builderRunning, setBuilderRunning] = useState(false);
+  const [builderResult, setBuilderResult] = useState<any>(null);
+  const [builderFormat, setBuilderFormat] = useState("CSV");
+  const [builderStatus, setBuilderStatus] = useState("");
+  const [builderCategory, setBuilderCategory] = useState("");
+  const [builderPriority, setBuilderPriority] = useState("");
+  const [savedFilters, setSavedFilters] = useState<any[]>([]);
+  const [filterName, setFilterName] = useState("");
+  const [schedules, setSchedules] = useState<any[]>([]);
+  const [schedLoading, setSchedLoading] = useState(false);
+  const [schedForm, setSchedForm] = useState({
+    name: "",
+    reportType: "assets",
+    schedule: "0 8 * * 1",
+    format: "PDF",
+    recipients: "",
+    status: "",
+  });
+  const [schedSaving, setSchedSaving] = useState(false);
   const [securityData, setSecurityData] = useState<SecuritySummary | null>(null);
   const [fullReport, setFullReport] = useState<FullReport | null>(null);
   const [loading, setLoading] = useState(true);
@@ -273,14 +296,68 @@ export default function ComplianceReportsPage() {
     { id: "security", label: "Security Summary", icon: <Shield size={15} /> },
     { id: "cis", label: "CIS Benchmark", icon: <ShieldCheck size={15} /> },
     { id: "full", label: "Full Report", icon: <FileText size={15} /> },
+    { id: "builder", label: "Report Builder", icon: <BarChart3 size={15} /> },
+    { id: "schedules", label: "Schedules", icon: <Clock size={15} /> },
   ];
+
+  const loadSchedules = useCallback(async () => {
+    setSchedLoading(true);
+    try {
+      const data = await apiFetch("/reports/schedules");
+      setSchedules(Array.isArray(data) ? data : []);
+    } catch {
+      setSchedules([]);
+    } finally {
+      setSchedLoading(false);
+    }
+  }, []);
+
+  const loadSavedFilters = useCallback(async () => {
+    try {
+      const data = await apiFetch("/reports/saved-filters");
+      setSavedFilters(Array.isArray(data) ? data : []);
+    } catch {
+      setSavedFilters([]);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (activeTab === "schedules") loadSchedules();
+    if (activeTab === "builder") loadSavedFilters();
+  }, [activeTab, loadSchedules, loadSavedFilters]);
+
+  async function downloadReport(format: string) {
+    const params = new URLSearchParams({ format });
+    if (builderStatus) params.set("status", builderStatus);
+    if (builderCategory) params.set("category", builderCategory);
+    if (builderPriority) params.set("priority", builderPriority);
+    const blob = await apiFetchBlob(`/reports/download/${builderType}?${params}`);
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `${builderType}_report.${format === "xlsx" ? "xlsx" : format === "pdf" ? "pdf" : "csv"}`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
 
   /* ═══ Render ═════════════════════════════════════════════════ */
 
   return (
     <>
-      {/* Header */}
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 28, flexWrap: "wrap", gap: 16 }}>
+      <PageHeader
+        eyebrow="Analytics"
+        title="Reports"
+        description="Security summaries, parameterized builders, and scheduled PDF/XLSX delivery"
+        actions={
+          <button className="btn btn-secondary" onClick={() => fetchData(true)} disabled={refreshing}>
+            <RefreshCw size={14} style={refreshing ? { animation: "spin 1s linear infinite" } : undefined} />
+            Refresh
+          </button>
+        }
+      />
+
+      {/* Legacy gradient header replaced by PageHeader — keep tabs below */}
+      <div style={{ display: "none" }}>
         <div>
           <h1 style={{
             fontSize: 26, fontWeight: 800, letterSpacing: "-0.03em", margin: 0,
@@ -382,6 +459,315 @@ export default function ComplianceReportsPage() {
           toggleAgent={toggleAgent}
           exportJSON={exportJSON}
         />
+      )}
+      {activeTab === "builder" && (
+        <div className="card" style={{ padding: 20 }}>
+          <div style={{ fontWeight: 700, marginBottom: 12 }}>Parameterized Report Builder</div>
+          <div style={{ display: "flex", gap: 12, flexWrap: "wrap", marginBottom: 12 }}>
+            <select
+              value={builderType}
+              onChange={(e) => setBuilderType(e.target.value)}
+              style={{ padding: "8px 12px", borderRadius: 8, background: "var(--bg-elevated)", border: "1px solid var(--border-primary)", color: "var(--text-primary)" }}
+            >
+              {["assets", "tickets", "licenses", "patches", "executive", "compliance", "business-services", "audit", "network"].map((t) => (
+                <option key={t} value={t}>{t}</option>
+              ))}
+            </select>
+            <select
+              value={builderFormat}
+              onChange={(e) => setBuilderFormat(e.target.value)}
+              style={{ padding: "8px 12px", borderRadius: 8, background: "var(--bg-elevated)", border: "1px solid var(--border-primary)", color: "var(--text-primary)" }}
+            >
+              {["CSV", "XLSX", "PDF"].map((f) => (
+                <option key={f} value={f}>{f}</option>
+              ))}
+            </select>
+            <input
+              value={builderEmail}
+              onChange={(e) => setBuilderEmail(e.target.value)}
+              placeholder="Email recipients (comma-separated, optional)"
+              style={{ flex: 1, minWidth: 220, padding: "8px 12px", borderRadius: 8, background: "var(--bg-elevated)", border: "1px solid var(--border-primary)", color: "var(--text-primary)" }}
+            />
+          </div>
+          <div style={{ display: "flex", gap: 12, flexWrap: "wrap", marginBottom: 16 }}>
+            <input
+              value={builderStatus}
+              onChange={(e) => setBuilderStatus(e.target.value)}
+              placeholder="Filter: status (e.g. ACTIVE)"
+              style={{ padding: "8px 12px", borderRadius: 8, background: "var(--bg-elevated)", border: "1px solid var(--border-primary)", color: "var(--text-primary)", minWidth: 160 }}
+            />
+            <input
+              value={builderCategory}
+              onChange={(e) => setBuilderCategory(e.target.value)}
+              placeholder="Filter: category"
+              style={{ padding: "8px 12px", borderRadius: 8, background: "var(--bg-elevated)", border: "1px solid var(--border-primary)", color: "var(--text-primary)", minWidth: 140 }}
+            />
+            <input
+              value={builderPriority}
+              onChange={(e) => setBuilderPriority(e.target.value)}
+              placeholder="Filter: priority (tickets)"
+              style={{ padding: "8px 12px", borderRadius: 8, background: "var(--bg-elevated)", border: "1px solid var(--border-primary)", color: "var(--text-primary)", minWidth: 160 }}
+            />
+          </div>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", marginBottom: 16, padding: 12, borderRadius: 10, background: "var(--bg-elevated)", border: "1px solid var(--border-primary)" }}>
+            <span style={{ fontSize: 12, fontWeight: 650, color: "var(--text-secondary)" }}>Saved filters</span>
+            <input
+              value={filterName}
+              onChange={(e) => setFilterName(e.target.value)}
+              placeholder="Preset name"
+              style={{ padding: "6px 10px", borderRadius: 8, background: "var(--bg-primary)", border: "1px solid var(--border-primary)", color: "var(--text-primary)", minWidth: 140, fontSize: 12 }}
+            />
+            <button
+              className="btn btn-secondary"
+              style={{ fontSize: 12 }}
+              onClick={async () => {
+                if (!filterName.trim()) { alert("Name required"); return; }
+                const filters: Record<string, string> = {};
+                if (builderStatus) filters.status = builderStatus;
+                if (builderCategory) filters.category = builderCategory;
+                if (builderPriority) filters.priority = builderPriority;
+                await apiFetch("/reports/saved-filters", {
+                  method: "POST",
+                  body: JSON.stringify({
+                    name: filterName.trim(),
+                    reportType: builderType,
+                    format: builderFormat,
+                    filters,
+                  }),
+                });
+                setFilterName("");
+                await loadSavedFilters();
+              }}
+            >
+              Save current
+            </button>
+            {savedFilters.length === 0 ? (
+              <span style={{ fontSize: 12, color: "var(--text-tertiary)" }}>No presets yet</span>
+            ) : (
+              savedFilters.map((f) => (
+                <span key={f.id} style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
+                  <button
+                    className="btn btn-secondary"
+                    style={{ fontSize: 11, padding: "4px 8px" }}
+                    onClick={() => {
+                      setBuilderType(f.reportType || "assets");
+                      setBuilderFormat(f.format || "CSV");
+                      setBuilderStatus(f.filters?.status || "");
+                      setBuilderCategory(f.filters?.category || "");
+                      setBuilderPriority(f.filters?.priority || "");
+                    }}
+                    title="Apply filter"
+                  >
+                    {f.name}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      await apiFetch(`/reports/saved-filters/${f.id}`, { method: "DELETE" });
+                      await loadSavedFilters();
+                    }}
+                    style={{ background: "none", border: "none", color: "var(--text-tertiary)", cursor: "pointer", fontSize: 11 }}
+                    title="Delete"
+                  >
+                    ×
+                  </button>
+                </span>
+              ))
+            )}
+          </div>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 16 }}>
+            <button
+              className="btn btn-primary"
+              disabled={builderRunning}
+              onClick={async () => {
+                setBuilderRunning(true);
+                setBuilderResult(null);
+                try {
+                  const emailTo = builderEmail.split(",").map((s) => s.trim()).filter(Boolean);
+                  const filters: Record<string, string> = {};
+                  if (builderStatus) filters.status = builderStatus;
+                  if (builderCategory) filters.category = builderCategory;
+                  if (builderPriority) filters.priority = builderPriority;
+                  const res = await apiFetch("/reports/run", {
+                    method: "POST",
+                    body: JSON.stringify({
+                      reportType: builderType,
+                      name: `Ad-hoc ${builderType}`,
+                      format: builderFormat,
+                      filters,
+                      emailTo: emailTo.length ? emailTo : undefined,
+                    }),
+                  });
+                  setBuilderResult(res);
+                } catch (err: any) {
+                  setBuilderResult({ error: err?.message || "Run failed" });
+                } finally {
+                  setBuilderRunning(false);
+                }
+              }}
+            >
+              {builderRunning ? "Running…" : "Run Report"}
+            </button>
+            <button className="btn btn-secondary" onClick={() => downloadReport("csv")}>
+              <Download size={14} /> CSV
+            </button>
+            <button className="btn btn-secondary" onClick={() => downloadReport("xlsx")}>
+              <Download size={14} /> XLSX
+            </button>
+            <button className="btn btn-secondary" onClick={() => downloadReport("pdf")}>
+              <Download size={14} /> PDF
+            </button>
+            <button
+              className="btn btn-secondary"
+              onClick={async () => {
+                const blob = await apiFetchBlob("/compliance/cis-benchmark/evidence?format=csv");
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement("a");
+                a.href = url;
+                a.download = `cis-evidence.csv`;
+                a.click();
+                URL.revokeObjectURL(url);
+              }}
+            >
+              <Download size={14} /> CIS Evidence CSV
+            </button>
+            <button
+              className="btn btn-secondary"
+              onClick={async () => {
+                const blob = await apiFetchBlob("/compliance/cis-benchmark/evidence?format=pdf");
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement("a");
+                a.href = url;
+                a.download = `cis-evidence.pdf`;
+                a.click();
+                URL.revokeObjectURL(url);
+              }}
+            >
+              <Download size={14} /> CIS Evidence PDF
+            </button>
+          </div>
+          {builderResult && (
+            <pre style={{ fontSize: 11, maxHeight: 360, overflow: "auto", background: "var(--bg-elevated)", padding: 12, borderRadius: 8 }}>
+              {JSON.stringify(builderResult.report?.summary || builderResult, null, 2)}
+            </pre>
+          )}
+        </div>
+      )}
+
+      {activeTab === "schedules" && (
+        <div className="card" style={{ padding: 20 }}>
+          <div style={{ fontWeight: 700, marginBottom: 12 }}>Scheduled PDF / XLSX / CSV Reports</div>
+          <div style={{ display: "grid", gap: 10, marginBottom: 20, maxWidth: 640 }}>
+            <input
+              placeholder="Schedule name"
+              value={schedForm.name}
+              onChange={(e) => setSchedForm({ ...schedForm, name: e.target.value })}
+              style={{ padding: "8px 12px", borderRadius: 8, background: "var(--bg-elevated)", border: "1px solid var(--border-primary)", color: "var(--text-primary)" }}
+            />
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+              <select value={schedForm.reportType} onChange={(e) => setSchedForm({ ...schedForm, reportType: e.target.value })} style={{ padding: "8px 12px", borderRadius: 8, background: "var(--bg-elevated)", border: "1px solid var(--border-primary)", color: "var(--text-primary)" }}>
+                {["assets", "tickets", "licenses", "executive", "compliance", "business-services", "patches", "audit", "network"].map((t) => (
+                  <option key={t} value={t}>{t}</option>
+                ))}
+              </select>
+              <select value={schedForm.format} onChange={(e) => setSchedForm({ ...schedForm, format: e.target.value })} style={{ padding: "8px 12px", borderRadius: 8, background: "var(--bg-elevated)", border: "1px solid var(--border-primary)", color: "var(--text-primary)" }}>
+                {["PDF", "XLSX", "CSV"].map((f) => <option key={f} value={f}>{f}</option>)}
+              </select>
+              <input
+                placeholder="Cron (e.g. 0 8 * * 1)"
+                value={schedForm.schedule}
+                onChange={(e) => setSchedForm({ ...schedForm, schedule: e.target.value })}
+                style={{ flex: 1, minWidth: 160, padding: "8px 12px", borderRadius: 8, background: "var(--bg-elevated)", border: "1px solid var(--border-primary)", color: "var(--text-primary)" }}
+              />
+            </div>
+            <input
+              placeholder="Recipients (comma-separated emails)"
+              value={schedForm.recipients}
+              onChange={(e) => setSchedForm({ ...schedForm, recipients: e.target.value })}
+              style={{ padding: "8px 12px", borderRadius: 8, background: "var(--bg-elevated)", border: "1px solid var(--border-primary)", color: "var(--text-primary)" }}
+            />
+            <input
+              placeholder="Optional filter status (assets/tickets)"
+              value={schedForm.status}
+              onChange={(e) => setSchedForm({ ...schedForm, status: e.target.value })}
+              style={{ padding: "8px 12px", borderRadius: 8, background: "var(--bg-elevated)", border: "1px solid var(--border-primary)", color: "var(--text-primary)" }}
+            />
+            <button
+              className="btn btn-primary"
+              disabled={schedSaving}
+              style={{ width: "fit-content" }}
+              onClick={async () => {
+                if (!schedForm.name.trim()) { alert("Name required"); return; }
+                setSchedSaving(true);
+                try {
+                  await apiFetch("/reports/schedules", {
+                    method: "POST",
+                    body: JSON.stringify({
+                      name: schedForm.name.trim(),
+                      reportType: schedForm.reportType,
+                      schedule: schedForm.schedule,
+                      format: schedForm.format,
+                      recipients: schedForm.recipients.split(",").map((s) => s.trim()).filter(Boolean),
+                      filters: schedForm.status ? { status: schedForm.status } : {},
+                    }),
+                  });
+                  setSchedForm({ name: "", reportType: "assets", schedule: "0 8 * * 1", format: "PDF", recipients: "", status: "" });
+                  await loadSchedules();
+                } catch (err: any) {
+                  alert(err?.message || "Failed to create schedule");
+                } finally {
+                  setSchedSaving(false);
+                }
+              }}
+            >
+              {schedSaving ? "Saving…" : "Create schedule"}
+            </button>
+          </div>
+          {schedLoading ? (
+            <div style={{ color: "var(--text-tertiary)", fontSize: 13 }}>Loading schedules…</div>
+          ) : schedules.length === 0 ? (
+            <EmptyState
+              compact
+              icon={<Clock size={28} />}
+              title="No scheduled reports"
+              description="Create a schedule to email PDF, XLSX, or CSV reports on a cron."
+            />
+          ) : (
+            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+              <thead>
+                <tr>
+                  {["Name", "Type", "Format", "Cron", "Recipients", "Next run", ""].map((h) => (
+                    <th key={h} style={{ textAlign: "left", padding: "8px 6px", borderBottom: "1px solid var(--border-primary)", color: "var(--text-tertiary)", fontWeight: 600 }}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {schedules.map((s) => (
+                  <tr key={s.id}>
+                    <td style={{ padding: "8px 6px", borderBottom: "1px solid var(--border-primary)" }}>{s.name}</td>
+                    <td style={{ padding: "8px 6px", borderBottom: "1px solid var(--border-primary)" }}>{s.reportType}</td>
+                    <td style={{ padding: "8px 6px", borderBottom: "1px solid var(--border-primary)" }}>{s.format}</td>
+                    <td style={{ padding: "8px 6px", borderBottom: "1px solid var(--border-primary)", fontFamily: "monospace", fontSize: 11 }}>{s.schedule}</td>
+                    <td style={{ padding: "8px 6px", borderBottom: "1px solid var(--border-primary)" }}>{(s.recipients || []).join(", ") || "—"}</td>
+                    <td style={{ padding: "8px 6px", borderBottom: "1px solid var(--border-primary)" }}>{s.nextRunAt ? new Date(s.nextRunAt).toLocaleString() : "—"}</td>
+                    <td style={{ padding: "8px 6px", borderBottom: "1px solid var(--border-primary)" }}>
+                      <button
+                        className="btn btn-secondary"
+                        style={{ fontSize: 11, padding: "4px 8px" }}
+                        onClick={async () => {
+                          await apiFetch(`/reports/schedules/${s.id}`, { method: "DELETE" });
+                          await loadSchedules();
+                        }}
+                      >
+                        Delete
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
       )}
 
       {/* ── Styles ───────────────────────────────────────────── */}

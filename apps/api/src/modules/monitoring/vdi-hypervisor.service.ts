@@ -1,8 +1,15 @@
-import { Injectable, Logger, NotImplementedException } from '@nestjs/common';
+import { Injectable, Logger, BadRequestException } from '@nestjs/common';
 import * as https from 'https';
 import * as http from 'http';
+import * as fs from 'fs';
+import * as os from 'os';
+import * as path from 'path';
+import { execFile } from 'child_process';
+import { promisify } from 'util';
 import { PrismaService } from '../../common/database/prisma.service';
 import { EventBusService } from '../../common/events/event-bus.service';
+
+const execFileAsync = promisify(execFile);
 
 /**
  * Hypervisor connection configuration
@@ -137,7 +144,8 @@ export class VdiHypervisorService {
   async proxmoxLogin(config: HypervisorConfig): Promise<{ ticket: string; csrfToken: string }> {
     const cached = this.authTokens.get(`proxmox:${config.host}`);
     if (cached && cached.expiresAt > new Date()) {
-      return { ticket: cached.token, csrfToken: '' };
+      const csrf = (cached as any).csrfToken || '';
+      return { ticket: cached.token, csrfToken: csrf };
     }
 
     const body = `username=${encodeURIComponent(config.username)}@pam&password=${encodeURIComponent(config.password)}`;
@@ -155,7 +163,8 @@ export class VdiHypervisorService {
     this.authTokens.set(`proxmox:${config.host}`, {
       token: ticket,
       expiresAt: new Date(Date.now() + 120 * 60 * 1000), // 2 hours
-    });
+      csrfToken,
+    } as any);
 
     return { ticket, csrfToken };
   }
@@ -205,6 +214,208 @@ export class VdiHypervisorService {
     return vms;
   }
 
+  // ─── Hyper-V via WinRM / PowerShell Remoting ───────────────────
+
+  /**
+   * Inventory Hyper-V VMs by spawning pwsh and running
+   * `Invoke-Command -ComputerName ... { Get-VM }` over WinRM.
+   */
+  async hyperVGetVMs(config: HypervisorConfig): Promise<VmInfo[]> {
+    if (!config.host) throw new BadRequestException('Hyper-V host is required');
+    if (!config.username || !config.password) {
+      throw new BadRequestException(
+        'Hyper-V WinRM sync requires username and password (Enable-PSRemoting on the host)',
+      );
+    }
+
+    const psBinary = await this.findPowerShellBinary();
+    if (!psBinary) {
+      const hint =
+        process.platform === 'win32'
+          ? 'Install PowerShell 7+ or ensure powershell.exe is on PATH.'
+          : 'Install PowerShell 7+ (https://aka.ms/powershell) on this API host so Invoke-Command over WinRM can run.';
+      throw new BadRequestException(
+        `PowerShell was not found on this API host. ${hint} Also ensure WinRM is enabled on the Hyper-V host (Enable-PSRemoting -Force).`,
+      );
+    }
+
+    const stamp = Date.now();
+    const localPs1Path = path.join(os.tmpdir(), `qs-hyperv-inventory-${stamp}.ps1`);
+
+    const ps1 = `
+$ErrorActionPreference = 'Stop'
+$target = $env:QS_WINRM_TARGET
+$user = $env:QS_WINRM_USER
+$passPlain = $env:QS_WINRM_PASS
+
+if (-not $target -or -not $user -or -not $passPlain) {
+  Write-Output '{"error":"Missing WinRM target or credentials"}'
+  exit 2
+}
+
+Write-Output "[INFO] Connecting via WinRM to Hyper-V host $target as $user"
+$secure = ConvertTo-SecureString $passPlain -AsPlainText -Force
+$cred = New-Object System.Management.Automation.PSCredential ($user, $secure)
+
+try {
+  $vms = Invoke-Command -ComputerName $target -Credential $cred -Authentication Negotiate -ScriptBlock {
+    $ErrorActionPreference = 'Stop'
+    if (-not (Get-Command Get-VM -ErrorAction SilentlyContinue)) {
+      throw 'Hyper-V PowerShell module is not available on this host (Install-WindowsFeature Hyper-V-PowerShell).'
+    }
+    Get-VM | ForEach-Object {
+      $vm = $_
+      $ip = $null
+      try {
+        $adapters = Get-VMNetworkAdapter -VM $vm -ErrorAction SilentlyContinue
+        $ip = @($adapters | ForEach-Object { $_.IPAddresses } | Where-Object { $_ -and $_ -notmatch ':' } | Select-Object -First 1)[0]
+      } catch {}
+      $memMb = 0
+      if ($vm.MemoryAssigned -gt 0) { $memMb = [math]::Round($vm.MemoryAssigned / 1MB) }
+      elseif ($vm.MemoryStartup -gt 0) { $memMb = [math]::Round($vm.MemoryStartup / 1MB) }
+      [PSCustomObject]@{
+        Id        = [string]$vm.Id
+        Name      = $vm.Name
+        State     = [string]$vm.State
+        CPUCount  = [int]$vm.ProcessorCount
+        MemoryMB  = [int]$memMb
+        Status    = [string]$vm.Status
+        Uptime    = if ($vm.Uptime) { $vm.Uptime.ToString() } else { $null }
+        IpAddress = $ip
+        Version   = [string]$vm.Version
+        Path      = [string]$vm.Path
+      }
+    } | ConvertTo-Json -Depth 4 -Compress
+  }
+
+  Write-Output '[OK] Invoke-Command completed'
+  if ($null -eq $vms -or $vms -eq '') {
+    Write-Output '[]'
+  } else {
+    Write-Output $vms
+  }
+  exit 0
+} catch {
+  Write-Output ("[FAIL] " + $_.Exception.Message)
+  Write-Output '[HINT] Ensure WinRM is enabled (Enable-PSRemoting -Force), firewall allows 5985/5986, Hyper-V PowerShell is installed, and credentials have Hyper-V admin rights.'
+  exit 1
+}
+`.trim();
+
+    try {
+      fs.writeFileSync(localPs1Path, ps1, 'utf8');
+
+      const { stdout, stderr } = await execFileAsync(
+        psBinary,
+        ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', localPs1Path],
+        {
+          timeout: 120000,
+          maxBuffer: 10 * 1024 * 1024,
+          env: {
+            ...process.env,
+            QS_WINRM_TARGET: config.host,
+            QS_WINRM_USER: config.username,
+            QS_WINRM_PASS: config.password,
+          },
+        },
+      );
+
+      const combined = `${stdout || ''}\n${stderr || ''}`;
+      if (/\[FAIL\]/i.test(combined) || !/\[OK\] Invoke-Command completed/i.test(combined)) {
+        const failLine = combined.split('\n').find((l) => /\[FAIL\]/i.test(l)) || combined.trim();
+        throw new Error(failLine.replace(/^\[FAIL\]\s*/i, '').trim() || 'Hyper-V WinRM inventory failed');
+      }
+
+      // Extract JSON payload after the OK marker (array or single object)
+      const afterOk = combined.split(/\[OK\] Invoke-Command completed/i).pop() || '';
+      const jsonMatch = afterOk.match(/(\[[\s\S]*\]|\{[\s\S]*\})/);
+      if (!jsonMatch) {
+        this.logger.warn(`Hyper-V inventory returned no JSON from ${config.host}`);
+        return [];
+      }
+
+      let parsed: any;
+      try {
+        parsed = JSON.parse(jsonMatch[1]);
+      } catch (err: any) {
+        throw new Error(`Failed to parse Hyper-V inventory JSON: ${err.message}`);
+      }
+
+      const rows = Array.isArray(parsed) ? parsed : [parsed];
+      return rows.filter(Boolean).map((row: any) => this.mapHyperVRow(row, config.host));
+    } finally {
+      try {
+        fs.unlinkSync(localPs1Path);
+      } catch {
+        /* ignore */
+      }
+    }
+  }
+
+  private mapHyperVRow(row: any, hypervisorHost: string): VmInfo {
+    const stateRaw = String(row.State || row.state || '').toLowerCase();
+    let status: VmInfo['status'] = 'stopped';
+    if (stateRaw === 'running' || stateRaw === '2') status = 'running';
+    else if (stateRaw === 'paused' || stateRaw === 'saved' || stateRaw === '3' || stateRaw === '6') {
+      status = 'suspended';
+    } else if (stateRaw.includes('error') || stateRaw === 'critical') {
+      status = 'error';
+    }
+
+    return {
+      id: String(row.Id || row.id || row.Name || row.name),
+      name: String(row.Name || row.name || 'Unknown-VM'),
+      status,
+      os: 'Unknown',
+      host: hypervisorHost,
+      pool: 'Hyper-V',
+      cpu: Number(row.CPUCount ?? row.ProcessorCount ?? 0) || 0,
+      ramMb: Number(row.MemoryMB ?? 0) || 0,
+      diskGb: 0,
+      cpuUsage: null,
+      ramUsage: null,
+      diskUsage: null,
+      uptime: row.Uptime || undefined,
+      ipAddress: row.IpAddress || row.IPAddress || undefined,
+    };
+  }
+
+  /**
+   * Locate pwsh / powershell for WinRM Invoke-Command (same approach as discovery deploy).
+   */
+  private async findPowerShellBinary(): Promise<string | null> {
+    const candidates =
+      process.platform === 'win32'
+        ? ['pwsh.exe', 'powershell.exe']
+        : ['pwsh', 'powershell'];
+
+    for (const cmd of candidates) {
+      try {
+        if (process.platform === 'win32') {
+          await execFileAsync('where.exe', [cmd], { timeout: 5000 });
+        } else {
+          await execFileAsync('which', [cmd], { timeout: 5000 });
+        }
+        return cmd;
+      } catch {
+        // try next
+      }
+    }
+
+    const absPaths =
+      process.platform === 'win32'
+        ? [
+            'C:\\Program Files\\PowerShell\\7\\pwsh.exe',
+            'C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe',
+          ]
+        : ['/usr/bin/pwsh', '/usr/local/bin/pwsh', '/opt/microsoft/powershell/7/pwsh'];
+
+    for (const p of absPaths) {
+      if (fs.existsSync(p)) return p;
+    }
+    return null;
+  }
+
   // ─── Sync to MonitoredDevice ─────────────────────────────────────
 
   /**
@@ -222,7 +433,8 @@ export class VdiHypervisorService {
           vms = await this.proxmoxGetVMs(config);
           break;
         case 'hyper-v':
-          throw new NotImplementedException('Hyper-V integration is not yet available. Supported hypervisors: VMware Horizon, Proxmox VE.');
+          vms = await this.hyperVGetVMs(config);
+          break;
         default:
           this.logger.warn(`Unsupported hypervisor type: ${config.type}`);
           return { hypervisor: config.type, totalVMs: 0, created: 0, updated: 0, removed: 0 };
@@ -254,6 +466,8 @@ export class VdiHypervisorService {
           ramMb: vm.ramMb,
           diskGb: vm.diskGb,
           assignedUser: vm.assignedUser,
+          externalId: vm.id,
+          user: vm.assignedUser,
         },
         metrics: {
           cpu: vm.cpuUsage,
@@ -306,6 +520,209 @@ export class VdiHypervisorService {
     return settings.hypervisors || [];
   }
 
+  /**
+   * Build a console launch URL for a monitored VM.
+   * - Proxmox: VNC proxy ticket → noVNC console URL
+   * - VMware Horizon: HTML Access portal URL
+   * - Hyper-V: RDP connection hint (no browser console)
+   */
+  async getConsoleUrl(deviceId: string, tenantId: string): Promise<{
+    available: boolean;
+    type: string;
+    url?: string;
+    hint?: string;
+    reason?: string;
+  }> {
+    const device = await this.prisma.monitoredDevice.findFirst({
+      where: { id: deviceId, tenantId, type: 'VIRTUAL_MACHINE' },
+    });
+    if (!device) throw new BadRequestException('Virtual machine not found');
+
+    const cfg = (device.config as any) || {};
+    const hypervisorType = (cfg.hypervisor || cfg.hypervisorType || '') as string;
+    const hypervisors = await this.getHypervisors(tenantId);
+    const matched =
+      hypervisors.find(
+        (h) =>
+          h.host === cfg.hypervisorHost ||
+          h.type === hypervisorType ||
+          (hypervisorType && h.type?.includes(String(hypervisorType).replace('vmware-', ''))),
+      ) || hypervisors.find((h) => h.type === hypervisorType);
+
+    if (hypervisorType === 'proxmox' || matched?.type === 'proxmox') {
+      const config = matched || {
+        type: 'proxmox' as const,
+        host: cfg.hypervisorHost || '',
+        port: 8006,
+        username: '',
+        password: '',
+        ssl: true,
+        verifySsl: false,
+      };
+      if (!config.host || !config.username || !config.password) {
+        return {
+          available: false,
+          type: 'proxmox',
+          reason: 'Proxmox credentials not configured in tenant hypervisors settings.',
+        };
+      }
+      return this.proxmoxConsoleUrl(config, device.name, cfg);
+    }
+
+    if (
+      hypervisorType === 'vmware-horizon' ||
+      hypervisorType === 'horizon' ||
+      matched?.type === 'vmware-horizon'
+    ) {
+      const host = matched?.host || cfg.hypervisorHost;
+      if (!host) {
+        return {
+          available: false,
+          type: 'horizon',
+          reason: 'Horizon connection server host is not configured.',
+        };
+      }
+      const scheme = matched?.ssl === false ? 'http' : 'https';
+      const port = matched?.port && matched.port !== 443 ? `:${matched.port}` : '';
+      const url = `${scheme}://${host}${port}/portal/webclient/index.html`;
+      return {
+        available: true,
+        type: 'horizon',
+        url,
+        hint: 'Opens VMware Horizon HTML Access. Sign in with your Horizon credentials.',
+      };
+    }
+
+    if (hypervisorType === 'hyper-v' || matched?.type === 'hyper-v') {
+      const host = device.ipAddress || cfg.host || cfg.hypervisorHost || matched?.host;
+      if (!host) {
+        return {
+          available: false,
+          type: 'rdp',
+          reason: 'No IP/host available for RDP. Sync Hyper-V inventory or set the VM IP.',
+        };
+      }
+      return {
+        available: true,
+        type: 'rdp',
+        url: `rdp://full%20address=s:${host}:3389`,
+        hint: `Open Remote Desktop (mstsc) and connect to ${host}:3389. Browser WebRTC console is not available for Hyper-V.`,
+      };
+    }
+
+    // Fallback: if VM has an IP, offer RDP hint
+    if (device.ipAddress) {
+      return {
+        available: true,
+        type: 'rdp',
+        url: `rdp://full%20address=s:${device.ipAddress}:3389`,
+        hint: `No hypervisor console integration configured. Try RDP to ${device.ipAddress}:3389.`,
+      };
+    }
+
+    return {
+      available: false,
+      type: 'unknown',
+      reason:
+        'Console access requires a synced hypervisor (Proxmox, VMware Horizon, or Hyper-V) with credentials configured in settings.',
+    };
+  }
+
+  private async proxmoxConsoleUrl(
+    config: HypervisorConfig,
+    vmName: string,
+    cfg: any,
+  ): Promise<{ available: boolean; type: string; url?: string; hint?: string; reason?: string }> {
+    try {
+      const { ticket, csrfToken } = await this.proxmoxLogin({
+        ...config,
+        ssl: true,
+        verifySsl: false,
+        port: config.port || 8006,
+      });
+
+      // Resolve node + vmid from config or id pattern "node-vmid"
+      let node = cfg.host || cfg.node;
+      let vmid = cfg.vmid || cfg.vmId;
+      if ((!node || !vmid) && cfg.hypervisorId) {
+        const parts = String(cfg.hypervisorId).split('-');
+        if (parts.length >= 2) {
+          vmid = parts.pop();
+          node = parts.join('-');
+        }
+      }
+      // Try matching from name sync id stored as `${node}-${vmid}`
+      const existingId = String(cfg.externalId || '');
+      if ((!node || !vmid) && existingId.includes('-')) {
+        const parts = existingId.split('-');
+        vmid = parts.pop();
+        node = parts.join('-');
+      }
+
+      if (!node || !vmid) {
+        // Look up from live inventory
+        const vms = await this.proxmoxGetVMs({ ...config, ssl: true, verifySsl: false, port: config.port || 8006 });
+        const match = vms.find((v) => v.name === vmName);
+        if (match) {
+          const parts = match.id.split('-');
+          vmid = parts.pop();
+          node = parts.join('-');
+        }
+      }
+
+      if (!node || !vmid) {
+        return {
+          available: false,
+          type: 'proxmox',
+          reason: 'Could not resolve Proxmox node/VMID for this VM. Re-sync from Proxmox.',
+        };
+      }
+
+      const proxy = await this.apiRequest(
+        { ...config, ssl: true, verifySsl: false, port: config.port || 8006 },
+        'POST',
+        `/api2/json/nodes/${encodeURIComponent(node)}/qemu/${encodeURIComponent(String(vmid))}/vncproxy`,
+        '',
+        undefined,
+        'application/x-www-form-urlencoded',
+        `PVEAuthCookie=${ticket}`,
+        csrfToken ? { CSRFPreventionToken: csrfToken } : undefined,
+      );
+
+      const vncticket = proxy?.data?.ticket;
+      if (!vncticket) {
+        return {
+          available: false,
+          type: 'proxmox',
+          reason: 'Proxmox VNC proxy did not return a ticket. Check API permissions (VM.Console).',
+        };
+      }
+
+      const host = config.host;
+      const port = config.port || 8006;
+      const url =
+        `https://${host}:${port}/?console=kvm&novnc=1` +
+        `&vmid=${encodeURIComponent(String(vmid))}` +
+        `&vmname=${encodeURIComponent(vmName)}` +
+        `&node=${encodeURIComponent(node)}` +
+        `&resize=1&vncticket=${encodeURIComponent(vncticket)}`;
+
+      return {
+        available: true,
+        type: 'proxmox',
+        url,
+        hint: 'Opens Proxmox noVNC console. Your session ticket is short-lived.',
+      };
+    } catch (err: any) {
+      this.logger.error(`Proxmox console URL failed: ${err.message}`);
+      return {
+        available: false,
+        type: 'proxmox',
+        reason: err.message || 'Failed to obtain Proxmox console ticket',
+      };
+    }
+  }
+
   // ─── Helpers ─────────────────────────────────────────────────────
 
   private async apiRequest(
@@ -316,6 +733,7 @@ export class VdiHypervisorService {
     authToken?: string,
     contentType = 'application/json',
     cookie?: string,
+    extraHeaders?: Record<string, string>,
   ): Promise<any> {
     return new Promise((resolve, reject) => {
       const isHttps = config.ssl !== false;
@@ -324,6 +742,7 @@ export class VdiHypervisorService {
       const headers: Record<string, string> = {
         'Content-Type': contentType,
         'Accept': 'application/json',
+        ...(extraHeaders || {}),
       };
       if (body) headers['Content-Length'] = Buffer.byteLength(body).toString();
       if (authToken) headers['Authorization'] = `Bearer ${authToken}`;

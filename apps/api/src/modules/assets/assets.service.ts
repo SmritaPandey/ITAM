@@ -1,17 +1,30 @@
-import { Injectable, NotFoundException, HttpException, HttpStatus } from '@nestjs/common';
+import { Injectable, NotFoundException, HttpException, HttpStatus, OnModuleInit, Logger } from '@nestjs/common';
 import { PrismaService } from '../../common/database/prisma.service';
 import { TenantMeteringService } from '../tenants/tenant-metering.service';
+import { JobQueueService } from '../../common/queue/job-queue.service';
 import { Prisma } from '@prisma/client';
 
 const MAX_BULK_IMPORT = 500;
 const MAX_EXPORT_RECORDS = 10000;
 
 @Injectable()
-export class AssetsService {
+export class AssetsService implements OnModuleInit {
+  private readonly logger = new Logger(AssetsService.name);
+
   constructor(
     private prisma: PrismaService,
     private metering: TenantMeteringService,
+    private jobQueue: JobQueueService,
   ) {}
+
+  onModuleInit() {
+    this.jobQueue.registerHandler('depreciation.mass', async (job) => {
+      const tenantId = String((job.data as any)?.tenantId || '');
+      if (!tenantId) throw new Error('tenantId required for depreciation.mass');
+      this.logger.log(`Running mass depreciation for tenant ${tenantId}`);
+      return this.runMassDepreciation(tenantId);
+    });
+  }
 
   async findAll(tenantId: string, filters: {
     page?: number; limit?: number; status?: string; assetTypeId?: string;
@@ -158,7 +171,8 @@ export class AssetsService {
   }
 
   async getDashboardStats(tenantId: string) {
-    const [total, byStatus, byType, recentlyAdded] = await Promise.all([
+    const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+    const [total, byStatus, byType, recentlyAdded, recentAssets] = await Promise.all([
       this.prisma.asset.count({ where: { tenantId, deletedAt: null } }),
       this.prisma.asset.groupBy({
         by: ['status'],
@@ -174,11 +188,30 @@ export class AssetsService {
         where: {
           tenantId,
           deletedAt: null,
-          createdAt: { gte: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000) },
+          createdAt: { gte: weekAgo },
         },
       }),
+      this.prisma.asset.findMany({
+        where: { tenantId, deletedAt: null, createdAt: { gte: weekAgo } },
+        select: { createdAt: true },
+        take: 2000,
+      }),
     ]);
-    return { total, byStatus, byType, recentlyAdded };
+    const weeklyCreated = this.bucketByDay(recentAssets.map((a) => a.createdAt));
+    return { total, byStatus, byType, recentlyAdded, weeklyCreated };
+  }
+
+  private bucketByDay(dates: Date[]): { day: string; count: number }[] {
+    const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+    const buckets: Record<string, number> = {};
+    DAYS.forEach((d) => (buckets[d] = 0));
+    for (const d of dates) {
+      buckets[DAYS[new Date(d).getDay()]]++;
+    }
+    return ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map((day) => ({
+      day,
+      count: buckets[day] || 0,
+    }));
   }
 
   async bulkImport(tenantId: string, userId: string, assets: any[]) {
@@ -391,23 +424,91 @@ export class AssetsService {
   }
 
   // ─── QR / BARCODE ──────────────────────────────────────────────────────
-  async getQrData(assetId: string, tenantId: string, baseUrl = process.env.APP_URL || process.env.FRONTEND_URL || 'http://localhost:3100') {
+  private resolveBarcodeValue(asset: { barcode?: string | null; assetTag?: string | null; id: string }) {
+    return asset.barcode || asset.assetTag || asset.id.substring(0, 12);
+  }
+
+  private resolveAppBaseUrl(baseUrl?: string) {
+    return (baseUrl || process.env.APP_URL || process.env.FRONTEND_URL || 'http://localhost:3100').replace(/\/$/, '');
+  }
+
+  async getQrData(assetId: string, tenantId: string, baseUrl?: string) {
     const asset = await this.findById(assetId, tenantId);
+    const appBase = this.resolveAppBaseUrl(baseUrl);
+    const barcode = this.resolveBarcodeValue(asset);
+    const qrUrl = `${appBase}/scan?code=${encodeURIComponent(barcode)}`;
     return {
       assetId: asset.id,
       assetTag: asset.assetTag,
       name: asset.name,
       serialNumber: asset.serialNumber,
-      barcode: asset.barcode || asset.assetTag || asset.id.substring(0, 12),
-      qrUrl: `${baseUrl}/dashboard/assets/${asset.id}`,
-      qrContent: JSON.stringify({ id: asset.id, tag: asset.assetTag, name: asset.name }),
+      barcode,
+      qrUrl,
+      qrContent: qrUrl,
+      deepLink: `${appBase}/dashboard/assets/${asset.id}`,
     };
   }
 
+  async generateQrPng(assetId: string, tenantId: string, baseUrl?: string): Promise<Buffer> {
+    const QRCode = await import('qrcode');
+    const data = await this.getQrData(assetId, tenantId, baseUrl);
+    return QRCode.toBuffer(data.qrUrl, {
+      type: 'png',
+      width: 280,
+      margin: 2,
+      errorCorrectionLevel: 'M',
+      color: { dark: '#000000', light: '#ffffff' },
+    });
+  }
+
+  async generateBarcodePng(assetId: string, tenantId: string): Promise<{ buffer: Buffer; barcode: string }> {
+    const bwipjs = await import('bwip-js');
+    const asset = await this.findById(assetId, tenantId);
+    const barcode = this.resolveBarcodeValue(asset);
+    const png = await bwipjs.toBuffer({
+      bcid: 'code128',
+      text: barcode,
+      scale: 3,
+      height: 12,
+      includetext: true,
+      textxalign: 'center',
+      backgroundcolor: 'FFFFFF',
+    });
+    return { buffer: Buffer.from(png), barcode };
+  }
+
   async lookupByBarcode(tenantId: string, barcode: string) {
+    const code = (barcode || '').trim();
+    if (!code) throw new HttpException('Barcode is required', HttpStatus.BAD_REQUEST);
+
+    // Accept raw barcode/tag/serial, or a scan URL like /scan?code=TAG
+    let lookup = code;
+    try {
+      if (code.includes('://') || code.startsWith('/scan')) {
+        const url = code.includes('://') ? new URL(code) : new URL(code, 'http://localhost');
+        const fromQuery = url.searchParams.get('code');
+        if (fromQuery) lookup = fromQuery.trim();
+      }
+    } catch {
+      // keep raw code
+    }
+
     const asset = await this.prisma.asset.findFirst({
-      where: { tenantId, deletedAt: null, OR: [{ barcode }, { assetTag: barcode }, { serialNumber: barcode }] },
-      include: { assetType: true, assignedTo: { select: { firstName: true, lastName: true } } },
+      where: {
+        tenantId,
+        deletedAt: null,
+        OR: [
+          { barcode: { equals: lookup, mode: 'insensitive' } },
+          { assetTag: { equals: lookup, mode: 'insensitive' } },
+          { serialNumber: { equals: lookup, mode: 'insensitive' } },
+          { rfidTag: { equals: lookup, mode: 'insensitive' } },
+        ],
+      },
+      include: {
+        assetType: true,
+        assignedTo: { select: { id: true, firstName: true, lastName: true, email: true } },
+        site: { select: { id: true, name: true } },
+      },
     });
     if (!asset) throw new NotFoundException('No asset found for barcode');
     return asset;
@@ -432,33 +533,121 @@ export class AssetsService {
   }
 
   // ─── ATTESTATION ───────────────────────────────────────────────────────
-  async createAttestationCampaign(tenantId: string, campaignName: string) {
+  async createAttestationCampaign(tenantId: string, campaignName: string, opts?: { assetIds?: string[]; userIds?: string[] }) {
+    const name = (campaignName || '').trim() || `Attestation ${new Date().toISOString().slice(0, 10)}`;
+    const where: Prisma.AssetWhereInput = {
+      tenantId,
+      deletedAt: null,
+      assignedToId: { not: null },
+      status: 'ACTIVE',
+    };
+    if (opts?.assetIds?.length) where.id = { in: opts.assetIds };
+    if (opts?.userIds?.length) where.assignedToId = { in: opts.userIds };
+
     const assets = await this.prisma.asset.findMany({
-      where: { tenantId, deletedAt: null, assignedToId: { not: null }, status: 'ACTIVE' },
+      where,
       select: { id: true, assignedToId: true },
     });
 
-    const records = assets.map(a => ({
-      tenantId, assetId: a.id, userId: a.assignedToId!, campaignName,
+    const records = assets.map((a) => ({
+      tenantId,
+      assetId: a.id,
+      userId: a.assignedToId!,
+      campaignName: name,
     }));
 
-    await this.prisma.assetAttestation.createMany({ data: records });
-    return { campaign: campaignName, assetsRequested: records.length };
+    if (records.length) {
+      await this.prisma.assetAttestation.createMany({ data: records });
+    }
+    return { campaign: name, assetsRequested: records.length };
   }
 
-  async getPendingAttestations(tenantId: string) {
+  async getPendingAttestations(tenantId: string, campaignName?: string) {
     return this.prisma.assetAttestation.findMany({
-      where: { tenantId, response: null },
+      where: {
+        tenantId,
+        response: null,
+        ...(campaignName && { campaignName }),
+      },
       include: { asset: { select: { id: true, name: true, assetTag: true } } },
       orderBy: { requestedAt: 'desc' },
     });
   }
 
+  async listAttestationCampaigns(tenantId: string) {
+    const rows = await this.prisma.assetAttestation.groupBy({
+      by: ['campaignName'],
+      where: { tenantId, campaignName: { not: null } },
+      _count: { id: true },
+    });
+    const result = [];
+    for (const row of rows) {
+      const pending = await this.prisma.assetAttestation.count({
+        where: { tenantId, campaignName: row.campaignName, response: null },
+      });
+      const confirmed = await this.prisma.assetAttestation.count({
+        where: { tenantId, campaignName: row.campaignName, response: 'CONFIRMED' },
+      });
+      result.push({
+        campaignName: row.campaignName,
+        total: row._count.id,
+        pending,
+        confirmed,
+        responded: row._count.id - pending,
+      });
+    }
+    return result.sort((a, b) => String(b.campaignName).localeCompare(String(a.campaignName)));
+  }
+
   async respondAttestation(id: string, tenantId: string, response: string, notes?: string) {
+    const row = await this.prisma.assetAttestation.findFirst({ where: { id, tenantId } });
+    if (!row) throw new NotFoundException('Attestation not found');
+    const allowed = ['CONFIRMED', 'LOST', 'TRANSFERRED', 'NO_RESPONSE'];
+    if (!allowed.includes(response)) {
+      throw new HttpException(`response must be one of ${allowed.join(', ')}`, HttpStatus.BAD_REQUEST);
+    }
     return this.prisma.assetAttestation.update({
-      where: { id, tenantId },
+      where: { id },
       data: { response, respondedAt: new Date(), notes },
     });
+  }
+
+  /** Remind owners of pending attestations via AlertEvent. */
+  async remindAttestations(tenantId: string, campaignName?: string) {
+    const pending = await this.prisma.assetAttestation.findMany({
+      where: {
+        tenantId,
+        response: null,
+        ...(campaignName && { campaignName }),
+      },
+      include: {
+        asset: { select: { id: true, name: true, assetTag: true } },
+      },
+      take: 500,
+    });
+
+    let reminded = 0;
+    for (const a of pending) {
+      await this.prisma.alertEvent.create({
+        data: {
+          tenantId,
+          severity: 'MEDIUM',
+          category: 'ATTESTATION',
+          title: `Asset attestation reminder: ${a.asset?.name || a.assetId}`,
+          message: `Please certify custody of asset ${a.asset?.assetTag || a.assetId} for campaign "${a.campaignName || 'Attestation'}".`,
+          source: 'itam.attestation',
+          sourceId: a.id,
+          metadata: {
+            attestationId: a.id,
+            assetId: a.assetId,
+            userId: a.userId,
+            campaignName: a.campaignName,
+          },
+        },
+      });
+      reminded++;
+    }
+    return { reminded, pending: pending.length, campaignName: campaignName || null };
   }
 
   // ─── WARRANTY / LEASE EXPIRY ───────────────────────────────────────────
@@ -517,6 +706,137 @@ export class AssetsService {
       percentDepreciated: Math.round(percentDepreciated * 10) / 10,
       projectedEolValue: salvageValue,
       fullyDepreciated: monthsElapsed >= usefulLifeMonths,
+    };
+  }
+
+  /** Batch recalculate currentValue for all assets with purchasePrice. */
+  async runMassDepreciation(tenantId: string) {
+    const assets = await this.prisma.asset.findMany({
+      where: { tenantId, deletedAt: null, purchasePrice: { not: null } },
+      select: { id: true },
+    });
+    let updated = 0;
+    for (const a of assets) {
+      const calc = await this.calculateDepreciation(a.id, tenantId);
+      await this.prisma.asset.update({
+        where: { id: a.id },
+        data: { currentValue: calc.currentBookValue },
+      });
+      updated++;
+    }
+    return { updated, total: assets.length };
+  }
+
+  /** Enqueue (or run inline) mass depreciation for a tenant. */
+  async enqueueMassDepreciation(tenantId: string) {
+    const result = await this.jobQueue.enqueue('depreciation.mass', { tenantId });
+    if (result && typeof result === 'object' && 'updated' in (result as any)) {
+      return result;
+    }
+    return { queued: true, jobId: (result as any)?.id ?? null };
+  }
+
+  async financeDepreciationReport(tenantId: string) {
+    const assets = await this.prisma.asset.findMany({
+      where: { tenantId, deletedAt: null, purchasePrice: { not: null } },
+      select: {
+        id: true, name: true, assetTag: true, purchasePrice: true,
+        currentValue: true, salvageValue: true, usefulLifeMonths: true,
+        depreciationMethod: true, procurementDate: true, status: true,
+      },
+    });
+    const rows = [];
+    let totalPurchase = 0;
+    let totalBook = 0;
+    for (const a of assets) {
+      const calc = await this.calculateDepreciation(a.id, tenantId);
+      totalPurchase += calc.purchasePrice;
+      totalBook += calc.currentBookValue;
+      rows.push(calc);
+    }
+    return {
+      generatedAt: new Date().toISOString(),
+      assetCount: rows.length,
+      totalPurchasePrice: Math.round(totalPurchase * 100) / 100,
+      totalBookValue: Math.round(totalBook * 100) / 100,
+      totalDepreciated: Math.round((totalPurchase - totalBook) * 100) / 100,
+      assets: rows,
+    };
+  }
+
+  async findByRfid(tenantId: string, rfidTag: string) {
+    const tag = (rfidTag || '').trim();
+    if (!tag) throw new HttpException('RFID tag is required', HttpStatus.BAD_REQUEST);
+    // Same resolution path as barcode/tag/serial lookup (includes rfidTag)
+    return this.lookupByBarcode(tenantId, tag);
+  }
+
+  /**
+   * CMDB impact analysis — BFS through DEPENDS_ON / COMPONENT_OF relationships.
+   */
+  async getImpactAnalysis(assetId: string, tenantId: string, maxDepth = 8) {
+    const root = await this.findById(assetId, tenantId);
+    const visited = new Set<string>([assetId]);
+    const impacted: Array<{
+      assetId: string;
+      name: string;
+      assetTag: string | null;
+      status: string;
+      depth: number;
+      via: string;
+    }> = [];
+    let frontier = [assetId];
+    const IMPACT_TYPES = ['DEPENDS_ON', 'COMPONENT_OF'] as const;
+
+    for (let depth = 1; depth <= maxDepth && frontier.length; depth++) {
+      const rels = await this.prisma.assetRelationship.findMany({
+        where: {
+          tenantId,
+          relationshipType: { in: [...IMPACT_TYPES] },
+          OR: [
+            { sourceAssetId: { in: frontier } },
+            { targetAssetId: { in: frontier } },
+          ],
+        },
+        include: {
+          sourceAsset: { select: { id: true, name: true, assetTag: true, status: true } },
+          targetAsset: { select: { id: true, name: true, assetTag: true, status: true } },
+        },
+      });
+      const next: string[] = [];
+      for (const r of rels) {
+        const neighbors = [
+          { node: r.sourceAsset, via: r.relationshipType as string },
+          { node: r.targetAsset, via: r.relationshipType as string },
+        ];
+        for (const { node, via } of neighbors) {
+          if (!node || visited.has(node.id)) continue;
+          visited.add(node.id);
+          next.push(node.id);
+          impacted.push({
+            assetId: node.id,
+            name: node.name,
+            assetTag: node.assetTag,
+            status: node.status,
+            depth,
+            via,
+          });
+        }
+      }
+      frontier = next;
+    }
+
+    return {
+      root: {
+        id: root.id,
+        name: root.name,
+        assetTag: root.assetTag,
+        status: root.status,
+      },
+      rootAssetId: assetId,
+      impactedCount: impacted.length,
+      maxDepth: impacted.reduce((m, i) => Math.max(m, i.depth), 0),
+      impacted,
     };
   }
 }

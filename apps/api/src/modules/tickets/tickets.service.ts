@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../../common/database/prisma.service';
 import { Prisma } from '@prisma/client';
 import { EventBusService } from '../../common/events/event-bus.service';
@@ -183,14 +183,30 @@ export class TicketsService {
   }
 
   async getStats(tenantId: string) {
-    const [byStatus, byPriority, byType, total, openCount] = await Promise.all([
+    const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+    const [byStatus, byPriority, byType, total, openCount, recentTickets] = await Promise.all([
       this.prisma.ticket.groupBy({ by: ['status'], where: { tenantId }, _count: true }),
       this.prisma.ticket.groupBy({ by: ['priority'], where: { tenantId }, _count: true }),
       this.prisma.ticket.groupBy({ by: ['type'], where: { tenantId }, _count: true }),
       this.prisma.ticket.count({ where: { tenantId } }),
       this.prisma.ticket.count({ where: { tenantId, status: { in: ['NEW', 'OPEN', 'IN_PROGRESS'] } } }),
+      this.prisma.ticket.findMany({
+        where: { tenantId, createdAt: { gte: weekAgo } },
+        select: { createdAt: true },
+        take: 2000,
+      }),
     ]);
-    return { total, open: openCount, byStatus, byPriority, byType };
+    const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+    const buckets: Record<string, number> = {};
+    DAYS.forEach((d) => (buckets[d] = 0));
+    for (const t of recentTickets) {
+      buckets[DAYS[new Date(t.createdAt).getDay()]]++;
+    }
+    const weeklyCreated = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map((day) => ({
+      day,
+      count: buckets[day] || 0,
+    }));
+    return { total, open: openCount, byStatus, byPriority, byType, weeklyCreated };
   }
 
   async update(id: string, tenantId: string, data: any) {
@@ -214,6 +230,117 @@ export class TicketsService {
     await this.prisma.ticketComment.deleteMany({ where: { ticketId: id } });
     await this.prisma.ticketAsset.deleteMany({ where: { ticketId: id } });
     return this.prisma.ticket.delete({ where: { id } });
+  }
+
+  /**
+   * CSAT survey — only when ticket is RESOLVED or CLOSED.
+   */
+  async submitCsat(
+    id: string,
+    tenantId: string,
+    data: { score: number; comment?: string },
+    requesterId?: string,
+  ) {
+    const ticket = await this.findById(id, tenantId);
+    if (!['RESOLVED', 'CLOSED'].includes(ticket.status)) {
+      throw new BadRequestException('CSAT can only be submitted for RESOLVED or CLOSED tickets');
+    }
+    if (ticket.satisfactionScore != null && ticket.csatAt) {
+      throw new BadRequestException('CSAT already submitted for this ticket');
+    }
+    const score = Number(data.score);
+    if (!Number.isFinite(score) || score < 1 || score > 5) {
+      throw new BadRequestException('score must be an integer from 1 to 5');
+    }
+    if (requesterId && ticket.requesterId !== requesterId) {
+      // Allow admins; employees may only rate their own tickets
+      const admin = await this.prisma.user.findFirst({
+        where: {
+          id: requesterId,
+          tenantId,
+          role: { name: { in: ['Tenant Admin', 'IT Admin'] } },
+        },
+      });
+      if (!admin) {
+        throw new BadRequestException('Only the requester (or an admin) can submit CSAT');
+      }
+    }
+    return this.prisma.ticket.update({
+      where: { id },
+      data: {
+        satisfactionScore: Math.round(score),
+        csatComment: data.comment || null,
+        csatAt: new Date(),
+      },
+    });
+  }
+
+  /**
+   * Suggest knowledge-base articles for a ticket (subject/description keywords).
+   */
+  async suggestKb(tenantId: string, ticketIdOrQuery: string, opts?: { q?: string; limit?: number }) {
+    let query = (opts?.q || '').trim();
+    if (!query && ticketIdOrQuery) {
+      // If looks like UUID, load ticket; otherwise treat as search string
+      const isUuid = /^[0-9a-f-]{36}$/i.test(ticketIdOrQuery);
+      if (isUuid) {
+        const ticket = await this.prisma.ticket.findFirst({
+          where: { id: ticketIdOrQuery, tenantId },
+          select: { subject: true, description: true, category: true },
+        });
+        if (ticket) {
+          query = [ticket.subject, ticket.category, (ticket.description || '').slice(0, 120)]
+            .filter(Boolean)
+            .join(' ');
+        }
+      } else {
+        query = ticketIdOrQuery;
+      }
+    }
+    if (!query || query.length < 2) {
+      return { data: [], query: '', total: 0 };
+    }
+
+    // Extract distinctive tokens (≥4 chars), drop stopwords
+    const stop = new Set([
+      'the', 'and', 'for', 'with', 'from', 'this', 'that', 'have', 'been', 'were',
+      'will', 'your', 'into', 'about', 'please', 'issue', 'problem', 'request',
+    ]);
+    const tokens = query
+      .toLowerCase()
+      .replace(/[^a-z0-9\s-]/g, ' ')
+      .split(/\s+/)
+      .filter((t) => t.length >= 4 && !stop.has(t))
+      .slice(0, 8);
+
+    const orClauses: any[] = tokens.flatMap((t) => [
+      { title: { contains: t, mode: 'insensitive' } },
+      { content: { contains: t, mode: 'insensitive' } },
+      { tags: { has: t } },
+    ]);
+    // Also full-phrase title search
+    orClauses.push({ title: { contains: query.slice(0, 80), mode: 'insensitive' } });
+
+    const articles = await this.prisma.knowledgeArticle.findMany({
+      where: {
+        tenantId,
+        status: 'PUBLISHED',
+        OR: orClauses.length ? orClauses : undefined,
+      },
+      orderBy: { viewCount: 'desc' },
+      take: Math.min(opts?.limit || 5, 20),
+      select: {
+        id: true,
+        title: true,
+        category: true,
+        tags: true,
+        viewCount: true,
+        helpfulCount: true,
+        updatedAt: true,
+      },
+    });
+
+    return { data: articles, query, tokens, total: articles.length };
   }
 }
 

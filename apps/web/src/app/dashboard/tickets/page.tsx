@@ -6,6 +6,8 @@ import CreateTicketPanel from "@/components/CreateTicketPanel";
 import { apiFetch } from "@/lib/api";
 import { useRealtimeEvents } from "@/lib/useRealtimeEvents";
 import { PageHelp } from "@/components/HelpSystem";
+import PageHeader from "@/components/PageHeader";
+import EmptyState from "@/components/EmptyState";
 
 const PRIORITY_BADGE: Record<string, string> = { CRITICAL: "red", HIGH: "amber", MEDIUM: "blue", LOW: "gray" };
 const STATUS_BADGE: Record<string, string> = { NEW: "blue", OPEN: "cyan", IN_PROGRESS: "purple", PENDING: "amber", RESOLVED: "green", CLOSED: "gray" };
@@ -69,13 +71,14 @@ export default function TicketsPage() {
 
   return (
     <>
-      <div className="page-header">
-        <div>
-          <h1 className="page-title">Tickets</h1>
-          <p className="page-subtitle">{tickets.total} tickets • Incidents, Problems, Changes & Service Requests</p>
-        </div>
-        <button className="btn btn-primary" onClick={() => setShowCreate(true)}><Plus size={14} /> New Ticket</button>
-      </div>
+      <PageHeader
+        eyebrow="ITSM"
+        title="Tickets"
+        description={`${tickets.total} tickets • Incidents, Problems, Changes & Service Requests`}
+        actions={
+          <button className="btn btn-primary" onClick={() => setShowCreate(true)}><Plus size={14} /> New Ticket</button>
+        }
+      />
 
       {/* Search */}
       <div style={{ marginBottom: 12, display: "flex", gap: 10 }}>
@@ -179,7 +182,19 @@ export default function TicketsPage() {
           </thead>
           <tbody>
             {loading ? (
-              <tr><td colSpan={8} style={{ textAlign: "center", padding: 40, color: "var(--text-tertiary)" }}>Loading...</td></tr>
+              <tr><td colSpan={9} style={{ textAlign: "center", padding: 40, color: "var(--text-tertiary)" }}>Loading...</td></tr>
+            ) : !(statusFilter ? tickets.data?.filter((t: any) => t.status === statusFilter) : tickets.data)?.length ? (
+              <tr>
+                <td colSpan={9} style={{ padding: 0, border: "none" }}>
+                  <EmptyState
+                    compact
+                    icon={<MessageSquare size={28} />}
+                    title="No tickets yet"
+                    description="Create an incident, service request, or change to get started."
+                    action={{ label: "New Ticket", onClick: () => setShowCreate(true) }}
+                  />
+                </td>
+              </tr>
             ) : (statusFilter ? tickets.data?.filter((t: any) => t.status === statusFilter) : tickets.data)?.map((t: any) => {
               const sla = slaCountdown(t.resolutionDueAt);
               return (

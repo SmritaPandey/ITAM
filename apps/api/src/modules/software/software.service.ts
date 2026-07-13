@@ -4,6 +4,10 @@ import { PrismaService } from '../../common/database/prisma.service';
 @Injectable()
 export class SoftwareService {
   private readonly logger = new Logger(SoftwareService.name);
+  /** Skip identical package inventories between agent heartbeats (per asset). */
+  private readonly ingestFingerprints = new Map<string, string>();
+  /** Serialize ingest per asset so heartbeats cannot pile up. */
+  private readonly ingestInFlight = new Map<string, Promise<void>>();
 
   constructor(private prisma: PrismaService) {}
 
@@ -22,6 +26,14 @@ export class SoftwareService {
   ) {
     this.logger.log(`findAll: tenantId=${tenantId}, page=${page}, limit=${limit}, search=${search}, sortBy=${sortBy}`);
     const skip = (Number(page) - 1) * Number(limit);
+    const take = Number(limit);
+
+    // installCount sort via relation _count is very expensive on large catalogs —
+    // use a single indexed LEFT JOIN instead.
+    if (sortBy === 'installCount') {
+      return this.findAllByInstallCount(tenantId, skip, take, search, filters);
+    }
+
     const where: any = { tenantId };
 
     if (search) {
@@ -51,8 +63,6 @@ export class SoftwareService {
       orderBy = { riskScore: 'desc' };
     } else if (sortBy === 'createdAt') {
       orderBy = { createdAt: 'desc' };
-    } else if (sortBy === 'installCount') {
-      orderBy = { installations: { _count: 'desc' } };
     }
 
     const [data, total] = await Promise.all([
@@ -61,12 +71,100 @@ export class SoftwareService {
         include: { _count: { select: { installations: true } } },
         orderBy,
         skip,
-        take: Number(limit),
+        take,
       }),
       this.prisma.softwareCatalog.count({ where }),
     ]);
 
-    return { data, total, page: Number(page), limit: Number(limit) };
+    return { data, total, page: Number(page), limit: take };
+  }
+
+  private async findAllByInstallCount(
+    tenantId: string,
+    skip: number,
+    take: number,
+    search?: string,
+    filters?: {
+      authorizationStatus?: string;
+      lifecycleStatus?: string;
+      category?: string;
+      publisher?: string;
+    },
+  ) {
+    const params: any[] = [tenantId];
+    const clauses = [`c.tenant_id = $1::uuid`];
+
+    if (search) {
+      params.push(`%${search}%`);
+      const i = params.length;
+      clauses.push(`(c.name ILIKE $${i} OR c.publisher ILIKE $${i})`);
+    }
+    if (filters?.authorizationStatus) {
+      params.push(filters.authorizationStatus);
+      clauses.push(`c.authorization_status = $${params.length}`);
+    }
+    if (filters?.lifecycleStatus) {
+      params.push(filters.lifecycleStatus);
+      clauses.push(`c.lifecycle_status = $${params.length}`);
+    }
+    if (filters?.category) {
+      params.push(filters.category);
+      clauses.push(`c.category = $${params.length}`);
+    }
+    if (filters?.publisher) {
+      params.push(filters.publisher);
+      clauses.push(`c.publisher = $${params.length}`);
+    }
+
+    const whereSql = clauses.join(' AND ');
+    params.push(take);
+    const takeIdx = params.length;
+    params.push(skip);
+    const skipIdx = params.length;
+
+    const rows: any[] = await this.prisma.$queryRawUnsafe(
+      `
+      SELECT
+        c.id, c.tenant_id AS "tenantId", c.name, c.publisher, c.category,
+        c.is_blacklisted AS "isBlacklisted", c.is_authorized AS "isAuthorized",
+        c.authorization_status AS "authorizationStatus",
+        c.latest_version AS "latestVersion",
+        c.eol_date AS "eolDate", c.eos_date AS "eosDate",
+        c.lifecycle_status AS "lifecycleStatus",
+        c.risk_score AS "riskScore", c.description, c.website,
+        c.created_at AS "createdAt", c.updated_at AS "updatedAt",
+        COALESCE(ic.cnt, 0)::int AS "installCount"
+      FROM software_catalog c
+      LEFT JOIN (
+        SELECT software_id, COUNT(*)::int AS cnt
+        FROM software_installations
+        WHERE tenant_id = $1::uuid
+        GROUP BY software_id
+      ) ic ON ic.software_id = c.id
+      WHERE ${whereSql}
+      ORDER BY COALESCE(ic.cnt, 0) DESC, c.name ASC
+      LIMIT $${takeIdx} OFFSET $${skipIdx}
+      `,
+      ...params,
+    );
+
+    const countParams = params.slice(0, params.length - 2);
+    const countRows: any[] = await this.prisma.$queryRawUnsafe(
+      `SELECT COUNT(*)::int AS total FROM software_catalog c WHERE ${whereSql}`,
+      ...countParams,
+    );
+
+    const data = rows.map((r) => ({
+      ...r,
+      _count: { installations: r.installCount ?? 0 },
+    }));
+
+    return {
+      data,
+      total: countRows[0]?.total ?? 0,
+      page: Math.floor(skip / take) + 1,
+      limit: take,
+    };
   }
 
   async getDashboard(tenantId: string) {
@@ -103,15 +201,19 @@ export class SoftwareService {
       take: 10,
     });
 
-    const topInstalled = await this.prisma.softwareCatalog.findMany({
-      where: { tenantId },
-      select: {
-        id: true, name: true, publisher: true,
-        _count: { select: { installations: true } },
-      },
-      orderBy: { installations: { _count: 'desc' } },
-      take: 10,
-    });
+    const topInstalled = await this.prisma.$queryRawUnsafe(`
+      SELECT c.id, c.name, c.publisher, COALESCE(ic.cnt, 0)::int AS "installCount"
+      FROM software_catalog c
+      LEFT JOIN (
+        SELECT software_id, COUNT(*)::int AS cnt
+        FROM software_installations
+        WHERE tenant_id = $1::uuid
+        GROUP BY software_id
+      ) ic ON ic.software_id = c.id
+      WHERE c.tenant_id = $1::uuid
+      ORDER BY COALESCE(ic.cnt, 0) DESC, c.name ASC
+      LIMIT 10
+    `, tenantId) as any[];
 
     return {
       totalSoftware: c.totalSoftware || 0,
@@ -135,7 +237,8 @@ export class SoftwareService {
         id: s.id,
         name: s.name,
         publisher: s.publisher,
-        installationCount: s._count.installations,
+        installationCount: s.installCount ?? 0,
+        installCount: s.installCount ?? 0,
       })),
     };
   }
@@ -317,10 +420,295 @@ export class SoftwareService {
       }
     }
 
-    return this.prisma.softwareCatalog.update({
+    // Keep blacklist flags in sync
+    if (updateData.authorizationStatus === 'BLACKLISTED') {
+      updateData.isBlacklisted = true;
+      updateData.isAuthorized = false;
+    } else if (updateData.isBlacklisted === true) {
+      updateData.authorizationStatus = 'BLACKLISTED';
+      updateData.isAuthorized = false;
+    } else if (updateData.authorizationStatus && updateData.authorizationStatus !== 'BLACKLISTED') {
+      updateData.isBlacklisted = false;
+    }
+
+    const updated = await this.prisma.softwareCatalog.update({
       where: { id },
       data: updateData,
     });
+
+    if (updated.isBlacklisted || updated.authorizationStatus === 'BLACKLISTED') {
+      await this.enforceBlacklistToAgents(tenantId, updated);
+    }
+
+    return updated;
+  }
+
+  /**
+   * Push KILL_PROCESS + BLOCK_INSTALL actions to agents that have this software installed.
+   */
+  async enforceBlacklistToAgents(
+    tenantId: string,
+    software: { id: string; name: string; publisher?: string | null },
+  ) {
+    const installs = await this.prisma.softwareInstallation.findMany({
+      where: { tenantId, softwareId: software.id },
+      select: { assetId: true },
+    });
+    const assetIds = [...new Set(installs.map((i) => i.assetId))];
+    if (!assetIds.length) {
+      return { enqueued: 0, assets: 0 };
+    }
+
+    const agents = await this.prisma.agent.findMany({
+      where: { tenantId, assetId: { in: assetIds } },
+      select: { id: true, systemInfo: true, assetId: true },
+    });
+
+    const processName = this.guessProcessName(software.name);
+    let enqueued = 0;
+    for (const agent of agents) {
+      const info = (agent.systemInfo as any) || {};
+      const pending: any[] = Array.isArray(info._pendingActions) ? info._pendingActions : [];
+      pending.push({
+        type: 'KILL_PROCESS',
+        processName,
+        reason: `Blacklisted software: ${software.name}`,
+        softwareId: software.id,
+        timestamp: new Date().toISOString(),
+      });
+      pending.push({
+        type: 'UNINSTALL_PACKAGE',
+        packageName: software.name,
+        packageId: software.name,
+        reason: 'BLACKLIST_ENFORCE',
+        softwareId: software.id,
+        queuedAt: new Date().toISOString(),
+      });
+      pending.push({
+        type: 'BLOCK_INSTALL',
+        softwareName: software.name,
+        processName,
+        publisher: software.publisher || undefined,
+        reason: 'BLACKLISTED',
+        timestamp: new Date().toISOString(),
+      });
+      info._pendingActions = pending;
+      const policy = Array.isArray(info._softwarePolicy) ? info._softwarePolicy : [];
+      if (!policy.find((p: any) => p.softwareId === software.id || p.name === software.name)) {
+        policy.push({
+          softwareId: software.id,
+          name: software.name,
+          action: 'BLOCK',
+          processName,
+        });
+      }
+      info._softwarePolicy = policy;
+      await this.prisma.agent.update({
+        where: { id: agent.id },
+        data: { systemInfo: info },
+      });
+      enqueued++;
+    }
+
+    this.logger.log(
+      `Blacklist enforce: ${software.name} → ${enqueued} agent(s) across ${assetIds.length} asset(s)`,
+    );
+    return { enqueued, assets: assetIds.length, processName };
+  }
+
+  /** Push full blacklist/whitelist policy snapshot to all online agents for a tenant. */
+  async pushSoftwarePolicyToAgents(tenantId: string) {
+    const [blacklisted, whitelisted] = await Promise.all([
+      this.prisma.softwareCatalog.findMany({
+        where: {
+          tenantId,
+          OR: [{ isBlacklisted: true }, { authorizationStatus: 'BLACKLISTED' }],
+        },
+        select: { id: true, name: true, publisher: true },
+      }),
+      this.prisma.softwareCatalog.findMany({
+        where: {
+          tenantId,
+          OR: [{ isAuthorized: true }, { authorizationStatus: { in: ['AUTHORIZED', 'REQUIRED'] } }],
+        },
+        select: { id: true, name: true },
+        take: 500,
+      }),
+    ]);
+
+    const policy = {
+      blacklist: blacklisted.map((s) => ({
+        softwareId: s.id,
+        name: s.name,
+        processName: this.guessProcessName(s.name),
+        action: 'BLOCK',
+      })),
+      whitelist: whitelisted.map((s) => ({ softwareId: s.id, name: s.name })),
+      updatedAt: new Date().toISOString(),
+    };
+
+    const agents = await this.prisma.agent.findMany({
+      where: { tenantId },
+      select: { id: true, systemInfo: true },
+    });
+
+    for (const agent of agents) {
+      const info = (agent.systemInfo as any) || {};
+      const pending: any[] = Array.isArray(info._pendingActions) ? info._pendingActions : [];
+      pending.push({ type: 'SOFTWARE_POLICY', ...policy });
+      info._pendingActions = pending;
+      info._softwarePolicy = policy.blacklist;
+      await this.prisma.agent.update({
+        where: { id: agent.id },
+        data: { systemInfo: info },
+      });
+    }
+
+    return {
+      agentsUpdated: agents.length,
+      blacklistCount: blacklisted.length,
+      whitelistCount: whitelisted.length,
+    };
+  }
+
+  private guessProcessName(softwareName: string): string {
+    const base = (softwareName || 'unknown')
+      .replace(/[^a-zA-Z0-9._\- ]/g, '')
+      .trim()
+      .split(/\s+/)[0];
+    if (!base) return 'unknown.exe';
+    return base.toLowerCase().endsWith('.exe') ? base : `${base}.exe`;
+  }
+
+  /**
+   * Harvest recommendations: unused installs (stale lastUsedAt) that can be reclaimed.
+   */
+  async getHarvestRecommendations(tenantId: string, unusedDays = 90) {
+    const cutoff = new Date(Date.now() - unusedDays * 86400000);
+    const installs = await this.prisma.softwareInstallation.findMany({
+      where: {
+        tenantId,
+        OR: [{ lastUsedAt: { lt: cutoff } }, { lastUsedAt: null }],
+        software: {
+          licenses: { some: {} },
+        },
+      },
+      include: {
+        software: {
+          select: {
+            id: true,
+            name: true,
+            publisher: true,
+            licenses: {
+              select: { id: true, totalSeats: true, usedSeats: true, purchaseCost: true },
+            },
+          },
+        },
+        asset: {
+          select: {
+            id: true,
+            name: true,
+            assetTag: true,
+            hostname: true,
+            assignedTo: { select: { id: true, email: true, firstName: true, lastName: true } },
+          },
+        },
+      },
+      orderBy: { lastUsedAt: 'asc' },
+      take: 200,
+    });
+
+    return installs.map((i) => {
+      const daysUnused = i.lastUsedAt
+        ? Math.floor((Date.now() - new Date(i.lastUsedAt).getTime()) / 86400000)
+        : null;
+      return {
+        installationId: i.id,
+        softwareId: i.software.id,
+        softwareName: i.software.name,
+        publisher: i.software.publisher,
+        assetId: i.asset.id,
+        assetName: i.asset.name,
+        assetTag: i.asset.assetTag,
+        hostname: i.asset.hostname,
+        assignedTo: i.asset.assignedTo,
+        lastUsedAt: i.lastUsedAt,
+        daysUnused,
+        version: i.version,
+        recommendation: 'RECLAIM',
+        licenses: i.software.licenses,
+      };
+    });
+  }
+
+  /** Create reclaim ticket and optionally enqueue uninstall on the agent. */
+  async reclaimHarvest(
+    tenantId: string,
+    userId: string,
+    data: { installationId: string; createTicket?: boolean; uninstall?: boolean },
+  ) {
+    const inst = await this.prisma.softwareInstallation.findFirst({
+      where: { id: data.installationId, tenantId },
+      include: {
+        software: { select: { id: true, name: true } },
+        asset: { select: { id: true, name: true, assetTag: true } },
+      },
+    });
+    if (!inst) throw new NotFoundException('Installation not found');
+
+    let ticket: any = null;
+    if (data.createTicket !== false) {
+      const count = await this.prisma.ticket.count({ where: { tenantId } });
+      const ticketNumber = `INC-${String(count + 1).padStart(5, '0')}`;
+      ticket = await this.prisma.ticket.create({
+        data: {
+          tenantId,
+          ticketNumber,
+          type: 'SERVICE_REQUEST',
+          subject: `Reclaim unused license: ${inst.software.name}`,
+          description: `Harvest recommendation: ${inst.software.name} on ${inst.asset.name} (${inst.asset.assetTag || inst.asset.id}) appears unused (last used: ${inst.lastUsedAt ? inst.lastUsedAt.toISOString() : 'never'}). Please uninstall and reclaim the seat.`,
+          priority: 'LOW',
+          status: 'NEW',
+          category: 'Software',
+          requesterId: userId,
+        },
+      });
+      await this.prisma.ticketAsset.create({
+        data: { ticketId: ticket.id, assetId: inst.assetId },
+      });
+    }
+
+    let agentAction: any = null;
+    if (data.uninstall) {
+      const agent = await this.prisma.agent.findFirst({
+        where: { tenantId, assetId: inst.assetId },
+      });
+      if (agent) {
+        const info = (agent.systemInfo as any) || {};
+        const pending: any[] = Array.isArray(info._pendingActions) ? info._pendingActions : [];
+        agentAction = {
+          type: 'UNINSTALL_SOFTWARE',
+          softwareName: inst.software.name,
+          processName: this.guessProcessName(inst.software.name),
+          installationId: inst.id,
+          timestamp: new Date().toISOString(),
+        };
+        pending.push(agentAction);
+        info._pendingActions = pending;
+        await this.prisma.agent.update({
+          where: { id: agent.id },
+          data: { systemInfo: info },
+        });
+      }
+    }
+
+    return {
+      installationId: inst.id,
+      softwareName: inst.software.name,
+      assetId: inst.assetId,
+      ticket,
+      agentAction,
+    };
   }
 
   async getByUser(userId: string, tenantId: string) {
@@ -442,6 +830,57 @@ export class SoftwareService {
     return software;
   }
 
+  /**
+   * Deterministic initial risk score (0-100) for newly discovered software,
+   * based on known-risky software classes and publisher trust signals.
+   * Refined later by vulnerability correlation and lifecycle (EOL) data.
+   */
+  private computeInitialRiskScore(name: string, publisher?: string): number {
+    const n = (name || '').toLowerCase();
+    const p = (publisher || '').toLowerCase();
+    let score = 0;
+
+    // High-risk classes: remote access, P2P/torrent, password crackers, keygens, anonymizers
+    const highRisk = [
+      'teamviewer', 'anydesk', 'ammyy', 'ultraviewer', 'remote utilities',
+      'utorrent', 'bittorrent', 'qbittorrent', 'limewire', 'frostwire',
+      'keygen', 'crack', 'activator', 'kmspico', 'hacktool',
+      'tor browser', 'psiphon', 'ultrasurf', 'hotspot shield',
+      'mimikatz', 'cain', 'john the ripper', 'hashcat', 'wireshark',
+      'nmap', 'netcat', 'angry ip scanner', 'advanced port scanner',
+    ];
+    // Medium-risk: file sharing, browser toolbars, unmanaged cloud sync, gaming platforms on corp assets
+    const mediumRisk = [
+      'dropbox', 'megasync', 'wetransfer', 'sharex',
+      'steam', 'epic games', 'battle.net', 'discord',
+      'toolbar', 'coupon', 'search protect', 'driver booster', 'driver updater',
+      'cheat engine', 'auto clicker',
+    ];
+    // Trusted publishers reduce baseline risk
+    const trustedPublishers = [
+      'microsoft', 'apple', 'google', 'adobe', 'mozilla', 'oracle',
+      'ibm', 'cisco', 'vmware', 'red hat', 'canonical', 'suse',
+      'dell', 'hp', 'lenovo', 'intel', 'nvidia', 'amd', 'jetbrains',
+      'atlassian', 'zoom video', 'slack', 'salesforce', 'sap',
+    ];
+
+    if (highRisk.some((k) => n.includes(k))) score += 70;
+    else if (mediumRisk.some((k) => n.includes(k))) score += 40;
+
+    const isTrusted = trustedPublishers.some((t) => p.includes(t));
+    if (!publisher || p === 'unknown' || p.trim() === '') {
+      score += 20; // Unknown provenance
+    } else if (!isTrusted && score === 0) {
+      score += 10; // Unverified third-party publisher
+    }
+    if (isTrusted) score = Math.max(0, score - 15);
+
+    // Beta/nightly/portable builds carry more operational risk
+    if (/\b(beta|alpha|nightly|portable|preview)\b/.test(n)) score += 10;
+
+    return Math.min(100, score);
+  }
+
   async ingestSoftware(
     tenantId: string,
     assetId: string,
@@ -454,16 +893,57 @@ export class SoftwareService {
   ) {
     if (!packages || !Array.isArray(packages) || packages.length === 0) return;
 
+    const fingerprint = this.packageFingerprint(packages);
+    if (this.ingestFingerprints.get(assetId) === fingerprint) {
+      return; // unchanged inventory — skip redundant heartbeat upserts
+    }
+
+    const existing = this.ingestInFlight.get(assetId);
+    if (existing) {
+      await existing; // coalesce concurrent heartbeats for same asset
+      if (this.ingestFingerprints.get(assetId) === fingerprint) return;
+    }
+
+    const run = this.runIngest(tenantId, assetId, packages, fingerprint);
+    this.ingestInFlight.set(assetId, run);
+    try {
+      await run;
+    } finally {
+      if (this.ingestInFlight.get(assetId) === run) {
+        this.ingestInFlight.delete(assetId);
+      }
+    }
+  }
+
+  private packageFingerprint(
+    packages: { name: string; version: string; publisher?: string }[],
+  ): string {
+    return packages
+      .map((p) => `${p.name}\0${p.version}\0${p.publisher || ''}`)
+      .sort()
+      .join('\n');
+  }
+
+  private async runIngest(
+    tenantId: string,
+    assetId: string,
+    packages: {
+      name: string;
+      version: string;
+      publisher?: string;
+      description?: string;
+    }[],
+    fingerprint: string,
+  ) {
     this.logger.log(`Ingesting ${packages.length} packages for asset ${assetId}`);
 
-    // Process in chunks of 5 to balance speed and DB load
-    const CHUNK_SIZE = 5;
+    // Process in chunks of 3 to keep connection pool free for UI queries
+    const CHUNK_SIZE = 3;
     for (let i = 0; i < packages.length; i += CHUNK_SIZE) {
       const chunk = packages.slice(i, i + CHUNK_SIZE);
       await Promise.all(
         chunk.map(async (pkg) => {
           try {
-            // 1. Find or create software in catalog
             const software = await this.prisma.softwareCatalog.upsert({
               where: {
                 tenantId_name_publisher: {
@@ -480,7 +960,7 @@ export class SoftwareService {
                 latestVersion: pkg.version,
                 authorizationStatus: 'NEEDS_REVIEW',
                 lifecycleStatus: 'CURRENT',
-                riskScore: Math.floor(Math.random() * 30), // Initial random risk score
+                riskScore: this.computeInitialRiskScore(pkg.name, pkg.publisher),
               },
               update: {
                 latestVersion: pkg.version,
@@ -488,7 +968,6 @@ export class SoftwareService {
               },
             });
 
-            // 2. Upsert installation record for this asset
             await this.prisma.softwareInstallation.upsert({
               where: {
                 tenantId_assetId_softwareId: {
@@ -510,12 +989,82 @@ export class SoftwareService {
                 lastUsedAt: new Date(),
               },
             });
+
+            if (
+              software.isBlacklisted ||
+              software.authorizationStatus === 'BLACKLISTED'
+            ) {
+              await this.enforceBlacklistToAgents(tenantId, software);
+            }
           } catch (err) {
             this.logger.error(`Failed to ingest software ${pkg.name} for asset ${assetId}: ${err.message}`);
           }
         }),
       );
     }
+
+    this.ingestFingerprints.set(assetId, fingerprint);
+  }
+
+  /**
+   * Queue UNINSTALL_PACKAGE on the agent linked to this asset when blacklisted software is detected.
+   */
+  async enqueueBlacklistUninstall(
+    tenantId: string,
+    assetId: string,
+    packageName: string,
+    version?: string,
+  ) {
+    const agent = await this.prisma.agent.findFirst({
+      where: { tenantId, assetId, status: { in: ['ONLINE', 'STALE'] } },
+      select: { id: true, systemInfo: true, hostname: true },
+    });
+    if (!agent) return { queued: false, reason: 'no_agent' };
+
+    const info = (agent.systemInfo as any) || {};
+    const pending: any[] = Array.isArray(info._pendingActions) ? info._pendingActions : [];
+    const already = pending.some(
+      (a) =>
+        a.type === 'UNINSTALL_PACKAGE' &&
+        (a.packageName === packageName || a.winget === packageName || a.packageId === packageName),
+    );
+    if (already) return { queued: false, reason: 'already_queued' };
+
+    pending.push({
+      type: 'UNINSTALL_PACKAGE',
+      packageName,
+      packageId: packageName,
+      version: version || undefined,
+      reason: 'BLACKLIST_ENFORCE',
+      queuedAt: new Date().toISOString(),
+    });
+
+    await this.prisma.agent.update({
+      where: { id: agent.id },
+      data: { systemInfo: { ...info, _pendingActions: pending } },
+    });
+
+    try {
+      await this.prisma.alertEvent.create({
+        data: {
+          tenantId,
+          severity: 'HIGH',
+          category: 'SOFTWARE_BLACKLIST',
+          title: `Blacklisted software removed: ${packageName}`,
+          message: `Queued uninstall of blacklisted package "${packageName}" on ${agent.hostname || assetId}`,
+          source: 'SoftwarePolicy',
+          sourceId: assetId,
+          metadata: { packageName, version, agentId: agent.id },
+        },
+      });
+    } catch {
+      /* alert optional */
+    }
+
+    this.logger.warn(
+      `Blacklist enforce: queued UNINSTALL_PACKAGE "${packageName}" on agent ${agent.hostname}`,
+    );
+    return { queued: true, agentId: agent.id };
   }
 
   /**

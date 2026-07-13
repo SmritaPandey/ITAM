@@ -46,11 +46,13 @@ export default function ProblemsPage() {
         apiFetch("/assets?limit=200").catch(() => ({ data: [] })),
         apiFetch("/tickets?limit=200").catch(() => ({ data: [] })),
       ]);
-      setProblems(p);
-      setKnownErrors(ke);
-      setStats(s);
-      setAssets(assetList?.data || []);
-      setTickets(ticketList?.data || []);
+      const problemRows = Array.isArray(p) ? p : (Array.isArray(p?.data) ? p.data : []);
+      const knownRows = Array.isArray(ke) ? ke : (Array.isArray(ke?.data) ? ke.data : []);
+      setProblems(problemRows);
+      setKnownErrors(knownRows);
+      setStats(s && typeof s === "object" ? s : null);
+      setAssets(Array.isArray(assetList) ? assetList : (assetList?.data || []));
+      setTickets(Array.isArray(ticketList) ? ticketList : (ticketList?.data || []));
     } catch (e) { console.error(e); }
     setLoading(false);
   }, []);
@@ -169,7 +171,17 @@ export default function ProblemsPage() {
     background: "var(--bg-primary)", color: "var(--text-primary)", fontSize: 13, fontFamily: "inherit", width: "100%",
   };
 
-  const items = tab === "known-errors" ? knownErrors : (statusFilter ? problems.filter(p => p.status === statusFilter) : problems);
+  const items = tab === "known-errors"
+    ? (Array.isArray(knownErrors) ? knownErrors : [])
+    : (Array.isArray(problems)
+        ? (statusFilter ? problems.filter(p => p.status === statusFilter) : problems)
+        : []);
+
+  const statusCount = (status: string) => {
+    const row = stats?.byStatus?.find((x: any) => x.status === status);
+    if (!row) return 0;
+    return typeof row._count === "number" ? row._count : (row._count?._all ?? 0);
+  };
 
   return (
     <>
@@ -188,7 +200,7 @@ export default function ProblemsPage() {
       {stats && (
         <div className="stats-grid" style={{ gridTemplateColumns: "repeat(5, 1fr)" }}>
           {["OPEN", "ROOT_CAUSE_IDENTIFIED", "KNOWN_ERROR", "RESOLVED", "CLOSED"].map(s => {
-            const count = stats.byStatus?.find((x: any) => x.status === s)?._count || 0;
+            const count = statusCount(s);
             const sc = STATUS_CONFIG[s];
             const isActive = statusFilter === s;
             return (

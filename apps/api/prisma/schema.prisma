@@ -80,25 +80,50 @@ model Tenant {
   trips               Trip[]
   gpsTelemetries      GpsTelemetry[]
   serviceCatalogItems ServiceCatalogItem[]
+  alertRules          AlertRule[]
+  alertEvents         AlertEvent[]
+  nacVlanPolicies     NacVlanPolicy[]
+  nacNetworkSegments  NacNetworkSegment[]
+  nacRadiusConfig     NacRadiusConfig?
+  vulnerabilities     Vulnerability[]
+  assetVulnerabilities AssetVulnerability[]
+  mqttConfigs         MqttBrokerConfig[]
+  ssoConfigs          SsoConfig[]
+  cloudConnectors     CloudConnector[]
+  maintenanceSchedules MaintenanceSchedule[]
+  maintenanceWorkOrders MaintenanceWorkOrder[]
+  spareParts          SparePart[]
+  consumables         Consumable[]
+  businessServices    BusinessService[]
+  flowRecords         FlowRecord[]
+  flowRollups         FlowRollup[]
+  syslogEvents        SyslogEvent[]
+  changeApprovals     ChangeApproval[]
+  cabMeetings         CabMeeting[]
+  patchCatalogs       PatchCatalogItem[]
+  patchPolicies       PatchDeployPolicy[]
+  emailIngestConfigs  EmailIngestConfig[]
+  searchIndexJobs     SearchIndexJob[]
 
   @@map("tenants")
 }
 
 model Site {
-  id        String   @id @default(uuid()) @db.Uuid
-  tenantId  String   @map("tenant_id") @db.Uuid
-  name      String
-  address   String?
-  city      String?
-  state     String?
-  country   String?
-  zipCode   String?  @map("zip_code")
-  latitude  Float?
-  longitude Float?
-  timezone  String   @default("UTC")
-  isHq      Boolean  @default(false) @map("is_hq")
-  createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @updatedAt @map("updated_at")
+  id           String   @id @default(uuid()) @db.Uuid
+  tenantId     String   @map("tenant_id") @db.Uuid
+  name         String
+  address      String?
+  city         String?
+  state        String?
+  country      String?
+  zipCode      String?  @map("zip_code")
+  latitude     Float?
+  longitude    Float?
+  timezone     String   @default("UTC")
+  isHq         Boolean  @default(false) @map("is_hq")
+  floorPlanUrl String?  @map("floor_plan_url")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
 
   tenant      Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   departments Department[]
@@ -335,6 +360,7 @@ enum DiscoverySource {
   WMI
   SSH
   NETWORK_SCAN
+  CLOUD
   CLOUD_AWS
   CLOUD_AZURE
   CLOUD_GCP
@@ -343,6 +369,8 @@ enum DiscoverySource {
   CSV_IMPORT
   API
   ONVIF
+  IOT
+  AGENTLESS
 }
 
 model Asset {
@@ -354,6 +382,7 @@ model Asset {
   name            String
   serialNumber    String?         @map("serial_number")
   barcode         String?
+  rfidTag         String?         @map("rfid_tag")
   // Classification
   category        String?
   subCategory     String?         @map("sub_category")
@@ -366,6 +395,8 @@ model Asset {
   room            String?
   rack            String?
   position        String?
+  floorPinX       Float?          @map("floor_pin_x")
+  floorPinY       Float?          @map("floor_pin_y")
   // Ownership
   assignedToId    String?         @map("assigned_to_id") @db.Uuid
   managedById     String?         @map("managed_by_id") @db.Uuid
@@ -439,6 +470,10 @@ model Asset {
   targetRelations   AssetRelationship[] @relation("RelTarget")
   trips             Trip[]
   gpsTelemetries    GpsTelemetry[]
+  vulnerabilities   AssetVulnerability[]
+  maintenanceSchedules MaintenanceSchedule[]
+  maintenanceWorkOrders MaintenanceWorkOrder[]
+  businessServiceLinks BusinessServiceAsset[]
 
   @@unique([tenantId, assetTag])
   @@index([tenantId])
@@ -448,6 +483,7 @@ model Asset {
   @@index([tenantId, macAddress])
   @@index([tenantId, serialNumber])
   @@index([tenantId, hostname])
+  @@index([tenantId, rfidTag])
   @@map("assets")
 }
 
@@ -600,6 +636,7 @@ model SoftwareInstallation {
 
   @@unique([tenantId, assetId, softwareId])
   @@index([tenantId, assetId])
+  @@index([tenantId, softwareId])
   @@map("software_installations")
 }
 
@@ -653,6 +690,10 @@ model Ticket {
   resolvedAt      DateTime?      @map("resolved_at")
   closedAt        DateTime?      @map("closed_at")
   satisfactionScore Int?         @map("satisfaction_score")
+  csatComment     String?        @map("csat_comment")
+  csatAt          DateTime?      @map("csat_at")
+  escalatedAt     DateTime?      @map("escalated_at")
+  escalationLevel Int            @default(0) @map("escalation_level")
   parentTicketId  String?        @map("parent_ticket_id") @db.Uuid
   createdAt       DateTime       @default(now()) @map("created_at")
   updatedAt       DateTime       @updatedAt @map("updated_at")
@@ -1007,6 +1048,8 @@ model Patch {
   recurring       String?                                // null, 'weekly', 'monthly'
   cronExpression  String?   @map("cron_expression")     // e.g. '0 2 * * 0' for Sunday 2AM
   autoApprove     Boolean   @default(false) @map("auto_approve")
+  deployRing      String    @default("ALL") @map("deploy_ring") // PILOT, STAGED, ALL
+  catalogItemId   String?   @map("catalog_item_id") @db.Uuid
   // Rollback support
   rollbackAvailable Boolean @default(false) @map("rollback_available")
   rollbackData      Json?   @map("rollback_data")        // Pre-patch state snapshot
@@ -1377,7 +1420,7 @@ model ChangeRequest {
   category        String?   // INFRASTRUCTURE, SOFTWARE, NETWORK, SECURITY, DATABASE
   priority        String    @default("MEDIUM") // LOW, MEDIUM, HIGH, CRITICAL
   risk            String    @default("MEDIUM") // LOW, MEDIUM, HIGH, CRITICAL
-  status          String    @default("DRAFT") // DRAFT, SUBMITTED, APPROVED, REJECTED, IN_PROGRESS, COMPLETED, FAILED, ROLLED_BACK, CANCELLED
+  status          String    @default("DRAFT") // DRAFT, SUBMITTED, CAB_REVIEW, APPROVED, REJECTED, IN_PROGRESS, COMPLETED, FAILED, ROLLED_BACK, CANCELLED
   requestedById   String    @map("requested_by_id") @db.Uuid
   approvedById    String?   @map("approved_by_id") @db.Uuid
   implementedById String?   @map("implemented_by_id") @db.Uuid
@@ -1388,6 +1431,11 @@ model ChangeRequest {
   impactAnalysis  String?   @map("impact_analysis") @db.Text
   rollbackPlan    String?   @map("rollback_plan") @db.Text
   testPlan        String?   @map("test_plan") @db.Text
+  // SSDLC 9-step gate evidence (JSON checklist)
+  ssdlcGates      Json      @default("{}") @map("ssdlc_gates")
+  uatEvidence     String?   @map("uat_evidence") @db.Text
+  vaptEvidence    String?   @map("vapt_evidence") @db.Text
+  cabMeetingId    String?   @map("cab_meeting_id") @db.Uuid
   affectedAssets  Json      @default("[]") @map("affected_assets")
   affectedServices Json     @default("[]") @map("affected_services")
   relatedTickets  Json      @default("[]") @map("related_tickets")
@@ -1396,6 +1444,7 @@ model ChangeRequest {
   updatedAt       DateTime  @updatedAt @map("updated_at")
 
   tenant          Tenant    @relation(fields: [tenantId], references: [id])
+  approvals       ChangeApproval[]
 
   @@unique([tenantId, changeNumber])
   @@index([tenantId, status])
@@ -1720,5 +1769,601 @@ model ServiceCatalogItem {
   @@index([tenantId])
   @@index([tenantId, category])
   @@map("service_catalog_items")
+}
+
+// ============================================================================
+// ALERTS (durable)
+// ============================================================================
+model AlertRule {
+  id              String   @id @default(uuid()) @db.Uuid
+  tenantId        String   @map("tenant_id") @db.Uuid
+  name            String
+  description     String?
+  enabled         Boolean  @default(true)
+  category        String
+  conditions      Json     @default("{}")
+  severity        String   @default("MEDIUM")
+  channels        Json     @default("[\"in_app\"]")
+  cooldownMinutes Int      @default(15) @map("cooldown_minutes")
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@map("alert_rules")
+}
+
+model AlertEvent {
+  id             String    @id @default(uuid()) @db.Uuid
+  tenantId       String    @map("tenant_id") @db.Uuid
+  severity       String
+  category       String
+  title          String
+  message        String    @db.Text
+  source         String
+  sourceId       String?   @map("source_id")
+  acknowledged   Boolean   @default(false)
+  acknowledgedBy String?   @map("acknowledged_by") @db.Uuid
+  acknowledgedAt DateTime? @map("acknowledged_at")
+  resolved       Boolean   @default(false)
+  resolvedAt     DateTime? @map("resolved_at")
+  metadata       Json      @default("{}")
+  createdAt      DateTime  @default(now()) @map("created_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, createdAt])
+  @@index([tenantId, acknowledged])
+  @@index([tenantId, severity])
+  @@map("alert_events")
+}
+
+// ============================================================================
+// NAC (durable)
+// ============================================================================
+model NacVlanPolicy {
+  id          String   @id @default(uuid()) @db.Uuid
+  tenantId    String   @map("tenant_id") @db.Uuid
+  name        String
+  description String?
+  vlanId      Int      @map("vlan_id")
+  vlanName    String   @map("vlan_name")
+  conditions  Json     @default("{}")
+  action      String   @default("ASSIGN")
+  priority    Int      @default(1)
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@map("nac_vlan_policies")
+}
+
+model NacNetworkSegment {
+  id           String   @id @default(uuid()) @db.Uuid
+  tenantId     String   @map("tenant_id") @db.Uuid
+  name         String
+  vlanId       Int      @map("vlan_id")
+  subnet       String
+  securityZone String   @map("security_zone")
+  description  String?
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@map("nac_network_segments")
+}
+
+model NacRadiusConfig {
+  id            String   @id @default(uuid()) @db.Uuid
+  tenantId      String   @unique @map("tenant_id") @db.Uuid
+  serverAddress String   @default("") @map("server_address")
+  port          Int      @default(1812)
+  sharedSecret  String   @default("") @map("shared_secret")
+  authProtocol  String   @default("EAP-TLS") @map("auth_protocol")
+  enabled       Boolean  @default(false)
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@map("nac_radius_configs")
+}
+
+// ============================================================================
+// VULNERABILITIES (CVE / NVD)
+// ============================================================================
+model Vulnerability {
+  id          String   @id @default(uuid()) @db.Uuid
+  tenantId    String?  @map("tenant_id") @db.Uuid // null = global NVD cache
+  cveId       String   @map("cve_id")
+  title       String
+  description String?  @db.Text
+  cvssScore   Float?   @map("cvss_score")
+  severity    String   @default("MEDIUM")
+  publishedAt DateTime? @map("published_at")
+  modifiedAt  DateTime? @map("modified_at")
+  cpeMatches  Json     @default("[]") @map("cpe_matches")
+  references  Json     @default("[]")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  tenant Tenant? @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  assets AssetVulnerability[]
+
+  @@unique([cveId])
+  @@index([severity])
+  @@index([cvssScore])
+  @@map("vulnerabilities")
+}
+
+model AssetVulnerability {
+  id              String    @id @default(uuid()) @db.Uuid
+  tenantId        String    @map("tenant_id") @db.Uuid
+  assetId         String    @map("asset_id") @db.Uuid
+  vulnerabilityId String    @map("vulnerability_id") @db.Uuid
+  status          String    @default("OPEN") // OPEN, ACKNOWLEDGED, REMEDIATED, FALSE_POSITIVE
+  firstSeenAt     DateTime  @default(now()) @map("first_seen_at")
+  lastSeenAt      DateTime  @default(now()) @map("last_seen_at")
+  matchedSoftware String?   @map("matched_software")
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
+
+  tenant          Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  asset           Asset         @relation(fields: [assetId], references: [id], onDelete: Cascade)
+  vulnerability   Vulnerability @relation(fields: [vulnerabilityId], references: [id], onDelete: Cascade)
+
+  @@unique([assetId, vulnerabilityId])
+  @@index([tenantId, status])
+  @@index([assetId])
+  @@map("asset_vulnerabilities")
+}
+
+// ============================================================================
+// IOT / MQTT
+// ============================================================================
+model MqttBrokerConfig {
+  id        String   @id @default(uuid()) @db.Uuid
+  tenantId  String   @map("tenant_id") @db.Uuid
+  name      String
+  brokerUrl String   @map("broker_url")
+  username  String?
+  password  String?
+  topics    Json     @default("[\"devices/+/telemetry\"]")
+  enabled   Boolean  @default(true)
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@map("mqtt_broker_configs")
+}
+
+// ============================================================================
+// SSO (SAML / OIDC)
+// ============================================================================
+model SsoConfig {
+  id             String   @id @default(uuid()) @db.Uuid
+  tenantId       String   @map("tenant_id") @db.Uuid
+  provider       String   // SAML, OIDC, GOOGLE, MICROSOFT
+  enabled        Boolean  @default(false)
+  entityId       String?  @map("entity_id")
+  ssoUrl         String?  @map("sso_url")
+  certificate    String?  @db.Text
+  clientId       String?  @map("client_id")
+  clientSecret   String?  @map("client_secret")
+  issuer         String?
+  metadataUrl    String?  @map("metadata_url")
+  groupRoleMap   Json     @default("{}") @map("group_role_map")
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, provider])
+  @@index([tenantId])
+  @@map("sso_configs")
+}
+
+// ============================================================================
+// CLOUD CONNECTORS (AWS / Azure)
+// ============================================================================
+model CloudConnector {
+  id             String    @id @default(uuid()) @db.Uuid
+  tenantId       String    @map("tenant_id") @db.Uuid
+  provider       String    // AWS, AZURE, GCP
+  name           String
+  enabled        Boolean   @default(true)
+  encryptedCreds String    @map("encrypted_creds") // AES JSON
+  regions        Json      @default("[]")
+  lastSyncAt     DateTime? @map("last_sync_at")
+  lastSyncStatus String?   @map("last_sync_status")
+  createdAt      DateTime  @default(now()) @map("created_at")
+  updatedAt      DateTime  @updatedAt @map("updated_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@map("cloud_connectors")
+}
+
+// ============================================================================
+// EAM — Preventive Maintenance, Spares, Consumables
+// ============================================================================
+
+model MaintenanceSchedule {
+  id              String    @id @default(uuid()) @db.Uuid
+  tenantId        String    @map("tenant_id") @db.Uuid
+  assetId         String    @map("asset_id") @db.Uuid
+  name            String
+  scheduleType    String    @default("CALENDAR") @map("schedule_type") // CALENDAR, CONDITION, METER
+  cronExpression  String?   @map("cron_expression")
+  intervalDays    Int?      @map("interval_days")
+  conditionMetric String?   @map("condition_metric")
+  conditionThreshold Float? @map("condition_threshold")
+  nextDueAt       DateTime? @map("next_due_at")
+  lastCompletedAt DateTime? @map("last_completed_at")
+  autoCreateWo    Boolean   @default(true) @map("auto_create_wo")
+  isActive        Boolean   @default(true) @map("is_active")
+  notes           String?
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
+
+  tenant     Tenant                  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  asset      Asset                   @relation(fields: [assetId], references: [id], onDelete: Cascade)
+  workOrders MaintenanceWorkOrder[]
+
+  @@index([tenantId])
+  @@index([tenantId, nextDueAt])
+  @@map("maintenance_schedules")
+}
+
+model MaintenanceWorkOrder {
+  id              String    @id @default(uuid()) @db.Uuid
+  tenantId        String    @map("tenant_id") @db.Uuid
+  scheduleId      String?   @map("schedule_id") @db.Uuid
+  assetId         String    @map("asset_id") @db.Uuid
+  workOrderNumber String    @map("work_order_number")
+  title           String
+  description     String?
+  priority        String    @default("MEDIUM")
+  status          String    @default("OPEN") // OPEN, IN_PROGRESS, COMPLETED, CANCELLED
+  assignedToId    String?   @map("assigned_to_id") @db.Uuid
+  dueAt           DateTime? @map("due_at")
+  completedAt     DateTime? @map("completed_at")
+  notes           String?
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
+
+  tenant   Tenant               @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  schedule MaintenanceSchedule? @relation(fields: [scheduleId], references: [id], onDelete: SetNull)
+  asset    Asset                @relation(fields: [assetId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, workOrderNumber])
+  @@index([tenantId, status])
+  @@index([tenantId, assetId])
+  @@map("maintenance_work_orders")
+}
+
+model SparePart {
+  id           String   @id @default(uuid()) @db.Uuid
+  tenantId     String   @map("tenant_id") @db.Uuid
+  sku          String
+  name         String
+  description  String?
+  quantityOnHand Int    @default(0) @map("quantity_on_hand")
+  minStock     Int      @default(0) @map("min_stock")
+  unitCost     Decimal? @map("unit_cost") @db.Decimal(12, 2)
+  location     String?
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  tenant       Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  transactions SparePartTransaction[]
+
+  @@unique([tenantId, sku])
+  @@index([tenantId])
+  @@map("spare_parts")
+}
+
+model SparePartTransaction {
+  id          String   @id @default(uuid()) @db.Uuid
+  tenantId    String   @map("tenant_id") @db.Uuid
+  sparePartId String   @map("spare_part_id") @db.Uuid
+  quantity    Int
+  type        String   // RECEIVE, CONSUME, ADJUST
+  workOrderId String?  @map("work_order_id") @db.Uuid
+  notes       String?
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  sparePart SparePart @relation(fields: [sparePartId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@index([sparePartId])
+  @@map("spare_part_transactions")
+}
+
+model Consumable {
+  id             String   @id @default(uuid()) @db.Uuid
+  tenantId       String   @map("tenant_id") @db.Uuid
+  sku            String
+  name           String
+  quantityOnHand Int      @default(0) @map("quantity_on_hand")
+  reorderPoint   Int      @default(0) @map("reorder_point")
+  reorderQty     Int      @default(0) @map("reorder_qty")
+  unitCost       Decimal? @map("unit_cost") @db.Decimal(12, 2)
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, sku])
+  @@index([tenantId])
+  @@map("consumables")
+}
+
+// ============================================================================
+// CMDB — Business Services (CSDM-lite)
+// ============================================================================
+
+model BusinessService {
+  id          String   @id @default(uuid()) @db.Uuid
+  tenantId    String   @map("tenant_id") @db.Uuid
+  name        String
+  description String?
+  criticality String   @default("MEDIUM") // LOW, MEDIUM, HIGH, CRITICAL
+  ownerId     String?  @map("owner_id") @db.Uuid
+  status      String   @default("HEALTHY") // HEALTHY, DEGRADED, OUTAGE
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  assets BusinessServiceAsset[]
+
+  @@index([tenantId])
+  @@map("business_services")
+}
+
+model BusinessServiceAsset {
+  id               String @id @default(uuid()) @db.Uuid
+  businessServiceId String @map("business_service_id") @db.Uuid
+  assetId          String @map("asset_id") @db.Uuid
+  role             String @default("SUPPORTS") // SUPPORTS, CRITICAL, DEPENDS
+
+  businessService BusinessService @relation(fields: [businessServiceId], references: [id], onDelete: Cascade)
+  asset           Asset           @relation(fields: [assetId], references: [id], onDelete: Cascade)
+
+  @@unique([businessServiceId, assetId])
+  @@map("business_service_assets")
+}
+
+// ============================================================================
+// NMS — NetFlow / Syslog
+// ============================================================================
+
+model FlowRecord {
+  id           String   @id @default(uuid()) @db.Uuid
+  tenantId     String   @map("tenant_id") @db.Uuid
+  exporterIp   String   @map("exporter_ip")
+  srcIp        String   @map("src_ip")
+  dstIp        String   @map("dst_ip")
+  srcPort      Int      @map("src_port")
+  dstPort      Int      @map("dst_port")
+  protocol     Int
+  bytes        BigInt   @default(0)
+  packets      BigInt   @default(0)
+  sampledAt    DateTime @default(now()) @map("sampled_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, sampledAt])
+  @@index([tenantId, bytes])
+  @@map("flow_records")
+}
+
+model FlowRollup {
+  id         String   @id @default(uuid()) @db.Uuid
+  tenantId   String   @map("tenant_id") @db.Uuid
+  windowStart DateTime @map("window_start")
+  talkerIp   String   @map("talker_ip")
+  bytesIn    BigInt   @default(0) @map("bytes_in")
+  bytesOut   BigInt   @default(0) @map("bytes_out")
+  packets    BigInt   @default(0)
+  flows      Int      @default(0)
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, windowStart, talkerIp])
+  @@index([tenantId, windowStart])
+  @@map("flow_rollups")
+}
+
+model SyslogEvent {
+  id        String   @id @default(uuid()) @db.Uuid
+  tenantId  String?  @map("tenant_id") @db.Uuid
+  sourceIp  String   @map("source_ip")
+  facility  Int?
+  severity  Int?
+  message   String   @db.Text
+  ticketId  String?  @map("ticket_id") @db.Uuid
+  receivedAt DateTime @default(now()) @map("received_at")
+
+  tenant Tenant? @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, receivedAt])
+  @@index([sourceIp])
+  @@map("syslog_events")
+}
+
+// ============================================================================
+// ITSM — CAB / Approvals / Email ingest
+// ============================================================================
+
+model ChangeApproval {
+  id              String    @id @default(uuid()) @db.Uuid
+  tenantId        String    @map("tenant_id") @db.Uuid
+  changeRequestId String    @map("change_request_id") @db.Uuid
+  approverId      String    @map("approver_id") @db.Uuid
+  level           Int       @default(1)
+  status          String    @default("PENDING") // PENDING, APPROVED, REJECTED
+  comment         String?
+  decidedAt       DateTime? @map("decided_at")
+  createdAt       DateTime  @default(now()) @map("created_at")
+
+  tenant        Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  changeRequest ChangeRequest @relation(fields: [changeRequestId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@index([changeRequestId])
+  @@map("change_approvals")
+}
+
+model CabMeeting {
+  id          String   @id @default(uuid()) @db.Uuid
+  tenantId    String   @map("tenant_id") @db.Uuid
+  title       String
+  scheduledAt DateTime @map("scheduled_at")
+  location    String?
+  agenda      Json     @default("[]") // change request IDs
+  minutes     String?  @db.Text
+  status      String   @default("SCHEDULED") // SCHEDULED, COMPLETED, CANCELLED
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, scheduledAt])
+  @@map("cab_meetings")
+}
+
+model EmailIngestConfig {
+  id             String   @id @default(uuid()) @db.Uuid
+  tenantId       String   @map("tenant_id") @db.Uuid
+  host           String
+  port           Int      @default(993)
+  username       String
+  encryptedPass  String   @map("encrypted_pass")
+  folder         String   @default("INBOX")
+  enabled        Boolean  @default(true)
+  lastPolledAt   DateTime? @map("last_polled_at")
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@map("email_ingest_configs")
+}
+
+// ============================================================================
+// Patch catalogs & deploy policies
+// ============================================================================
+
+model PatchCatalogItem {
+  id          String   @id @default(uuid()) @db.Uuid
+  tenantId    String?  @map("tenant_id") @db.Uuid // null = global catalog
+  source      String   // WINGET, APT, BREW, MANUAL
+  packageId   String   @map("package_id")
+  name        String
+  version     String?
+  publisher   String?
+  metadata    Json     @default("{}")
+  syncedAt    DateTime @default(now()) @map("synced_at")
+
+  tenant Tenant? @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([source, packageId, version])
+  @@index([tenantId])
+  @@index([name])
+  @@map("patch_catalog_items")
+}
+
+model PatchDeployPolicy {
+  id             String   @id @default(uuid()) @db.Uuid
+  tenantId       String   @map("tenant_id") @db.Uuid
+  name           String
+  pilotAssetIds  Json     @default("[]") @map("pilot_asset_ids")
+  stagedAssetIds Json     @default("[]") @map("staged_asset_ids")
+  scheduleCron   String?  @map("schedule_cron")
+  autoPromote    Boolean  @default(false) @map("auto_promote")
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@map("patch_deploy_policies")
+}
+
+model SearchIndexJob {
+  id        String   @id @default(uuid()) @db.Uuid
+  tenantId  String   @map("tenant_id") @db.Uuid
+  entity    String
+  entityId  String   @map("entity_id") @db.Uuid
+  action    String   // INDEX, DELETE
+  status    String   @default("PENDING")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, status])
+  @@map("search_index_jobs")
+}
+
+// ============================================================================
+// PRODUCT LICENSING (QS Assets entitlement — not software-asset License)
+// ============================================================================
+
+enum ProductLicenseStatus {
+  ISSUED
+  ACTIVE
+  REVOKED
+  EXPIRED
+}
+
+model ProductLicense {
+  id                    String                @id @default(uuid()) @db.Uuid
+  licenseKey            String                @unique @map("license_key")
+  customerName          String                @map("customer_name")
+  plan                  TenantPlan            @default(ON_PREMISE)
+  maxAssets             Int                   @default(-1) @map("max_assets") // -1 = unlimited
+  maxUsers              Int                   @default(-1) @map("max_users")
+  allowedModules        Json                  @default("[]") @map("allowed_modules")
+  expiresAt             DateTime              @map("expires_at")
+  status                ProductLicenseStatus  @default(ISSUED)
+  deploymentFingerprint String?               @map("deployment_fingerprint")
+  activatedAt           DateTime?             @map("activated_at")
+  createdBy             String?               @map("created_by") @db.Uuid
+  notes                 String?
+  createdAt             DateTime              @default(now()) @map("created_at")
+  updatedAt             DateTime              @updatedAt @map("updated_at")
+
+  @@index([status])
+  @@index([customerName])
+  @@map("product_licenses")
+}
+
+/// Singleton (or few) local entitlement rows for on-prem installs after license activation.
+model InstanceEntitlement {
+  id              String    @id @default(uuid()) @db.Uuid
+  installId       String    @unique @map("install_id")
+  licenseKey      String?   @map("license_key")
+  payload         Json      // verified entitlement claims
+  signedBlob      String    @map("signed_blob") @db.Text
+  activatedAt     DateTime  @default(now()) @map("activated_at")
+  expiresAt       DateTime? @map("expires_at")
+  plan            TenantPlan @default(ON_PREMISE)
+  maxAssets       Int       @default(-1) @map("max_assets")
+  maxUsers        Int       @default(-1) @map("max_users")
+  allowedModules  Json      @default("[]") @map("allowed_modules")
+  status          String    @default("ACTIVE") // ACTIVE | EXPIRED | INVALID
+  updatedAt       DateTime  @updatedAt @map("updated_at")
+
+  @@map("instance_entitlements")
 }
 

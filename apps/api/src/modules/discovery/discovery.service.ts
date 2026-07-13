@@ -1,10 +1,10 @@
-import { Injectable, Logger, NotFoundException, BadRequestException, NotImplementedException } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException, BadRequestException, NotImplementedException, Optional, Inject, forwardRef } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { PrismaService } from '../../common/database/prisma.service';
 import { EventBusService } from '../../common/events/event-bus.service';
 import { ComplianceService } from '../compliance/compliance.service';
 import { AlertsService } from '../alerts/alerts.service';
-import { exec } from 'child_process';
+import { exec, execFile } from 'child_process';
 import { promisify } from 'util';
 import * as os from 'os';
 import * as dns from 'dns';
@@ -13,11 +13,24 @@ import * as path from 'path';
 import * as fs from 'fs';
 import AdmZip from 'adm-zip';
 import { SshScanner } from '../../common/scanners/ssh.scanner';
+import { WmiScanner } from '../../common/scanners/wmi.scanner';
 import { CredentialVaultService } from './credential-vault.service';
 import { SnmpScanner } from '../../common/scanners/snmp.scanner';
 import { SoftwareService } from '../software/software.service';
+import { AuthService } from '../auth/auth.service';
+import { VulnerabilitiesService } from '../vulnerabilities/vulnerabilities.service';
 
 const execAsync = promisify(exec);
+const execFileAsync = promisify(execFile);
+
+export type DeployRemoteMethod = 'ssh' | 'winrm' | 'auto';
+
+export interface DeployRemoteOptions {
+  method?: DeployRemoteMethod;
+  platform?: string;
+  username?: string;
+  password?: string;
+}
 
 // Common service ports for fingerprinting
 const SERVICE_PORTS = [22, 80, 135, 139, 161, 443, 445, 631, 3306, 3389, 5432, 5900, 8080, 8443, 9100];
@@ -64,6 +77,9 @@ export class DiscoveryService {
     private snmpScanner: SnmpScanner,
     private alertsService: AlertsService,
     private softwareService: SoftwareService,
+    private authService: AuthService,
+    @Optional() @Inject(forwardRef(() => VulnerabilitiesService))
+    private vulnerabilitiesService?: VulnerabilitiesService,
   ) {}
 
   /**
@@ -1423,6 +1439,52 @@ export class DiscoveryService {
         } catch (err) {
           this.logger.warn(`Software sync failed for agent ${agent.hostname}: ${err.message}`);
         }
+
+        // Authenticated CVE match from agent product inventory + CRITICAL auto-tickets
+        if (this.vulnerabilitiesService) {
+          try {
+            const products = data.systemInfo.software
+              .filter((p: any) => p?.name)
+              .map((p: any) => ({ name: String(p.name), version: p.version ? String(p.version) : undefined }))
+              .slice(0, 200);
+            if (products.length > 0) {
+              // Throttle: at most once per 6 hours per agent (stored on systemInfo)
+              const lastScan = Number((data.systemInfo as any)?._lastCveScanAt || 0);
+              const sixHours = 6 * 60 * 60 * 1000;
+              if (Date.now() - lastScan > sixHours) {
+                const scanResult = await this.vulnerabilitiesService.agentProductScan(tenantId, {
+                  assetId: agent.assetId,
+                  agentId: agent.id,
+                  hostname: agent.hostname,
+                  products,
+                  autoTicket: true,
+                });
+                const info = ((await this.prisma.agent.findUnique({ where: { id } }))?.systemInfo as any) || {};
+                await this.prisma.agent.update({
+                  where: { id },
+                  data: {
+                    systemInfo: {
+                      ...info,
+                      _lastCveScanAt: Date.now(),
+                      _lastCveScanResult: {
+                        matched: scanResult.matched,
+                        critical: scanResult.critical,
+                        ticketsCreated: scanResult.ticketsCreated,
+                      },
+                    },
+                  },
+                });
+                if (scanResult.critical > 0) {
+                  this.logger.warn(
+                    `Agent CVE scan ${agent.hostname}: ${scanResult.matched} matches, ${scanResult.critical} CRITICAL, ${scanResult.ticketsCreated} tickets`,
+                  );
+                }
+              }
+            }
+          } catch (err: any) {
+            this.logger.warn(`Agent CVE scan failed for ${agent.hostname}: ${err?.message || err}`);
+          }
+        }
       }
 
       // Evaluate security alert rules against agent telemetry
@@ -1813,6 +1875,166 @@ export class DiscoveryService {
       this.logger.warn(`Failed to check agentStartOnBoot setting: ${err.message}`);
     }
 
+    // Drain admin-enqueued threat actions from systemInfo._pendingActions
+    try {
+      const info = (updated.systemInfo as any) || {};
+      const pending: any[] = Array.isArray(info._pendingActions) ? info._pendingActions : [];
+      if (pending.length > 0) {
+        for (const act of pending) {
+          actions.push(act);
+        }
+        info._pendingActions = [];
+        await this.prisma.agent.update({
+          where: { id },
+          data: { systemInfo: info },
+        });
+        this.logger.log(`Drained ${pending.length} pending action(s) to agent ${agent.hostname}`);
+      }
+    } catch (err: any) {
+      this.logger.warn(`Failed to drain _pendingActions for agent ${id}: ${err.message}`);
+    }
+
+    // Inject live software blacklist policy for this agent's asset
+    try {
+      const blacklist = await this.prisma.softwareCatalog.findMany({
+        where: {
+          tenantId,
+          OR: [{ isBlacklisted: true }, { authorizationStatus: 'BLACKLISTED' }],
+        },
+        select: { id: true, name: true },
+        take: 200,
+      });
+      if (blacklist.length) {
+        actions.push({
+          type: 'SOFTWARE_POLICY',
+          blacklist: blacklist.map((s) => ({
+            softwareId: s.id,
+            name: s.name,
+            processName: `${(s.name.split(/\s+/)[0] || 'unknown').replace(/[^a-zA-Z0-9._\-]/g, '')}.exe`,
+            action: 'BLOCK',
+          })),
+          whitelist: [],
+          updatedAt: new Date().toISOString(),
+        });
+
+        if (agent.assetId) {
+          const badInstalls = await this.prisma.softwareInstallation.findMany({
+            where: {
+              tenantId,
+              assetId: agent.assetId,
+              softwareId: { in: blacklist.map((b) => b.id) },
+            },
+            include: { software: { select: { name: true } } },
+          });
+          for (const inst of badInstalls) {
+            const pname = `${(inst.software.name.split(/\s+/)[0] || 'unknown').replace(/[^a-zA-Z0-9._\-]/g, '')}.exe`;
+            actions.push({
+              type: 'KILL_PROCESS',
+              processName: pname,
+              reason: `Blacklisted: ${inst.software.name}`,
+              softwareId: inst.softwareId,
+            });
+            actions.push({
+              type: 'BLOCK_INSTALL',
+              softwareName: inst.software.name,
+              processName: pname,
+              reason: 'BLACKLISTED',
+            });
+          }
+        }
+      }
+    } catch (err: any) {
+      this.logger.warn(`Failed to inject software policy for agent ${id}: ${err.message}`);
+    }
+
+    // Drain admin-enqueued remote commands → REMOTE_COMMAND actions
+    try {
+      const info = ((await this.prisma.agent.findUnique({ where: { id } }))?.systemInfo as any) || {};
+      const pendingCmds: any[] = Array.isArray(info._pendingCommands) ? info._pendingCommands : [];
+      const stillQueued: any[] = [];
+      for (const cmd of pendingCmds) {
+        if (cmd.status === 'QUEUED' || !cmd.status) {
+          actions.push({
+            type: 'REMOTE_COMMAND',
+            commandId: cmd.id,
+            command: cmd.command,
+            timeout: cmd.timeout || 30000,
+          });
+        } else {
+          stillQueued.push(cmd);
+        }
+      }
+      if (pendingCmds.length !== stillQueued.length) {
+        info._pendingCommands = stillQueued;
+        await this.prisma.agent.update({
+          where: { id },
+          data: { systemInfo: info },
+        });
+      }
+    } catch (err: any) {
+      this.logger.warn(`Failed to drain _pendingCommands for agent ${id}: ${err.message}`);
+    }
+
+    // Queue software / patch package installs for this agent's linked asset (deploy rings)
+    try {
+      const agentRing = ((updated.systemInfo as any)?.deployRing || 'ALL').toUpperCase();
+      const ringOrder = { PILOT: 1, STAGED: 2, ALL: 3 } as Record<string, number>;
+      const agentRank = ringOrder[agentRing] || 3;
+
+      if (updated.assetId) {
+        const deployments = await this.prisma.patchDeployment.findMany({
+          where: {
+            tenantId,
+            assetId: updated.assetId,
+            status: 'QUEUED',
+          },
+          include: { patch: true },
+          take: 5,
+        });
+        for (const dep of deployments) {
+          const patchRing = (dep.patch?.deployRing || 'ALL').toUpperCase();
+          const requiredRank = ringOrder[patchRing] || 3;
+          // Agent must be in a ring at least as early as the patch's ring
+          // PILOT patch → only PILOT agents; STAGED → PILOT+STAGED; ALL → everyone
+          if (agentRank > requiredRank) continue;
+
+          let pkg: any = {};
+          try {
+            pkg = dep.output ? JSON.parse(dep.output) : {};
+          } catch {
+            pkg = {};
+          }
+          if (pkg.action === 'INSTALL_PACKAGE' || dep.patch?.category === 'Software Deployment') {
+            actions.push({
+              type: 'INSTALL_PACKAGE',
+              deploymentId: dep.id,
+              packageName: pkg.packageName || dep.patch?.title,
+              packageUrl: pkg.packageUrl,
+              packageType: pkg.packageType,
+              silent: pkg.silent ?? true,
+              deployRing: patchRing,
+            });
+          } else {
+            actions.push({
+              type: 'INSTALL_PACKAGE',
+              deploymentId: dep.id,
+              packageName: dep.patch?.patchId || dep.patch?.title,
+              packageUrl: pkg.packageUrl,
+              packageType: pkg.packageType || 'patch',
+              silent: true,
+              deployRing: patchRing,
+            });
+          }
+          await this.prisma.patchDeployment.update({
+            where: { id: dep.id },
+            data: { status: 'DEPLOYING' },
+          });
+        }
+      }
+    } catch (err: any) {
+      this.logger.warn(`Failed to queue package deploys for agent ${id}: ${err.message}`);
+    }
+
     return {
       ...updated,
       actions,
@@ -2184,7 +2406,7 @@ export class DiscoveryService {
       method: 'PORT_FINGERPRINT',
     };
 
-    // ─── Try SSH/SNMP scan if credentials provided ─────────
+    // ─── Try SNMP / WMI-WinRM / SSH enrichment if credentials provided ─────────
     if (credentialId) {
       const cred = await this.prisma.scanCredential.findFirst({
         where: { id: credentialId, tenantId },
@@ -2240,6 +2462,117 @@ export class DiscoveryService {
           } catch (err: any) {
             this.logger.warn(`SNMP enrichment failed for ${device.ipAddress}: ${err.message}`);
             enrichmentData.snmpError = err.message;
+          }
+        } else if (['WMI', 'WINRM', 'WMI_PASSWORD'].includes(cred.type)) {
+          // WMI / WinRM agentless Windows inventory
+          const credData = await this.credentialVault.getDecrypted(cred.id, tenantId);
+          if (!credData?.username || !credData?.password) {
+            throw new Error(`WMI/WinRM credentials for ID ${cred.id} must include username and password`);
+          }
+          try {
+            const wmiResult = await WmiScanner.scan({
+              host: device.ipAddress,
+              username: credData.username,
+              password: credData.password,
+              domain: credData.domain,
+              timeout: 90000,
+            });
+
+            if (!wmiResult.error) {
+              const packages = (wmiResult.software || []).map((s) => ({
+                name: s.name,
+                version: s.version || '',
+                publisher: s.publisher,
+              }));
+
+              const osName =
+                wmiResult.os?.name ||
+                (wmiResult.os?.version ? `Windows ${wmiResult.os.version}` : null) ||
+                'Windows';
+              const hwManufacturer = wmiResult.manufacturer || 'Unknown';
+              const hwModel = wmiResult.model || 'Unknown';
+
+              enrichmentData = {
+                collectedAt: new Date().toISOString(),
+                method: 'WMI',
+                hardware: {
+                  manufacturer: hwManufacturer,
+                  model: hwModel,
+                  serialNumber: wmiResult.serial || null,
+                  cpuModel: wmiResult.cpu?.name || null,
+                  cpuCores: wmiResult.cpu?.cores || wmiResult.cpu?.logicalProcessors || 0,
+                  totalRamMb: wmiResult.ram?.totalMb || 0,
+                  diskDrives: (wmiResult.disks || []).map((d) => ({
+                    deviceId: d.deviceId,
+                    filesystem: d.filesystem,
+                    sizeGb: d.sizeGb,
+                    freeGb: d.freeGb,
+                    sizeBytes: d.sizeBytes,
+                    freeBytes: d.freeBytes,
+                  })),
+                },
+                operatingSystem: {
+                  name: osName,
+                  version: wmiResult.os?.version || null,
+                  build: wmiResult.os?.build || null,
+                  architecture: wmiResult.os?.architecture || null,
+                  hostname: wmiResult.hostname || null,
+                  installDate: wmiResult.os?.installDate || null,
+                  lastBoot: wmiResult.os?.lastBoot || null,
+                },
+                network: {
+                  nics: wmiResult.nics || [],
+                  macAddresses: (wmiResult.nics || []).map((n) => n.mac).filter(Boolean),
+                },
+                security: {
+                  hotfixes: wmiResult.hotfixes || [],
+                  hotfixCount: wmiResult.hotfixes?.length || 0,
+                },
+                software: {
+                  installedPackages: packages.length,
+                  packages,
+                  runningServices: (wmiResult.services || []).map((s) => ({
+                    name: s.name,
+                    displayName: s.displayName,
+                    status: s.state,
+                    startMode: s.startMode,
+                  })),
+                },
+              };
+
+              await this.prisma.discoveredDevice.update({
+                where: { id: deviceId },
+                data: {
+                  hostname: wmiResult.hostname || device.hostname,
+                  manufacturer: hwManufacturer !== 'Unknown' ? hwManufacturer : device.manufacturer,
+                  osInfo: osName,
+                  macAddress:
+                    device.macAddress ||
+                    wmiResult.nics?.find((n) => n.mac)?.mac ||
+                    undefined,
+                },
+              });
+
+              if (packages.length > 0 && device.approvedAssetId) {
+                this.softwareService
+                  .ingestSoftware(tenantId, device.approvedAssetId, packages)
+                  .catch((err) =>
+                    this.logger.error(
+                      `Software ingestion failed for asset ${device.approvedAssetId}: ${err.message}`,
+                    ),
+                  );
+              }
+
+              this.logger.log(
+                `Device ${device.ipAddress} enriched via WMI/WinRM — ${wmiResult.cpu?.cores || '?'} cores, ${wmiResult.disks?.length || 0} disks, ${packages.length} packages`,
+              );
+            } else {
+              this.logger.warn(`WMI/WinRM enrichment failed for ${device.ipAddress}: ${wmiResult.error}`);
+              enrichmentData.wmiError = wmiResult.error;
+            }
+          } catch (err: any) {
+            this.logger.warn(`WMI/WinRM enrichment exception for ${device.ipAddress}: ${err.message}`);
+            enrichmentData.wmiError = err.message;
           }
         } else {
           // SSH Credential
@@ -2312,6 +2645,19 @@ export class DiscoveryService {
                   ).catch(err => this.logger.error(`Software ingestion failed for asset ${targetAssetId}: ${err.message}`));
                 }
               }
+
+              await this.prisma.discoveredDevice.update({
+                where: { id: deviceId },
+                data: {
+                  hostname: sshResult.hostname || device.hostname,
+                  manufacturer:
+                    sshResult.hardwareDetails?.biosVendor &&
+                    sshResult.hardwareDetails.biosVendor !== 'Unknown'
+                      ? sshResult.hardwareDetails.biosVendor
+                      : device.manufacturer,
+                  osInfo: sshResult.osInfo?.distro || enrichmentData.operatingSystem?.name || device.osInfo,
+                },
+              });
 
               this.logger.log(`Device ${device.ipAddress} enriched via SSH — ${sshResult.cpuInfo?.cores || '?'} cores, ${sshResult.diskUsage?.length || 0} disks`);
             } else {
@@ -2391,6 +2737,20 @@ export class DiscoveryService {
       data: {
         enrichmentData: enrichmentData as any,
         enrichmentStatus: 'ENRICHED',
+        // Always surface Hardware/OS onto the device row when enrich succeeded
+        ...(enrichmentData.operatingSystem?.name || enrichmentData.operatingSystem?.osGuess
+          ? {
+              osInfo:
+                enrichmentData.operatingSystem.name ||
+                enrichmentData.operatingSystem.osGuess,
+            }
+          : {}),
+        ...(enrichmentData.hardware?.manufacturer
+          ? { manufacturer: enrichmentData.hardware.manufacturer }
+          : {}),
+        ...(enrichmentData.operatingSystem?.hostname
+          ? { hostname: enrichmentData.operatingSystem.hostname }
+          : {}),
       },
     });
 
@@ -2419,33 +2779,44 @@ export class DiscoveryService {
   }
 
   /**
+   * Resolve the canonical monorepo-root `/agent` directory.
+   * Never prefers the stale `apps/api/agent` copy.
+   */
+  private resolveAgentDirectory(): string {
+    const staleMarker = `${path.sep}apps${path.sep}api${path.sep}agent`;
+    // Prefer repo-root agent/ (cwd may be repo root or apps/api)
+    const possiblePaths = [
+      path.resolve(process.cwd(), 'agent'), // repo root → ./agent (skipped if apps/api/agent)
+      path.resolve(process.cwd(), '../../agent'), // apps/api cwd → monorepo root /agent
+      path.resolve(__dirname, '../../../../../agent'), // dist/modules/discovery → root/agent
+      path.resolve(__dirname, '../../../../../../agent'),
+      path.resolve(__dirname, '../../../../agent'),
+    ];
+
+    for (const p of possiblePaths) {
+      const resolved = path.resolve(p);
+      if (resolved.includes(staleMarker)) continue;
+      if (
+        fs.existsSync(resolved) &&
+        fs.statSync(resolved).isDirectory() &&
+        fs.existsSync(path.join(resolved, 'qs-discovery-agent.js'))
+      ) {
+        this.logger.debug(`Using canonical agent directory: ${resolved}`);
+        return resolved;
+      }
+    }
+
+    this.logger.error('Discovery agent directory not found (expected repo-root /agent).');
+    throw new NotFoundException('Discovery Agent template files not found on the server.');
+  }
+
+  /**
    * Package all agent collector files into an in-memory ZIP buffer with OS-specific hierarchy.
+   * Source of truth: monorepo-root `/agent` only (not `apps/api/agent`).
    */
   getAgentZipPackage(serverUrl?: string, token?: string, userEmail?: string): Buffer {
     const zip = new AdmZip();
-    
-    // Resolve agent directory
-    const possiblePaths = [
-      path.resolve(process.cwd(), 'agent'),
-      path.resolve(process.cwd(), 'apps/api/agent'),
-      path.resolve(process.cwd(), '../../agent'),
-      path.resolve(__dirname, '../../../../agent'),
-      path.resolve(__dirname, '../../../../../agent'),
-      path.resolve(__dirname, '../../../../apps/api/agent'),
-    ];
-
-    let agentDir = '';
-    for (const p of possiblePaths) {
-      if (fs.existsSync(p) && fs.statSync(p).isDirectory()) {
-        agentDir = p;
-        break;
-      }
-    }
-    
-    if (!agentDir) {
-      this.logger.error(`Discovery agent directory not found.`);
-      throw new NotFoundException('Discovery Agent template files not found on the server.');
-    }
+    const agentDir = this.resolveAgentDirectory();
 
     // 1. Structure: /bin (Unix), /win (Windows), /mac (macOS .app), /core (clean background core), and root (premium native quick-launchers)
     
@@ -2516,11 +2887,355 @@ export class DiscoveryService {
   }
 
   /**
+   * Resolve whether to use SSH or WinRM for remote agent deploy.
+   */
+  private resolveDeployMethod(
+    method?: DeployRemoteMethod,
+    platform?: string,
+  ): 'ssh' | 'winrm' {
+    if (method === 'ssh' || method === 'winrm') return method;
+    const p = (platform || '').toLowerCase();
+    if (
+      p.includes('win') ||
+      p.includes('windows') ||
+      p === 'wmi' ||
+      p === 'winrm'
+    ) {
+      return 'winrm';
+    }
+    return 'ssh';
+  }
+
+  /**
+   * Locate pwsh / powershell for WinRM Invoke-Command deploys.
+   */
+  private async findPowerShellBinary(): Promise<string | null> {
+    const candidates =
+      process.platform === 'win32'
+        ? ['pwsh.exe', 'powershell.exe']
+        : ['pwsh', 'powershell'];
+
+    for (const cmd of candidates) {
+      try {
+        if (process.platform === 'win32') {
+          await execFileAsync('where.exe', [cmd], { timeout: 5000 });
+        } else {
+          await execFileAsync('which', [cmd], { timeout: 5000 });
+        }
+        return cmd;
+      } catch {
+        // try next
+      }
+    }
+
+    // Common absolute paths
+    const absPaths =
+      process.platform === 'win32'
+        ? [
+            'C:\\Program Files\\PowerShell\\7\\pwsh.exe',
+            'C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe',
+          ]
+        : ['/usr/bin/pwsh', '/usr/local/bin/pwsh', '/opt/microsoft/powershell/7/pwsh'];
+
+    for (const p of absPaths) {
+      if (fs.existsSync(p)) return p;
+    }
+    return null;
+  }
+
+  /**
+   * Deploy the discovery agent to a remote host via SSH or WinRM.
+   * method: 'ssh' | 'winrm' | 'auto' (auto uses platform hint when provided).
+   */
+  async deployRemoteAgent(
+    tenantId: string,
+    userId: string,
+    targetIp: string,
+    credentialId: string,
+    options?: DeployRemoteOptions,
+  ) {
+    const method = this.resolveDeployMethod(options?.method, options?.platform);
+    if (method === 'winrm') {
+      return this.deployRemoteAgentWinRM(tenantId, userId, targetIp, credentialId, options);
+    }
+    return this.deployRemoteAgentSsh(tenantId, userId, targetIp, credentialId);
+  }
+
+  /**
+   * Deploy the discovery agent to a remote Windows host via WinRM / PowerShell Remoting.
+   * Builds the same agent zip as SSH (with a real JWT), base64-encodes it, and runs
+   * `pwsh -Command "Invoke-Command -ComputerName ..."` when PowerShell is available.
+   */
+  async deployRemoteAgentWinRM(
+    tenantId: string,
+    userId: string,
+    targetIp: string,
+    credentialId?: string,
+    options?: DeployRemoteOptions,
+  ) {
+    this.logger.log(`Starting WinRM agent deployment to ${targetIp} for tenant ${tenantId}`);
+    const logs: string[] = [];
+    const stamp = Date.now();
+    const localPackagePath = path.join(os.tmpdir(), `qs-agent-winrm-${stamp}.zip`);
+    const localB64Path = path.join(os.tmpdir(), `qs-agent-winrm-${stamp}.b64`);
+    const localPs1Path = path.join(os.tmpdir(), `qs-agent-winrm-${stamp}.ps1`);
+
+    let username = options?.username?.trim() || '';
+    let password = options?.password || '';
+
+    // 1. Resolve WMI / WINRM credentials (vault preferred, body username/password as override)
+    try {
+      if (credentialId) {
+        const credMeta = await this.prisma.scanCredential.findFirst({
+          where: { id: credentialId, tenantId },
+          select: { type: true, name: true },
+        });
+        const credentials = await this.credentialVault.getDecrypted(credentialId, tenantId);
+        if (!credentials?.username || !credentials?.password) {
+          throw new BadRequestException(
+            'WinRM credentials must include username and password (WMI or WINRM vault type)',
+          );
+        }
+        username = username || credentials.username;
+        password = password || credentials.password;
+        logs.push(
+          `[OK] WinRM credentials resolved from vault (${credMeta?.name || credentialId}, type=${credMeta?.type || 'unknown'})`,
+        );
+      } else if (!username || !password) {
+        // Auto-pick first WMI/WINRM credential for the tenant
+        const winCred = await this.prisma.scanCredential.findFirst({
+          where: {
+            tenantId,
+            type: { in: ['WMI', 'WINRM', 'WMI_PASSWORD'] },
+          },
+          orderBy: { updatedAt: 'desc' },
+        });
+        if (winCred) {
+          const credentials = await this.credentialVault.getDecrypted(winCred.id, tenantId);
+          username = credentials?.username || '';
+          password = credentials?.password || '';
+          logs.push(`[OK] Using tenant WMI/WINRM credential "${winCred.name}"`);
+        }
+      }
+
+      if (!username || !password) {
+        throw new BadRequestException(
+          'WinRM deploy requires a WMI/WINRM vault credential (username + password) or body username/password',
+        );
+      }
+    } catch (err: any) {
+      if (err instanceof BadRequestException) throw err;
+      logs.push(`[FAIL] Failed to resolve WinRM credentials: ${err.message}`);
+      throw new BadRequestException(`Failed to resolve WinRM credentials: ${err.message}`);
+    }
+
+    const psBinary = await this.findPowerShellBinary();
+    if (!psBinary) {
+      const hint =
+        process.platform === 'win32'
+          ? 'PowerShell was not found on this API host. Install PowerShell 7+ or ensure powershell.exe is on PATH, and enable WinRM on the target (Enable-PSRemoting -Force).'
+          : 'PowerShell (pwsh) is not installed on this Linux API host. Install PowerShell 7+ (https://aka.ms/powershell) so the API can run Invoke-Command over WinRM, and ensure the target has WinRM enabled (Enable-PSRemoting -Force) with reachable port 5985/5986.';
+      logs.push(`[FAIL] ${hint}`);
+      return {
+        status: 'FAILED',
+        success: false,
+        method: 'winrm',
+        targetIp,
+        logs,
+        error: hint,
+      };
+    }
+    logs.push(`[OK] Using PowerShell binary: ${psBinary}`);
+
+    try {
+      // 2. Generate agent package with real long-lived JWT
+      const serverUrl =
+        process.env.API_URL || process.env.SERVER_URL || `http://${os.hostname()}:3001`;
+      const deployer = await this.prisma.user.findFirst({
+        where: { id: userId, tenantId, deletedAt: null },
+        select: { email: true },
+      });
+      const userEmail = deployer?.email || `agent-deploy@${tenantId}`;
+      const token = this.authService.generateAgentToken(tenantId, userEmail, userId);
+      const packageBuffer = this.getAgentZipPackage(serverUrl, token, userEmail);
+      fs.writeFileSync(localPackagePath, packageBuffer);
+      fs.writeFileSync(localB64Path, packageBuffer.toString('base64'), 'utf8');
+      logs.push(
+        `[OK] Agent package generated with JWT (${Math.round(packageBuffer.length / 1024)} KB, base64 staged)`,
+      );
+
+      const remoteInstallDir = 'C:\\ProgramData\\QS-Discovery-Agent';
+      const configJson = JSON.stringify({ server: serverUrl, token, email: userEmail }, null, 2);
+
+      // 3. Write a temp PS1 that uses Invoke-Command (WinRM) — credentials via env to avoid argv leaks in process list somewhat
+      const ps1 = `
+$ErrorActionPreference = 'Stop'
+$target = $env:QS_WINRM_TARGET
+$user = $env:QS_WINRM_USER
+$passPlain = $env:QS_WINRM_PASS
+$b64Path = $env:QS_WINRM_B64
+$installDir = '${remoteInstallDir.replace(/'/g, "''")}'
+$configJson = @'
+${configJson}
+'@
+
+if (-not $target -or -not $user -or -not $passPlain) {
+  Write-Output '[FAIL] Missing WinRM target or credentials in environment'
+  exit 2
+}
+if (-not (Test-Path -LiteralPath $b64Path)) {
+  Write-Output "[FAIL] Base64 package missing at $b64Path"
+  exit 3
+}
+
+Write-Output "[INFO] Connecting via WinRM / PowerShell Remoting to $target as $user"
+$secure = ConvertTo-SecureString $passPlain -AsPlainText -Force
+$cred = New-Object System.Management.Automation.PSCredential ($user, $secure)
+$b64 = Get-Content -LiteralPath $b64Path -Raw
+
+try {
+  $result = Invoke-Command -ComputerName $target -Credential $cred -Authentication Negotiate -ScriptBlock {
+    param($B64, $InstallDir, $ConfigJson)
+    $ErrorActionPreference = 'Stop'
+    New-Item -ItemType Directory -Force -Path $InstallDir | Out-Null
+    $zipPath = Join-Path $InstallDir 'agent.zip'
+    [System.IO.File]::WriteAllBytes($zipPath, [Convert]::FromBase64String($B64))
+    if (Get-Command Expand-Archive -ErrorAction SilentlyContinue) {
+      Expand-Archive -Path $zipPath -DestinationPath $InstallDir -Force
+    } else {
+      Add-Type -AssemblyName System.IO.Compression.FileSystem
+      if (Test-Path $InstallDir) {
+        Get-ChildItem -LiteralPath $InstallDir -Force | Where-Object { $_.Name -ne 'agent.zip' } | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
+      }
+      [System.IO.Compression.ZipFile]::ExtractToDirectory($zipPath, $InstallDir)
+    }
+
+    $coreDir = Join-Path $InstallDir 'core'
+    if (-not (Test-Path $coreDir)) { $coreDir = $InstallDir }
+
+    foreach ($cfgName in @('config.json', (Join-Path 'bin' 'config.json'), (Join-Path 'core' 'config.json'))) {
+      $cfgPath = Join-Path $InstallDir $cfgName
+      $parent = Split-Path -Parent $cfgPath
+      if ($parent -and -not (Test-Path $parent)) { New-Item -ItemType Directory -Force -Path $parent | Out-Null }
+      Set-Content -LiteralPath $cfgPath -Value $ConfigJson -Encoding UTF8
+    }
+    if (Test-Path $coreDir) {
+      Set-Content -LiteralPath (Join-Path $coreDir 'config.json') -Value $ConfigJson -Encoding UTF8
+    }
+
+    $vbs = Join-Path $coreDir 'launch-silent.vbs'
+    $agentJs = Join-Path $coreDir 'qs-discovery-agent.js'
+    if (-not (Test-Path $agentJs)) { $agentJs = Join-Path $InstallDir 'qs-discovery-agent.js' }
+
+    if (Test-Path $vbs) {
+      & schtasks.exe /create /tn 'QSDiscoveryAgent' /tr "wscript.exe \`"$vbs\`"" /sc onlogon /rl highest /f | Out-Null
+      & schtasks.exe /run /tn 'QSDiscoveryAgent' | Out-Null
+      Write-Output '[OK] Scheduled task QSDiscoveryAgent registered and started'
+    } elseif (Test-Path $agentJs) {
+      $node = Get-Command node -ErrorAction SilentlyContinue
+      if ($node) {
+        Start-Process -FilePath $node.Source -ArgumentList $agentJs -WorkingDirectory (Split-Path $agentJs) -WindowStyle Hidden
+        Write-Output '[OK] Agent started via node (no launch-silent.vbs)'
+      } else {
+        Write-Output '[WARN] Agent files extracted but node/launch-silent.vbs missing — install Node.js or re-package agent'
+      }
+    } else {
+      Write-Output '[WARN] Package extracted but agent entrypoint not found'
+    }
+
+    Remove-Item -LiteralPath $zipPath -Force -ErrorAction SilentlyContinue
+    Write-Output "[OK] WinRM deploy finished under $InstallDir"
+  } -ArgumentList $b64, $installDir, $configJson
+
+  $result | ForEach-Object { Write-Output $_ }
+  Write-Output '[OK] Invoke-Command completed'
+  exit 0
+} catch {
+  Write-Output ("[FAIL] WinRM Invoke-Command error: " + $_.Exception.Message)
+  Write-Output '[HINT] Ensure WinRM is enabled on the target (Enable-PSRemoting -Force), firewall allows 5985/5986, and credentials have admin rights.'
+  exit 1
+}
+`.trim();
+
+      fs.writeFileSync(localPs1Path, ps1, 'utf8');
+      logs.push(`[OK] WinRM deploy script prepared`);
+
+      const { stdout, stderr } = await execFileAsync(
+        psBinary,
+        ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', localPs1Path],
+        {
+          timeout: 180000,
+          maxBuffer: 10 * 1024 * 1024,
+          env: {
+            ...process.env,
+            QS_WINRM_TARGET: targetIp,
+            QS_WINRM_USER: username,
+            QS_WINRM_PASS: password,
+            QS_WINRM_B64: localB64Path,
+          },
+        },
+      );
+
+      const combined = `${stdout || ''}\n${stderr || ''}`.trim();
+      for (const line of combined.split(/\r?\n/).filter(Boolean)) {
+        logs.push(line);
+      }
+
+      const failed = /\[FAIL\]/i.test(combined) || (!/\[OK\] Invoke-Command completed/i.test(combined) && !/WinRM deploy finished/i.test(combined));
+      if (failed) {
+        this.logger.error(`WinRM agent deployment to ${targetIp} failed`);
+        return {
+          status: 'FAILED',
+          success: false,
+          method: 'winrm',
+          targetIp,
+          logs,
+          error: combined || 'WinRM deployment failed',
+        };
+      }
+
+      this.logger.log(`WinRM agent deployment to ${targetIp} completed successfully`);
+      return {
+        status: 'SUCCESS',
+        success: true,
+        method: 'winrm',
+        targetIp,
+        installDir: remoteInstallDir,
+        logs,
+        message: `Agent deployed to ${targetIp} via WinRM. It will register with the server on first heartbeat.`,
+      };
+    } catch (err: any) {
+      const msg = err?.stderr || err?.message || String(err);
+      this.logger.error(`WinRM agent deployment to ${targetIp} failed: ${msg}`);
+      logs.push(`[FAIL] Deployment failed: ${msg}`);
+      logs.push(
+        '[HINT] WinRM must be enabled on the target (Enable-PSRemoting -Force), API host needs pwsh/powershell, and credentials need local admin rights.',
+      );
+      return {
+        status: 'FAILED',
+        success: false,
+        method: 'winrm',
+        targetIp,
+        logs,
+        error: msg,
+      };
+    } finally {
+      for (const f of [localPackagePath, localB64Path, localPs1Path]) {
+        try {
+          fs.unlinkSync(f);
+        } catch {
+          /* ignore */
+        }
+      }
+    }
+  }
+
+  /**
    * Deploy the discovery agent to a remote host via SSH.
    * Resolves SSH credentials from the credential vault, copies the agent package,
    * extracts it, configures the server URL and auth token, and starts the agent service.
    */
-  async deployRemoteAgent(
+  async deployRemoteAgentSsh(
     tenantId: string,
     userId: string,
     targetIp: string,
@@ -2592,12 +3307,17 @@ export class DiscoveryService {
         );
       }
 
-      // 3. Generate the agent package with embedded config
+      // 3. Generate the agent package with a real long-lived JWT (same as download endpoint)
       const serverUrl = process.env.API_URL || process.env.SERVER_URL || `http://${os.hostname()}:3001`;
-      const token = `agent-deploy-${tenantId}-${Date.now()}`;
-      const packageBuffer = this.getAgentZipPackage(serverUrl, token);
+      const deployer = await this.prisma.user.findFirst({
+        where: { id: userId, tenantId, deletedAt: null },
+        select: { email: true },
+      });
+      const userEmail = deployer?.email || `agent-deploy@${tenantId}`;
+      const token = this.authService.generateAgentToken(tenantId, userEmail, userId);
+      const packageBuffer = this.getAgentZipPackage(serverUrl, token, userEmail);
       fs.writeFileSync(localPackagePath, packageBuffer);
-      logs.push(`[OK] Agent package generated (${Math.round(packageBuffer.length / 1024)} KB)`);
+      logs.push(`[OK] Agent package generated with JWT (${Math.round(packageBuffer.length / 1024)} KB)`);
 
       // 4. Copy the agent package to the remote host
       try {
@@ -2625,7 +3345,7 @@ export class DiscoveryService {
 
       // 6. Configure the agent with server URL and auth token
       try {
-        const configJson = JSON.stringify({ server: serverUrl, token }, null, 2);
+        const configJson = JSON.stringify({ server: serverUrl, token, email: userEmail }, null, 2);
         await execAsync(sshCmd(
           `echo '${configJson}' > ${remoteInstallDir}/bin/config.json && ` +
           `echo '${configJson}' > ${remoteInstallDir}/core/config.json 2>/dev/null; true`,
@@ -2666,6 +3386,8 @@ export class DiscoveryService {
 
       return {
         status: 'SUCCESS',
+        success: true,
+        method: 'ssh',
         targetIp,
         installDir: remoteInstallDir,
         logs,
@@ -2683,6 +3405,8 @@ export class DiscoveryService {
 
       return {
         status: 'FAILED',
+        success: false,
+        method: 'ssh',
         targetIp,
         logs,
         error: err.message,
@@ -2954,6 +3678,309 @@ export class DiscoveryService {
     return {
       history: systemInfo._commandHistory || [],
       pending: systemInfo._pendingCommands || [],
+      filePulls: systemInfo._filePullHistory || [],
     };
+  }
+
+  /**
+   * Queue an approved ScriptLibrary script onto an agent (UEM remote run).
+   */
+  async queueScriptLibraryRun(
+    tenantId: string,
+    userId: string,
+    agentId: string,
+    scriptId: string,
+    parameters?: any,
+  ) {
+    const agent = await this.prisma.agent.findFirst({ where: { id: agentId, tenantId } });
+    if (!agent) throw new NotFoundException('Agent not found');
+
+    const script = await this.prisma.scriptLibrary.findFirst({
+      where: { id: scriptId, tenantId },
+    });
+    if (!script) throw new NotFoundException('Script not found');
+    if (script.approvalStatus !== 'APPROVED') {
+      throw new BadRequestException(
+        `Script must be APPROVED before remote run (status=${script.approvalStatus})`,
+      );
+    }
+
+    const execution = await this.prisma.scanResult.create({
+      data: {
+        tenantId,
+        scanType: 'SCRIPT_EXECUTION',
+        targetType: 'HOST',
+        target: agent.ipAddress,
+        status: 'QUEUED',
+        triggeredBy: userId,
+        summary: {
+          scriptId,
+          scriptName: script.name,
+          platform: script.platform,
+          agentId,
+          agentHostname: agent.hostname,
+          parameters: parameters || {},
+          timeoutSeconds: script.timeoutSeconds,
+        },
+        rawOutput: script.scriptContent,
+      },
+    });
+
+    await this.prisma.scriptLibrary.update({
+      where: { id: scriptId },
+      data: { runCount: { increment: 1 }, lastRunAt: new Date() },
+    });
+
+    return {
+      executionId: execution.id,
+      status: 'QUEUED',
+      agentId,
+      scriptId,
+      message: 'Script queued. Agent picks it up on next heartbeat as EXECUTE_SCRIPT.',
+    };
+  }
+
+  async queueFilePull(
+    tenantId: string,
+    agentId: string,
+    body: { path: string; maxBytes?: number },
+  ) {
+    const agent = await this.prisma.agent.findFirst({ where: { id: agentId, tenantId } });
+    if (!agent) throw new NotFoundException('Agent not found');
+    if (!body.path?.trim()) throw new BadRequestException('path is required');
+
+    // Reject path traversal / absolute sensitive roots being abused
+    const p = body.path.trim();
+    if (p.includes('..') || p.startsWith('/etc/shadow') || /^[A-Za-z]:\\Windows\\System32/i.test(p)) {
+      throw new BadRequestException('Path rejected by security policy');
+    }
+
+    const systemInfo = (agent.systemInfo as any) || {};
+    const pendingActions = Array.isArray(systemInfo._pendingActions)
+      ? systemInfo._pendingActions
+      : [];
+    const pullId = `pull-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    pendingActions.push({
+      type: 'FILE_PULL',
+      pullId,
+      path: p,
+      maxBytes: body.maxBytes || 256 * 1024,
+    });
+
+    await this.prisma.agent.update({
+      where: { id: agentId },
+      data: { systemInfo: { ...systemInfo, _pendingActions: pendingActions } },
+    });
+
+    return {
+      success: true,
+      pullId,
+      message: 'FILE_PULL queued. Agent will upload file content on next heartbeat.',
+    };
+  }
+
+  async storeFilePullResult(body: {
+    agentId: string;
+    pullId?: string;
+    path: string;
+    content: string;
+    truncated?: boolean;
+    error?: string;
+  }) {
+    const agent = await this.prisma.agent.findFirst({ where: { id: body.agentId } });
+    if (!agent) return { received: false };
+
+    const systemInfo = (agent.systemInfo as any) || {};
+    const history = Array.isArray(systemInfo._filePullHistory) ? systemInfo._filePullHistory : [];
+    history.push({
+      pullId: body.pullId,
+      path: body.path,
+      content: (body.content || '').substring(0, 200_000),
+      truncated: !!body.truncated,
+      error: body.error || null,
+      receivedAt: new Date().toISOString(),
+    });
+    if (history.length > 20) history.splice(0, history.length - 20);
+
+    await this.prisma.agent.update({
+      where: { id: agent.id },
+      data: { systemInfo: { ...systemInfo, _filePullHistory: history } },
+    });
+
+    return { received: true };
+  }
+
+  /**
+   * Honest remote-assist deep links — rdp:// / ssh:// only (no fake WebRTC).
+   */
+  async getRemoteAssistDeepLink(agentId: string, tenantId: string) {
+    const agent = await this.prisma.agent.findFirst({ where: { id: agentId, tenantId } });
+    if (!agent) throw new NotFoundException('Agent not found');
+
+    const host = agent.ipAddress || agent.hostname;
+    const platform = (agent.platform || '').toLowerCase();
+
+    if (platform.includes('win')) {
+      return {
+        available: true,
+        type: 'rdp',
+        url: `rdp://full%20address=s:${host}:3389`,
+        hint: `Opens the system Remote Desktop client to ${host}:3389. No in-browser WebRTC console is provided.`,
+        agentId,
+        hostname: agent.hostname,
+        platform: agent.platform,
+      };
+    }
+
+    return {
+      available: true,
+      type: 'ssh',
+      url: `ssh://${host}`,
+      hint: `Opens an SSH client to ${host}. No in-browser WebRTC console is provided.`,
+      agentId,
+      hostname: agent.hostname,
+      platform: agent.platform,
+    };
+  }
+
+  async setAgentDeployRing(tenantId: string, agentId: string, deployRing: string) {
+    const ring = (deployRing || '').toUpperCase();
+    if (!['PILOT', 'STAGED', 'ALL'].includes(ring)) {
+      throw new BadRequestException('deployRing must be PILOT, STAGED, or ALL');
+    }
+    const agent = await this.prisma.agent.findFirst({ where: { id: agentId, tenantId } });
+    if (!agent) throw new NotFoundException('Agent not found');
+    const systemInfo = (agent.systemInfo as any) || {};
+    await this.prisma.agent.update({
+      where: { id: agentId },
+      data: { systemInfo: { ...systemInfo, deployRing: ring } },
+    });
+    return { agentId, deployRing: ring };
+  }
+
+  /**
+   * Desktop App package — Electron tray sources from apps/agent-desktop + paired config.
+   */
+  getDesktopAppPackage(serverUrl?: string, token?: string, userEmail?: string): Buffer {
+    const zip = new AdmZip();
+    const desktopDir = this.resolveAgentDesktopDirectory();
+    const agentDir = this.resolveAgentDirectory();
+
+    if (desktopDir && fs.existsSync(desktopDir)) {
+      const include = ['package.json', 'README.md', 'src', 'assets'];
+      for (const name of include) {
+        const p = path.join(desktopDir, name);
+        if (!fs.existsSync(p)) continue;
+        const st = fs.statSync(p);
+        if (st.isDirectory()) zip.addLocalFolder(p, name);
+        else zip.addLocalFile(p);
+      }
+    } else {
+      // Fallback: include macOS .app bundle as the "desktop" artifact
+      const appBundle = path.join(agentDir, 'QS-Discovery-Agent.app');
+      if (fs.existsSync(appBundle)) {
+        zip.addLocalFolder(appBundle, 'QS-Discovery-Agent.app');
+      }
+      const readme = Buffer.from(
+        'QS Discovery Agent — Desktop package\n\n' +
+          'Electron sources were not found at apps/agent-desktop.\n' +
+          'Use the included .app bundle or build from the monorepo.\n',
+        'utf-8',
+      );
+      zip.addFile('README.txt', readme);
+    }
+
+    // Always include core agent for the tray to launch
+    const core = path.join(agentDir, 'qs-discovery-agent.js');
+    if (fs.existsSync(core)) zip.addLocalFile(core, 'agent');
+
+    if (serverUrl && token) {
+      const configObj: Record<string, any> = { server: serverUrl, token };
+      if (userEmail) configObj.email = userEmail;
+      const configBuffer = Buffer.from(JSON.stringify(configObj, null, 2), 'utf-8');
+      zip.addFile('config.json', configBuffer);
+      zip.addFile('agent/config.json', configBuffer);
+    }
+
+    const instructions = Buffer.from(
+      [
+        'QS Discovery Agent — Desktop App',
+        '',
+        '1. Extract this ZIP.',
+        '2. Ensure config.json has your server URL + token (pre-filled on download).',
+        '3. From apps/agent-desktop (or this package root): npm install && npm start',
+        '   Or build installers: npm run dist:mac | dist:win | dist:linux',
+        '4. Tray icons reflect ONLINE / OFFLINE / PAUSED.',
+        '',
+      ].join('\n'),
+      'utf-8',
+    );
+    zip.addFile('INSTALL.txt', instructions);
+    return zip.toBuffer();
+  }
+
+  /**
+   * Service installer package — systemd / launchd / Windows service scripts + agent.
+   */
+  getServiceInstallerPackage(serverUrl?: string, token?: string, userEmail?: string): Buffer {
+    const zip = new AdmZip();
+    const agentDir = this.resolveAgentDirectory();
+    const packagingDir = path.join(agentDir, 'packaging');
+
+    const serviceFiles = [
+      'install-service.sh',
+      'install-service.bat',
+      'qs-discovery-agent.js',
+      'run-agent.sh',
+      'run-agent.bat',
+      'README.md',
+    ];
+    for (const file of serviceFiles) {
+      const p = path.join(agentDir, file);
+      if (fs.existsSync(p)) zip.addLocalFile(p);
+    }
+
+    if (fs.existsSync(packagingDir)) {
+      zip.addLocalFolder(packagingDir, 'packaging');
+    }
+
+    if (serverUrl && token) {
+      const configObj: Record<string, any> = { server: serverUrl, token };
+      if (userEmail) configObj.email = userEmail;
+      zip.addFile('config.json', Buffer.from(JSON.stringify(configObj, null, 2), 'utf-8'));
+    }
+
+    zip.addFile(
+      'INSTALL.txt',
+      Buffer.from(
+        [
+          'QS Discovery Agent — Service Installer',
+          '',
+          'Linux:   sudo bash install-service.sh   (or packaging/linux/*.sh)',
+          'macOS:   sudo bash install-service.sh   (or packaging/macos/com.qs.discovery-agent.plist)',
+          'Windows: Run Install Service.bat as Administrator (or packaging/windows/*.ps1)',
+          '',
+          'config.json is pre-paired for your tenant.',
+          '',
+        ].join('\n'),
+        'utf-8',
+      ),
+    );
+
+    return zip.toBuffer();
+  }
+
+  private resolveAgentDesktopDirectory(): string | null {
+    const candidates = [
+      path.resolve(process.cwd(), 'apps/agent-desktop'),
+      path.resolve(process.cwd(), '../agent-desktop'),
+      path.resolve(process.cwd(), '../../apps/agent-desktop'),
+      path.resolve(__dirname, '../../../../../apps/agent-desktop'),
+      path.resolve(__dirname, '../../../../../../apps/agent-desktop'),
+    ];
+    for (const c of candidates) {
+      if (fs.existsSync(path.join(c, 'package.json'))) return c;
+    }
+    return null;
   }
 }

@@ -34,6 +34,12 @@ export class AdminController {
     return this.service.listTenants({ limit, offset, search, plan, status });
   }
 
+  @Post('tenants')
+  @ApiOperation({ summary: 'Create tenant + Tenant Admin (owner provision)' })
+  createTenant(@Body() body: any) {
+    return this.service.createTenant(body);
+  }
+
   @Get('tenants/:id')
   @ApiOperation({ summary: 'Get tenant detail' })
   getTenant(@Param('id') id: string) {

@@ -93,8 +93,8 @@ export class AnalyticsService {
    */
   async record(event: AnalyticsEvent, ip?: string, authHeader?: string) {
     try {
-      // Decode user authorization metadata
-      const decoded = this.decodeToken(authHeader) || (event.token ? this.decodeToken(`Bearer ${event.token}`) : null);
+      // Decode user authorization metadata from the standard auth header only
+      const decoded = this.decodeToken(authHeader);
       const tenantId = decoded?.tenantId || null;
       const userId = decoded?.sub || null;
       const email = decoded?.email || null;
@@ -102,8 +102,14 @@ export class AnalyticsService {
       // Extract geolocation details
       const geo = await this.geolocate(ip);
 
-      // Parse cookies if present
-      const cookiesObj = typeof event.cookies === 'object' && event.cookies ? event.cookies : {};
+      // Only cookie NAMES are accepted (compliance auditing) — never store cookie values.
+      // Backwards-compat: if a legacy client sends a cookies object, keep only its keys.
+      const cookieNames: string[] = Array.isArray(event.cookieNames)
+        ? event.cookieNames.filter((n: any) => typeof n === 'string').slice(0, 100)
+        : typeof event.cookies === 'object' && event.cookies
+          ? Object.keys(event.cookies).slice(0, 100)
+          : [];
+      const cookiesObj = { names: cookieNames };
 
       // Build extra session context details
       const sessionData = {

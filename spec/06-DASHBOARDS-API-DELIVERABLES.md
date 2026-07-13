@@ -1,443 +1,247 @@
-# User Dashboards, API Design & Deliverables
+# QS Assets — Dashboards, API & Deliverables
+
+| Field | Value |
+|-------|-------|
+| **Product** | QS Assets |
+| **Last reviewed** | 2026-07-13 |
+| **Status** | Living PRD |
+| **Depends on** | [01](01-PRODUCT-OVERVIEW.md)–[05](05-DATABASE-SCHEMA.md) |
 
 ---
 
-## Dashboard Specifications
+## API principles
 
-### 1. Executive Dashboard (Tenant Admin / C-Level)
-- Total assets by category (donut chart)
-- Asset health score (overall compliance gauge)
-- Open tickets by priority (stacked bar)
-- Patch compliance percentage (trend line)
-- License utilization summary
-- Cost overview (assets by cost center)
-- Top 5 alerts (critical items requiring attention)
-- Fleet utilization summary
-- Network uptime SLA gauge
-
-### 2. IT Admin Dashboard
-- Discovered vs. managed assets count
-- New devices in last 24h/7d (with "review" action)
-- Patch compliance: % up-to-date, critical missing patches count
-- Security posture: devices with AV disabled, encryption off, firewall off
-- Software license compliance bar chart
-- Top 10 vulnerable assets
-- Agent health: online/offline/stale agents
-- Recent scan results summary
-- Active incidents by severity
-
-### 3. Network Operations Center (NOC) Dashboard
-- Network topology map (interactive, color-coded by health)
-- Device health grid (green/yellow/red indicators)
-- Active alarms list (sortable, filterable)
-- Interface utilization (top 10 busiest links)
-- WAN/VPN link status panel
-- Recent SNMP traps and syslog events
-- Bandwidth utilization trend (24h)
-- Device uptime leaderboard
-
-### 4. Fleet Manager Dashboard
-- Live GPS map with all vehicles
-- Vehicle status legend (moving, idle, parked, offline)
-- Active geofence breach alerts
-- Today's trips summary
-- Driver assignments board
-- Maintenance due vehicles list
-- Speed violations log
-- Fleet utilization percentage
-- Fuel consumption trends (if integrated)
-
-### 5. IT Service Desk Dashboard
-- Ticket queue by status (new, open, in progress, pending)
-- My assigned tickets
-- SLA breach countdown (tickets at risk)
-- Tickets created vs. resolved (trend)
-- Average resolution time (by category)
-- Customer satisfaction score (CSAT)
-- Knowledge base top articles
-- Pending approvals
-
-### 6. Security Dashboard
-- CCTV camera grid (live status)
-- Security posture heatmap (by department/site)
-- Vulnerability severity distribution
-- Rogue device alerts
-- Failed login attempts (last 24h)
-- Compliance score by framework (ISO 27001, NIST CSF)
-- Patch status by criticality
-- Encryption compliance percentage
-
-### 7. Employee Self-Service Portal
-- My assigned assets list (with details)
-- Raise new ticket / service request (forms from service catalog)
-- My ticket history (with status tracking)
-- Knowledge base search
-- Announcements from IT
-- Software request catalog
-- Check-in/check-out for shared assets
-
-### 8. Facility Manager Dashboard
-- Non-IT asset inventory by location/floor
-- Maintenance calendar (upcoming scheduled maintenance)
-- Open work orders
-- Spare parts inventory with low-stock alerts
-- Vendor performance ratings
-- Asset condition reports
-- Floor plan view with asset pins
+- REST under Nest controllers (global prefix as deployed; typically `/` or `/api`).
+- JSON bodies; standard HTTP codes; tenant from JWT.
+- Pagination + filters on list endpoints.
+- Rate limits per tenant / API key.
+- OpenAPI via Swagger in non-prod (and protected prod if enabled).
+- **No mocks:** empty arrays and operational errors when deps missing.
 
 ---
 
-## API Design
+## Eight role dashboards → routes
 
-### API Principles
-- RESTful with consistent resource naming (`/api/v1/{module}/{resource}`)
-- JSON request/response bodies
-- HTTP status codes used correctly (200, 201, 204, 400, 401, 403, 404, 409, 422, 429, 500)
-- Pagination: cursor-based for large datasets, offset for simple lists
-- Filtering: query parameters (`?status=active&type=laptop`)
-- Sorting: `?sort=created_at&order=desc`
-- Field selection: `?fields=id,name,status`
-- Rate limiting: per-tenant, per-API-key
-- API versioning via URL path (`/api/v1/`, `/api/v2/`)
-- All endpoints require authentication (except health check)
-- Tenant context from JWT or API key
+Compose existing APIs; dedicated widgets In-build where noted.
 
-### Core API Routes
-```
-# Auth
-POST   /api/v1/auth/login
-POST   /api/v1/auth/logout
-POST   /api/v1/auth/refresh
-POST   /api/v1/auth/mfa/verify
-GET    /api/v1/auth/sso/{provider}
+### 1. Executive / Tenant Admin
 
-# Assets (CMDB)
-GET    /api/v1/assets                    # List with filters
-POST   /api/v1/assets                    # Create
-GET    /api/v1/assets/:id                # Get single
-PATCH  /api/v1/assets/:id                # Update
-DELETE /api/v1/assets/:id                # Soft delete
-GET    /api/v1/assets/:id/history        # Lifecycle history
-GET    /api/v1/assets/:id/relationships  # CI relationships
-POST   /api/v1/assets/:id/relationships  # Create relationship
-GET    /api/v1/assets/:id/tickets        # Related tickets
-POST   /api/v1/assets/import             # Bulk CSV/Excel import
-GET    /api/v1/assets/export             # Export filtered results
+| Widget | API / source | Route |
+|--------|--------------|-------|
+| Assets by category | `GET /assets/stats`, reports executive | `/dashboard` |
+| Open tickets by priority | `GET /tickets/stats` | `/dashboard` |
+| Patch / vuln summary | patches + vulnerabilities | `/dashboard` |
+| License utilization | `GET /licenses` / reports | `/dashboard/licenses` |
+| Top alerts | `GET /alerts/dashboard` | `/dashboard/alerts` |
+| Cost / depreciation | reports finance (In-build) | `/dashboard/reports` |
 
-# Asset Types
-GET    /api/v1/asset-types
-POST   /api/v1/asset-types
-PATCH  /api/v1/asset-types/:id
+**Pass:** Executive sees live counts within 30s of Socket.io refresh; no placeholder charts with random data.
 
-# Discovery
-POST   /api/v1/discovery/scans           # Trigger scan
-GET    /api/v1/discovery/scans           # List scan jobs
-GET    /api/v1/discovery/scans/:id       # Scan results
-POST   /api/v1/discovery/credentials     # Store scan credentials
-GET    /api/v1/discovery/agents          # List registered agents
-GET    /api/v1/discovery/agents/:id      # Agent details
+### 2. IT Admin
 
-# Network (NMS)
-GET    /api/v1/network/devices           # All network devices
-GET    /api/v1/network/devices/:id/interfaces
-GET    /api/v1/network/topology          # Topology map data
-GET    /api/v1/network/metrics           # Time-series metrics
-GET    /api/v1/network/traps             # SNMP traps
-GET    /api/v1/network/configs/:id       # Device config history
+| Widget | Route |
+|--------|-------|
+| Discovered vs managed, agents health | `/dashboard/discovery` |
+| New devices 24h/7d | `/dashboard/discovery` |
+| Patch compliance + critical missing | `/dashboard/patches` |
+| Security posture / vulns | `/dashboard/vulnerabilities`, `/dashboard/compliance` |
+| Software / licenses | `/dashboard/software`, `/dashboard/licenses` |
 
-# Fleet / GPS
-GET    /api/v1/fleet/vehicles            # All vehicles
-GET    /api/v1/fleet/vehicles/:id/position  # Current position
-GET    /api/v1/fleet/vehicles/:id/trips  # Trip history
-WS     /api/v1/fleet/live                # WebSocket: live positions
-GET    /api/v1/fleet/geofences           # Geofence definitions
-POST   /api/v1/fleet/geofences           # Create geofence
-GET    /api/v1/fleet/alerts              # Fleet alerts
+**Pass:** Agent offline &gt; threshold surfaces alert; scan job progress via WS.
 
-# Patches
-GET    /api/v1/patches                   # Available patches
-GET    /api/v1/patches/missing           # Missing patches by asset
-POST   /api/v1/patches/deploy            # Create deployment job
-GET    /api/v1/patches/deployments/:id   # Deployment status
-GET    /api/v1/patches/compliance        # Compliance report
+### 3. NOC
 
-# Licenses
-GET    /api/v1/licenses                  # All licenses
-GET    /api/v1/licenses/compliance       # Compliance overview
-GET    /api/v1/licenses/:id/assignments  # Who is using this license
+| Widget | Route |
+|--------|-------|
+| Topology map | `/dashboard/network` |
+| Device health grid | `/dashboard/network` |
+| Alarms + trap/syslog stream | `/dashboard/network`, `/dashboard/alerts` (In-build syslog) |
+| Top interfaces / talkers | `/dashboard/network` (In-build NetFlow) |
+| Config drift | `/dashboard/network/configs` |
 
-# Tickets (ITSM)
-GET    /api/v1/tickets                   # List tickets
-POST   /api/v1/tickets                   # Create ticket
-GET    /api/v1/tickets/:id              # Get ticket
-PATCH  /api/v1/tickets/:id              # Update ticket
-POST   /api/v1/tickets/:id/comments     # Add comment
-GET    /api/v1/tickets/:id/history      # Ticket timeline
-POST   /api/v1/tickets/:id/assign      # Assign ticket
-POST   /api/v1/tickets/:id/escalate    # Escalate
+**Pass:** SNMP metrics chart from `DeviceMetricsHistory`; traps live; empty NetFlow state until exporters configured.
 
-# Service Catalog
-GET    /api/v1/service-catalog           # Available services
-POST   /api/v1/service-catalog/:id/request  # Request a service
+### 4. Fleet Manager
 
-# CCTV
-GET    /api/v1/cctv/cameras              # All cameras
-GET    /api/v1/cctv/cameras/:id/stream   # Get stream URL
-GET    /api/v1/cctv/cameras/:id/events   # Camera events
+| Widget | Route |
+|--------|-------|
+| Live map + trips | `/dashboard/fleet` |
+| Geofence / speed / idle alerts | `/dashboard/fleet`, `/dashboard/alerts` (In-build) |
+| Maintenance due | fleet + work-orders (In-build EAM link) |
 
-# VDI
-GET    /api/v1/vdi/pools                 # VDI pool overview
-GET    /api/v1/vdi/sessions              # Active sessions
-GET    /api/v1/vdi/metrics               # Performance metrics
+**Pass:** Telemetry updates map; geofence breach creates AlertEvent.
 
-# Automation
-GET    /api/v1/automation/rules          # All rules
-POST   /api/v1/automation/rules          # Create rule
-GET    /api/v1/automation/executions     # Execution history
+### 5. IT Service Desk
 
-# Reports
-GET    /api/v1/reports                   # Available reports
-POST   /api/v1/reports/:id/generate     # Generate report
-GET    /api/v1/reports/exports/:id      # Download export
+| Widget | Route |
+|--------|-------|
+| Queue by status / mine | `/dashboard/tickets` |
+| SLA at risk | `/dashboard/tickets` |
+| Changes / problems | `/dashboard/changes`, `/dashboard/problems` |
+| KB + catalog | `/dashboard/knowledge-base`, `/dashboard/service-catalog` |
+| CSAT | tickets (In-build) |
+| Work orders | `/dashboard/work-orders` |
 
-# Notifications
-GET    /api/v1/notifications             # User notifications
-PATCH  /api/v1/notifications/:id/read   # Mark as read
+**Pass:** SLA escalation fires; CSAT stored on resolve; catalog approval enforced.
 
-# Admin
-GET    /api/v1/admin/users               # Manage users
-GET    /api/v1/admin/roles               # Manage roles
-GET    /api/v1/admin/audit-logs          # Audit trail
-GET    /api/v1/admin/settings            # System settings
+### 6. Security
 
-# Health
-GET    /api/v1/health                    # System health (no auth)
-GET    /api/v1/health/detailed           # Detailed health (admin only)
-```
+| Widget | Route |
+|--------|-------|
+| Vuln severity distribution | `/dashboard/vulnerabilities` |
+| Compliance score | `/dashboard/compliance` |
+| CCTV status / wall | `/dashboard/cctv` |
+| NAC / rogue | `/dashboard/nac` |
+| Audit integrity | `/dashboard/audit-logs` |
+| Scanning capabilities | `/dashboard/scanning` |
+
+**Pass:** Critical CVE auto-ticket path; audit verify; threat actions push WS.
+
+### 7. Employee self-service
+
+| Widget | Route |
+|--------|-------|
+| My assets | `/dashboard/my-portal`, `/portal/*` |
+| Raise request / ticket | portal + service catalog |
+| Ticket history | portal |
+| KB search | portal / KB |
+| Check-in/out | portal / assets |
+| Mobile scan | `/scan` PWA |
+
+**Pass:** Employee sees only assigned assets; request creates ticket; QR scan resolves asset.
+
+### 8. Facility Manager
+
+| Widget | Route |
+|--------|-------|
+| Non-IT inventory | `/dashboard/non-it-assets` |
+| Floor pins | facility UI (In-build) |
+| PM calendar + WOs | `/dashboard/work-orders` |
+| Spares / consumables low stock | facility widgets (In-build) |
+| Vendors | `/dashboard/procurement` |
+
+**Pass:** Pin overlay; PM → WO; min-stock alert.
 
 ---
 
-## CI/CD Pipeline
+## REST catalog (as-built modules)
 
-### Pipeline Stages
-```yaml
-stages:
-  - lint          # ESLint, Prettier check
-  - type-check    # TypeScript compilation
-  - unit-test     # Jest unit tests
-  - sast          # SonarQube / Semgrep static analysis
-  - sca           # Snyk dependency vulnerability scan
-  - secret-scan   # GitLeaks secret detection
-  - build         # Build application + Docker images
-  - container-scan # Trivy container vulnerability scan
-  - integration-test # API integration tests
-  - dast          # OWASP ZAP dynamic scan (staging)
-  - deploy-staging # Deploy to staging
-  - smoke-test    # Automated smoke tests on staging
-  - approval      # Manual approval gate (production)
-  - deploy-prod   # Blue-green deploy to production
-  - post-deploy   # Health checks, rollback if unhealthy
-```
+Representative groups — controllers under `apps/api/src/modules/*`. Expand as routes ship; keep Swagger accurate.
 
-### Quality Gates (Must Pass)
-- 0 critical/high SAST findings
-- 0 critical/high SCA vulnerabilities
-- 0 secrets detected
-- Code coverage > 80%
-- All unit tests pass
-- All integration tests pass
-- Container scan: 0 critical vulnerabilities
-- Lighthouse score > 90 (performance)
-- API response time < 200ms (p95)
+| Area | Prefix / examples |
+|------|-------------------|
+| Auth | `POST /auth/login`, `refresh`, `logout`, `register`, OAuth |
+| SSO | `sso/*` (SAML ACS, OIDC) |
+| Users / tenants | `users/*`, `tenants/me`, settings |
+| Assets | `assets/*`, `asset-types/*`, checkout, attestation, import |
+| Discovery | `discovery/*` (jobs, agents, credentials, schedules, downloads) |
+| Cloud | `cloud-connectors/*` |
+| IoT | MQTT config/telemetry controllers |
+| Monitoring | `monitoring/network`, SNMP, traps, nmap, cameras, HLS, VDI |
+| Network configs | `monitoring` network-config routes |
+| Scanning | `scanning/*` |
+| NAC | discovery NAC routes |
+| Tickets / WO | `tickets/*`, work-orders |
+| Changes / problems | `changes/*`, `problems/*` |
+| Patches | `patches/*` |
+| Vulnerabilities | `vulnerabilities/*` |
+| Licenses / software | `licenses/*`, `software/*` |
+| Automation / scripts | `automation/*`, `automation/scripts/*` |
+| Alerts | `alerts/*` |
+| Notifications | `notifications/*` |
+| Reports | `reports/*`, generate/download/schedules |
+| Compliance | `compliance/*` |
+| Procurement | `procurement/*` |
+| Fleet | fleet / GPS routes |
+| Knowledge / catalog | `knowledge-base/*`, `service-catalog/*` |
+| Audit | `audit-logs/*` (+ verify) |
+| Admin | `admin/*` |
+| Health | `health`, `ready`, `live`, `detailed` |
+| Risk / analytics | `risk/*`, `analytics/*` |
+| Setup / contact / payments | setup, contact, payment webhooks |
 
----
-
-## Complete Deliverables Checklist
-
-### Code Deliverables
-| # | Deliverable | Tech |
-|---|-------------|------|
-| 1 | Backend API + Business Logic | NestJS / TypeScript |
-| 2 | Frontend Web Application | Next.js / React |
-| 3 | Discovery Engine (network scanner) | Go |
-| 4 | Endpoint Agent | Go |
-| 5 | GPS Ingestion Service | Go |
-| 6 | Database Schema + Migrations | Prisma / PostgreSQL |
-| 7 | CMDB Module | NestJS module |
-| 8 | ITAM Module | NestJS module |
-| 9 | EAM Module | NestJS module |
-| 10 | NMS Module | NestJS + Go |
-| 11 | Fleet/GPS Module | NestJS + Go |
-| 12 | Patch Management Module | NestJS |
-| 13 | License Management Module | NestJS |
-| 14 | VDI Monitoring Module | NestJS |
-| 15 | CCTV Management Module | NestJS |
-| 16 | ITSM Ticketing Module | NestJS |
-| 17 | Automation Engine | NestJS |
-| 18 | Notification Engine | NestJS |
-| 19 | Reporting Engine | NestJS |
-| 20 | Auth + RBAC System | NestJS |
-| 21 | Multi-tenant System | NestJS middleware |
-| 22 | Audit Logging System | NestJS interceptor |
-| 23 | API Gateway | NestJS / Kong |
-| 24 | SaaS Billing Module (optional) | NestJS + Stripe |
-
-### Infrastructure Deliverables
-| # | Deliverable |
-|---|-------------|
-| 25 | Dockerfiles (all services) |
-| 26 | docker-compose.yml (local dev) |
-| 27 | docker-compose.prod.yml (production) |
-| 28 | Kubernetes Helm charts |
-| 29 | Terraform modules (AWS/Azure/GCP) |
-| 30 | CI/CD pipeline configs (GitHub Actions) |
-| 31 | Nginx/Traefik reverse proxy config |
-| 32 | Prometheus + Grafana monitoring setup |
-
-### Documentation Deliverables
-| # | Deliverable |
-|---|-------------|
-| 33 | Software Requirements Specification (IEEE 830) |
-| 34 | Architecture Decision Records (ADRs) |
-| 35 | API Documentation (OpenAPI 3.0 / Swagger) |
-| 36 | Database ERD diagrams |
-| 37 | User guide / admin manual |
-| 38 | Deployment guide (SaaS + On-Prem) |
-| 39 | Compliance mapping document (ISO, NIST, ITIL) |
-| 40 | SSDLC documentation (threat models, security controls) |
-
-### Data & Testing
-| # | Deliverable |
-|---|-------------|
-| 41 | Seed data (realistic mock data for demo) |
-| 42 | Sample tenant configurations |
-| 43 | Unit test suite (>80% coverage) |
-| 44 | Integration test suite |
-| 45 | E2E test suite (Playwright) |
-| 46 | Performance/load test scripts (k6) |
+**In-build additions:** MFA challenge endpoints; NetFlow/syslog ingest; CAB/CSAT; EAM spares/PM; BusinessService impact; Traccar ingest; global search.
 
 ---
 
-## Implementation Phases
+## Frontend route inventory (dashboard)
 
-### Phase 1 — Foundation (Weeks 1-4)
-- Project scaffolding (Turborepo monorepo)
-- Database schema + Prisma setup
-- Auth system (local + JWT + RBAC)
-- Multi-tenant middleware + RLS
-- Base UI (layout, navigation, dark/light theme)
-- Audit logging interceptor
-- Health checks + basic monitoring
-
-### Phase 2 — Core Asset Management (Weeks 5-8)
-- CMDB + Asset CRUD (unified asset model)
-- Asset types + custom fields
-- IT asset details (hardware, OS, software)
-- Non-IT asset management (EAM)
-- Manual entry forms + CSV/Excel import
-- Asset lifecycle management
-- Asset search + filtering + bulk operations
-
-### Phase 3 — Discovery & Scanning (Weeks 9-12)
-- Go-based discovery engine
-- Agent-based scanning (Go agent)
-- Agentless: SNMP, WMI, SSH scanning
-- Active Directory import
-- Cloud discovery (AWS/Azure/GCP)
-- Auto-classification + correlation
-- Credential vault
-
-### Phase 4 — ITSM & Ticketing (Weeks 13-16)
-- Full ticketing system (incident, problem, change, request)
-- Self-service portal + service catalog
-- SLA management + escalations
-- Workflow builder (visual, no-code)
-- Knowledge base
-- Email-to-ticket integration
-- Work order management
-
-### Phase 5 — Network & Patch Management (Weeks 17-20)
-- NMS: SNMP polling, topology mapping
-- NMS: alerts, traps, syslog
-- NMS: config management
-- Patch scanning + deployment engine
-- Patch approval workflows
-- Vulnerability assessment dashboard
-- License management + compliance
-
-### Phase 6 — Fleet, CCTV & VDI (Weeks 21-24)
-- GPS ingestion service (Go)
-- Fleet dashboard + live map
-- Geofencing engine (PostGIS)
-- CCTV: ONVIF discovery + camera management
-- CCTV: live view proxy (RTSP → HLS/WebRTC)
-- VDI monitoring (VMware/Citrix/Azure API integration)
-
-### Phase 7 — Automation, Reports & Polish (Weeks 25-28)
-- Automation engine (rule builder + execution)
-- Notification engine (multi-channel)
-- Reporting engine (custom reports + scheduled delivery)
-- Change request lifecycle (SSDLC workflow)
-- Dashboard customization (drag-and-drop widgets)
-- Global search (Meilisearch integration)
-- Performance optimization
-
-### Phase 8 — Production Readiness (Weeks 29-32)
-- Security hardening + penetration testing
-- CI/CD pipeline finalization
-- Docker/K8s production configs
-- On-prem installation packaging
-- SaaS billing integration (optional)
-- Load testing + optimization
-- Documentation completion
-- End-to-end test suite
-- Demo environment with mock data
+| Route | Module |
+|-------|--------|
+| `/dashboard` | Home / executive compose |
+| `/dashboard/my-portal` | Employee |
+| `/dashboard/assets`, `it-assets`, `non-it-assets`, `assets/[id]`, `import` | ITAM/EAM |
+| `/dashboard/cmdb` | CMDB |
+| `/dashboard/tickets`, `tickets/[id]` | ITSM |
+| `/dashboard/work-orders` | WO |
+| `/dashboard/discovery` | Discovery |
+| `/dashboard/patches` | Patch |
+| `/dashboard/vulnerabilities` | Vuln |
+| `/dashboard/network`, `network/configs` | NMS |
+| `/dashboard/scanning` | Security scan |
+| `/dashboard/compliance` | Compliance |
+| `/dashboard/nac` | NAC |
+| `/dashboard/procurement` | Procurement |
+| `/dashboard/changes`, `problems` | ITIL |
+| `/dashboard/fleet`, `cctv`, `vdi` | Ops |
+| `/dashboard/automation` | Automation |
+| `/dashboard/licenses`, `software`, `software-deploy` | SAM |
+| `/dashboard/knowledge-base`, `service-catalog` | Self-service |
+| `/dashboard/reports`, `alerts`, `users`, `audit-logs`, `settings`, `help` | Platform |
+| `/dashboard/intelligence`, `remote-terminal` | Advanced |
+| `/scan` | Label scan PWA |
+| `/portal/*` | Employee portal |
+| `/admin/*` | Platform admin |
 
 ---
 
-## Things You Specified That Are Preserved
+## Deliverables pass/fail checklist
 
-✅ IT + Non-IT asset management
-✅ GPS fleet tracking with geofencing
-✅ Ticket raising from user dashboards
-✅ Admin dashboard with alerts/notifications
-✅ Ticket status management
-✅ Patch management for software updates
-✅ License management
-✅ SaaS + On-Premise deployment
-✅ Agent + Agentless + SNMP + Cloud scanning
-✅ Auto-discovery of network devices
-✅ Manual entry + CSV/Excel import
-✅ CMDB with relationships
-✅ Automation engine
-✅ Role-based access with SSO/MFA
-✅ NMS (network monitoring)
-✅ VDI monitoring
-✅ CCTV management
-✅ ITIL/ISO/NIST/SSDLC compliance
-✅ Change request lifecycle (full SSDLC)
-✅ ManageEngine-inspired design
-✅ Production-ready architecture
-✅ Full documentation
-✅ Mock data
+### Platform
 
-## Additional Items Added From Research
+- [ ] Docker PostGIS + Redis healthy; migrate + seed
+- [ ] API health green; web login works against API
+- [ ] Socket.io tenant rooms deliver events
+- [ ] RLS enabled on tenant tables
+- [ ] CI lint/typecheck/test/build green
 
-✅ PostGIS for spatial queries (geofencing, asset location)
-✅ TimescaleDB for time-series metrics (network, GPS, VDI)
-✅ Hash-chained audit logs (tamper-proof compliance)
-✅ Transactional outbox pattern for event consistency
-✅ Row-Level Security for tenant isolation
-✅ IoT/OT protocol support (MQTT, Modbus, BACnet)
-✅ Known Error Database (KEDB) for problem management
-✅ Service catalog with approval workflows
-✅ Asset correlation engine (deduplicate multi-source discoveries)
-✅ Spare parts inventory management
-✅ Floor plan views with asset pins
-✅ NOC/Kiosk display mode
-✅ CIS benchmark compliance checking
-✅ Data classification levels
-✅ GDPR/DPDP Act privacy compliance
-✅ Lighthouse performance targets
-✅ k6 load testing
-✅ Playwright E2E tests
+### Discovery / UEM
+
+- [ ] Agent Desktop / Service / ZIP paths work
+- [ ] WMI/SSH/SNMP enrich real data
+- [ ] AWS sync; Azure + GCP non-stub
+- [ ] AD sync merge-safe
+- [ ] MQTT + ONVIF; Modbus/BACnet flagged honestly
+
+### ITAM / EAM
+
+- [ ] Depreciation mass run + report
+- [ ] Checkout + attestation campaigns
+- [ ] PM + spares + consumables + floor pins + RFID scan
+
+### NMS / security
+
+- [ ] Traps + syslog → alert/ticket
+- [ ] NetFlow top talkers when exporter present
+- [ ] Vuln match + critical ticket
+- [ ] Patch rings + rollback
+- [ ] CIS evidence export
+- [ ] MFA + SAML + NAC CoA/fallback
+
+### ITSM / UX
+
+- [ ] CAB + SSDLC gates + CSAT + email ingest
+- [ ] All 8 role dashboards usable
+- [ ] No “Coming soon” where backend exists
+- [ ] `/scan` installable PWA meta
+- [ ] Production Railway + Vercel healthy (CORS/OAuth)
+
+---
+
+## Acceptance tests — dashboards & API
+
+1. Each of the 8 roles can complete primary job on mapped routes with seeded data.
+2. `GET /reports/generate/executive?format=pdf` returns non-empty PDF.
+3. Unauthorized role receives 403 on admin routes.
+4. OpenAPI lists new Must-ship endpoints when shipped.
+5. Pass/fail checklist items checked in [07](07-GAP-REMEDIATION-PLAN.md) as phases complete.

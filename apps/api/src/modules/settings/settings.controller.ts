@@ -1,4 +1,4 @@
-import { Controller, Get, Patch, Post, Body, UseGuards, Request } from '@nestjs/common';
+import { Controller, Get, Patch, Post, Body, Query, UseGuards, Request } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
@@ -64,8 +64,19 @@ export class SettingsController {
 
   @Post('upgrade')
   @Roles('Tenant Admin')
-  @ApiOperation({ summary: 'Request plan upgrade' })
-  async requestUpgrade(@Request() req: any, @Body() body: { plan: string; billingCycle?: string; currency?: string }) {
-    return this.service.requestUpgrade(req.user.tenantId, body.plan, body.billingCycle, body.currency);
+  @ApiOperation({ summary: 'Request plan upgrade (creates Stripe Checkout or Razorpay Order when configured)' })
+  async requestUpgrade(
+    @Request() req: any,
+    @Body() body: { plan: string; billingCycle?: string; currency?: string; provider?: string },
+    @Query('provider') providerQuery?: string,
+  ) {
+    const provider = body?.provider || providerQuery;
+    return this.service.requestUpgrade(
+      req.user.tenantId,
+      body.plan,
+      body.billingCycle,
+      body.currency,
+      provider,
+    );
   }
 }

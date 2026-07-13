@@ -1,4 +1,4 @@
-import { Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../../common/database/prisma.service';
 
 @Injectable()
@@ -143,18 +143,110 @@ export class ServiceCatalogService {
     });
     const nextNum = lastTicket ? parseInt(lastTicket.ticketNumber.replace(/\D/g, '') || '0') + 1 : 1;
 
-    return this.prisma.ticket.create({
+    const needsApproval = !!catalogItem.approvalRequired;
+    const approvalMarker = needsApproval
+      ? `\n\n<!-- catalogApproval:PENDING catalogItemId:${catalogItem.id} -->`
+      : `\n\n<!-- catalogApproval:NOT_REQUIRED catalogItemId:${catalogItem.id} -->`;
+
+    const ticket = await this.prisma.ticket.create({
       data: {
         tenantId,
         ticketNumber: `SR-${String(nextNum).padStart(5, '0')}`,
         type: 'SERVICE_REQUEST',
         category: catalogItem.category || 'Service Request',
         subject: body.subject || `Service Request: ${catalogItem.name}`,
-        description: body.description || catalogItem.description || '',
+        description: `${body.description || catalogItem.description || ''}${approvalMarker}`,
         priority: 'MEDIUM',
-        status: 'NEW',
+        // PENDING = awaiting manager approval before fulfillment work starts
+        status: needsApproval ? 'PENDING' : 'NEW',
         requesterId: userId,
+        subCategory: needsApproval ? 'AWAITING_APPROVAL' : 'AUTO_APPROVED',
       },
     });
+
+    return {
+      ...ticket,
+      approvalRequired: needsApproval,
+      approvalStatus: needsApproval ? 'PENDING' : 'NOT_REQUIRED',
+      message: needsApproval
+        ? 'Request submitted — awaiting manager approval before fulfillment'
+        : 'Request submitted — ready for fulfillment',
+    };
+  }
+
+  /**
+   * Approve a catalog-originated service request. Moves PENDING → OPEN so agents can fulfill.
+   */
+  async approveRequest(tenantId: string, ticketId: string, approverId: string, comment?: string) {
+    const ticket = await this.prisma.ticket.findFirst({
+      where: { id: ticketId, tenantId, type: 'SERVICE_REQUEST' },
+    });
+    if (!ticket) throw new NotFoundException('Service request not found');
+    if (ticket.status !== 'PENDING' && ticket.subCategory !== 'AWAITING_APPROVAL') {
+      throw new BadRequestException('Request is not awaiting approval');
+    }
+
+    const desc = (ticket.description || '').replace(
+      /<!-- catalogApproval:PENDING[^>]*-->/,
+      `<!-- catalogApproval:APPROVED by:${approverId} at:${new Date().toISOString()} -->`,
+    );
+
+    const updated = await this.prisma.ticket.update({
+      where: { id: ticketId },
+      data: {
+        status: 'OPEN',
+        subCategory: 'APPROVED',
+        description: desc,
+      },
+    });
+
+    if (comment) {
+      await this.prisma.ticketComment.create({
+        data: {
+          ticketId,
+          authorId: approverId,
+          content: `Catalog approval: ${comment}`,
+          isInternal: true,
+        },
+      }).catch(() => {});
+    }
+
+    return { ...updated, approvalStatus: 'APPROVED' };
+  }
+
+  async rejectRequest(tenantId: string, ticketId: string, approverId: string, reason?: string) {
+    const ticket = await this.prisma.ticket.findFirst({
+      where: { id: ticketId, tenantId, type: 'SERVICE_REQUEST' },
+    });
+    if (!ticket) throw new NotFoundException('Service request not found');
+    if (ticket.status !== 'PENDING' && ticket.subCategory !== 'AWAITING_APPROVAL') {
+      throw new BadRequestException('Request is not awaiting approval');
+    }
+
+    const desc = (ticket.description || '').replace(
+      /<!-- catalogApproval:PENDING[^>]*-->/,
+      `<!-- catalogApproval:REJECTED by:${approverId} at:${new Date().toISOString()} -->`,
+    );
+
+    const updated = await this.prisma.ticket.update({
+      where: { id: ticketId },
+      data: {
+        status: 'CANCELLED',
+        subCategory: 'REJECTED',
+        description: desc,
+        closedAt: new Date(),
+      },
+    });
+
+    await this.prisma.ticketComment.create({
+      data: {
+        ticketId,
+        authorId: approverId,
+        content: `Catalog request rejected${reason ? `: ${reason}` : ''}`,
+        isInternal: false,
+      },
+    }).catch(() => {});
+
+    return { ...updated, approvalStatus: 'REJECTED' };
   }
 }

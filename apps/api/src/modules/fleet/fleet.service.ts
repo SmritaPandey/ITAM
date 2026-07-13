@@ -23,12 +23,61 @@ export class FleetService {
     });
     const active = assets.filter(a => a.status === 'ACTIVE').length;
     const maintenance = assets.filter(a => a.status === 'IN_MAINTENANCE').length;
+    const maintenanceDue = await this.getMaintenanceDue(tenantId);
     return {
       data: assets,
       total: assets.length,
       active,
       inMaintenance: maintenance,
       gpsTracked: assets.length,
+      maintenanceDueCount: maintenanceDue.total,
+    };
+  }
+
+  /** Fleet vehicle PM due from EAM MaintenanceSchedule (next 14 days + overdue). */
+  async getMaintenanceDue(tenantId: string) {
+    const now = new Date();
+    const in14d = new Date(now.getTime() + 14 * 24 * 60 * 60 * 1000);
+    const vehicleIds = (
+      await this.prisma.asset.findMany({
+        where: { tenantId, deletedAt: null, latitude: { not: null } },
+        select: { id: true },
+      })
+    ).map((a) => a.id);
+
+    if (vehicleIds.length === 0) {
+      return { total: 0, overdue: 0, upcoming: 0, items: [] };
+    }
+
+    const schedules = await this.prisma.maintenanceSchedule.findMany({
+      where: {
+        tenantId,
+        isActive: true,
+        assetId: { in: vehicleIds },
+        nextDueAt: { not: null, lte: in14d },
+      },
+      include: {
+        asset: { select: { id: true, name: true, assetTag: true, status: true } },
+      },
+      orderBy: { nextDueAt: 'asc' },
+      take: 100,
+    });
+
+    const items = schedules.map((s) => ({
+      id: s.id,
+      assetId: s.assetId,
+      assetName: s.asset?.name,
+      assetTag: s.asset?.assetTag,
+      title: s.name,
+      nextDueAt: s.nextDueAt,
+      overdue: s.nextDueAt ? s.nextDueAt <= now : false,
+    }));
+
+    return {
+      total: items.length,
+      overdue: items.filter((i) => i.overdue).length,
+      upcoming: items.filter((i) => !i.overdue).length,
+      items,
     };
   }
 
@@ -52,11 +101,51 @@ export class FleetService {
   }
 
   async getAlerts(tenantId: string) {
-    return this.prisma.notification.findMany({
-      where: { user: { tenantId }, type: 'ALERT' },
-      take: 20,
-      orderBy: { createdAt: 'desc' },
-    });
+    const [alertEvents, notifications] = await Promise.all([
+      this.prisma.alertEvent.findMany({
+        where: { tenantId, category: { in: ['fleet', 'FLEET', 'geofence', 'speeding', 'idle'] } },
+        take: 40,
+        orderBy: { createdAt: 'desc' },
+      }),
+      this.prisma.notification.findMany({
+        where: { tenantId, type: 'ALERT', module: 'fleet' },
+        take: 20,
+        orderBy: { createdAt: 'desc' },
+      }),
+    ]);
+
+    const fromEvents = alertEvents.map((e) => ({
+      id: e.id,
+      title: e.title,
+      message: e.message,
+      type: 'ALERT',
+      severity: e.severity,
+      category: e.category,
+      source: e.source,
+      sourceId: e.sourceId,
+      acknowledged: e.acknowledged,
+      resolved: e.resolved,
+      createdAt: e.createdAt,
+      metadata: e.metadata,
+    }));
+
+    // Prefer AlertEvent feed; fall back to notifications for older installs
+    if (fromEvents.length > 0) return fromEvents;
+
+    return notifications.map((n) => ({
+      id: n.id,
+      title: n.title,
+      message: n.message,
+      type: n.type,
+      severity: 'WARNING',
+      category: 'fleet',
+      source: 'notification',
+      sourceId: n.resourceId,
+      acknowledged: n.isRead,
+      resolved: false,
+      createdAt: n.createdAt,
+      metadata: {},
+    }));
   }
 
   async getTripHistory(tenantId: string, vehicleId: string) {
@@ -196,7 +285,235 @@ export class FleetService {
     // 3. Check geofence violations
     await this.checkGeofences(tenantId, data.assetId, data.latitude, data.longitude);
 
+    // 4. Speeding + idle alerts
+    await this.checkSpeedAndIdle(tenantId, data.assetId, data.speed || 0);
+
     return telemetry;
+  }
+
+  /**
+   * Speeding and idle detection based on tenant fleet settings.
+   * settings.fleet.maxSpeedKmh (default 120), settings.fleet.idleMinutes (default 15)
+   */
+  async checkSpeedAndIdle(tenantId: string, vehicleId: string, speed: number) {
+    const tenant = await this.prisma.tenant.findUnique({ where: { id: tenantId } });
+    const settings = (tenant?.settings as any) || {};
+    const fleetCfg = settings.fleet || {};
+    const maxSpeed = Number(fleetCfg.maxSpeedKmh) || 120;
+    const idleMinutes = Number(fleetCfg.idleMinutes) || 15;
+
+    const vehicle = await this.prisma.asset.findFirst({
+      where: { id: vehicleId, tenantId, deletedAt: null },
+      select: { id: true, name: true },
+    });
+    if (!vehicle) return;
+
+    if (speed > maxSpeed) {
+      await this.broadcastFleetAlert(tenantId, {
+        vehicleId,
+        vehicleName: vehicle.name,
+        alertType: 'SPEEDING',
+        title: `Speeding: ${vehicle.name}`,
+        message: `Vehicle "${vehicle.name}" is traveling at ${speed.toFixed(1)} km/h (limit ${maxSpeed} km/h).`,
+        meta: { speed, maxSpeed },
+      });
+      this.eventBus.emitAssetEvent(tenantId, 'fleet.speeding', {
+        vehicleId,
+        vehicleName: vehicle.name,
+        speed,
+        maxSpeed,
+        timestamp: new Date(),
+      });
+    }
+
+    // Idle: speed ≈ 0 for idleMinutes based on recent telemetry
+    if (speed <= 1) {
+      const since = new Date(Date.now() - idleMinutes * 60 * 1000);
+      const recent = await this.prisma.gpsTelemetry.findMany({
+        where: { tenantId, assetId: vehicleId, collectedAt: { gte: since } },
+        orderBy: { collectedAt: 'asc' },
+        select: { speed: true, collectedAt: true },
+      });
+      if (recent.length >= 3 && recent.every((r) => (r.speed || 0) <= 1)) {
+        const first = recent[0].collectedAt;
+        const idleForMin = (Date.now() - new Date(first).getTime()) / 60000;
+        if (idleForMin >= idleMinutes) {
+          // Dedup: only alert if no idle alert in last idleMinutes
+          const recentAlert = await this.prisma.notification.findFirst({
+            where: {
+              tenantId,
+              resourceId: vehicleId,
+              module: 'fleet',
+              title: { startsWith: 'Idle:' },
+              createdAt: { gte: since },
+            },
+          });
+          if (!recentAlert) {
+            await this.broadcastFleetAlert(tenantId, {
+              vehicleId,
+              vehicleName: vehicle.name,
+              alertType: 'IDLE',
+              title: `Idle: ${vehicle.name}`,
+              message: `Vehicle "${vehicle.name}" has been idle for ~${Math.round(idleForMin)} minutes.`,
+              meta: { idleMinutes: Math.round(idleForMin) },
+            });
+            this.eventBus.emitAssetEvent(tenantId, 'fleet.idle', {
+              vehicleId,
+              vehicleName: vehicle.name,
+              idleMinutes: Math.round(idleForMin),
+              timestamp: new Date(),
+            });
+          }
+        }
+      }
+    }
+  }
+
+  private async broadcastFleetAlert(
+    tenantId: string,
+    data: {
+      vehicleId: string;
+      vehicleName: string;
+      alertType: string;
+      title: string;
+      message: string;
+      meta?: any;
+    },
+  ) {
+    const severity =
+      data.alertType === 'SPEEDING' ? 'HIGH' : data.alertType === 'IDLE' ? 'MEDIUM' : 'WARNING';
+    const category =
+      data.alertType === 'SPEEDING' ? 'speeding' : data.alertType === 'IDLE' ? 'idle' : 'fleet';
+
+    // Dedup AlertEvent within 15 minutes for same vehicle + type
+    const since = new Date(Date.now() - 15 * 60 * 1000);
+    const existing = await this.prisma.alertEvent.findFirst({
+      where: {
+        tenantId,
+        sourceId: data.vehicleId,
+        category,
+        title: data.title,
+        createdAt: { gte: since },
+      },
+    });
+    if (!existing) {
+      await this.prisma.alertEvent.create({
+        data: {
+          tenantId,
+          severity,
+          category,
+          title: data.title,
+          message: data.message,
+          source: 'fleet',
+          sourceId: data.vehicleId,
+          metadata: { alertType: data.alertType, vehicleName: data.vehicleName, ...(data.meta || {}) },
+        },
+      });
+    }
+
+    const admins = await this.prisma.user.findMany({
+      where: {
+        tenantId,
+        role: { name: { in: ['Tenant Admin', 'Fleet Manager'] } },
+        status: 'ACTIVE',
+      },
+      select: { id: true },
+    });
+    if (admins.length === 0) return;
+    await this.prisma.notification.createMany({
+      data: admins.map((admin) => ({
+        tenantId,
+        userId: admin.id,
+        title: data.title,
+        message: data.message,
+        type: 'ALERT',
+        module: 'fleet',
+        resourceId: data.vehicleId,
+      })),
+    });
+  }
+
+  /**
+   * Traccar / OsmAnd webhook ingest.
+   * Traccar: { uniqueId|deviceId, latitude, longitude, speed, attributes? }
+   * OsmAnd: query/body lat, lon, speed, deviceid|id, timestamp
+   */
+  async ingestTraccarOrOsmand(
+    tenantId: string,
+    body: any,
+    query: any = {},
+  ) {
+    const src = { ...query, ...body };
+    const lat = parseFloat(src.latitude ?? src.lat ?? src.y);
+    const lng = parseFloat(src.longitude ?? src.lon ?? src.lng ?? src.x);
+    const speedRaw = src.speed ?? src.speedKmh ?? src.spd ?? 0;
+    let speed = parseFloat(speedRaw) || 0;
+    // Traccar often reports speed in knots or m/s — if attributes.speed present use km/h hint
+    if (src.speedUnit === 'knots' || (body?.protocol === 'osmand' && speed < 50 && src.speed)) {
+      // OsmAnd speed is often m/s
+      if (String(src.protocol || '').toLowerCase() === 'osmand' || query.protocol === 'osmand') {
+        speed = speed * 3.6;
+      }
+    }
+
+    if (Number.isNaN(lat) || Number.isNaN(lng)) {
+      return { error: 'latitude/longitude required' };
+    }
+
+    const deviceKey = String(
+      src.uniqueId ||
+        src.deviceId ||
+        src.deviceid ||
+        src.id ||
+        src.assetId ||
+        src.imei ||
+        '',
+    );
+    if (!deviceKey) return { error: 'device identifier required' };
+
+    // Map device key → asset via settings.fleet.traccarDeviceMap or assetTag/hostname/id
+    const settings = ((await this.prisma.tenant.findUnique({ where: { id: tenantId } }))
+      ?.settings as any) || {};
+    const map: Record<string, string> = settings.fleet?.traccarDeviceMap || {};
+    let assetId = map[deviceKey] || null;
+
+    if (!assetId) {
+      const asset = await this.prisma.asset.findFirst({
+        where: {
+          tenantId,
+          deletedAt: null,
+          OR: [
+            { id: deviceKey },
+            { assetTag: deviceKey },
+            { hostname: deviceKey },
+            { serialNumber: deviceKey },
+          ],
+        },
+        select: { id: true },
+      });
+      assetId = asset?.id || null;
+    }
+
+    if (!assetId) {
+      return { error: `No asset mapped for device ${deviceKey}`, deviceKey };
+    }
+
+    const fuelLevel =
+      src.fuel != null
+        ? parseFloat(src.fuel)
+        : src.attributes?.fuel != null
+          ? parseFloat(src.attributes.fuel)
+          : undefined;
+
+    const telemetry = await this.ingestTelemetry(tenantId, {
+      assetId,
+      latitude: lat,
+      longitude: lng,
+      speed,
+      fuelLevel: Number.isNaN(fuelLevel as number) ? undefined : fuelLevel,
+    });
+
+    return { ok: true, assetId, telemetryId: telemetry.id, speed };
   }
 
   // ─── GEOFENCE VIOLATION DETECTION ─────────────────────────────────────
@@ -346,6 +663,30 @@ export class FleetService {
       longitude: number; timestamp: Date;
     },
   ) {
+    const title = `Geofence ${data.eventType}: ${data.vehicleName}`;
+    const message = `Vehicle "${data.vehicleName}" has ${data.eventType.toLowerCase()} ` +
+      `geofence "${data.geofenceName}" at coordinates [${data.latitude.toFixed(5)}, ${data.longitude.toFixed(5)}].`;
+
+    await this.prisma.alertEvent.create({
+      data: {
+        tenantId,
+        severity: data.eventType === 'EXITED' ? 'HIGH' : 'MEDIUM',
+        category: 'geofence',
+        title,
+        message,
+        source: 'fleet',
+        sourceId: data.vehicleId,
+        metadata: {
+          geofenceId: data.geofenceId,
+          geofenceName: data.geofenceName,
+          eventType: data.eventType,
+          latitude: data.latitude,
+          longitude: data.longitude,
+          vehicleName: data.vehicleName,
+        },
+      },
+    });
+
     const admins = await this.prisma.user.findMany({
       where: {
         tenantId,
@@ -355,9 +696,7 @@ export class FleetService {
       select: { id: true },
     });
 
-    const title = `Geofence ${data.eventType}: ${data.vehicleName}`;
-    const message = `Vehicle "${data.vehicleName}" has ${data.eventType.toLowerCase()} ` +
-      `geofence "${data.geofenceName}" at coordinates [${data.latitude.toFixed(5)}, ${data.longitude.toFixed(5)}].`;
+    if (admins.length === 0) return;
 
     await this.prisma.notification.createMany({
       data: admins.map(admin => ({

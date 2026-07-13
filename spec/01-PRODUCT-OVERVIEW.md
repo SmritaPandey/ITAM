@@ -1,208 +1,391 @@
-# AssetCommand — Enterprise Asset Monitoring & Management Platform
+# QS Assets — Product Overview
 
-## Product Overview
-
-**Inspired by:** ManageEngine Suite (ServiceDesk Plus, Endpoint Central, OpManager, AssetExplorer), Ivanti Neurons, ServiceNow ITAM/EAM, Asset Panda
-
-**Product Name:** AssetCommand (working title)
-
-**Vision:** A unified, enterprise-grade platform that consolidates IT Asset Management, Non-IT/Enterprise Asset Management, Network Monitoring, Fleet/GPS Tracking, Patch Management, CCTV Surveillance, VDI Monitoring, Ticketing/ITSM, and Compliance — into a single pane of glass.
+| Field | Value |
+|-------|-------|
+| **Product** | QS Assets |
+| **Vendor** | NeurQ AI Labs |
+| **Last reviewed** | 2026-07-13 |
+| **Status** | Living PRD |
+| **Competitors** | ManageEngine Suite · ServiceNow ITAM/EAM/CMDB/ITSM · Qualys CSAM/VMDR-lite · Ivanti Neurons · Asset Panda |
 
 ---
 
-## Platform Modules
+## Vision
 
-### Module 1: IT Asset Management (ITAM)
-- Hardware inventory: laptops, desktops, servers, workstations
-- Network devices: switches, routers, firewalls, WiFi APs, load balancers
-- Peripherals: printers, scanners, UPS, projectors
-- Software inventory: installed applications, versions, usage metrics
-- OS details: version, build, architecture, BIOS/UEFI
-- Security posture: AV status, firewall state, encryption status, TPM
-- Lifecycle: procurement → deployment → maintenance → retirement → disposal
-- Warranty, AMC, service contract tracking
-- Asset value depreciation (straight-line, declining balance)
-- Cost center and department tagging
-- QR/barcode/RFID label generation and scanning
+A unified enterprise platform that consolidates **IT Asset Management**, **Non-IT / Enterprise Asset Management**, **Network Monitoring**, **Fleet/GPS**, **Patch & Vulnerability**, **CCTV**, **VDI**, **ITSM**, and **Compliance** into one pane of glass — with discovery that scales from a laptop agent to multi-cloud and OT/IoT.
 
-### Module 2: Non-IT / Enterprise Asset Management (EAM)
-- Machinery, tools, medical devices, lab equipment, industrial equipment
-- Furniture, facility assets, HVAC, elevators, fire suppression systems
-- Office inventory (stationery, consumables with reorder points)
-- Custom asset type definitions (admin-configurable)
-- Asset tracking via QR/RFID/barcode/NFC
-- Preventive maintenance scheduling (calendar + condition-based)
-- Maintenance lifecycle history with cost tracking
-- Vendor/service provider management
-- Spare parts inventory with min-stock alerts
-- Work order automation linked to maintenance schedules
-- Facility floor plans with asset pin mapping
+**Lifecycle north star:** procure → discover → inventory → monitor → secure/patch → service → retire.
 
-### Module 3: Network Management System (NMS)
-**Inspired by ManageEngine OpManager**
-- **Supported Networks:** LAN, WAN, MPLS, IPSec/OpenVPN/SSL VPN, SD-WAN, Hybrid WAN, Cellular (4G/5G), Data center, Cloud networks
-- **Discovery & Mapping:** SNMP v1/v2c/v3, LLDP/CDP, IP range scanning, ARP sweep, auto-detect switches/routers/firewalls/WiFi APs, auto-generate network topology maps (L2/L3), port mapping (physical + logical)
-- **Monitoring:** Device health (CPU/RAM/disk/temp), interface utilization, errors/discards, latency, uptime/downtime, QoS, SD-WAN link health, VPN tunnel status
-- **Traffic Analytics:** NetFlow/sFlow/JFlow, traffic patterns, anomaly detection, bandwidth monitoring, packet loss, jitter, top talkers, top applications
-- **Configuration Management:** Backup/restore device configs, detect config drift, compliance against baseline, config versioning, automated deployment (with approval)
-- **Alerts & Events:** SNMP trap collector, syslog ingestion, threshold-based alerts, AI anomaly detection, auto-ticket creation
-- **Network Security:** Firewall policy monitoring, IDS/IPS integration hooks, VPN/brute-force alerts, rogue device detection, unmanaged device discovery
-- **Dashboards:** Health dashboards, SLA/uptime, utilization heatmaps, NOC/plasma views, incident timelines
+---
 
-### Module 4: Fleet & GPS Asset Tracking
-- Real-time GPS tracking on interactive map (Leaflet/OpenLayers)
-- Route history playback with timeline slider
-- Geo-fencing (circular + polygon zones) with entry/exit alerts
-- Driver assignment and trip logging
-- Vehicle health metrics and maintenance reminders
-- Alerts: speeding, idling, unauthorized zone breach, tampering
-- Fuel monitoring integration (OBD-II / telematics API)
-- Route analytics and travel heatmaps
-- Parking/idle duration tracking
-- Integration layer for third-party GPS devices (Traccar protocol support)
-- WebSocket real-time map updates
+## Module catalog
 
-### Module 5: Patch & Vulnerability Management
-**Inspired by ManageEngine Endpoint Central + Patch Manager Plus**
-- Auto-scan endpoints for missing OS patches (Windows/macOS/Linux)
-- Third-party application patch detection (350+ apps)
-- NIST NVD CVE scoring and risk prioritization
-- Patch deployment: scheduled, immediate, or policy-based
-- Test & approve workflow (pilot group → wide deployment)
-- Patch rollback capability
-- Closed/air-gapped network patching support
-- Patch compliance dashboard with drill-down
-- Security bulletin tracking and correlation
-- Automated compliance reports (NIST, ISO, CIS benchmarks)
+### M1 — IT Asset Management (ITAM)
 
-### Module 6: Change Request & SSDLC Patch Lifecycle
-Full change-request workflow for functional patches/upgrades:
-1. **Request:** End user raises modification/addition/upgrade/feature request
-2. **Review:** Developer/IT analyst reviews, clarifies scope, creates understanding document
-3. **Approval:** End user approves understanding document
-4. **Build:** Developer implements following SSDLC (secure coding, unit testing, functional testing)
-5. **UAT:** User acceptance testing in staging environment
-6. **VAPT:** Vulnerability Assessment & Penetration Testing (internal/external), fix findings, retest
-7. **Patch-Fix Cycle:** Apply fixes from VAPT, revalidate, ensure zero critical/high findings
-8. **Deployment:** Release management, change log, post-deployment monitoring
-9. **Compliance Logging:** ISO/NIST patch cycle evidence, ITIL change management documentation
+**Analog:** ManageEngine AssetExplorer · ServiceNow ITAM
 
-### Module 7: License & Software Management
-- Track purchased licenses (per-seat, per-device, site, enterprise, subscription)
-- Auto-detect software installations via agent/agentless scans
-- License compliance: usage vs. entitlement comparison
-- Alerts for overuse, underuse, and expiry
-- Vendor-wise spending reports and renewal forecasts
-- Software metering (usage frequency, last-used date)
-- Blacklist/whitelist enforcement
-- License harvesting recommendations (reclaim unused)
-- Contract and PO linking
+| Capability | Status |
+|------------|--------|
+| Hardware / network / peripheral inventory | Shipped |
+| Software inventory + versions | Shipped |
+| OS / BIOS / security posture fields | Shipped |
+| Lifecycle states + warranty / AMC / contracts | Shipped |
+| Depreciation (straight-line, declining) mass job + finance report | In-build |
+| Cost center / department tagging | Shipped |
+| QR / barcode print + `/scan` lookup | Shipped |
+| RFID / NFC tag ID field + same scan path | In-build |
+| Checkout / check-in + attestation campaigns | Shipped (depth In-build) |
+| License harvest actionable (ticket + reclaim) | In-build |
 
-### Module 8: VDI Monitoring & Management
-- Support: VMware Horizon, Citrix, Azure Virtual Desktop, Amazon WorkSpaces, generic VDI via APIs
-- Track VDI sessions: login, logout, duration, connection quality
-- Per-session metrics: CPU/RAM/disk/network utilization
-- Session freeze/hang detection
-- Resource exhaustion alerts and auto-scaling recommendations
-- VDI pool utilization dashboards
-- Abnormal behavior detection (unusual login times, locations)
-- Profile disk (FSLogix) health monitoring
-- Logon duration tracking and optimization insights
-- Audit logs for all VDI activities
+**Acceptance tests**
 
-### Module 9: CCTV Management System
-- Add camera endpoints via ONVIF/RTSP
-- ONVIF auto-discovery on network
-- Live video wall (grid view, customizable layouts)
-- Camera health monitoring (online/offline, stream quality)
-- Recording status tracking (NVR/DVR integration)
-- Motion detection event logging
-- Tamper detection alerts
-- Storage utilization monitoring
-- Incident flagging and annotation
-- Audit log for camera access/viewing
-- Snapshot and clip export
+1. Create laptop asset with serial, site, department; status transitions ACTIVE → IN_MAINTENANCE → RETIRED.
+2. Generate QR label; `/scan` resolves asset by tag/barcode/RFID when field populated.
+3. Run depreciation job for N assets; finance report shows current vs purchase value.
+4. Checkout asset to user; attestation campaign reminds and records certify.
 
-### Module 10: ITSM Ticketing & Workflows
-**Inspired by ManageEngine ServiceDesk Plus**
-- **ITIL Processes:** Incident, Problem, Change, Release, Service Request management
-- **Omnichannel:** Email, web portal, mobile app, chat, API
-- **Self-Service Portal:** Knowledge base, FAQ, service catalog
-- **Ticket Types:** IT issues, asset requests ("need new laptop"), facility requests ("chair replacement"), fleet requests ("tire replacement"), maintenance requests
-- **Auto-classification:** Category, priority, assignment based on rules
-- **SLA Management:** Response time, resolution time, escalation tiers
-- **Multi-level Approval:** Manager → IT → Admin → Super Admin chains
-- **Visual Workflow Builder:** No-code drag-and-drop workflow designer
-- **Asset Linking:** Every ticket can be linked to specific asset(s) from CMDB
-- **Work Order Creation:** Convert tickets to work orders for maintenance teams
-- **Escalation Engine:** Time-based, condition-based, hierarchical escalation
-- **Satisfaction Surveys:** Post-resolution CSAT scoring
+---
 
-### Module 11: CMDB (Configuration Management Database)
-- Unified repository for ALL asset types (IT, Non-IT, Network, Fleet, CCTV, VDI)
-- CI classes with inheritance (Hardware > Server > Linux Server)
-- Relationship mapping: dependency, composition, association
-- Visual relationship canvas (drag-and-drop)
-- Impact analysis for change management
-- Auto-sync from discovery engines
-- Cost center and business service mapping
-- CI lifecycle state tracking
-- Data quality scoring and certification workflows
-- Common Service Data Model (CSDM) alignment
+### M2 — Non-IT / Enterprise Asset Management (EAM)
 
-### Module 12: Automation Engine
-Rule-based automation system:
-```
-IF [condition/sensor/log/event/alert]
-THEN [action/ticket/notify/scan/run-script/workflow]
-```
-**Example Rules:**
-- Device offline > 24h → create incident ticket
-- Patch missing > 7 days → create remediation workflow + notify IT
-- CCTV tamper detected → alert security + escalate
-- SD-WAN jitter > threshold → alert NOC team
-- License expiring < 30 days → notify procurement
-- New unmanaged device on network → flag + create investigation ticket
-- Vehicle outside geo-fence → alert fleet manager + log event
-- VDI session CPU > 90% for 10min → alert + recommend scaling
-- Temperature sensor anomaly → raise maintenance ticket
+**Analog:** Asset Panda · ServiceNow EAM
 
-**Capabilities:**
-- Visual rule builder (no-code)
-- Scheduled automation (cron-based)
-- Event-driven triggers (real-time)
-- Webhook actions (external system integration)
-- Script execution (PowerShell, Bash, Python)
-- Chained actions (multi-step workflows)
-- Audit trail for all automation executions
+| Capability | Status |
+|------------|--------|
+| Custom asset types (non-IT flag) | Shipped |
+| Facility / furniture / HVAC / medical / lab classes | Shipped (types) |
+| Preventive maintenance schedules (calendar + condition) | In-build |
+| Spare parts + min-stock → AlertEvent | In-build |
+| Consumables with reorder points | In-build |
+| Work orders linked to maintenance | Shipped (WO); schedule link In-build |
+| Floor plan URL + asset pin `{x,y}` overlay | In-build |
+| Vendor / service provider on contracts | Shipped |
 
-### Module 13: Alerts, Flags & Notifications
-- Asset health alerts (hardware failure prediction, SMART disk status)
-- Fleet GPS alerts (speed, geofence, idle, tamper)
-- Network alerts (device down, high utilization, config change)
-- Patch overdue alerts
-- Ticket SLA breach alerts
-- License expiry alerts
-- CCTV tamper/offline alerts
-- VDI resource exhaustion alerts
-- Unauthorized/rogue device alerts
-- High-risk vulnerability alerts
-- Custom user-defined alert rules
-- **Channels:** Email, SMS, push notification, Slack, Teams, webhook, in-app toast
-- **Digest modes:** Instant, hourly digest, daily digest
-- **Escalation chains:** Multi-tier notification escalation
+**Acceptance tests**
 
-### Module 14: Reports & Analytics
-- Pre-built report library (100+ reports across all modules)
-- Custom report builder (drag-and-drop)
-- Scheduled report delivery (email/SFTP)
-- Export: PDF, Excel, CSV, JSON
-- Executive dashboards with KPIs
-- Asset utilization analytics
-- Cost analysis and TCO reports
-- Patch & vulnerability statistics
-- Fleet travel heatmaps and route analytics
-- License compliance scorecards
-- Network uptime and SLA reports
-- Trend analysis and forecasting
-- Compliance audit reports (ISO, NIST, ITIL evidence)
+1. Create non-IT asset type; create HVAC unit; pin on facility floor plan.
+2. PM schedule fires → work order auto-created; spare consumed → stock decrements.
+3. Consumable below reorder → AlertEvent OPEN.
+4. Facility dashboard shows open WOs + low stock.
+
+---
+
+### M3 — Network Management System (NMS)
+
+**Analog:** ManageEngine OpManager
+
+| Capability | Status |
+|------------|--------|
+| ICMP / port scan / auto-discover | Shipped |
+| SNMP v1/v2c/v3 poll + metrics history | Shipped |
+| SNMP trap receiver | Shipped |
+| Topology (ARP/neighbor edges) | Shipped (LLDP enrich In-build) |
+| Network config backup / hash diff | Shipped (approve+push In-build) |
+| Syslog UDP ingest → alert / ticket | In-build |
+| NetFlow/sFlow/IPFIX → FlowRecord + top talkers | In-build |
+| NOC dashboard (topology + alarms + traps/syslog) | In-build |
+
+**Acceptance tests**
+
+1. SNMP poll stores DeviceMetricsHistory; UI chart uses real deltas.
+2. Trap received → AlertEvent; optional auto-ticket via automation.
+3. With exporter configured, FlowRecord rollups populate top talkers; empty state when no exporters.
+4. Config drift vs baseline creates alert.
+
+---
+
+### M4 — Fleet & GPS
+
+**Analog:** Fleet vendors / ME mobile asset tracking
+
+| Capability | Status |
+|------------|--------|
+| GPS telemetry storage + map | Shipped |
+| Trips | Shipped |
+| Geofence entry/exit + speeding + idle alerts | In-build |
+| Traccar-protocol ingest endpoint | In-build |
+| Maintenance due from EAM schedules | In-build |
+
+**Acceptance tests**
+
+1. Ingest GPS point → asset lat/lng updates; map shows vehicle.
+2. Breach geofence → AlertEvent to fleet role.
+3. Traccar payload accepted when endpoint enabled.
+
+---
+
+### M5 — Patch & Vulnerability
+
+**Analog:** Endpoint Central Patch Manager · Qualys VMDR-lite / CSAM
+
+| Capability | Status |
+|------------|--------|
+| Patch catalog + deployments model | Shipped |
+| Agent reports missing patches / products | Shipped (depth In-build) |
+| Live third-party catalogs (winget/apt/brew sync) | In-build |
+| Pilot → staged → all deploy rings + windows | In-build |
+| Rollback UI (uninstall / previous package) | In-build |
+| Air-gap patch bundle ZIP | In-build |
+| NVD CVE ingest + AssetVulnerability match | Shipped |
+| Agent authenticated inventory → CVE match | In-build |
+| Critical CVE → auto-ticket | In-build |
+| CIS evidence pack export PDF/CSV | In-build |
+
+**Acceptance tests**
+
+1. Sync catalog; create deploy to pilot ring; promote to all.
+2. Rollback deployment removes or reverts package via agent command.
+3. NVD ingest + match marks OPEN vulns on assets with matching software.
+4. Critical severity creates ticket linked to asset.
+
+---
+
+### M6 — Change / SSDLC patch lifecycle
+
+**Analog:** ServiceNow Change · ITIL Change Enablement
+
+| Capability | Status |
+|------------|--------|
+| ChangeRequest CRUD + states | Shipped |
+| Multi-level approval + CAB calendar | In-build |
+| SSDLC 9-step change type (UAT/VAPT gates + attachments) | In-build |
+| Link to assets / problems / tickets | Shipped / In-build |
+
+**Acceptance tests**
+
+1. Normal change requires CAB approval before IMPLEMENT.
+2. SSDLC type blocks close until UAT + VAPT evidence fields set.
+3. Audit log records approve/reject with hash chain.
+
+---
+
+### M7 — License & Software Management
+
+**Analog:** AssetExplorer SAM · Ivanti license ops
+
+| Capability | Status |
+|------------|--------|
+| License entitlements + assignments | Shipped |
+| Usage vs entitlement + expiry alerts | Shipped |
+| Software metering (last-used from agent) | In-build |
+| Blacklist/whitelist → agent enforce | In-build |
+| Harvest recommendations | In-build |
+
+**Acceptance tests**
+
+1. Over-assign license → compliance warning.
+2. Blacklisted process → agent KILL_PROCESS or block install when policy on.
+3. Harvest creates reclaim ticket for unused seat > N days.
+
+---
+
+### M8 — VDI Monitoring
+
+**Analog:** Horizon / AVD monitoring suites
+
+| Capability | Status |
+|------------|--------|
+| Hypervisor connectors + session list | Shipped |
+| Console launch deep-link | Shipped |
+| Session metrics charts (Horizon/Proxmox poll) | In-build |
+
+**Acceptance tests**
+
+1. Sync pools/sessions from configured hypervisor.
+2. Metrics appear only when connector succeeds; honest empty/error otherwise.
+
+---
+
+### M9 — CCTV
+
+**Analog:** OpManager camera / ONVIF suites
+
+| Capability | Status |
+|------------|--------|
+| ONVIF discovery | Shipped |
+| Snapshot / HLS stream proxy | Shipped |
+| Multi-camera video wall layouts | In-build |
+| Tamper / offline alerts | In-build |
+
+**Acceptance tests**
+
+1. Discover camera → MonitoredDevice CAMERA with stream URL.
+2. HLS playlist serves when ffmpeg available; otherwise operational message.
+3. Offline camera → AlertEvent.
+
+---
+
+### M10 — ITSM Ticketing & Workflows
+
+**Analog:** ServiceDesk Plus · ServiceNow ITSM
+
+| Capability | Status |
+|------------|--------|
+| Incidents / requests + comments + asset link | Shipped |
+| Problems + Known Error fields | Shipped |
+| SLA policies + timers | Shipped |
+| SLA escalation cron (notify + reassign) | In-build |
+| Service catalog + fulfillment | Shipped (approval enforce In-build) |
+| Knowledge base + ticket suggest | Shipped / In-build |
+| CSAT on resolve | In-build |
+| Omnichannel email ingest (IMAP) | In-build |
+| AutomationRule workflow builder UI | Shipped (complete form In-build) |
+| Work orders from tickets | Shipped |
+
+**Acceptance tests**
+
+1. Ticket SLA near breach → escalate + notify channel.
+2. Resolve → CSAT survey recorded.
+3. IMAP mail creates ticket with correct tenant.
+4. Catalog item with approval blocks fulfillment until approved.
+
+---
+
+### M11 — CMDB
+
+**Analog:** ServiceNow CMDB / CSDM-lite
+
+| Capability | Status |
+|------------|--------|
+| Unified Asset CI + types hierarchy | Shipped |
+| Relationships (DEPENDS_ON, CONNECTED_TO, …) | Shipped |
+| Discovery auto-sync | Shipped |
+| Impact analysis API + UI drilldown | In-build |
+| BusinessService health rollup (CSDM-lite) | In-build |
+| Data quality / attestation | Shipped / In-build |
+
+**Acceptance tests**
+
+1. Impact API returns transitive dependents for a CI.
+2. BusinessService RED when any critical child down.
+3. Discovery merge updates CI without duplicate serial/MAC.
+
+---
+
+### M12 — Automation Engine
+
+**Analog:** Ivanti Neurons · ME workflow rules
+
+| Capability | Status |
+|------------|--------|
+| IF condition THEN notify/ticket/script | Shipped |
+| Channels: in-app, email, Slack, Teams, webhook | Shipped |
+| Script library + approve + execute | Shipped |
+| Cron + event triggers | Shipped |
+| Visual-ish rules builder (not SN Flow canvas) | In-build polish |
+
+**Acceptance tests**
+
+1. Device offline > threshold → incident created.
+2. Script execute requires APPROVED state.
+3. Execution audit row written.
+
+---
+
+### M13 — Alerts & Notifications
+
+| Capability | Status |
+|------------|--------|
+| AlertRule / AlertEvent CRUD + ack/resolve | Shipped |
+| Multi-channel dispatch | Shipped |
+| Digest modes | In-build |
+| Threat Approve / Quarantine / Block + WS push | Shipped / In-build |
+
+**Acceptance tests**
+
+1. Critical alert appears in `/dashboard/alerts` and Socket.io room.
+2. Acknowledge-all updates status for tenant only.
+
+---
+
+### M14 — Reports & Analytics
+
+| Capability | Status |
+|------------|--------|
+| Template reports (assets, tickets, licenses, executive, audit) | Shipped |
+| PDF / XLSX / CSV generate + download | Shipped |
+| Scheduled report email | In-build (model Shipped) |
+| Custom saved-filter reports | In-build |
+| Meilisearch Cmd+K global search | In-build |
+
+**Acceptance tests**
+
+1. Generate patch compliance PDF with real counts.
+2. Schedule weekly executive XLSX to SMTP recipient.
+3. Global search returns asset + ticket + user hits.
+
+---
+
+### M15 — Discovery (see [02](02-DISCOVERY-AND-SCANNING.md))
+
+Cross-cutting: agent, agentless, AD, cloud, IoT/OT, correlation.
+
+### M16 — Auth, NAC, Compliance (see [04](04-SSDLC-COMPLIANCE-SECURITY.md))
+
+MFA TOTP, SAML/OIDC, RLS, CIS evidence, NAC CoA.
+
+---
+
+## Competitive capability matrix
+
+Status legend: **S** = Shipped · **B** = In-build (Must-ship) · **F** = Future-only / non-goal.
+
+| Capability | ME | SN | Qualys | Ivanti | AssetPanda | QS Assets |
+|------------|----|----|--------|--------|------------|-----------|
+| CMDB + lifecycle + finance | ● | ● | ○ | ● | ● | S + B (depreciation/BS) |
+| Non-IT PM + spares + floor pins | ○ | ● | ○ | ○ | ● | B |
+| Agent + agentless + AD + cloud | ● | ● | ● | ● | ○ | S + B (AD/Azure/GCP depth) |
+| Patch rings + rollback + catalogs | ● | ○ | ○ | ● | ○ | B |
+| CVE risk + tickets | ○ | ○ | ● | ● | ○ | S + B |
+| SNMP + syslog + NetFlow | ● | ○ | ○ | ○ | ○ | S + B |
+| Tickets + CAB + SLA + catalog | ● | ● | ○ | ● | ○ | S + B |
+| MFA + SAML + RLS | ● | ● | ● | ● | ● | B (SSO model S) |
+| Fleet GPS + geofence | ○ | ○ | ○ | ○ | ● | S + B |
+| CCTV wall | ● | ○ | ○ | ○ | ○ | S + B |
+| Always-on agent packaging | ● | ○ | ● | ● | ○ | S |
+| Proprietary vuln signatures | ○ | ○ | ● | ○ | ○ | F |
+| Full Flow Designer canvas | ○ | ● | ○ | ● | ○ | F |
+
+---
+
+## Role → primary surfaces
+
+| Role | Primary routes | Spec |
+|------|----------------|------|
+| Executive / Tenant Admin | `/dashboard`, `/dashboard/reports` | [06](06-DASHBOARDS-API-DELIVERABLES.md) |
+| IT Admin | `/dashboard/discovery`, assets, patches, vulns | 06 |
+| NOC | `/dashboard/network`, `/dashboard/alerts` | 06 |
+| Fleet Manager | `/dashboard/fleet` | 06 |
+| Service Desk | `/dashboard/tickets`, changes, KB, catalog | 06 |
+| Security | `/dashboard/vulnerabilities`, compliance, CCTV, NAC | 06 |
+| Facility Manager | `/dashboard/non-it-assets`, work-orders | 06 |
+| Employee | `/dashboard/my-portal`, `/portal/*`, `/scan` | 06 · [08](08-ORG-FLOWS.md) |
+
+---
+
+## Plans / packaging (commercial)
+
+| Plan | Intent |
+|------|--------|
+| Starter | Core ITAM + tickets + basic discovery |
+| Professional | CMDB, NMS, patch, automation, reports |
+| Enterprise | Full Must-ship matrix (SSO, NAC, cloud, EAM, NetFlow, CAB) |
+| On-Premise | Same Enterprise capabilities, customer-hosted |
+
+### Deployment modes
+
+| Mode | `DEPLOYMENT_MODE` | Who hosts | Owner control |
+|------|-------------------|-----------|---------------|
+| SaaS | `saas` (default) | NeurQ (Railway/Vercel) | SuperAdmin `/admin` — tenants, billing, **product license issuance** |
+| On-prem / BYO | `onprem` | Customer (compose or bare metal + BYO Postgres/Redis) | Signed product license (online/offline); local support SuperAdmin for break-glass only |
+
+**Non-goal:** permanent remote SuperAdmin into customer on-prem databases.
+
+Module gating in web layout must match `Tenant.plan` (+ on-prem entitlement modules) — no fake unlocks.
+
+---
+
+## Non-goals (this wave)
+
+Documented in [00-SPEC-INDEX.md](00-SPEC-INDEX.md). Must-ship items are never deferred with vague “roadmap” language — they are **In-build** until Shipped.
+Explicit packaging non-goal: remote control plane over customer asset data.

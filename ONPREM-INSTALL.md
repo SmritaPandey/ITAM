@@ -1,10 +1,21 @@
 # QS Asset — On-Premises Deployment & Operations Manual
 
-This manual provides detailed, step-by-step instructions to orchestrate, configure, and maintain a private, secure **on-premises deployment** of the QS Asset Management & Network Discovery platform. 
+This manual provides detailed, step-by-step instructions to orchestrate, configure, and maintain a private, secure **on-premises deployment** of the QS Asset Management & Network Discovery platform.
+
+## Product licensing (required for on-prem)
+
+On-prem installs use `DEPLOYMENT_MODE=onprem`:
+
+- Public self-signup is disabled.
+- A NeurQ-signed **product license** must be activated (Settings → Product License): online key via `LICENSE_SERVER_URL`, or offline `.lic` file.
+- Without a valid license, admins can still log in; discovery, scans, and agent enroll are blocked.
+- NeurQ SaaS `/admin/licenses` issues keys; NeurQ does **not** remotely SuperAdmin your database.
+
+See also: [DEPLOY.md](DEPLOY.md) (Enterprise BYO section), [`.env.onprem.example`](.env.onprem.example).
 
 ---
 
-## 🖥️ Platform Architecture
+## Platform Architecture
 
 QS Asset employs a hybrid-capable architecture. When deployed on-premises, it operates inside a host network configuration to permit direct Layer-2 (ARP) and Layer-3 (Ping/TCP/SNMP) active sweeps over local network interfaces without external cloud dependencies.
 

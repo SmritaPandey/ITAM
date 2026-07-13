@@ -27,6 +27,7 @@ import { AuthService } from '../auth/auth.service';
 import { ModuleGuard } from '../../common/guards/module.guard';
 import { RequireModule } from '../../common/decorators/require-module.decorator';
 import { SkipThrottle } from '@nestjs/throttler';
+import { AdSyncService } from './ad-sync.service';
 
 @ApiTags('discovery')
 @ApiBearerAuth()
@@ -38,6 +39,7 @@ export class DiscoveryController {
     private discoveryService: DiscoveryService,
     private credentialVault: CredentialVaultService,
     private authService: AuthService,
+    private adSyncService: AdSyncService,
   ) {}
 
 
@@ -314,6 +316,62 @@ export class DiscoveryController {
     res.end(buffer);
   }
 
+  @Get('agents/download/desktop')
+  @Roles('Tenant Admin', 'IT Admin')
+  @ApiOperation({
+    summary:
+      'Download Desktop App package (Electron tray wrapper sources + paired agent config)',
+  })
+  async downloadDesktopApp(@Request() req: any, @Res() res: any) {
+    const { serverUrl, agentToken, userEmail } = this.buildAgentDownloadContext(req);
+    const buffer = this.discoveryService.getDesktopAppPackage(serverUrl, agentToken, userEmail);
+    res.set({
+      'Content-Type': 'application/zip',
+      'Content-Disposition': 'attachment; filename=qs-discovery-agent-desktop.zip',
+      'Content-Length': buffer.length,
+    });
+    res.end(buffer);
+  }
+
+  @Get('agents/download/service')
+  @Roles('Tenant Admin', 'IT Admin')
+  @ApiOperation({
+    summary: 'Download OS service installer package (systemd / launchd / Windows service scripts)',
+  })
+  async downloadServiceInstaller(@Request() req: any, @Res() res: any) {
+    const { serverUrl, agentToken, userEmail } = this.buildAgentDownloadContext(req);
+    const buffer = this.discoveryService.getServiceInstallerPackage(serverUrl, agentToken, userEmail);
+    res.set({
+      'Content-Type': 'application/zip',
+      'Content-Disposition': 'attachment; filename=qs-discovery-agent-service.zip',
+      'Content-Length': buffer.length,
+    });
+    res.end(buffer);
+  }
+
+  @Get('agents/download-urls')
+  @Roles('Tenant Admin', 'IT Admin')
+  @ApiOperation({ summary: 'List real download URLs for Desktop App / Service Installer / ZIP' })
+  getDownloadUrls() {
+    return {
+      zip: '/discovery/agents/download',
+      desktop: '/discovery/agents/download/desktop',
+      service: '/discovery/agents/download/service',
+      note: 'All URLs require Bearer auth. Artifacts are generated from monorepo /agent and /apps/agent-desktop sources.',
+    };
+  }
+
+  private buildAgentDownloadContext(req: any) {
+    const host =
+      req.headers['x-forwarded-host'] || req.headers.host || 'localhost:4100';
+    const protocol = req.headers['x-forwarded-proto'] || req.protocol || 'http';
+    let serverUrl = `${protocol}://${host}`;
+    serverUrl = serverUrl.replace(/\/api\/v1\/?$/, '');
+    const userEmail = req.user?.email || '';
+    const agentToken = this.authService.generateAgentToken(req.user.tenantId, userEmail, req.user.sub);
+    return { serverUrl, agentToken, userEmail: userEmail || undefined };
+  }
+
   @Get('agents/:id')
   @Roles('Tenant Admin', 'IT Admin')
   @ApiOperation({ summary: 'Get agent details + system info' })
@@ -349,43 +407,93 @@ export class DiscoveryController {
 
   @Post('agents/deploy-remote')
   @Roles('Tenant Admin')
-  @ApiOperation({ summary: 'Remotely push and install discovery agent on target LAN host' })
+  @ApiOperation({
+    summary: 'Remotely push and install discovery agent on target LAN host (SSH or WinRM)',
+  })
   async deployRemoteAgent(
     @Request() req: any,
-    @Body() body: { targetIp: string; credentialId: string },
+    @Body()
+    body: {
+      targetIp: string;
+      credentialId?: string;
+      method?: 'ssh' | 'winrm' | 'auto';
+      platform?: string;
+      username?: string;
+      password?: string;
+    },
   ) {
-    return this.discoveryService.deployRemoteAgent(req.user.tenantId, req.user.sub, body.targetIp, body.credentialId);
+    return this.discoveryService.deployRemoteAgent(
+      req.user.tenantId,
+      req.user.sub,
+      body.targetIp,
+      body.credentialId || '',
+      {
+        method: body.method || 'auto',
+        platform: body.platform,
+        username: body.username,
+        password: body.password,
+      },
+    );
   }
 
   @Post('agents/deploy-remote/bulk')
   @Roles('Tenant Admin')
-  @ApiOperation({ summary: 'Bulk push-deploy discovery agents to multiple LAN hosts concurrently' })
+  @ApiOperation({
+    summary: 'Bulk push-deploy discovery agents to multiple LAN hosts concurrently (SSH or WinRM)',
+  })
   async bulkDeployRemoteAgent(
     @Request() req: any,
-    @Body() body: { targets: Array<{ ip: string; credentialId?: string }>; defaultCredentialId?: string },
+    @Body()
+    body: {
+      targets: Array<{
+        ip: string;
+        credentialId?: string;
+        method?: 'ssh' | 'winrm' | 'auto';
+        platform?: string;
+        username?: string;
+        password?: string;
+      }>;
+      defaultCredentialId?: string;
+      method?: 'ssh' | 'winrm' | 'auto';
+    },
   ) {
     const results = await Promise.allSettled(
-      body.targets.map(t =>
+      body.targets.map((t) =>
         this.discoveryService.deployRemoteAgent(
           req.user.tenantId,
           req.user.sub,
           t.ip,
           t.credentialId || body.defaultCredentialId || '',
+          {
+            method: t.method || body.method || 'auto',
+            platform: t.platform,
+            username: t.username,
+            password: t.password,
+          },
         ),
       ),
     );
 
     const summary = results.map((r, i) => ({
       ip: body.targets[i].ip,
+      method:
+        r.status === 'fulfilled'
+          ? (r.value as any).method
+          : body.targets[i].method || body.method || 'auto',
       status: r.status === 'fulfilled' ? (r.value as any).status : 'FAILED',
+      success: r.status === 'fulfilled' ? !!(r.value as any).success : false,
       logs: r.status === 'fulfilled' ? (r.value as any).logs : [],
-      error: r.status === 'rejected' ? (r as PromiseRejectedResult).reason?.message : undefined,
+      error:
+        r.status === 'rejected'
+          ? (r as PromiseRejectedResult).reason?.message
+          : (r.value as any)?.error,
+      message: r.status === 'fulfilled' ? (r.value as any).message : undefined,
     }));
 
     return {
       total: body.targets.length,
-      succeeded: summary.filter(s => s.status === 'SUCCESS').length,
-      failed: summary.filter(s => s.status !== 'SUCCESS').length,
+      succeeded: summary.filter((s) => s.status === 'SUCCESS').length,
+      failed: summary.filter((s) => s.status !== 'SUCCESS').length,
       results: summary,
     };
   }
@@ -415,6 +523,70 @@ export class DiscoveryController {
     return this.discoveryService.queueRemoteCommand(req.user.tenantId, agentId, body);
   }
 
+  @Post('agents/:agentId/run-script')
+  @Roles('Tenant Admin')
+  @ApiOperation({
+    summary: 'Queue an approved ScriptLibrary script on an agent (UEM remote run)',
+  })
+  async runScriptOnAgent(
+    @Request() req: any,
+    @Param('agentId') agentId: string,
+    @Body() body: { scriptId: string; parameters?: any },
+  ) {
+    return this.discoveryService.queueScriptLibraryRun(
+      req.user.tenantId,
+      req.user.sub,
+      agentId,
+      body.scriptId,
+      body.parameters,
+    );
+  }
+
+  @Post('agents/:agentId/file-pull')
+  @Roles('Tenant Admin')
+  @ApiOperation({
+    summary: 'Queue FILE_PULL — agent uploads a log/file path back to the server',
+  })
+  async filePull(
+    @Request() req: any,
+    @Param('agentId') agentId: string,
+    @Body() body: { path: string; maxBytes?: number },
+  ) {
+    return this.discoveryService.queueFilePull(req.user.tenantId, agentId, body);
+  }
+
+  @SkipThrottle()
+  @Post('agents/file-pull-result')
+  @ApiOperation({ summary: 'Receive FILE_PULL content from agent' })
+  async filePullResult(@Request() req: any, @Body() body: any) {
+    return this.discoveryService.storeFilePullResult(body);
+  }
+
+  @Get('agents/:agentId/remote-assist')
+  @Roles('Tenant Admin', 'IT Admin')
+  @ApiOperation({
+    summary:
+      'Return rdp:// or ssh:// deep-link for remote assist (no fake WebRTC console)',
+  })
+  async remoteAssist(@Request() req: any, @Param('agentId') agentId: string) {
+    return this.discoveryService.getRemoteAssistDeepLink(agentId, req.user.tenantId);
+  }
+
+  @Patch('agents/:agentId/deploy-ring')
+  @Roles('Tenant Admin')
+  @ApiOperation({ summary: 'Set software deploy ring for an agent (PILOT | STAGED | ALL)' })
+  async setDeployRing(
+    @Request() req: any,
+    @Param('agentId') agentId: string,
+    @Body() body: { deployRing: string },
+  ) {
+    return this.discoveryService.setAgentDeployRing(
+      req.user.tenantId,
+      agentId,
+      body.deployRing,
+    );
+  }
+
   @SkipThrottle()
   @Post('agents/command-result')
   @ApiOperation({ summary: 'Receive command execution result from agent' })
@@ -427,6 +599,29 @@ export class DiscoveryController {
   @ApiOperation({ summary: 'Get command execution history for an agent' })
   async commandHistory(@Param('agentId') agentId: string) {
     return this.discoveryService.getCommandHistory(agentId);
+  }
+
+  // ─── Active Directory / LDAP Sync ───────────────────────────────
+
+  @Get('ad-sync')
+  @Roles('Tenant Admin', 'IT Admin')
+  @ApiOperation({ summary: 'Get AD/LDAP sync configuration (no secrets)' })
+  async getAdSync(@Request() req: any) {
+    return this.adSyncService.getConfig(req.user.tenantId);
+  }
+
+  @Patch('ad-sync')
+  @Roles('Tenant Admin')
+  @ApiOperation({ summary: 'Update AD/LDAP sync configuration (multi-OU)' })
+  async updateAdSync(@Request() req: any, @Body() body: any) {
+    return this.adSyncService.updateConfig(req.user.tenantId, body);
+  }
+
+  @Post('ad-sync/run')
+  @Roles('Tenant Admin')
+  @ApiOperation({ summary: 'Run AD/LDAP computer + user sync now' })
+  async runAdSync(@Request() req: any) {
+    return this.adSyncService.sync(req.user.tenantId, req.user.sub);
   }
 
   // ─── Scheduled Scans ──────────────────────────────────────────
@@ -488,6 +683,9 @@ export class DiscoveryController {
       releaseDate: '2026-07-01',
       changelog: 'Enterprise v2: +Network Shares, +Printers, +Scheduled Tasks, +Docker/VM, +Bluetooth, +AD/Domain, +Patch History, +WiFi, +Display/Environment, +Security Hardening',
       downloadUrls: {
+        zip: '/discovery/agents/download',
+        desktop: '/discovery/agents/download/desktop',
+        service: '/discovery/agents/download/service',
         darwin: '/discovery/agents/download?platform=darwin',
         win32: '/discovery/agents/download?platform=win32',
         linux: '/discovery/agents/download?platform=linux',

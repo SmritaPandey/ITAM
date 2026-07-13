@@ -1,8 +1,9 @@
-import { Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException, BadRequestException, Optional } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { PrismaService } from '../../common/database/prisma.service';
 import { EventBusService } from '../../common/events/event-bus.service';
 import { EmailService } from '../notifications/email.service';
+import { PatchPolicyService } from './patch-policy.service';
 import { exec } from 'child_process';
 import { promisify } from 'util';
 import * as os from 'os';
@@ -17,6 +18,7 @@ export class PatchesService {
     private prisma: PrismaService,
     private eventBus: EventBusService,
     private emailService: EmailService,
+    @Optional() private policyService?: PatchPolicyService,
   ) {}
 
   // ─── LIST ────────────────────────────────────────────────────────
@@ -54,44 +56,73 @@ export class PatchesService {
 
   // ─── DEPLOY ──────────────────────────────────────────────────────
   /**
-   * Queue a patch for agent-based deployment.
-   * Instead of immediately marking as 'Deployed', sets status to 'PENDING_DEPLOYMENT'.
-   * Agents will pick up QUEUED PatchDeployment records on their next heartbeat check-in
-   * and execute the actual patch installation on managed endpoints.
+   * Queue a patch for agent-based deployment respecting PILOT → STAGED → ALL rings.
+   * Optional policyId narrows pilot/staged asset sets via PatchDeployPolicy.
    */
-  async deploy(id: string, tenantId?: string) {
+  async deploy(
+    id: string,
+    tenantId?: string,
+    opts?: { ring?: string; policyId?: string; promote?: boolean },
+  ) {
+    const existing = tenantId
+      ? await this.prisma.patch.findFirst({ where: { id, tenantId } })
+      : await this.prisma.patch.findUnique({ where: { id } });
+    if (!existing) throw new NotFoundException('Patch not found');
+
+    let ring = (opts?.ring || existing.deployRing || 'ALL').toUpperCase();
+    if (opts?.promote && this.policyService && tenantId) {
+      const promoted = await this.policyService.promoteRing(tenantId, id);
+      if (promoted.promoted) ring = promoted.to!;
+    }
+
     const patch = await this.prisma.patch.update({
       where: { id },
-      data: { status: 'PENDING_DEPLOYMENT' },
+      data: { status: 'PENDING_DEPLOYMENT', deployRing: ring },
     });
 
-    // If we have a tenantId, queue PatchDeployment records for agent-based deployment
     if (tenantId) {
+      let targetAssetIds: string[];
+      if (this.policyService) {
+        targetAssetIds = await this.policyService.resolveRingAssets(
+          tenantId,
+          ring,
+          opts?.policyId || null,
+        );
+      } else {
+        const assets = await this.prisma.asset.findMany({
+          where: { tenantId, deletedAt: null, agentId: { not: null }, status: 'ACTIVE' },
+          select: { id: true },
+        });
+        targetAssetIds = assets.map((a) => a.id);
+      }
+
       await this.prisma.patchDeployment.updateMany({
-        where: { patchId: id, tenantId, status: { in: ['PENDING', 'DEPLOYING'] } },
+        where: {
+          patchId: id,
+          tenantId,
+          assetId: { in: targetAssetIds },
+          status: { in: ['PENDING', 'DEPLOYING'] },
+        },
         data: { status: 'QUEUED' },
       });
 
-      // Create QUEUED PatchDeployment records for assets with agents that don't have one yet
-      const assetsWithAgents = await this.prisma.asset.findMany({
-        where: { tenantId, deletedAt: null, agentId: { not: null }, status: 'ACTIVE' },
-        select: { id: true },
-      });
-
-      for (const asset of assetsWithAgents) {
+      for (const assetId of targetAssetIds) {
         await this.prisma.patchDeployment.upsert({
-          where: { patchId_assetId: { patchId: id, assetId: asset.id } },
+          where: { patchId_assetId: { patchId: id, assetId } },
           create: {
             tenantId,
             patchId: id,
-            assetId: asset.id,
+            assetId,
             status: 'QUEUED',
           },
-          update: {},
+          update: { status: 'QUEUED' },
         });
       }
 
-      this.logger.log(`Patch ${patch.patchId} queued for agent-based deployment on ${assetsWithAgents.length} endpoints`);
+      this.logger.log(
+        `Patch ${patch.patchId} queued ring=${ring} on ${targetAssetIds.length} endpoints`,
+      );
+      return { ...patch, ring, targetCount: targetAssetIds.length };
     }
 
     return patch;
@@ -832,7 +863,6 @@ export class PatchesService {
       throw new Error('Only deployed patches can be rolled back');
     }
 
-    // Mark patch as rolled back
     await this.prisma.patch.update({
       where: { id },
       data: {
@@ -843,20 +873,89 @@ export class PatchesService {
       },
     });
 
-    // Reset deployment records so agents pick up the rollback action
+    const uninstallPayload = this.buildUninstallPayload(patch);
+
     await this.prisma.patchDeployment.updateMany({
       where: { patchId: id, tenantId },
-      data: { status: 'ROLLBACK_QUEUED' },
+      data: {
+        status: 'ROLLBACK_QUEUED',
+        output: JSON.stringify({
+          action: 'UNINSTALL_PACKAGE',
+          ...uninstallPayload,
+        }),
+      },
     });
+
+    // Push UNINSTALL_PACKAGE to online agents linked to deployment assets
+    const assetIds = patch.deployments.map((d) => d.assetId);
+    const agents = await this.prisma.agent.findMany({
+      where: {
+        tenantId,
+        assetId: { in: assetIds },
+        status: 'ONLINE',
+      },
+    });
+
+    let agentsNotified = 0;
+    for (const agent of agents) {
+      const info = (agent.systemInfo as any) || {};
+      const pending: any[] = Array.isArray(info._pendingActions) ? info._pendingActions : [];
+      pending.push({
+        type: 'UNINSTALL_PACKAGE',
+        packageName: uninstallPayload.packageName,
+        packageId: uninstallPayload.packageId,
+        patchId: patch.patchId,
+        winget: uninstallPayload.winget,
+        brew: uninstallPayload.brew,
+        apt: uninstallPayload.apt,
+      });
+      await this.prisma.agent.update({
+        where: { id: agent.id },
+        data: { systemInfo: { ...info, _pendingActions: pending } },
+      });
+      agentsNotified++;
+    }
 
     this.eventBus.emitAssetEvent(tenantId, 'patch_rolled_back', {
       patchId: patch.patchId,
       title: patch.title,
       timestamp: new Date(),
+      agentsNotified,
     });
 
-    this.logger.log(`Patch ${patch.patchId} rolled back — agents will reverse on next heartbeat`);
-    return { success: true, message: `Patch ${patch.patchId} rollback queued` };
+    this.logger.log(
+      `Patch ${patch.patchId} rolled back — uninstall queued for ${agentsNotified} agent(s)`,
+    );
+    return {
+      success: true,
+      message: `Patch ${patch.patchId} rollback queued`,
+      agentsNotified,
+      uninstall: uninstallPayload,
+    };
+  }
+
+  private buildUninstallPayload(patch: {
+    patchId: string;
+    title: string;
+    category: string;
+    rollbackData: any;
+    scanOutput: any;
+  }) {
+    const rb = (patch.rollbackData as any) || {};
+    const scan = (patch.scanOutput as any) || {};
+    const packageName =
+      rb.packageName ||
+      scan.packageName ||
+      (patch.category === 'Software Deployment'
+        ? patch.title.replace(/^Software Install:\s*/i, '')
+        : patch.patchId);
+    return {
+      packageName,
+      packageId: rb.packageId || scan.packageId || patch.patchId,
+      winget: rb.winget || scan.winget || null,
+      brew: rb.brew || scan.brew || null,
+      apt: rb.apt || scan.apt || null,
+    };
   }
 
   // ─── SOFTWARE DEPLOYMENT ──────────────────────────────────────────
@@ -866,8 +965,14 @@ export class PatchesService {
     packageType?: string;  // msi, exe, deb, rpm, pkg, dmg
     targetAssetIds?: string[];  // specific assets, or all if empty
     silent?: boolean;
+    /** PILOT → only pilot-ring agents; STAGED → pilot+staged; ALL → everyone */
+    deployRing?: string;
   }) {
     const { packageName, packageUrl, packageType, targetAssetIds, silent } = body;
+    const deployRing = (body.deployRing || 'ALL').toUpperCase();
+    if (!['PILOT', 'STAGED', 'ALL'].includes(deployRing)) {
+      throw new BadRequestException('deployRing must be PILOT, STAGED, or ALL');
+    }
     
     // Find target agents
     const whereClause: any = { tenantId, deletedAt: null, agentId: { not: null }, status: 'ACTIVE' };
@@ -890,6 +995,7 @@ export class PatchesService {
         category: 'Software Deployment',
         affectedAssets: assets.length,
         scanSource: 'MANUAL',
+        deployRing,
       },
     });
 
@@ -901,13 +1007,13 @@ export class PatchesService {
           patchId: patch.id,
           assetId: asset.id,
           status: 'QUEUED',
-          output: JSON.stringify({ action: 'INSTALL_PACKAGE', packageName, packageUrl, packageType, silent: silent ?? true }),
+          output: JSON.stringify({ action: 'INSTALL_PACKAGE', packageName, packageUrl, packageType, silent: silent ?? true, deployRing }),
         },
       });
     }
 
-    this.logger.log(`Software deployment queued: "${packageName}" → ${assets.length} endpoints`);
-    return { success: true, patchId: patch.id, targetCount: assets.length, packageName };
+    this.logger.log(`Software deployment queued: "${packageName}" ring=${deployRing} → ${assets.length} endpoints`);
+    return { success: true, patchId: patch.id, targetCount: assets.length, packageName, deployRing };
   }
 
   /**

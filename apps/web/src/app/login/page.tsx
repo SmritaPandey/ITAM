@@ -22,12 +22,27 @@ function LoginContent() {
   const [error, setError] = useState("");
   const { theme, toggleTheme } = useTheme();
   const [focused, setFocused] = useState<string | null>(null);
-  const [oauthProviders] = useState<{ google: boolean; microsoft: boolean }>({ google: true, microsoft: true });
+  const [oauthProviders, setOauthProviders] = useState<{ google: boolean; microsoft: boolean; extra: { id: string; name: string; startUrl: string }[] }>({
+    google: false,
+    microsoft: false,
+    extra: [],
+  });
   const [showForgotNotice, setShowForgotNotice] = useState(false);
   const [forgotEmail, setForgotEmail] = useState("");
   const [forgotLoading, setForgotLoading] = useState(false);
   const [forgotSuccess, setForgotSuccess] = useState(false);
   const [forgotError, setForgotError] = useState("");
+  const [mfaToken, setMfaToken] = useState<string | null>(null);
+  const [mfaCode, setMfaCode] = useState("");
+
+  async function completeLogin(data: { accessToken: string; refreshToken: string }, fallbackEmail: string) {
+    localStorage.setItem("accessToken", data.accessToken);
+    localStorage.setItem("refreshToken", data.refreshToken);
+    const decoded = decodeJwt(data.accessToken);
+    localStorage.setItem("userRole", decoded?.role || "");
+    localStorage.setItem("userEmail", decoded?.email || fallbackEmail);
+    router.push(decoded?.role === "Employee" ? "/portal" : "/dashboard");
+  }
 
   async function handleForgotPassword(e: React.FormEvent) {
     e.preventDefault();
@@ -57,24 +72,66 @@ function LoginContent() {
     if (urlError) setError(decodeURIComponent(urlError));
   }, [searchParams]);  // eslint-disable-line react-hooks/exhaustive-deps
 
+  useEffect(() => {
+    const tenant = searchParams.get("tenant") || undefined;
+    const qs = tenant ? `?tenant=${encodeURIComponent(tenant)}` : "";
+    fetch(`${API}/auth/sso/providers${qs}`)
+      .then((r) => r.json())
+      .then((data) => {
+        const list = Array.isArray(data?.providers) ? data.providers : [];
+        const google = list.some((p: any) => p.id === "google" || p.provider === "GOOGLE");
+        const microsoft = list.some((p: any) => p.id === "microsoft" || p.provider === "MICROSOFT");
+        const extra = list.filter(
+          (p: any) => p.id !== "google" && p.id !== "microsoft" && p.enabled !== false,
+        ).map((p: any) => ({
+          id: p.id,
+          name: p.name || p.provider,
+          startUrl: p.startUrl,
+        }));
+        setOauthProviders({ google, microsoft, extra });
+      })
+      .catch(() => {
+        // Fallback to legacy /auth/providers
+        fetch(`${API}/auth/providers`)
+          .then((r) => r.json())
+          .then((d) => setOauthProviders({
+            google: !!d.google,
+            microsoft: !!d.microsoft,
+            extra: [],
+          }))
+          .catch(() => setOauthProviders({ google: false, microsoft: false, extra: [] }));
+      });
+  }, [API, searchParams]);
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setLoading(true);
     setError("");
     try {
-      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || "http://localhost:4100/api/v1"}/auth/login`, {
+      if (mfaToken) {
+        const res = await fetch(`${API}/auth/mfa/challenge`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ mfaToken, code: mfaCode }),
+        });
+        if (!res.ok) { const data = await res.json(); throw new Error(data.message || "Invalid MFA code"); }
+        const data = await res.json();
+        await completeLogin(data, email);
+        return;
+      }
+      const res = await fetch(`${API}/auth/login`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email, password }),
       });
       if (!res.ok) { const data = await res.json(); throw new Error(data.message || "Invalid credentials"); }
       const data = await res.json();
-      localStorage.setItem("accessToken", data.accessToken);
-      localStorage.setItem("refreshToken", data.refreshToken);
-      const decoded = decodeJwt(data.accessToken);
-      localStorage.setItem("userRole", decoded?.role || "");
-      localStorage.setItem("userEmail", decoded?.email || email);
-      router.push(decoded?.role === "Employee" ? "/portal" : "/dashboard");
+      if (data.mfaRequired && (data.mfaToken || data.mfaChallengeToken)) {
+        setMfaToken(data.mfaToken || data.mfaChallengeToken);
+        setLoading(false);
+        return;
+      }
+      await completeLogin(data, email);
     } catch (err: any) {
       setError(err.message || "Login failed");
     } finally { setLoading(false); }
@@ -110,7 +167,7 @@ function LoginContent() {
         <div style={{ position: "relative", zIndex: 1, maxWidth: 480 }}>
           {/* Brand */}
           <Link href="/" style={{ display: "inline-flex", alignItems: "center", gap: 12, marginBottom: 48, textDecoration: "none", color: "inherit" }}>
-            <LogoIcon size={40} glow={dk} />
+            <LogoIcon size={52} glow={dk} />
             <span style={{
               fontSize: 24, fontWeight: 800, letterSpacing: "-0.04em",
               color: dk ? "#f1f5f9" : "#0f172a",
@@ -198,7 +255,7 @@ function LoginContent() {
           {/* Mobile-only brand */}
           <div className="login-mobile-brand" style={{ display: "none", textAlign: "center", marginBottom: 32 }}>
             <Link href="/" style={{ textDecoration: "none", display: "inline-flex", alignItems: "center", gap: 8 }}>
-              <LogoIcon size={32} glow={dk} />
+              <LogoIcon size={42} glow={dk} />
               <span style={{ fontSize: 20, fontWeight: 800, letterSpacing: "-0.03em", color: dk ? "#f1f5f9" : "#0f172a" }}>QS Asset</span>
             </Link>
           </div>
@@ -269,6 +326,29 @@ function LoginContent() {
               </div>
             </div>
 
+            {mfaToken && (
+              <div>
+                <label style={{
+                  display: "block", fontSize: 13, fontWeight: 600, marginBottom: 8,
+                  color: dk ? "#a1a1aa" : "#71717a",
+                }}>Authenticator code</label>
+                <input type="text" inputMode="numeric" pattern="[0-9]*" maxLength={6}
+                  value={mfaCode} onChange={e => setMfaCode(e.target.value)}
+                  placeholder="6-digit code" required autoComplete="one-time-code"
+                  style={{
+                    width: "100%", padding: "13px 16px", borderRadius: 10, fontSize: 14,
+                    fontFamily: "inherit", outline: "none", letterSpacing: "0.2em",
+                    background: dk ? "rgba(255,255,255,0.04)" : "white",
+                    border: `1.5px solid ${dk ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.1)"}`,
+                    color: dk ? "#f1f5f9" : "#0f172a",
+                  }} />
+                <button type="button" onClick={() => { setMfaToken(null); setMfaCode(""); }}
+                  style={{ marginTop: 8, background: "none", border: "none", color: "#06b6d4", fontSize: 12, cursor: "pointer", fontFamily: "inherit" }}>
+                  Back to password
+                </button>
+              </div>
+            )}
+
             {/* Error */}
             {error && (
               <div style={{
@@ -296,6 +376,8 @@ function LoginContent() {
             }}>
               {loading ? (
                 <><Loader2 size={16} style={{ animation: "spin 1s linear infinite" }} /> Signing in...</>
+              ) : mfaToken ? (
+                <>Verify MFA <Shield size={15} /></>
               ) : (
                 <>Sign in <ArrowRight size={15} /></>
               )}
@@ -303,17 +385,17 @@ function LoginContent() {
           </form>
 
           {/* OAuth Divider */}
-          {(oauthProviders.google || oauthProviders.microsoft) && (
+          {(oauthProviders.google || oauthProviders.microsoft || oauthProviders.extra.length > 0) && (
             <>
               <div style={{ display: "flex", alignItems: "center", gap: 12, margin: "20px 0" }}>
                 <div style={{ flex: 1, height: 1, background: dk ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.06)" }} />
                 <span style={{ fontSize: 11, color: dk ? "#52525b" : "#a1a1aa", fontWeight: 500, letterSpacing: "0.02em" }}>OR CONTINUE WITH</span>
                 <div style={{ flex: 1, height: 1, background: dk ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.06)" }} />
               </div>
-              <div style={{ display: "flex", gap: 10 }}>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 10 }}>
                 {oauthProviders.google && (
                   <a href={`${API}/auth/google`} style={{
-                    flex: 1, padding: "12px 16px", borderRadius: 10, textDecoration: "none",
+                    flex: 1, minWidth: 120, padding: "12px 16px", borderRadius: 10, textDecoration: "none",
                     display: "flex", alignItems: "center", justifyContent: "center", gap: 10,
                     background: dk ? "rgba(255,255,255,0.04)" : "white",
                     border: `1.5px solid ${dk ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.1)"}`,
@@ -326,7 +408,7 @@ function LoginContent() {
                 )}
                 {oauthProviders.microsoft && (
                   <a href={`${API}/auth/microsoft`} style={{
-                    flex: 1, padding: "12px 16px", borderRadius: 10, textDecoration: "none",
+                    flex: 1, minWidth: 120, padding: "12px 16px", borderRadius: 10, textDecoration: "none",
                     display: "flex", alignItems: "center", justifyContent: "center", gap: 10,
                     background: dk ? "rgba(255,255,255,0.04)" : "white",
                     border: `1.5px solid ${dk ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.1)"}`,
@@ -337,44 +419,59 @@ function LoginContent() {
                     Microsoft
                   </a>
                 )}
+                {oauthProviders.extra.map((p) => (
+                  <a key={p.id} href={p.startUrl} style={{
+                    flex: 1, minWidth: 120, padding: "12px 16px", borderRadius: 10, textDecoration: "none",
+                    display: "flex", alignItems: "center", justifyContent: "center", gap: 10,
+                    background: dk ? "rgba(255,255,255,0.04)" : "white",
+                    border: `1.5px solid ${dk ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.1)"}`,
+                    fontSize: 13, fontWeight: 600, color: dk ? "#e4e4e7" : "#3f3f46",
+                    fontFamily: "inherit", cursor: "pointer", transition: "all 0.15s",
+                  }}>
+                    <Fingerprint size={16} />
+                    {p.name}
+                  </a>
+                ))}
               </div>
             </>
           )}
 
-          {/* Separator */}
-          <div style={{
-            display: "flex", alignItems: "center", gap: 12, margin: "24px 0",
-          }}>
-            <div style={{ flex: 1, height: 1, background: dk ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.06)" }} />
-            <span style={{ fontSize: 11, color: dk ? "#52525b" : "#a1a1aa", fontWeight: 500, letterSpacing: "0.02em" }}>DEMO CREDENTIALS</span>
-            <div style={{ flex: 1, height: 1, background: dk ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.06)" }} />
-          </div>
-
-          {/* Quick logins */}
-          <div className="login-demo-grid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-            {[
-              { label: "Platform Owner", email: "owner@qsasset.com", color: "#f59e0b", sub: "Super admin" },
-              { label: "Admin Demo", email: "director@demobank.com", color: "#06b6d4", sub: "Tenant admin" },
-              { label: "IT Admin", email: "itsupport@demobank.com", color: "#10b981", sub: "IT operations" },
-              { label: "Security", email: "ciso@demobank.com", color: "#8b5cf6", sub: "Security admin" },
-            ].map(q => (
-              <button key={q.email} type="button" onClick={() => { setEmail(q.email); setPassword("Demo@2026"); }}
-                style={{
-                  padding: "12px 14px", borderRadius: 10, cursor: "pointer", fontFamily: "inherit",
-                  background: email === q.email
-                    ? (dk ? `rgba(${q.color === "#06b6d4" ? "6,182,212" : q.color === "#f59e0b" ? "245,158,11" : q.color === "#10b981" ? "16,185,129" : "139,92,246"},0.08)` : `rgba(${q.color === "#06b6d4" ? "6,182,212" : q.color === "#f59e0b" ? "245,158,11" : q.color === "#10b981" ? "16,185,129" : "139,92,246"},0.06)`)
-                    : (dk ? "rgba(255,255,255,0.03)" : "white"),
-                  border: `1.5px solid ${email === q.email ? `${q.color}40` : dk ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.08)"}`,
-                  transition: "all 0.15s",
-                  textAlign: "left",
-                }}>
-                <div style={{ fontSize: 13, fontWeight: 700, color: email === q.email ? q.color : (dk ? "#e4e4e7" : "#3f3f46"), marginBottom: 2 }}>
-                  {q.label}
-                </div>
-                <div style={{ fontSize: 11, color: dk ? "#52525b" : "#a1a1aa" }}>{q.sub}</div>
-              </button>
-            ))}
-          </div>
+          {/* Demo quick-logins — only rendered when explicitly enabled (never in production) */}
+          {process.env.NEXT_PUBLIC_SHOW_DEMO_LOGINS === "true" && (
+            <>
+              <div style={{
+                display: "flex", alignItems: "center", gap: 12, margin: "24px 0",
+              }}>
+                <div style={{ flex: 1, height: 1, background: dk ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.06)" }} />
+                <span style={{ fontSize: 11, color: dk ? "#52525b" : "#a1a1aa", fontWeight: 500, letterSpacing: "0.02em" }}>DEMO CREDENTIALS</span>
+                <div style={{ flex: 1, height: 1, background: dk ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.06)" }} />
+              </div>
+              <div className="login-demo-grid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+                {[
+                  { label: "Platform Owner", email: "owner@qsasset.com", color: "#f59e0b", sub: "Super admin" },
+                  { label: "Admin Demo", email: "director@demobank.com", color: "#06b6d4", sub: "Tenant admin" },
+                  { label: "IT Admin", email: "itsupport@demobank.com", color: "#10b981", sub: "IT operations" },
+                  { label: "Security", email: "ciso@demobank.com", color: "#8b5cf6", sub: "Security admin" },
+                ].map(q => (
+                  <button key={q.email} type="button" onClick={() => { setEmail(q.email); setPassword(process.env.NEXT_PUBLIC_DEMO_PASSWORD || ""); }}
+                    style={{
+                      padding: "12px 14px", borderRadius: 10, cursor: "pointer", fontFamily: "inherit",
+                      background: email === q.email
+                        ? (dk ? `rgba(${q.color === "#06b6d4" ? "6,182,212" : q.color === "#f59e0b" ? "245,158,11" : q.color === "#10b981" ? "16,185,129" : "139,92,246"},0.08)` : `rgba(${q.color === "#06b6d4" ? "6,182,212" : q.color === "#f59e0b" ? "245,158,11" : q.color === "#10b981" ? "16,185,129" : "139,92,246"},0.06)`)
+                        : (dk ? "rgba(255,255,255,0.03)" : "white"),
+                      border: `1.5px solid ${email === q.email ? `${q.color}40` : dk ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.08)"}`,
+                      transition: "all 0.15s",
+                      textAlign: "left",
+                    }}>
+                    <div style={{ fontSize: 13, fontWeight: 700, color: email === q.email ? q.color : (dk ? "#e4e4e7" : "#3f3f46"), marginBottom: 2 }}>
+                      {q.label}
+                    </div>
+                    <div style={{ fontSize: 11, color: dk ? "#52525b" : "#a1a1aa" }}>{q.sub}</div>
+                  </button>
+                ))}
+              </div>
+            </>
+          )}
 
           {/* Register link */}
           <div style={{ textAlign: "center", marginTop: 28 }}>

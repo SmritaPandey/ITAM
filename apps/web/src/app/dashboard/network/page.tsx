@@ -4,15 +4,16 @@ import { useRouter } from "next/navigation";
 import {
   Wifi, AlertTriangle, Activity, CheckCircle2, XCircle, Signal, Loader2,
   RefreshCw, FileCode, Scan, Zap, Cpu, HardDrive, Clock, BarChart3,
-  ChevronRight, X, Server, Network, Router, ExternalLink
+  ChevronRight, X, Server, Network, Router, ExternalLink, LayoutDashboard
 } from "lucide-react";
 import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, LineChart, Line, Legend
 } from "recharts";
-import { apiFetch } from "@/lib/api";
+import { apiFetch, apiFetchOptional, getTopTalkers } from "@/lib/api";
 import { PageHelp } from "@/components/HelpSystem";
 import SafeChart from "@/components/SafeChart";
 import { useRealtimeEvents } from "@/lib/useRealtimeEvents";
+import EmptyState from "@/components/EmptyState";
 
 const STATUS_COLORS: Record<string, string> = { ONLINE: "green", WARNING: "amber", OFFLINE: "red" };
 const DEVICE_ICONS: Record<string, any> = {
@@ -53,24 +54,30 @@ export default function NetworkPage() {
   const [deviceFilter, setDeviceFilter] = useState<string | null>(null);
   const [aggregatedBandwidth, setAggregatedBandwidth] = useState<any[] | null>(null);
   const [bandwidthLoading, setBandwidthLoading] = useState(false);
+  const [topTalkers, setTopTalkers] = useState<any[]>([]);
+  const [talkersLoading, setTalkersLoading] = useState(false);
 
   const { connected, on } = useRealtimeEvents();
 
   const refresh = useCallback(() => {
-    apiFetch("/monitoring/network").then((netData) => {
+    apiFetchOptional("/monitoring/network").then((netData) => {
+      if (!netData) {
+        setLoading(false);
+        return;
+      }
       setData(netData);
-      // Fetch real bandwidth history for SNMP-capable devices
+      // Fetch real bandwidth history for SNMP-capable devices (cap concurrency)
       const devices = netData.data || [];
       const snmpDevices = devices.filter((d: any) => d.metrics?.snmpAvailable || d.metrics?.ifInOctets !== undefined);
       if (snmpDevices.length > 0) {
         setBandwidthLoading(true);
         Promise.all(
-          snmpDevices.slice(0, 10).map((d: any) =>
-            apiFetch(`/monitoring/snmp/devices/${d.id}/history?hours=24`).catch(() => [])
+          snmpDevices.slice(0, 3).map((d: any) =>
+            apiFetchOptional(`/monitoring/snmp/devices/${d.id}/history?hours=24`)
           )
         ).then((histories) => {
           const buckets: Record<string, { inbound: number; outbound: number; count: number }> = {};
-          histories.forEach((history: any[]) => {
+          histories.forEach((history: any) => {
             (Array.isArray(history) ? history : []).forEach((m: any) => {
               const hour = new Date(m.collectedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
               if (!buckets[hour]) buckets[hour] = { inbound: 0, outbound: 0, count: 0 };
@@ -92,7 +99,13 @@ export default function NetworkPage() {
       } else {
         setAggregatedBandwidth(null);
       }
-    }).catch(console.error).finally(() => setLoading(false));
+    }).finally(() => setLoading(false));
+
+    setTalkersLoading(true);
+    getTopTalkers({ hours: 24, limit: 10 })
+      .then((r) => setTopTalkers(r?.talkers || []))
+      .catch(() => setTopTalkers([]))
+      .finally(() => setTalkersLoading(false));
   }, []);
 
   useEffect(() => { refresh(); }, [refresh]);
@@ -168,6 +181,7 @@ export default function NetworkPage() {
           <button className="btn btn-secondary" onClick={async () => { setDiscovering(true); try { const r = await apiFetch("/monitoring/network/auto-discover", { method: "POST" }); setScanResult({ message: `Auto-discovered ${r.created} devices from ${r.total} assets` }); refresh(); } catch (err: any) { alert(`Auto-discover failed: ${err.message || err}`); } finally { setDiscovering(false); } }} disabled={discovering}>
             {discovering ? <><Loader2 size={14} style={{ animation: "spin 1s linear infinite" }} /> Discovering...</> : <><Zap size={14} /> Auto-Discover</>}
           </button>
+          <button className="btn btn-secondary" onClick={() => router.push("/dashboard/network/noc")}><LayoutDashboard size={14} /> NOC</button>
           <button className="btn btn-secondary" onClick={() => router.push("/dashboard/network/configs")}><FileCode size={14} /> Config Backup</button>
           <button className="btn btn-primary" onClick={async () => { setScanning(true); setScanResult(null); try { const r = await apiFetch("/monitoring/network/scan", { method: "POST" }); setScanResult(r); refresh(); } catch (err: any) { alert(`Network scan failed: ${err.message || err}`); } finally { setScanning(false); } }} disabled={scanning}>
             {scanning ? <><Loader2 size={14} style={{ animation: "spin 1s linear infinite" }} /> Scanning...</> : <><Scan size={14} /> Scan Network</>}
@@ -235,6 +249,50 @@ export default function NetworkPage() {
             <div style={{ fontSize: 13, fontWeight: 500, color: "var(--text-secondary)" }}>No bandwidth history available</div>
             <div style={{ fontSize: 11 }}>Configure SNMP polling and run <strong>SNMP Poll</strong> to collect time-series data</div>
           </div>
+        )}
+      </div>
+
+      {/* Top Talkers (NetFlow) */}
+      <div className="card" style={{ marginBottom: 16, padding: 0, overflow: "hidden" }}>
+        <div className="card-header" style={{ padding: "12px 20px" }}>
+          <div>
+            <div className="card-title">Top Talkers</div>
+            <div className="card-subtitle">NetFlow / sFlow rollups (last 24h)</div>
+          </div>
+          <button className="btn btn-secondary" style={{ padding: "4px 10px", fontSize: 11 }} onClick={() => router.push("/dashboard/network/noc")}>
+            NOC view
+          </button>
+        </div>
+        {talkersLoading ? (
+          <div style={{ height: 120, display: "flex", alignItems: "center", justifyContent: "center", color: "var(--text-tertiary)" }}>
+            <Loader2 size={18} style={{ animation: "spin 1s linear infinite" }} />
+          </div>
+        ) : topTalkers.length === 0 ? (
+          <div style={{ padding: 20 }}>
+            <EmptyState
+              compact
+              title="No flow exporters reporting"
+              description="Set ENABLE_NETFLOW=true on the API and point NetFlow exporters (UDP 2055) at this collector. JSON test frames are also accepted."
+            />
+          </div>
+        ) : (
+          <table className="data-table">
+            <thead>
+              <tr><th>Talker IP</th><th>Bytes In</th><th>Bytes Out</th><th>Total</th><th>Packets</th><th>Flows</th></tr>
+            </thead>
+            <tbody>
+              {topTalkers.map((t: any) => (
+                <tr key={t.talkerIp}>
+                  <td style={{ fontFamily: "monospace", fontWeight: 500 }}>{t.talkerIp}</td>
+                  <td style={{ color: "#06b6d4" }}>{formatBytes(Number(t.bytesIn))}</td>
+                  <td style={{ color: "#8b5cf6" }}>{formatBytes(Number(t.bytesOut))}</td>
+                  <td style={{ fontWeight: 600 }}>{formatBytes(Number(t.totalBytes))}</td>
+                  <td>{Number(t.packets).toLocaleString()}</td>
+                  <td>{t.flows}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         )}
       </div>
 

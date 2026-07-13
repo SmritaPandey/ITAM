@@ -5,8 +5,8 @@ import {
   ChevronRight, Brain, Info, ArrowRight, Layers, Monitor, Users
 } from "lucide-react";
 import { apiFetch } from "@/lib/api";
-import { 
-  PieChart, Pie, Cell, Tooltip, ResponsiveContainer 
+import {
+  PieChart, Pie, Cell, Tooltip
 } from "recharts";
 import SafeChart from "@/components/SafeChart";
 import AiInsightCard from "@/components/AiInsightCard";
@@ -55,6 +55,46 @@ export default function IntelligencePage() {
     { name: 'Medium (25-50)', value: stats.mediumCount, color: '#f59e0b' },
     { name: 'Low (0-25)', value: stats.lowCount, color: '#10b981' },
   ];
+
+  // Compute the real primary risk vector from component scores across at-risk assets
+  const recommendation = (() => {
+    const atRisk = risks.filter((r: any) => r.overallScore >= 50);
+    const pool = atRisk.length > 0 ? atRisk : risks;
+    if (pool.length === 0) return null;
+    const sums: Record<string, { total: number; count: number }> = {};
+    pool.forEach((r: any) => {
+      Object.entries(r.components || {}).forEach(([k, v]: any) => {
+        if (typeof v !== 'number') return;
+        if (!sums[k]) sums[k] = { total: 0, count: 0 };
+        sums[k].total += v;
+        sums[k].count += 1;
+      });
+    });
+    const averages = Object.entries(sums).map(([k, s]) => ({ vector: k, avg: s.total / s.count }));
+    if (averages.length === 0) return null;
+    averages.sort((a, b) => a.avg - b.avg);
+    const weakest = averages[0];
+    const VECTOR_LABELS: Record<string, string> = {
+      os: 'OS Lifecycle & Patch Hygiene',
+      software: 'Unauthorized / End-of-Life Software',
+      security: 'Security Posture (Firewall & Encryption)',
+      telemetry: 'Endpoint Visibility & Resource Health',
+      hardware: 'Hardware Age & Warranty Coverage',
+    };
+    const VECTOR_ACTIONS: Record<string, string> = {
+      os: 'Prioritize OS upgrades and reboot/patch cycles on the lowest-scoring assets below.',
+      software: 'Remove or replace unauthorized and end-of-life software flagged on the assets below.',
+      security: 'Enable disk encryption and host firewalls on the non-compliant assets below.',
+      telemetry: 'Restore agent connectivity or re-scan stale assets to regain live visibility.',
+      hardware: 'Plan hardware refresh for out-of-warranty and aging devices listed below.',
+    };
+    return {
+      vectorLabel: VECTOR_LABELS[weakest.vector] || weakest.vector,
+      action: VECTOR_ACTIONS[weakest.vector] || 'Remediate the lowest-scoring assets below.',
+      avgScore: Math.round(weakest.avg),
+      assetCount: pool.length,
+    };
+  })();
 
   return (
     <>
@@ -113,11 +153,18 @@ export default function IntelligencePage() {
                   <Zap size={18} style={{ color: 'var(--brand-400)' }} />
                   <span style={{ fontWeight: 700, fontSize: 14 }}>Security Recommendation</span>
                 </div>
-                <p style={{ fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.6 }}>
-                  Your organization has {stats.criticalCount} assets with critical risk scores. 
-                  The primary risk vector is <b>OS Lifecycle (End-of-Life)</b> on legacy Windows servers.
-                  Prioritize patching the top 5 assets listed below to reduce overall risk by 24%.
-                </p>
+                {recommendation ? (
+                  <p style={{ fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.6 }}>
+                    Your organization has {stats.criticalCount} asset{stats.criticalCount === 1 ? '' : 's'} with critical risk scores.
+                    Across {recommendation.assetCount} analyzed asset{recommendation.assetCount === 1 ? '' : 's'}, the weakest risk vector is{' '}
+                    <b>{recommendation.vectorLabel}</b> (avg component score {recommendation.avgScore}/100).{' '}
+                    {recommendation.action}
+                  </p>
+                ) : (
+                  <p style={{ fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.6 }}>
+                    No risk data available yet. Deploy agents or run a discovery scan so the Risk Engine can analyze your assets.
+                  </p>
+                )}
               </div>
             </div>
          </div>

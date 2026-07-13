@@ -61,6 +61,60 @@ export class LicensesService {
     });
   }
 
+  async findMatching(tenantId: string, softwareName: string, softwareCatalogId?: string) {
+    const name = (softwareName || '').trim();
+    if (!name && !softwareCatalogId) return [];
+
+    const or: any[] = [];
+    if (softwareCatalogId) {
+      or.push({ softwareCatalogId });
+    }
+    if (name) {
+      or.push({ softwareName: { contains: name, mode: 'insensitive' } });
+      // Also match first significant token (e.g. "Microsoft Office" → "Office")
+      const token = name.split(/[\s\-_/]+/).filter((t) => t.length > 2)[0];
+      if (token && token.toLowerCase() !== name.toLowerCase()) {
+        or.push({ softwareName: { contains: token, mode: 'insensitive' } });
+      }
+    }
+
+    return this.prisma.license.findMany({
+      where: { tenantId, OR: or },
+      include: {
+        _count: { select: { assignments: true } },
+        softwareCatalog: { select: { id: true, name: true } },
+      },
+      orderBy: { updatedAt: 'desc' },
+      take: 50,
+    });
+  }
+
+  async linkToSoftware(licenseId: string, tenantId: string, softwareCatalogId: string) {
+    await this.findById(licenseId, tenantId);
+    const catalog = await this.prisma.softwareCatalog.findFirst({
+      where: { id: softwareCatalogId, tenantId },
+    });
+    if (!catalog) throw new NotFoundException('Software catalog entry not found');
+
+    return this.prisma.license.update({
+      where: { id: licenseId },
+      data: {
+        softwareCatalogId,
+        softwareName: catalog.name,
+      },
+      include: { _count: { select: { assignments: true } } },
+    });
+  }
+
+  async unlinkFromSoftware(licenseId: string, tenantId: string) {
+    await this.findById(licenseId, tenantId);
+    return this.prisma.license.update({
+      where: { id: licenseId },
+      data: { softwareCatalogId: null },
+      include: { _count: { select: { assignments: true } } },
+    });
+  }
+
   async delete(id: string, tenantId: string) {
     await this.findById(id, tenantId);
     // Cascade: delete related license assignments first

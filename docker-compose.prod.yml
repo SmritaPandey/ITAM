@@ -1,26 +1,17 @@
-# ═══════════════════════════════════════════════════════════════════
-# QS Asset Management — Full Local LAN Deployment
-# ═══════════════════════════════════════════════════════════════════
+# QS Assets — production compose
 #
-# USAGE:
-#   1. First time (with demo data):
-#      SERVER_IP=192.168.1.50 SEED_DB=true docker compose -f docker-compose.prod.yml up -d --build
+# Bundled Postgres + Redis (LAN):
+#   SERVER_IP=192.168.1.50 docker compose -f docker-compose.prod.yml up -d --build
 #
-#   2. Production (no seed):
-#      SERVER_IP=192.168.1.50 docker compose -f docker-compose.prod.yml up -d --build
+# BYO Postgres/Redis (skip local db/cache containers):
+#   EXTERNAL_DATABASE_URL=postgresql://… EXTERNAL_REDIS_URL=redis://… \
+#   SERVER_IP=… DEPLOYMENT_MODE=onprem \
+#   docker compose -f docker-compose.prod.yml up -d --build api web
 #
-#   3. View logs:
-#      docker compose -f docker-compose.prod.yml logs -f api
-#
-#   4. Stop:
-#      docker compose -f docker-compose.prod.yml down
-#
-# After startup, open: http://<SERVER_IP>:3100
-# Login: admin@acme.com / Admin@123 (if seeded)
-# ═══════════════════════════════════════════════════════════════════
+# After startup: http://<SERVER_IP>:3100
+# On-prem first boot seeds OWNER_EMAIL / TENANT_ADMIN_EMAIL (change passwords immediately).
 
 services:
-  # ─── PostgreSQL Database ───────────────────────────────────────
   postgres:
     image: postgres:16-alpine
     container_name: qsasset-db
@@ -44,7 +35,6 @@ services:
         limits:
           memory: 1G
 
-  # ─── Redis Cache ───────────────────────────────────────────────
   redis:
     image: redis:7-alpine
     container_name: qsasset-redis
@@ -62,8 +52,7 @@ services:
         limits:
           memory: 300M
 
-  # ─── NestJS API Backend ────────────────────────────────────────
-  # Uses HOST NETWORK for direct LAN scanning (ping, nmap, arp)
+  # NestJS API — host network for LAN discovery
   api:
     build:
       context: ./apps/api
@@ -72,8 +61,8 @@ services:
     restart: unless-stopped
     network_mode: host
     environment:
-      DATABASE_URL: postgresql://postgres:${DB_PASSWORD:-QSAsset@2026}@localhost:5434/assetcommand?connection_limit=20&statement_timeout=30000
-      REDIS_URL: redis://localhost:6379
+      DATABASE_URL: ${EXTERNAL_DATABASE_URL:-postgresql://postgres:${DB_PASSWORD:-QSAsset@2026}@localhost:5434/assetcommand?connection_limit=20&statement_timeout=30000}
+      REDIS_URL: ${EXTERNAL_REDIS_URL:-redis://localhost:6379}
       JWT_SECRET: ${JWT_SECRET:-qsasset-jwt-secret-2026-change-me}
       JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:-qsasset-refresh-secret-2026-change-me}
       JWT_EXPIRATION: "15m"
@@ -81,20 +70,24 @@ services:
       PORT: 4100
       NODE_ENV: production
       SEED_DB: ${SEED_DB:-false}
+      DEPLOYMENT_MODE: ${DEPLOYMENT_MODE:-onprem}
+      DISABLE_PUBLIC_SIGNUP: ${DISABLE_PUBLIC_SIGNUP:-true}
+      LICENSE_PUBLIC_KEY: ${LICENSE_PUBLIC_KEY:-}
+      LICENSE_PRIVATE_KEY: ${LICENSE_PRIVATE_KEY:-}
+      LICENSE_SERVER_URL: ${LICENSE_SERVER_URL:-}
+      ONPREM_ORG_NAME: ${ONPREM_ORG_NAME:-Enterprise Organization}
+      OWNER_EMAIL: ${OWNER_EMAIL:-owner@localhost}
+      OWNER_PASSWORD: ${OWNER_PASSWORD:-ChangeMe@123}
+      TENANT_ADMIN_EMAIL: ${TENANT_ADMIN_EMAIL:-admin@localhost}
+      TENANT_ADMIN_PASSWORD: ${TENANT_ADMIN_PASSWORD:-ChangeMe@123}
       CORS_ORIGIN: "http://localhost:3100,http://${SERVER_IP:-0.0.0.0}:3100,https://qsasset.com,https://www.qsasset.com"
       ENABLE_SNMP_TRAPS: ${ENABLE_SNMP_TRAPS:-false}
       NODE_OPTIONS: "--max-old-space-size=768"
-    depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
     deploy:
       resources:
         limits:
           memory: 1G
 
-  # ─── Next.js Frontend ─────────────────────────────────────────
   web:
     build:
       context: ./apps/web
@@ -115,4 +108,3 @@ services:
 volumes:
   pgdata:
     driver: local
-

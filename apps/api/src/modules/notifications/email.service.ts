@@ -9,6 +9,11 @@ interface EmailOptions {
   subject: string;
   html: string;
   text?: string;
+  attachments?: Array<{
+    filename: string;
+    content: Buffer | string;
+    contentType?: string;
+  }>;
 }
 
 @Injectable()
@@ -92,6 +97,7 @@ export class EmailService {
         subject: options.subject,
         html: options.html,
         text: options.text || options.subject,
+        attachments: options.attachments,
       });
       this.sentCount++;
       this.logger.log(`📧 Email sent to ${options.to}: ${options.subject}`);

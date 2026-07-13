@@ -23,11 +23,11 @@ export default function PrivacyPage() {
 
   const { theme, toggleTheme } = useTheme();
   const L = theme === "light";
-  const bg = L ? "#f9fafb" : "#020205";
-  const txt = L ? "#0f172a" : "#f3f4f6";
-  const muted = L ? "#475569" : "#8a8f98";
-  const border = L ? "rgba(15, 23, 42, 0.08)" : "rgba(255, 255, 255, 0.06)";
-  const card = L ? "rgba(255,255,255,0.7)" : "rgba(16, 22, 42, 0.65)";
+  const bg = L ? "#f5f7f8" : "#070b10";
+  const txt = L ? "#0f172a" : "#f5f5f7";
+  const muted = L ? "#6b7280" : "#9f9fa0";
+  const border = L ? "rgba(15, 23, 42, 0.08)" : "rgba(255, 255, 255, 0.08)";
+  const card = L ? "#ffffff" : "rgba(18, 21, 26, 0.92)";
   const cyanGlow = "rgba(6, 182, 212, 0.15)";
   const pTxt = L ? "#334155" : "#cbd5e1";
   const codeColor = L ? "#0891b2" : "#22d3ee";
@@ -73,28 +73,26 @@ export default function PrivacyPage() {
   };
 
   return (
-    <div style={{ minHeight: '100vh', background: bg, color: txt, fontFamily: "'Plus Jakarta Sans', 'Inter', system-ui, sans-serif", transition: 'background 0.5s, color 0.5s' }}>
+    <div style={{ minHeight: '100vh', background: bg, color: txt, fontFamily: "var(--font-body), 'DM Sans', system-ui, sans-serif", transition: 'background 0.4s, color 0.4s', overflowX: "hidden" }}>
       <Header theme={theme} onToggleTheme={toggleTheme} />
 
       <div style={{ position: "relative", overflowX: "hidden" }}>
-      {/* Dynamic Ambient Background Glows */}
-      <div style={{ position: "absolute", top: "-10%", right: "10%", width: "50%", height: "500px", background: "radial-gradient(ellipse at center, rgba(6,182,212,0.05) 0%, rgba(139,92,246,0.02) 60%, transparent 100%)", pointerEvents: "none", filter: "blur(80px)", zIndex: 0 }} />
-      <div style={{ position: "absolute", bottom: "10%", left: "5%", width: "45%", height: "600px", background: "radial-gradient(ellipse at center, rgba(139,92,246,0.04) 0%, rgba(6,182,212,0.01) 50%, transparent 100%)", pointerEvents: "none", filter: "blur(100px)", zIndex: 0 }} />
+      <div aria-hidden style={{ position: "absolute", inset: "0 0 auto 0", height: 360, pointerEvents: "none", zIndex: 0, background: L ? "radial-gradient(ellipse 90% 70% at 50% -10%, rgba(6,182,212,0.12) 0%, transparent 55%), linear-gradient(180deg, #eef4f6 0%, #f5f7f8 70%)" : "radial-gradient(ellipse 90% 70% at 50% -10%, rgba(6,182,212,0.16) 0%, transparent 55%), linear-gradient(180deg, #0a1218 0%, #070b10 75%)" }} />
 
-      <div style={{ maxWidth: 1080, margin: "0 auto", padding: "64px 24px 120px", paddingTop: 80, position: "relative", zIndex: 1 }}>
+      <div style={{ maxWidth: 1080, margin: "0 auto", padding: "64px 24px 120px", paddingTop: 108, position: "relative", zIndex: 1 }}>
         <div style={{ marginBottom: 48 }}>
-          <div style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "6px 14px", borderRadius: 20, background: "rgba(6,182,212,0.05)", border: "1px solid rgba(6,182,212,0.15)", marginBottom: 16, fontSize: 11, fontWeight: 700, color: "#06b6d4", letterSpacing: "0.05em", textTransform: "uppercase" }}>
-            <Shield size={11} /> Compliance & Privacy Division
+          <div className="font-mono-label" style={{ display: "inline-block", padding: "8px 18px", borderRadius: 9999, background: L ? "rgba(15,23,42,0.04)" : "rgba(255,255,255,0.08)", border: `1px solid ${border}`, marginBottom: 16, fontSize: 11, color: muted }}>
+            Privacy · DPDP-oriented
           </div>
-          <h1 style={{ fontSize: 42, fontWeight: 900, marginBottom: 8, letterSpacing: "-0.04em" }}>Privacy Policy</h1>
-          <p style={{ fontSize: 14, color: muted }}>Last updated: May 21, 2026 • Effective Date: May 21, 2026</p>
+          <h1 className="font-serif" style={{ fontSize: "clamp(36px, 5vw, 48px)", fontWeight: 400, marginBottom: 8, letterSpacing: "-0.02em", lineHeight: 0.95 }}>Privacy Policy</h1>
+          <p className="font-mono-label" style={{ fontSize: 11, color: muted, letterSpacing: "0.06em" }}>Updated May 21, 2026</p>
         </div>
 
         <div className="legal-container">
           {/* Sticky Left Table of Contents */}
-          <div className="legal-toc" style={{ background: L ? "rgba(255, 255, 255, 0.7)" : "rgba(16, 22, 42, 0.45)", border: `1px solid ${border}` }}>
-            <div style={{ fontSize: 11, fontWeight: 800, color: "#06b6d4", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 14, paddingLeft: 12 }}>
-              Outline Index
+          <div className="legal-toc" style={{ background: L ? "#ffffff" : "rgba(18, 21, 26, 0.92)", border: `1px solid ${border}` }}>
+            <div className="font-mono-label" style={{ fontSize: 10, color: muted, marginBottom: 14, paddingLeft: 12 }}>
+              Outline
             </div>
             {SECTIONS.map((sec) => (
               <button
@@ -156,7 +154,7 @@ export default function PrivacyPage() {
                     <p style={{ fontSize: 12, color: muted, margin: 0, lineHeight: 1.6 }}>Populating real-time infrastructure topology, issuing priority alert dispatches, and managing helpdesk service requests.</p>
                   </div>
                   <div style={{ padding: 16, borderRadius: 12, background: boxBg, border: `1px solid ${border}` }}>
-                    <div style={{ fontSize: 13, fontWeight: 700, color: "#8b5cf6", marginBottom: 4 }}>VULNERABILITY MITIGATION</div>
+                    <div className="font-mono-label" style={{ fontSize: 11, color: "#0e7490", marginBottom: 4 }}>Vulnerability mitigation</div>
                     <p style={{ fontSize: 12, color: muted, margin: 0, lineHeight: 1.6 }}>Correlating operating systems and daemon variations against globally verified Common Vulnerabilities and Exposures (CVE) repositories.</p>
                   </div>
                 </div>
@@ -200,15 +198,15 @@ export default function PrivacyPage() {
                 </p>
                 <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 14, marginTop: 16 }}>
                   <div style={{ padding: "16px 20px", borderRadius: 12, background: boxBg, border: `1px solid ${border}`, textAlign: "center" }}>
-                    <div style={{ fontSize: 24, fontWeight: 900, color: "#06b6d4" }}>90 Days</div>
+                    <div className="font-serif" style={{ fontSize: 24, fontWeight: 400, color: "#06b6d4" }}>90 Days</div>
                     <div style={{ fontSize: 11, color: muted, fontWeight: 700, textTransform: "uppercase", marginTop: 4 }}>Agent Telemetry</div>
                   </div>
                   <div style={{ padding: "16px 20px", borderRadius: 12, background: boxBg, border: `1px solid ${border}`, textAlign: "center" }}>
-                    <div style={{ fontSize: 24, fontWeight: 900, color: "#3b82f6" }}>180 Days</div>
+                    <div className="font-serif" style={{ fontSize: 24, fontWeight: 400, color: "#0e7490" }}>180 Days</div>
                     <div style={{ fontSize: 11, color: muted, fontWeight: 700, textTransform: "uppercase", marginTop: 4 }}>Discovery Scans</div>
                   </div>
                   <div style={{ padding: "16px 20px", borderRadius: 12, background: boxBg, border: `1px solid ${border}`, textAlign: "center" }}>
-                    <div style={{ fontSize: 24, fontWeight: 900, color: "#8b5cf6" }}>365 Days</div>
+                    <div className="font-serif" style={{ fontSize: 24, fontWeight: 400, color: "#0e7490" }}>365 Days</div>
                     <div style={{ fontSize: 11, color: muted, fontWeight: 700, textTransform: "uppercase", marginTop: 4 }}>Audit Event Logs</div>
                   </div>
                 </div>
@@ -303,23 +301,22 @@ export default function PrivacyPage() {
           border: 1px solid transparent;
           padding: 10px 14px;
           border-radius: 8px;
-          color: #94a3b8;
+          color: ${muted};
           font-size: 13px;
-          font-weight: 500;
+          font-weight: 400;
           cursor: pointer;
-          transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+          transition: all 0.2s ease;
           font-family: inherit;
         }
         .legal-toc-item:hover {
-          color: #22d3ee;
-          background: rgba(6, 182, 212, 0.04);
+          color: ${txt};
+          background: ${L ? "rgba(15,23,42,0.04)" : "rgba(255,255,255,0.04)"};
         }
         .legal-toc-item.active {
-          color: #06b6d4;
-          background: rgba(6, 182, 212, 0.08);
-          border-color: rgba(6, 182, 212, 0.2);
-          font-weight: 700;
-          box-shadow: inset 0 0 12px rgba(6, 182, 212, 0.05);
+          color: ${txt};
+          background: ${L ? "rgba(15,23,42,0.06)" : "rgba(255,255,255,0.08)"};
+          border-color: ${border};
+          font-weight: 500;
         }
         @media (max-width: 900px) {
           .legal-container {

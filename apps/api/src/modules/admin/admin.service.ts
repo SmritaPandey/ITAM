@@ -1,4 +1,4 @@
-import { Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException, ConflictException } from '@nestjs/common';
 import { PrismaService } from '../../common/database/prisma.service';
 import * as bcrypt from 'bcryptjs';
 
@@ -68,6 +68,138 @@ export class AdminService {
   }
 
   // ─── Tenant Management ───────────────────────────────────────
+  async createTenant(dto: {
+    name: string;
+    plan?: string;
+    adminEmail: string;
+    adminPassword?: string;
+    adminFullName?: string;
+    customAllowedModules?: string[];
+    customBlockedModules?: string[];
+  }) {
+    const email = dto.adminEmail.toLowerCase().trim();
+    const existing = await this.prisma.user.findFirst({ where: { email } });
+    if (existing) {
+      throw new ConflictException('An account with this admin email already exists');
+    }
+
+    const slugBase = dto.name
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-|-$/g, '')
+      .substring(0, 40) || 'tenant';
+    const slugExists = await this.prisma.tenant.findFirst({
+      where: { slug: { startsWith: slugBase } },
+    });
+    const slug = slugExists ? `${slugBase}-${Date.now().toString(36)}` : slugBase;
+    const plan = (dto.plan || 'STARTER') as any;
+    const password = dto.adminPassword || `Welcome-${Math.random().toString(36).slice(2, 10)}!`;
+    const [firstName, ...rest] = (dto.adminFullName || 'Tenant Admin').trim().split(' ');
+    const lastName = rest.join(' ') || 'Admin';
+    const passwordHash = await bcrypt.hash(password, 12);
+
+    const settings: Record<string, any> = {};
+    if (dto.customAllowedModules) settings.customAllowedModules = dto.customAllowedModules;
+    if (dto.customBlockedModules) settings.customBlockedModules = dto.customBlockedModules;
+
+    const result = await this.prisma.$transaction(async (tx) => {
+      const tenant = await tx.tenant.create({
+        data: {
+          name: dto.name,
+          slug,
+          plan,
+          status: 'ACTIVE',
+          settings,
+        },
+      });
+
+      await tx.site.create({
+        data: { tenantId: tenant.id, name: 'Headquarters', isHq: true },
+      });
+      await tx.department.create({
+        data: { tenantId: tenant.id, name: 'IT Department' },
+      });
+
+      const adminRole = await tx.role.create({
+        data: {
+          tenantId: tenant.id,
+          name: 'Tenant Admin',
+          description: 'Full administrative access',
+          permissions: ['*'],
+          isSystem: true,
+        },
+      });
+      await tx.role.createMany({
+        data: [
+          {
+            tenantId: tenant.id,
+            name: 'IT Admin',
+            description: 'IT operations',
+            permissions: ['assets:read', 'assets:write', 'tickets:read', 'tickets:write', 'scanning:execute'],
+            isSystem: true,
+          },
+          {
+            tenantId: tenant.id,
+            name: 'Staff',
+            description: 'Staff',
+            permissions: ['assets:read', 'tickets:read', 'tickets:write'],
+            isSystem: true,
+          },
+          {
+            tenantId: tenant.id,
+            name: 'Employee',
+            description: 'Employee',
+            permissions: ['assets:read', 'tickets:read', 'tickets:write'],
+            isSystem: true,
+          },
+        ],
+      });
+
+      const admin = await tx.user.create({
+        data: {
+          tenantId: tenant.id,
+          email,
+          passwordHash,
+          firstName: firstName || 'Admin',
+          lastName,
+          roleId: adminRole.id,
+          status: 'ACTIVE',
+          emailVerified: true,
+        },
+      });
+
+      await tx.assetType.createMany({
+        data: [
+          { tenantId: tenant.id, name: 'Laptop', isItAsset: true, icon: 'laptop', color: '#6366f1' },
+          { tenantId: tenant.id, name: 'Desktop', isItAsset: true, icon: 'monitor', color: '#3b82f6' },
+          { tenantId: tenant.id, name: 'Server', isItAsset: true, icon: 'server', color: '#8b5cf6' },
+          { tenantId: tenant.id, name: 'Network Device', isItAsset: true, icon: 'router', color: '#0ea5e9' },
+          { tenantId: tenant.id, name: 'Printer', isItAsset: true, icon: 'printer', color: '#a855f7' },
+          { tenantId: tenant.id, name: 'Furniture', isItAsset: false, icon: 'armchair', color: '#f97316' },
+          { tenantId: tenant.id, name: 'Vehicle', isItAsset: false, icon: 'car', color: '#10b981' },
+        ],
+      });
+
+      await tx.subscription.upsert({
+        where: { tenantId: tenant.id },
+        update: { plan, status: 'ACTIVE' },
+        create: { tenantId: tenant.id, plan, status: 'ACTIVE' },
+      });
+
+      return { tenant, admin, temporaryPassword: dto.adminPassword ? undefined : password };
+    });
+
+    this.logger.log(`Admin created tenant ${result.tenant.id} (${result.tenant.name})`);
+    return {
+      tenant: result.tenant,
+      admin: { id: result.admin.id, email: result.admin.email },
+      temporaryPassword: result.temporaryPassword,
+      message: result.temporaryPassword
+        ? 'Tenant created. Share the temporary password with the Tenant Admin securely.'
+        : 'Tenant created.',
+    };
+  }
+
   async listTenants(query?: { limit?: number; offset?: number; search?: string; plan?: string; status?: string }) {
     const where: any = {};
     if (query?.search) {

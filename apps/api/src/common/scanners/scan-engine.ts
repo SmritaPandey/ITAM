@@ -2,9 +2,13 @@ import { Logger } from '@nestjs/common';
 import { NmapScanner } from './nmap.scanner';
 import { SnmpScanner } from './snmp.scanner';
 import { SshScanner } from './ssh.scanner';
+import { WmiScanner } from './wmi.scanner';
 import { ArpScanner } from './arp.scanner';
 import { TracerouteScanner } from './traceroute.scanner';
 import { SslScanner } from './ssl.scanner';
+
+export { WmiScanner } from './wmi.scanner';
+export type { WmiScanResult, WmiCredentials } from './wmi.scanner';
 
 export interface ScanCapability {
   type: string;
@@ -18,7 +22,7 @@ export interface ScanCapability {
 }
 
 export interface ScanRequest {
-  type: 'NMAP' | 'SNMP' | 'SSH' | 'ARP' | 'TRACEROUTE' | 'SSL';
+  type: 'NMAP' | 'SNMP' | 'SSH' | 'WMI' | 'WINRM' | 'ARP' | 'TRACEROUTE' | 'SSL';
   target: string;
   options?: {
     scanDepth?: 'quick' | 'standard' | 'deep';
@@ -26,9 +30,11 @@ export interface ScanRequest {
     credentialId?: string;    // SSH credential vault ID
     username?: string;
     password?: string;
+    domain?: string;
     privateKeyPath?: string;
     port?: number;
     maxHops?: number;
+    timeout?: number;
   };
 }
 
@@ -53,10 +59,11 @@ export class ScanEngine {
    * Detect all available scanning capabilities
    */
   static async getCapabilities(): Promise<ScanCapability[]> {
-    const [nmap, snmp, ssh, arp, traceroute, ssl] = await Promise.all([
+    const [nmap, snmp, ssh, wmi, arp, traceroute, ssl] = await Promise.all([
       NmapScanner.isAvailable(),
       new SnmpScanner().isAvailable().then(available => ({ available, path: 'net-snmp' })),
       SshScanner.isAvailable(),
+      WmiScanner.isAvailable(),
       ArpScanner.isAvailable(),
       TracerouteScanner.isAvailable(),
       SslScanner.isAvailable(),
@@ -79,6 +86,12 @@ export class ScanEngine {
         type: 'SSH', name: 'SSH Agent Scanner', available: ssh.available,
         description: 'Remote endpoint audit via SSH — OS, disk, memory, patches, services, open ports, login history',
         mode: 'agent-based', requiresCredentials: true,
+      },
+      {
+        type: 'WMI', name: 'WMI / WinRM Scanner', available: wmi.available,
+        path: wmi.binary,
+        description: 'Agentless Windows inventory via WinRM — hostname, OS, hardware, disks, NICs, software, services, hotfixes',
+        mode: 'agentless', requiresCredentials: true,
       },
       {
         type: 'ARP', name: 'ARP Discovery', available: arp.available,
@@ -155,6 +168,18 @@ export class ScanEngine {
           password: options.password,
           privateKeyPath: options.privateKeyPath,
         });
+      case 'WMI':
+      case 'WINRM':
+        if (!options?.username || !options?.password) {
+          throw new Error('WMI/WinRM scan requires username and password');
+        }
+        return WmiScanner.scan({
+          host: target,
+          username: options.username,
+          password: options.password,
+          domain: options.domain,
+          timeout: options.timeout,
+        });
       case 'ARP':
         return ArpScanner.scan(target || undefined);
       case 'TRACEROUTE':
@@ -174,6 +199,18 @@ export class ScanEngine {
         return { deviceType: results.deviceType, sysName: results.sysName, interfaceCount: results.interfaces?.length || 0, arpEntries: results.arpTable?.length || 0 };
       case 'SSH':
         return { hostname: results.hostname, os: results.osInfo?.distro || results.osInfo?.kernel, pendingPatches: results.pendingPatches?.length || 0, openPorts: results.openPorts?.length || 0, services: results.runningServices?.length || 0 };
+      case 'WMI':
+      case 'WINRM':
+        return {
+          hostname: results.hostname,
+          os: results.os?.name,
+          manufacturer: results.manufacturer,
+          model: results.model,
+          software: results.software?.length || 0,
+          services: results.services?.length || 0,
+          hotfixes: results.hotfixes?.length || 0,
+          error: results.error,
+        };
       case 'ARP':
         return { hostsFound: results.totalFound, source: results.source };
       case 'TRACEROUTE':

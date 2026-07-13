@@ -1901,6 +1901,8 @@ async function sendHeartbeat() {
           } else if (act.type === 'ALERT') {
             const { category, summary, details } = act;
             log('security', `[ALERT DETECTED] Category: ${category} | Summary: ${summary} | Details: ${JSON.stringify(details)}`);
+          } else if (act.type === 'APPROVE_CHANGE') {
+            log('success', `✅ Admin APPROVED change ${act.changeId || ''} (${act.category || 'unknown'}): ${act.summary || 'n/a'}. Enforcement lifted for this item.`);
           } else if (act.type === 'QUARANTINE_DEVICE') {
             log('security', `🔒 QUARANTINE: Server ordered soft quarantine — reason: ${act.reason}`);
             log('security', `🔒 Blocking all outbound traffic except to QS Asset server...`);

@@ -1,6 +1,12 @@
 import { Injectable, OnModuleInit, OnModuleDestroy, Logger } from '@nestjs/common';
-import { PrismaClient } from '@prisma/client';
+import { Prisma, PrismaClient } from '@prisma/client';
 
+/**
+ * Tenant RLS: Postgres policies on assets/tickets/agents read
+ * `current_setting('app.current_tenant')`. Prefer `withTenant()` so SET LOCAL
+ * stays on the same connection inside a transaction. Migrations/seeds should
+ * run as a role that bypasses RLS, or call `setRlsBypass(true)` in-process.
+ */
 @Injectable()
 export class PrismaService extends PrismaClient implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(PrismaService.name);
@@ -12,17 +18,12 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
         : ['error', 'warn'],
       datasources: {
         db: {
-          // Append connection pool limits if not already in URL
           url: PrismaService.buildConnectionUrl(),
         },
       },
     });
   }
 
-  /**
-   * Build DATABASE_URL with connection pool limits for production stability.
-   * Prevents pool exhaustion under heavy concurrent load.
-   */
   private static buildConnectionUrl(): string {
     const url = process.env.DATABASE_URL || '';
     if (!url) return url;
@@ -30,19 +31,29 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
     const separator = url.includes('?') ? '&' : '?';
     const params: string[] = [];
 
-    // Connection pool size (default Prisma is num_cpus * 2 + 1, cap it)
-    if (!url.includes('connection_limit')) params.push('connection_limit=20');
-    // Pool timeout — how long to wait for a connection (ms)
-    if (!url.includes('pool_timeout')) params.push('pool_timeout=15');
-    // Statement timeout — kill queries running longer than 30s
-    if (!url.includes('statement_timeout')) params.push('statement_timeout=30000');
+    // Keep pool small on single Railway instances to avoid exhausting Postgres
+    if (!url.includes('connection_limit')) params.push('connection_limit=10');
+    if (!url.includes('pool_timeout')) params.push('pool_timeout=10');
+    if (!url.includes('connect_timeout')) params.push('connect_timeout=5');
+    if (!url.includes('statement_timeout')) params.push('statement_timeout=15000');
 
     return params.length > 0 ? `${url}${separator}${params.join('&')}` : url;
   }
 
   async onModuleInit() {
-    await this.$connect();
-    this.logger.log('Database connected');
+    const connectMs = 10_000;
+    try {
+      await Promise.race([
+        this.$connect(),
+        new Promise((_, reject) =>
+          setTimeout(() => reject(new Error(`Prisma $connect timed out after ${connectMs}ms`)), connectMs),
+        ),
+      ]);
+      this.logger.log('Database connected');
+    } catch (err: any) {
+      this.logger.error(`Database connect failed: ${err?.message || err}`);
+      throw err;
+    }
   }
 
   async onModuleDestroy() {
@@ -51,13 +62,40 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
   }
 
   /**
-   * Set the tenant context for RLS-like queries.
-   * All queries in services should use this to filter by tenant.
+   * App-level filter helper (defense in depth alongside Postgres RLS).
    */
   tenantScope(tenantId: string) {
     return {
       where: { tenantId },
     };
   }
-}
 
+  /**
+   * Set session GUC for RLS on the current connection (non-transactional).
+   * Prefer withTenant() when using the connection pool.
+   */
+  async setCurrentTenant(tenantId: string | null): Promise<void> {
+    if (tenantId) {
+      await this.$executeRaw`SELECT set_config('app.current_tenant', ${tenantId}, false)`;
+    } else {
+      await this.$executeRaw`SELECT set_config('app.current_tenant', '', false)`;
+    }
+  }
+
+  async setRlsBypass(enabled: boolean): Promise<void> {
+    await this.$executeRaw`SELECT set_config('app.rls_bypass', ${enabled ? 'on' : ''}, false)`;
+  }
+
+  /**
+   * Run work inside a transaction with SET LOCAL app.current_tenant so RLS policies apply.
+   */
+  async withTenant<T>(
+    tenantId: string,
+    fn: (tx: Prisma.TransactionClient) => Promise<T>,
+  ): Promise<T> {
+    return this.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT set_config('app.current_tenant', ${tenantId}, true)`;
+      return fn(tx);
+    });
+  }
+}

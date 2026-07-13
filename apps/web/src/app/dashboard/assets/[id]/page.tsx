@@ -4,9 +4,11 @@ import { useParams, useRouter } from "next/navigation";
 import {
   ArrowLeft, Monitor, Cpu, HardDrive, Shield, Clock, Package,
   MapPin, User, Calendar, Tag, Activity, Server, Wifi, ChevronRight,
-  FileText, AlertTriangle, CheckCircle2, Info, Trash2
+  FileText, AlertTriangle, CheckCircle2, Info, Trash2, Printer, QrCode, Bug, Loader2
 } from "lucide-react";
 import EditAssetPanel from "@/components/EditAssetPanel";
+import PrintLabelModal from "@/components/PrintLabelModal";
+import EmptyState from "@/components/EmptyState";
 import { apiFetch } from "@/lib/api";
 
 const STATUS_BADGE: Record<string, string> = {
@@ -19,6 +21,7 @@ const TABS = [
   { id: "hardware", label: "Hardware", icon: <Cpu size={14} /> },
   { id: "software", label: "Software", icon: <Package size={14} /> },
   { id: "security", label: "Security", icon: <Shield size={14} /> },
+  { id: "vulns", label: "Vulns", icon: <Bug size={14} /> },
   { id: "history", label: "History", icon: <Clock size={14} /> },
 ];
 
@@ -29,6 +32,7 @@ export default function AssetDetailPage() {
   const [tab, setTab] = useState("overview");
   const [loading, setLoading] = useState(true);
   const [showEdit, setShowEdit] = useState(false);
+  const [showPrintLabel, setShowPrintLabel] = useState(false);
 
   function loadAsset() {
     apiFetch(`/assets/${params.id}`)
@@ -75,9 +79,12 @@ export default function AssetDetailPage() {
               </div>
             </div>
           </div>
-          <div style={{ display: "flex", gap: 8 }}>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", justifyContent: "flex-end" }}>
+            <button className="btn btn-secondary" onClick={() => setShowPrintLabel(true)}>
+              <Printer size={14} /> Print Label
+            </button>
             <button className="btn btn-secondary" onClick={() => setShowEdit(true)}>Edit</button>
-            <button className="btn btn-primary" onClick={() => { if(confirm('Delete this asset?')) { apiFetch(`/assets/${asset.id}`, { method: 'DELETE' }).then(() => router.push('/dashboard/assets')); } }}><Trash2 size={14} /> Delete</button>
+            <button className="btn btn-primary" onClick={() => { if(confirm('Delete this asset?')) { apiFetch(`/assets/${asset.id}`, { method: 'DELETE' }).then(() => router.push('/dashboard/assets')).catch((err: any) => alert(err?.message || 'Failed to delete asset. Please try again.')); } }}><Trash2 size={14} /> Delete</button>
           </div>
         </div>
       </div>
@@ -103,22 +110,25 @@ export default function AssetDetailPage() {
       </div>
 
       {/* Tab Content */}
-      {tab === "overview" && <OverviewTab asset={asset} />}
+      {tab === "overview" && <OverviewTab asset={asset} onPrintLabel={() => setShowPrintLabel(true)} />}
       {tab === "hardware" && <HardwareTab asset={asset} />}
       {tab === "software" && <SoftwareTab asset={asset} />}
       {tab === "security" && <SecurityTab asset={asset} />}
+      {tab === "vulns" && <VulnsTab assetId={asset.id} />}
       {tab === "history" && <HistoryTab asset={asset} />}
 
       <EditAssetPanel open={showEdit} asset={asset} onClose={() => setShowEdit(false)} onUpdated={loadAsset} />
+      <PrintLabelModal open={showPrintLabel} asset={asset} onClose={() => setShowPrintLabel(false)} />
       <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
     </>
   );
 }
 
 /* ========== OVERVIEW TAB ========== */
-function OverviewTab({ asset }: { asset: any }) {
+function OverviewTab({ asset, onPrintLabel }: { asset: any; onPrintLabel: () => void }) {
   const fields = [
     { label: "Asset Tag", value: asset.assetTag, icon: <Tag size={14} /> },
+    { label: "Barcode", value: asset.barcode || asset.assetTag, icon: <QrCode size={14} /> },
     { label: "Serial Number", value: asset.serialNumber, icon: <FileText size={14} /> },
     { label: "Manufacturer", value: asset.manufacturer, icon: <Package size={14} /> },
     { label: "Model", value: asset.model, icon: <Server size={14} /> },
@@ -148,7 +158,12 @@ function OverviewTab({ asset }: { asset: any }) {
     <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
       {/* Identity & Location */}
       <div className="card">
-        <div className="card-header"><div className="card-title">Identity & Location</div></div>
+        <div className="card-header" style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+          <div className="card-title">Identity & Location</div>
+          <button className="btn btn-secondary" style={{ padding: "4px 10px", fontSize: 12 }} onClick={onPrintLabel}>
+            <QrCode size={12} /> Label
+          </button>
+        </div>
         <div style={{ display: "grid", gap: 12 }}>
           {fields.map(f => (
             <div key={f.label} style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
@@ -242,7 +257,17 @@ function HardwareTab({ asset }: { asset: any }) {
   const hw = asset.hardwareDetails;
   const os = asset.osDetails;
 
-  if (!hw && !os) return <EmptyState icon={<Cpu size={40} />} title="No Hardware Details" desc="Hardware specs will appear here once discovered via agent or scan" />;
+  if (!hw && !os) {
+    return (
+      <EmptyState
+        icon={<Cpu size={40} />}
+        title="No hardware details"
+        description="Hardware specs appear after an agent reports in or an agentless discovery scan completes."
+        action={{ label: "Install Agent", href: "/dashboard/discovery" }}
+        secondaryAction={{ label: "Run Agentless", href: "/dashboard/discovery" }}
+      />
+    );
+  }
 
   const hwFields = hw ? [
     { label: "CPU Model", value: hw.cpuModel }, { label: "CPU Cores", value: hw.cpuCores },
@@ -270,8 +295,25 @@ function HardwareTab({ asset }: { asset: any }) {
     <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
       {hw && <DetailCard title="Hardware Specs" icon={<Cpu size={14} />} fields={hwFields} />}
       {os && <DetailCard title="Operating System" icon={<Monitor size={14} />} fields={osFields} />}
-      {!hw && <EmptyState icon={<Cpu size={32} />} title="No Hardware Data" desc="Run an agent scan to collect hardware specs" />}
-      {!os && <EmptyState icon={<Monitor size={32} />} title="No OS Data" desc="OS details pending scan" />}
+      {!hw && (
+        <EmptyState
+          compact
+          icon={<Cpu size={32} />}
+          title="No hardware data"
+          description="Install an agent or run agentless discovery to collect specs."
+          action={{ label: "Install Agent", href: "/dashboard/discovery" }}
+          secondaryAction={{ label: "Run Agentless", href: "/dashboard/discovery" }}
+        />
+      )}
+      {!os && (
+        <EmptyState
+          compact
+          icon={<Monitor size={32} />}
+          title="No OS data"
+          description="OS details populate after a discovery scan."
+          action={{ label: "Go to Discovery", href: "/dashboard/discovery" }}
+        />
+      )}
     </div>
   );
 }
@@ -279,7 +321,17 @@ function HardwareTab({ asset }: { asset: any }) {
 /* ========== SOFTWARE TAB ========== */
 function SoftwareTab({ asset }: { asset: any }) {
   const installs = asset.softwareInstalls || [];
-  if (installs.length === 0) return <EmptyState icon={<Package size={40} />} title="No Software Detected" desc="Software inventory will populate here after an agent scan" />;
+  if (installs.length === 0) {
+    return (
+      <EmptyState
+        icon={<Package size={40} />}
+        title="No software detected"
+        description="Software inventory populates after an agent scan."
+        action={{ label: "Install Agent", href: "/dashboard/discovery" }}
+        secondaryAction={{ label: "Run Agentless", href: "/dashboard/discovery" }}
+      />
+    );
+  }
 
   return (
     <div className="card" style={{ padding: 0, overflow: "hidden" }}>
@@ -307,7 +359,16 @@ function SoftwareTab({ asset }: { asset: any }) {
 /* ========== SECURITY TAB ========== */
 function SecurityTab({ asset }: { asset: any }) {
   const sec = asset.securityPosture;
-  if (!sec) return <EmptyState icon={<Shield size={40} />} title="No Security Data" desc="Security posture will update after an agent or vulnerability scan" />;
+  if (!sec) {
+    return (
+      <EmptyState
+        icon={<Shield size={40} />}
+        title="No security data"
+        description="Security posture updates after an agent or vulnerability scan."
+        action={{ label: "Go to Discovery", href: "/dashboard/discovery" }}
+      />
+    );
+  }
 
   const score = sec.complianceScore || 0;
   const scoreColor = score >= 80 ? "var(--success)" : score >= 50 ? "var(--warning)" : "var(--error)";
@@ -336,10 +397,98 @@ function SecurityTab({ asset }: { asset: any }) {
   );
 }
 
+/* ========== VULNS TAB ========== */
+function VulnsTab({ assetId }: { assetId: string }) {
+  const [findings, setFindings] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    setLoading(true);
+    apiFetch(`/vulnerabilities/asset/${assetId}`)
+      .then((data) => setFindings(Array.isArray(data) ? data : data?.data || []))
+      .catch(() => setFindings([]))
+      .finally(() => setLoading(false));
+  }, [assetId]);
+
+  if (loading) {
+    return (
+      <div style={{ display: "flex", justifyContent: "center", padding: 48 }}>
+        <Loader2 size={22} style={{ color: "var(--brand-500)", animation: "spin 1s linear infinite" }} />
+      </div>
+    );
+  }
+
+  if (findings.length === 0) {
+    return (
+      <EmptyState
+        icon={<Bug size={40} />}
+        title="No vulnerabilities"
+        description="No CVE matches for this asset. Run a scan from Vulnerabilities or Discovery."
+        action={{ label: "Open Vulnerabilities", href: "/dashboard/vulnerabilities" }}
+        secondaryAction={{ label: "Discovery", href: "/dashboard/discovery" }}
+      />
+    );
+  }
+
+  const sevBadge: Record<string, string> = {
+    CRITICAL: "red", HIGH: "amber", MEDIUM: "amber", LOW: "blue",
+  };
+
+  return (
+    <div className="card" style={{ padding: 0, overflow: "hidden" }}>
+      <div className="card-header" style={{ padding: "16px 20px 12px" }}>
+        <div className="card-title">{findings.length} Vulnerability Finding{findings.length !== 1 ? "s" : ""}</div>
+      </div>
+      <table className="data-table">
+        <thead>
+          <tr>
+            <th>CVE</th>
+            <th>Severity</th>
+            <th>CVSS</th>
+            <th>Matched Software</th>
+            <th>Status</th>
+            <th>Last Seen</th>
+          </tr>
+        </thead>
+        <tbody>
+          {findings.map((f: any) => {
+            const v = f.vulnerability || {};
+            return (
+              <tr key={f.id}>
+                <td>
+                  <div style={{ fontWeight: 600 }}>{v.cveId}</div>
+                  <div style={{ fontSize: 11, color: "var(--text-tertiary)", maxWidth: 320, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                    {v.title}
+                  </div>
+                </td>
+                <td><span className={`badge ${sevBadge[v.severity] || "gray"}`}>{v.severity}</span></td>
+                <td style={{ fontWeight: 600 }}>{v.cvssScore != null ? Number(v.cvssScore).toFixed(1) : "—"}</td>
+                <td style={{ fontSize: 12, color: "var(--text-secondary)" }}>{f.matchedSoftware || "—"}</td>
+                <td><span className="badge gray">{f.status}</span></td>
+                <td style={{ fontSize: 11, color: "var(--text-tertiary)" }}>
+                  {f.lastSeenAt ? new Date(f.lastSeenAt).toLocaleDateString() : "—"}
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
 /* ========== HISTORY TAB ========== */
 function HistoryTab({ asset }: { asset: any }) {
   const events = asset.assetHistory || [];
-  if (events.length === 0) return <EmptyState icon={<Clock size={40} />} title="No History" desc="Asset lifecycle events will appear here" />;
+  if (events.length === 0) {
+    return (
+      <EmptyState
+        icon={<Clock size={40} />}
+        title="No history"
+        description="Asset lifecycle events will appear here as changes are recorded."
+      />
+    );
+  }
 
   const eventColors: Record<string, string> = {
     CREATED: "var(--success)", UPDATED: "var(--brand-400)", STATUS_CHANGED: "var(--warning)",
@@ -393,16 +542,6 @@ function DetailCard({ title, icon, fields }: { title: string; icon: React.ReactN
           </div>
         ))}
       </div>
-    </div>
-  );
-}
-
-function EmptyState({ icon, title, desc }: { icon: React.ReactNode; title: string; desc: string }) {
-  return (
-    <div className="card" style={{ textAlign: "center", padding: 48, gridColumn: "1 / -1" }}>
-      <div style={{ color: "var(--text-tertiary)", margin: "0 auto 12px" }}>{icon}</div>
-      <h3 style={{ fontSize: 16, fontWeight: 600, marginBottom: 4 }}>{title}</h3>
-      <p style={{ color: "var(--text-tertiary)", fontSize: 13 }}>{desc}</p>
     </div>
   );
 }

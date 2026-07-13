@@ -66,10 +66,10 @@ export default function PortalLayout({ children }: { children: React.ReactNode }
           borderBottom: "1px solid var(--border-primary)",
         }}>
           <a href="/portal" onClick={(e) => { e.preventDefault(); router.push("/portal"); }} style={{ display: "flex", alignItems: "center", gap: 10, textDecoration: "none", color: "inherit" }}>
-            <LogoIcon size={32} />
+            <LogoIcon size={40} />
             <div>
               <div style={{ fontSize: 14, fontWeight: 700, color: "var(--text-primary)", letterSpacing: "-0.01em" }}>Employee Portal</div>
-              <div style={{ fontSize: 9, color: "var(--text-tertiary)", fontWeight: 600, letterSpacing: "0.03em" }}>QS ASSET</div>
+              <div style={{ fontSize: 9, color: "var(--text-tertiary)", fontWeight: 600, letterSpacing: "0.03em" }}>QS ASSETS</div>
             </div>
           </a>
         </div>

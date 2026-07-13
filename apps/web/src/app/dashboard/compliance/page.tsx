@@ -4,7 +4,7 @@ import {
   Shield, AlertTriangle, CheckCircle2, XCircle, Clock, Eye, RefreshCw,
   Plus, Loader2, ChevronDown, Filter, Activity, Cpu, HardDrive,
   Wifi, Usb, Package, Lock, Trash2, Power, Scan, Server,
-  UserX, AlertOctagon, Skull, Terminal, FileText, Check, X, ShieldAlert, Key
+  UserX, AlertOctagon, Skull, Terminal, FileText, Check, X, ShieldAlert, Key, ShieldX
 } from "lucide-react";
 import { apiFetch } from "@/lib/api";
 import { useRealtimeEvents } from "@/lib/useRealtimeEvents";
@@ -137,7 +137,17 @@ export default function CompliancePage() {
   }
 
   async function instantReject(id: string, note: string = "Rejected & blocked process") {
-    await apiFetch(`/compliance/changes/${id}/reject`, { method: "PATCH", body: JSON.stringify({ note }) });
+    await apiFetch(`/compliance/changes/${id}/block`, { method: "PATCH", body: JSON.stringify({ note }) });
+    refresh();
+  }
+
+  async function instantQuarantine(id: string, note: string = "Device quarantined from threat board") {
+    await apiFetch(`/compliance/changes/${id}/quarantine`, { method: "PATCH", body: JSON.stringify({ note }) });
+    refresh();
+  }
+
+  async function instantBlock(id: string, note: string = "Blocked from threat board") {
+    await apiFetch(`/compliance/changes/${id}/block`, { method: "PATCH", body: JSON.stringify({ note }) });
     refresh();
   }
 
@@ -454,7 +464,27 @@ export default function CompliancePage() {
                               await instantApprove(c.id, input?.value || "Manually approved from threat review hub");
                             }}
                           >
-                            <CheckCircle2 size={12} /> Approve Access
+                            <CheckCircle2 size={12} /> Approve
+                          </button>
+                          <button
+                            className="btn"
+                            style={{
+                              flex: 1,
+                              padding: "6px 8px",
+                              fontSize: 11,
+                              fontWeight: 600,
+                              color: "#fbbf24",
+                              borderColor: "rgba(245,158,11,0.3)",
+                              background: "rgba(245,158,11,0.06)",
+                              border: "1px solid rgba(245,158,11,0.3)",
+                              justifyContent: "center"
+                            }}
+                            onClick={async () => {
+                              const input = document.getElementById(`note-${c.id}`) as HTMLInputElement;
+                              await instantQuarantine(c.id, input?.value || "Quarantined from threat review hub");
+                            }}
+                          >
+                            <ShieldX size={12} /> Quarantine
                           </button>
                           <button
                             className="btn"
@@ -471,10 +501,10 @@ export default function CompliancePage() {
                             }}
                             onClick={async () => {
                               const input = document.getElementById(`note-${c.id}`) as HTMLInputElement;
-                              await instantReject(c.id, input?.value || "Denied. Block active & process killed");
+                              await instantBlock(c.id, input?.value || "Blocked — enforcement action queued");
                             }}
                           >
-                            <XCircle size={12} /> Deny & Keep Block
+                            <XCircle size={12} /> Block
                           </button>
                         </div>
                       </div>
@@ -523,15 +553,20 @@ export default function CompliancePage() {
                         <td><span className={`badge ${STATUS_COLORS[c.status]?.badge}`}>{c.status.replace(/_/g, " ")}</span></td>
                         <td style={{ fontSize: 11, color: "var(--text-tertiary)", whiteSpace: "nowrap" }}>{new Date(c.createdAt).toLocaleString()}</td>
                         <td onClick={e => e.stopPropagation()}>
-                          {c.status === "PENDING_REVIEW" ? (
+                          {c.status === "PENDING_REVIEW" || c.status === "VIOLATION" ? (
                             <div style={{ display: "flex", gap: 4 }}>
                               <button className="btn btn-secondary" style={{ padding: "3px 8px", fontSize: 10, color: "#10b981" }}
                                 onClick={() => { setReviewModal(c); setReviewNote(""); }}>
                                 <CheckCircle2 size={10} /> Approve
                               </button>
+                              <button className="btn btn-secondary" style={{ padding: "3px 8px", fontSize: 10, color: "#f59e0b" }}
+                                title="Quarantine device"
+                                onClick={async (e) => { e.stopPropagation(); await instantQuarantine(c.id); }}>
+                                <ShieldX size={10} /> Quarantine
+                              </button>
                               <button className="btn btn-secondary" style={{ padding: "3px 8px", fontSize: 10, color: "#ef4444" }}
                                 onClick={() => { setReviewModal({ ...c, _reject: true }); setReviewNote(""); }}>
-                                <XCircle size={10} /> Reject
+                                <XCircle size={10} /> Block
                               </button>
                             </div>
                           ) : (
@@ -629,17 +664,17 @@ export default function CompliancePage() {
                                   </div>
                                 </div>
 
-                                {/* Quick-action gate review directly inside row if pending */}
-                                {c.status === "PENDING_REVIEW" && (
+                                {(c.status === "PENDING_REVIEW" || c.status === "VIOLATION") && (
                                   <div style={{ marginTop: 14, borderTop: "1px solid var(--border-primary)", paddingTop: 12 }}>
-                                    <span style={{ fontSize: 10, color: "var(--text-tertiary)", display: "block", marginBottom: 6 }}>Manual Approval Gate Quick Action</span>
-                                    <div style={{ display: "flex", gap: 6 }} onClick={e => e.stopPropagation()}>
+                                    <span style={{ fontSize: 10, color: "var(--text-tertiary)", display: "block", marginBottom: 6 }}>Threat response actions</span>
+                                    <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }} onClick={e => e.stopPropagation()}>
                                       <input
                                         type="text"
                                         placeholder="Review note (optional)..."
                                         id={`note-row-${c.id}`}
                                         style={{
                                           flex: 1,
+                                          minWidth: 120,
                                           padding: "4px 8px",
                                           fontSize: 11,
                                           background: "rgba(0,0,0,0.3)",
@@ -661,11 +696,22 @@ export default function CompliancePage() {
                                       </button>
                                       <button
                                         className="btn btn-secondary"
+                                        style={{ padding: "4px 10px", fontSize: 11, color: "#fbbf24", borderColor: "rgba(245,158,11,0.3)", background: "rgba(245,158,11,0.06)" }}
+                                        onClick={async (e) => {
+                                          e.stopPropagation();
+                                          const input = document.getElementById(`note-row-${c.id}`) as HTMLInputElement;
+                                          await instantQuarantine(c.id, input?.value || "Quarantined from compliance review");
+                                        }}
+                                      >
+                                        <ShieldX size={12} /> Quarantine
+                                      </button>
+                                      <button
+                                        className="btn btn-secondary"
                                         style={{ padding: "4px 10px", fontSize: 11, color: "#f87171", borderColor: "rgba(239,68,68,0.3)", background: "rgba(239,68,68,0.06)" }}
                                         onClick={async (e) => {
                                           e.stopPropagation();
                                           const input = document.getElementById(`note-row-${c.id}`) as HTMLInputElement;
-                                          await instantReject(c.id, input?.value || "Blocked & force terminated");
+                                          await instantBlock(c.id, input?.value || "Blocked & force terminated");
                                         }}
                                       >
                                         <XCircle size={12} /> Block
@@ -739,7 +785,7 @@ export default function CompliancePage() {
           <div style={{ width: 480, borderRadius: 16, background: "var(--bg-card)", border: "1px solid var(--border-primary)", padding: 24 }}
             onClick={e => e.stopPropagation()}>
             <h3 style={{ fontSize: 16, fontWeight: 700, marginBottom: 12 }}>
-              {reviewModal._reject ? "Reject Change" : "Approve Change"}
+              {reviewModal._reject ? "Block Threat" : "Approve Change"}
             </h3>
             <div className="card" style={{ padding: 12, marginBottom: 14 }}>
               <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 4 }}>{reviewModal.summary}</div>
@@ -754,9 +800,18 @@ export default function CompliancePage() {
             <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 14 }}>
               <button className="btn btn-secondary" onClick={() => setReviewModal(null)}>Cancel</button>
               {reviewModal._reject ? (
-                <button className="btn btn-primary" style={{ background: "#ef4444" }} onClick={() => rejectChange(reviewModal.id)}>
-                  <XCircle size={14} /> Reject
-                </button>
+                <>
+                  <button className="btn btn-secondary" style={{ color: "#f59e0b", borderColor: "rgba(245,158,11,0.4)" }}
+                    onClick={async () => {
+                      await instantQuarantine(reviewModal.id, reviewNote || "Quarantined from review modal");
+                      setReviewModal(null); setReviewNote("");
+                    }}>
+                    <ShieldX size={14} /> Quarantine
+                  </button>
+                  <button className="btn btn-primary" style={{ background: "#ef4444" }} onClick={() => rejectChange(reviewModal.id)}>
+                    <XCircle size={14} /> Block
+                  </button>
+                </>
               ) : (
                 <button className="btn btn-primary" style={{ background: "#10b981" }} onClick={() => approveChange(reviewModal.id)}>
                   <CheckCircle2 size={14} /> Approve
@@ -989,7 +1044,26 @@ export default function CompliancePage() {
               <h2 style={{ fontSize: 16, fontWeight: 700, margin: 0 }}>CIS Benchmark Compliance</h2>
               <p style={{ fontSize: 11, color: "var(--text-tertiary)", margin: "4px 0 0" }}>Assess endpoints against CIS security benchmarks (encryption, firewall, screen lock, ports, AV)</p>
             </div>
-            <button className="btn btn-primary" disabled={cisLoading} onClick={async () => {
+            <div style={{ display: "flex", gap: 8 }}>
+              <button className="btn btn-secondary" disabled={cisLoading} onClick={async () => {
+                try {
+                  const blob = await (await import("@/lib/api")).api.cisEvidence("csv");
+                  const url = URL.createObjectURL(blob);
+                  const a = document.createElement("a");
+                  a.href = url; a.download = `cis-evidence-${new Date().toISOString().slice(0, 10)}.csv`; a.click();
+                  URL.revokeObjectURL(url);
+                } catch (e) { console.error(e); }
+              }}>Export CSV</button>
+              <button className="btn btn-secondary" disabled={cisLoading} onClick={async () => {
+                try {
+                  const blob = await (await import("@/lib/api")).api.cisEvidence("pdf");
+                  const url = URL.createObjectURL(blob);
+                  const a = document.createElement("a");
+                  a.href = url; a.download = `cis-evidence-${new Date().toISOString().slice(0, 10)}.pdf`; a.click();
+                  URL.revokeObjectURL(url);
+                } catch (e) { console.error(e); }
+              }}>Export PDF</button>
+              <button className="btn btn-primary" disabled={cisLoading} onClick={async () => {
               setCisLoading(true);
               try {
                 const report = await apiFetch("/compliance/cis-benchmark/report");
@@ -999,6 +1073,7 @@ export default function CompliancePage() {
             }}>
               {cisLoading ? <><Loader2 size={14} style={{ animation: "spin 1s linear infinite" }} /> Assessing...</> : <><ShieldAlert size={14} /> Run Assessment</>}
             </button>
+            </div>
           </div>
 
           {cisReport ? (

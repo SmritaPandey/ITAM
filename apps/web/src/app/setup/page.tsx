@@ -102,7 +102,7 @@ export default function SetupPage() {
             display: "flex",
             justifyContent: "center",
           }}>
-            <LogoIcon size={56} />
+            <LogoIcon size={68} />
           </div>
           <h1 style={{ fontSize: 24, fontWeight: 700, margin: 0, letterSpacing: "-0.5px" }}>
             QS Asset

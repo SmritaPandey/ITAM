@@ -5,6 +5,7 @@ import { ConfigService } from '@nestjs/config';
 import * as express from 'express';
 import { AuthService } from './auth.service';
 import { EmailVerificationService } from './email-verification.service';
+import { MfaService } from './mfa.service';
 import { LocalAuthGuard } from './guards/local-auth.guard';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import { GoogleAuthGuard, MicrosoftAuthGuard } from './guards/oauth.guard';
@@ -22,6 +23,7 @@ export class AuthController {
   constructor(
     private authService: AuthService,
     private emailVerification: EmailVerificationService,
+    private mfaService: MfaService,
     private configService: ConfigService,
   ) {
     this.appUrl = this.configService.get<string>('APP_URL') || 'https://qsasset.vercel.app';
@@ -36,11 +38,20 @@ export class AuthController {
   @UseGuards(LocalAuthGuard)
   @Throttle({ long: { limit: 5, ttl: 60000 } })
   @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: 'Login with email and password' })
+  @ApiOperation({ summary: 'Login with email and password (may return mfaRequired)' })
   @ApiBody({ type: LoginDto })
   async login(@Request() req: any) {
     const ip = req.ip || req.connection?.remoteAddress;
     const userAgent = req.headers['user-agent'];
+    const challenge = await this.mfaService.beginChallenge(req.user);
+    if (challenge.mfaRequired) {
+      if ((challenge as any).mfaEnrollmentRequired) {
+        throw new UnauthorizedException(
+          (challenge as any).message || 'MFA enrollment is required for this organization',
+        );
+      }
+      return { mfaRequired: true, mfaToken: (challenge as any).mfaToken };
+    }
     return this.authService.login(req.user, ip, userAgent);
   }
 
@@ -106,6 +117,54 @@ export class AuthController {
   @ApiOperation({ summary: 'Complete password reset (public)' })
   async resetPassword(@Body() body: { token: string; password: string }) {
     return this.authService.resetPassword(body);
+  }
+
+  // ─── MFA TOTP ────────────────────────────────────────────────────
+
+  @Get('mfa/status')
+  @UseGuards(JwtAuthGuard)
+  @ApiOperation({ summary: 'Get MFA enrollment status for current user' })
+  async mfaStatus(@Request() req: any) {
+    return this.mfaService.status(req.user.sub);
+  }
+
+  @Post('mfa/enroll')
+  @UseGuards(JwtAuthGuard)
+  @ApiOperation({ summary: 'Start TOTP MFA enrollment (returns QR + secret)' })
+  async mfaEnroll(@Request() req: any) {
+    return this.mfaService.enroll(req.user.sub);
+  }
+
+  @Post('mfa/verify-enroll')
+  @UseGuards(JwtAuthGuard)
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Confirm MFA enrollment with first TOTP code' })
+  async mfaVerifyEnroll(@Request() req: any, @Body() body: { code: string }) {
+    return this.mfaService.verifyEnroll(req.user.sub, body.code);
+  }
+
+  @Post('mfa/challenge')
+  @Throttle({ long: { limit: 10, ttl: 60000 } })
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Complete login with MFA code after password challenge' })
+  async mfaChallenge(
+    @Body() body: { mfaToken?: string; mfaChallengeToken?: string; code: string },
+    @Request() req: any,
+  ) {
+    return this.mfaService.completeChallenge(
+      body.mfaToken || body.mfaChallengeToken || '',
+      body.code,
+      req.ip || req.connection?.remoteAddress,
+      req.headers['user-agent'],
+    );
+  }
+
+  @Post('mfa/disable')
+  @UseGuards(JwtAuthGuard)
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Disable MFA (requires current TOTP code)' })
+  async mfaDisable(@Request() req: any, @Body() body: { code: string }) {
+    return this.mfaService.disable(req.user.sub, body.code);
   }
 
   // ─── OAuth Providers Status ────────────────────────────────────

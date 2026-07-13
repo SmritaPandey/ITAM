@@ -13,10 +13,10 @@ export class ProblemsService {
     const _page = Number(page) || 1; const _limit = Number(limit) || 20;
     const skip = (_page - 1) * _limit;
     const [data, total] = await Promise.all([
-      this.prisma.problem.findMany({ where, orderBy: { createdAt: 'desc' }, skip, take: limit }),
+      this.prisma.problem.findMany({ where, orderBy: { createdAt: 'desc' }, skip, take: _limit }),
       this.prisma.problem.count({ where }),
     ]);
-    return { data, total, page, limit, totalPages: Math.ceil(total / limit) };
+    return { data, total, page: _page, limit: _limit, totalPages: Math.ceil(total / _limit) };
   }
 
   async getById(id: string, tenantId: string) {

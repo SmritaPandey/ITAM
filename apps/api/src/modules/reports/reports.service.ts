@@ -38,35 +38,56 @@ export class ReportsService {
 
     for (const schedule of dueReports) {
       try {
-        // Generate the report using the existing report generator
+        const filters = (schedule.filters as any) || {};
         const report = await this.reportGenerator.generate(
           schedule.tenantId,
           schedule.reportType,
-          { format: schedule.format },
+          {
+            format: schedule.format,
+            filters,
+            startDate: filters.startDate,
+            endDate: filters.endDate,
+          },
         );
 
-        // Attempt email delivery if recipients are configured
         if (schedule.recipients && schedule.recipients.length > 0) {
-          const csvContent = this.reportGenerator.toCSV(report);
+          const fmt = String(schedule.format || 'CSV').toUpperCase();
+          const stamp = now.toISOString().split('T')[0];
+          const baseName = `${schedule.reportType}_${stamp}`;
+          let attachment: { filename: string; content: Buffer | string; contentType: string };
+
+          if (fmt === 'PDF') {
+            const buf = await this.reportGenerator.toPDF(report);
+            attachment = { filename: `${baseName}.pdf`, content: buf, contentType: 'application/pdf' };
+          } else if (fmt === 'XLSX' || fmt === 'XLS') {
+            const buf = await this.reportGenerator.toXLSX(report);
+            attachment = {
+              filename: `${baseName}.xlsx`,
+              content: buf,
+              contentType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            };
+          } else {
+            const csv = this.reportGenerator.toCSV(report);
+            attachment = { filename: `${baseName}.csv`, content: csv, contentType: 'text/csv' };
+          }
+
           const reportData = report as any;
           await this.emailService.send({
             to: schedule.recipients,
-            subject: `📊 Scheduled Report: ${schedule.name} — ${now.toLocaleDateString()}`,
+            subject: `Scheduled Report: ${schedule.name} — ${now.toLocaleDateString()}`,
             html: `
               <h2>${reportData.title || schedule.name}</h2>
               <p>Your scheduled report <strong>${schedule.name}</strong> has been generated.</p>
-              <p>Report Type: ${schedule.reportType} | Format: ${schedule.format}</p>
+              <p>Report Type: ${schedule.reportType} | Format: ${fmt}</p>
               <p>Generated at: ${now.toISOString()}</p>
               ${reportData.summary ? `<pre>${JSON.stringify(reportData.summary, null, 2)}</pre>` : ''}
-              <hr/>
-              <p><em>Full report data is attached below in CSV format:</em></p>
-              <pre style="font-size:11px;max-height:400px;overflow:auto">${csvContent.substring(0, 5000)}${csvContent.length > 5000 ? '\n... (truncated)' : ''}</pre>
+              <p><em>Full report is attached as ${attachment.filename}.</em></p>
             `,
+            attachments: [attachment],
           });
-          this.logger.log(`Report "${schedule.name}" emailed to ${schedule.recipients.length} recipient(s)`);
+          this.logger.log(`Report "${schedule.name}" emailed to ${schedule.recipients.length} recipient(s) as ${fmt}`);
         }
 
-        // Update lastRunAt and calculate nextRunAt
         const nextRunAt = this.calculateNextRun(schedule.schedule);
         await this.prisma.scheduledReport.update({
           where: { id: schedule.id },
@@ -78,7 +99,6 @@ export class ReportsService {
 
         this.logger.log(`Scheduled report "${schedule.name}" executed. Next run: ${nextRunAt.toISOString()}`);
       } catch (err: any) {
-        // Log and continue — one failure should not block others
         this.logger.error(`Failed to execute scheduled report "${schedule.name}" (${schedule.id}): ${err.message}`);
       }
     }
@@ -187,13 +207,134 @@ export class ReportsService {
   }
 
   async getExecutiveDashboard(tenantId: string) {
-    const [assets, tickets, licenses] = await Promise.all([
+    const [assets, tickets, licenses, businessServices] = await Promise.all([
       this.getAssetSummary(tenantId),
       this.getTicketSummary(tenantId),
       this.getLicenseSummary(tenantId),
+      this.getBusinessServiceHealth(tenantId),
     ]);
-    return { assets, tickets, licenses, generatedAt: new Date() };
+    return { assets, tickets, licenses, businessServices, generatedAt: new Date() };
   }
+
+  async getBusinessServiceHealth(tenantId: string) {
+    try {
+      const services = await this.prisma.businessService.findMany({
+        where: { tenantId },
+        include: {
+          assets: {
+            include: {
+              asset: { select: { id: true, name: true, status: true } },
+            },
+          },
+        },
+        take: 100,
+      });
+      return {
+        total: services.length,
+        healthy: services.filter((s) => s.status === 'HEALTHY').length,
+        degraded: services.filter((s) => s.status === 'DEGRADED').length,
+        outage: services.filter((s) => s.status === 'OUTAGE').length,
+        services: services.map((s) => ({
+          id: s.id,
+          name: s.name,
+          status: s.status,
+          criticality: s.criticality,
+          assetCount: s.assets.length,
+        })),
+      };
+    } catch {
+      return { total: 0, healthy: 0, degraded: 0, outage: 0, services: [] };
+    }
+  }
+
+  /**
+   * Parameterized report builder runner — generates report with filters and optional email.
+   */
+  async runReport(
+    tenantId: string,
+    params: {
+      reportType: string;
+      startDate?: string;
+      endDate?: string;
+      format?: string;
+      filters?: Record<string, any>;
+      emailTo?: string[];
+      name?: string;
+    },
+  ) {
+    const report = await this.reportGenerator.generate(tenantId, params.reportType, {
+      startDate: params.startDate,
+      endDate: params.endDate,
+      format: params.format,
+      filters: params.filters,
+    });
+
+    let emailed = false;
+    if (params.emailTo?.length) {
+      const fmt = String(params.format || 'CSV').toUpperCase();
+      const stamp = new Date().toISOString().split('T')[0];
+      const baseName = `${params.reportType}_${stamp}`;
+      let attachment: { filename: string; content: Buffer | string; contentType: string };
+      if (fmt === 'PDF') {
+        const buf = await this.reportGenerator.toPDF(report as any);
+        attachment = { filename: `${baseName}.pdf`, content: buf, contentType: 'application/pdf' };
+      } else if (fmt === 'XLSX' || fmt === 'XLS') {
+        const buf = await this.reportGenerator.toXLSX(report as any);
+        attachment = {
+          filename: `${baseName}.xlsx`,
+          content: buf,
+          contentType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        };
+      } else {
+        const csv = this.reportGenerator.toCSV(report as any);
+        attachment = { filename: `${baseName}.csv`, content: csv, contentType: 'text/csv' };
+      }
+
+      const reportData = report as any;
+      await this.emailService.send({
+        to: params.emailTo,
+        subject: `Report: ${params.name || params.reportType} — ${new Date().toLocaleDateString()}`,
+        html: `
+          <h2>${reportData.title || params.reportType}</h2>
+          <p>Generated at ${new Date().toISOString()}</p>
+          ${reportData.summary ? `<pre>${JSON.stringify(reportData.summary, null, 2)}</pre>` : ''}
+          <p><em>Full report attached as ${attachment.filename}.</em></p>
+        `,
+        attachments: [attachment],
+      });
+      emailed = true;
+    }
+
+    return { report, emailed, recipients: params.emailTo || [] };
+  }
+
+  async scheduleReport(
+    tenantId: string,
+    userId: string,
+    body: {
+      name: string;
+      reportType: string;
+      schedule: string;
+      format?: string;
+      recipients?: string[];
+      filters?: any;
+    },
+  ) {
+    return this.prisma.scheduledReport.create({
+      data: {
+        tenantId,
+        name: body.name,
+        reportType: body.reportType,
+        schedule: body.schedule,
+        format: body.format || 'CSV',
+        recipients: body.recipients || [],
+        filters: body.filters || {},
+        createdById: userId,
+        nextRunAt: this.calculateNextRun(body.schedule),
+      },
+    });
+  }
+
 
   async getMonthlyTrend(tenantId: string) {
     const sixMonthsAgo = new Date();
@@ -233,5 +374,73 @@ export class ReportsService {
     });
 
     return Object.entries(months).map(([month, data]) => ({ month, ...data }));
+  }
+
+  /**
+   * Saved custom report filters stored in tenant.settings.reportSavedFilters
+   * (avoids a new migration that could conflict with in-flight EAM schema work).
+   */
+  async listSavedFilters(tenantId: string) {
+    const tenant = await this.prisma.tenant.findUnique({
+      where: { id: tenantId },
+      select: { settings: true },
+    });
+    const settings = (tenant?.settings as any) || {};
+    return Array.isArray(settings.reportSavedFilters) ? settings.reportSavedFilters : [];
+  }
+
+  async saveFilter(
+    tenantId: string,
+    body: {
+      id?: string;
+      name: string;
+      reportType: string;
+      filters?: Record<string, any>;
+      format?: string;
+    },
+  ) {
+    const tenant = await this.prisma.tenant.findUnique({
+      where: { id: tenantId },
+      select: { settings: true },
+    });
+    const settings = { ...((tenant?.settings as any) || {}) };
+    const list: any[] = Array.isArray(settings.reportSavedFilters)
+      ? [...settings.reportSavedFilters]
+      : [];
+    const id = body.id || `rf_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 7)}`;
+    const entry = {
+      id,
+      name: body.name,
+      reportType: body.reportType,
+      filters: body.filters || {},
+      format: body.format || 'CSV',
+      updatedAt: new Date().toISOString(),
+    };
+    const idx = list.findIndex((f) => f.id === id);
+    if (idx >= 0) list[idx] = entry;
+    else list.push(entry);
+    settings.reportSavedFilters = list;
+    await this.prisma.tenant.update({
+      where: { id: tenantId },
+      data: { settings },
+    });
+    return entry;
+  }
+
+  async deleteSavedFilter(tenantId: string, filterId: string) {
+    const tenant = await this.prisma.tenant.findUnique({
+      where: { id: tenantId },
+      select: { settings: true },
+    });
+    const settings = { ...((tenant?.settings as any) || {}) };
+    const list: any[] = Array.isArray(settings.reportSavedFilters)
+      ? settings.reportSavedFilters
+      : [];
+    settings.reportSavedFilters = list.filter((f) => f.id !== filterId);
+    await this.prisma.tenant.update({
+      where: { id: tenantId },
+      data: { settings },
+    });
+    return { deleted: true };
   }
 }

@@ -3,21 +3,24 @@ set -e
 
 echo "🔧 QS Asset API — Starting... (build $(date +%Y%m%d-%H%M%S))"
 
-# Apply database schema (works without migrations folder)
-echo "📦 Applying database schema..."
-# Deduplicate discovered_devices before schema push (handles migration to unique constraint)
-echo "DELETE FROM discovered_devices a USING discovered_devices b WHERE a.created_at < b.created_at AND a.tenant_id = b.tenant_id AND a.ip_address = b.ip_address;" | npx prisma db execute --stdin --schema prisma/schema.prisma 2>/dev/null || true
-
-npx prisma db push --skip-generate --accept-data-loss || {
-  echo "⚠️  Schema push failed — trying without accept-data-loss..."
+echo "📦 Applying database migrations..."
+npx prisma migrate deploy || {
+  echo "⚠️  migrate deploy failed — falling back to db push..."
   npx prisma db push --skip-generate || echo "⚠️  Schema push failed — continuing with existing schema"
 }
 
-# Run seed if SEED_DB is set and this is first run
 if [ "${SEED_DB}" = "true" ]; then
   echo "🌱 Seeding database..."
   npx prisma db seed || echo "⚠️  Seed skipped (may already exist)"
 fi
 
-echo "✅ Database ready. Starting API server..."
-exec node dist/src/main.js
+echo "✅ Database ready. Starting API server on PORT=${PORT:-4100}..."
+if [ -f dist/main.js ]; then
+  exec node dist/main.js
+elif [ -f dist/src/main.js ]; then
+  exec node dist/src/main.js
+else
+  echo "❌ No compiled main.js found under dist/"
+  ls -laR dist 2>/dev/null | head -80 || true
+  exit 1
+fi

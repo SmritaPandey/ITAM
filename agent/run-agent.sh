@@ -109,72 +109,14 @@ else
 fi
 
 # ─── Install as background service (silent, automatic) ──────
-install_service() {
-  if [ "$(uname -s)" = "Darwin" ]; then
-    PLIST_PATH="/Library/LaunchDaemons/com.qsasset.discovery.agent.plist"
-    if [ ! -f "$PLIST_PATH" ] && [ "$EUID" -eq 0 ]; then
-      cat <<EOF > "$PLIST_PATH"
-<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0">
-<dict>
-    <key>Label</key>
-    <string>com.qsasset.discovery.agent</string>
-    <key>ProgramArguments</key>
-    <array>
-        <string>${NODE_BIN}</string>
-        <string>${SCRIPT_DIR}/qs-discovery-agent.js</string>
-    </array>
-    <key>RunAtLoad</key>
-    <true/>
-    <key>KeepAlive</key>
-    <true/>
-    <key>StandardOutPath</key>
-    <string>${SCRIPT_DIR}/agent-service.log</string>
-    <key>StandardErrorPath</key>
-    <string>${SCRIPT_DIR}/agent-service-error.log</string>
-    <key>WorkingDirectory</key>
-    <string>${SCRIPT_DIR}</string>
-</dict>
-</plist>
-EOF
-      chown root:wheel "$PLIST_PATH"
-      chmod 644 "$PLIST_PATH"
-      launchctl unload "$PLIST_PATH" 2>/dev/null || true
-      launchctl load "$PLIST_PATH"
-      echo "  ✅ Installed as background service (starts on boot)"
-    fi
-  elif [ "$(uname -s)" = "Linux" ]; then
-    SERVICE_PATH="/etc/systemd/system/qsasset-agent.service"
-    if [ ! -f "$SERVICE_PATH" ] && [ "$EUID" -eq 0 ]; then
-      cat <<EOF > "$SERVICE_PATH"
-[Unit]
-Description=QS Asset Discovery Agent
-After=network.target
-
-[Service]
-Type=simple
-User=root
-WorkingDirectory=${SCRIPT_DIR}
-ExecStart=${NODE_BIN} ${SCRIPT_DIR}/qs-discovery-agent.js
-Restart=always
-RestartSec=10
-StandardOutput=append:${SCRIPT_DIR}/agent-service.log
-StandardError=append:${SCRIPT_DIR}/agent-service-error.log
-
-[Install]
-WantedBy=multi-user.target
-EOF
-      systemctl daemon-reload
-      systemctl enable qsasset-agent
-      systemctl start qsasset-agent
-      echo "  ✅ Installed as background service (starts on boot)"
-    fi
+# Prefer packaging/install-service.sh (LaunchDaemon / systemd canonical paths)
+if [ "${EUID:-$(id -u)}" -eq 0 ] && [ -x "${SCRIPT_DIR}/install-service.sh" ]; then
+  if [ "$(uname -s)" = "Darwin" ] && [ ! -f /Library/LaunchDaemons/com.qs.discovery-agent.plist ]; then
+    "${SCRIPT_DIR}/install-service.sh" 2>/dev/null && echo "  ✅ Installed as background service (starts on boot)" || true
+  elif [ "$(uname -s)" = "Linux" ] && [ ! -f /etc/systemd/system/qs-discovery-agent.service ]; then
+    "${SCRIPT_DIR}/install-service.sh" 2>/dev/null && echo "  ✅ Installed as background service (starts on boot)" || true
   fi
-}
-
-# Silently install service if running as root
-install_service 2>/dev/null
+fi
 
 # ─── Launch the agent ────────────────────────────────────────
 echo "  🚀 Starting agent..."

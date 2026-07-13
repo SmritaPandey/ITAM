@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import {
   LayoutDashboard, Building2, Users, MessageSquare, CreditCard, Shield,
-  Activity, LogOut, ChevronRight, ArrowLeft, Sun, Moon, Eye, DollarSign,
+  Activity, LogOut, ChevronRight, ArrowLeft, Sun, Moon, Eye, DollarSign, Key,
 } from "lucide-react";
 import { LogoIcon } from "@/components/Logo";
 import { useTheme } from "@/components/ThemeProvider";
@@ -11,6 +11,7 @@ import { useTheme } from "@/components/ThemeProvider";
 const adminNav = [
   { name: "Dashboard", icon: LayoutDashboard, href: "/admin" },
   { name: "Tenants", icon: Building2, href: "/admin/tenants" },
+  { name: "Licenses", icon: Key, href: "/admin/licenses" },
   { name: "Users", icon: Users, href: "/admin/users" },
   { name: "Support Inbox", icon: MessageSquare, href: "/admin/support" },
   { name: "Payments", icon: CreditCard, href: "/admin/payments" },
@@ -58,10 +59,10 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         {/* Logo */}
         <div style={{ padding: "20px 16px", borderBottom: "1px solid var(--border-primary)" }}>
           <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 6 }}>
-            <LogoIcon size={34} />
+            <LogoIcon size={42} />
             <div>
-              <div style={{ fontSize: 14, fontWeight: 700, color: "var(--text-primary)" }}>Platform Console</div>
-              <div style={{ fontSize: 10, color: "#06b6d4", fontWeight: 600 }}>OWNER ACCESS</div>
+              <div style={{ fontSize: 14, fontWeight: 700, color: "var(--text-primary)", fontFamily: "var(--font-display), inherit" }}>QS Assets</div>
+              <div style={{ fontSize: 10, color: "#06b6d4", fontWeight: 600 }}>PLATFORM CONSOLE</div>
             </div>
           </div>
         </div>

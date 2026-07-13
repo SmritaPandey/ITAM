@@ -1,51 +1,103 @@
-import React from "react";
+"use client";
+
+import React, { useId } from "react";
 
 interface LogoIconProps {
   size?: number;
   glow?: boolean;
 }
 
+/**
+ * QS Assets / QSA mark — open hexagon line-art with SE depth outline,
+ * isometric cube, and gradient asset nodes. Transparent (no plate).
+ */
 export function LogoIcon({ size = 32, glow = true }: LogoIconProps) {
+  const uid = useId().replace(/:/g, "");
+  const qGrad = `qs-q-${uid}`;
+  const cubeStroke = `qs-cube-${uid}`;
+  const nodeGrad = `qs-node-${uid}`;
+
+  // Open hex: skip top-right edge (Top→TR); no Q-tail
+  const hex = "M424 149 L424 323 L256 420 L88 323 L88 149 L256 52";
+  const cubeTop = "216,148 148,186 216,224 284,186";
+  const cubeLeft = "148,186 148,278 216,316 216,224";
+  const cubeRight = "284,186 284,278 216,316 216,224";
+
   return (
     <svg
       width={size}
       height={size}
-      viewBox="8 8 32 32"
+      viewBox="0 0 512 512"
       fill="none"
       xmlns="http://www.w3.org/2000/svg"
+      aria-hidden
       style={{
-        filter: glow ? "drop-shadow(0 4px 14px rgba(6, 182, 212, 0.35))" : "none",
-        transition: "all 0.3s cubic-bezier(0.16, 1, 0.3, 1)",
+        filter: glow ? "drop-shadow(0 2px 10px rgba(6, 182, 212, 0.35))" : "none",
+        transition: "filter 0.3s ease",
+        flexShrink: 0,
       }}
     >
       <defs>
-        {/* Core Sleek Cybernetic Gradients */}
-        <linearGradient id="qs-primary-grad" x1="0%" y1="0%" x2="100%" y2="100%">
-          <stop offset="0%" stopColor="#22d3ee" />
-          <stop offset="50%" stopColor="#3b82f6" />
-          <stop offset="100%" stopColor="#8b5cf6" />
+        <linearGradient id={qGrad} x1="70" y1="30" x2="470" y2="490" gradientUnits="userSpaceOnUse">
+          <stop stopColor="#a5f3fc" />
+          <stop offset="0.35" stopColor="#22d3ee" />
+          <stop offset="0.7" stopColor="#06b6d4" />
+          <stop offset="1" stopColor="#0e7490" />
         </linearGradient>
-        <linearGradient id="qs-accent-grad" x1="100%" y1="0%" x2="0%" y2="100%">
-          <stop offset="0%" stopColor="#10b981" />
-          <stop offset="100%" stopColor="#06b6d4" />
+        <linearGradient id={cubeStroke} x1="140" y1="140" x2="300" y2="320" gradientUnits="userSpaceOnUse">
+          <stop stopColor="#ecfeff" />
+          <stop offset="0.45" stopColor="#67e8f9" />
+          <stop offset="1" stopColor="#0891b2" />
+        </linearGradient>
+        <linearGradient id={nodeGrad} x1="300" y1="160" x2="380" y2="310" gradientUnits="userSpaceOnUse">
+          <stop stopColor="#5eead4" />
+          <stop offset="0.55" stopColor="#14b8a6" />
+          <stop offset="1" stopColor="#0d9488" />
         </linearGradient>
       </defs>
 
-      {/* High-Fidelity Interlocking 'Q' Ring */}
-      <path
-        d="M24 11.5 C17.1 11.5 11.5 17.1 11.5 24 C11.5 30.9 17.1 36.5 24 36.5 C27.1 36.5 29.9 35.3 32.1 33.4 L36.8 38.1 C37.2 38.5 37.8 38.5 38.2 38.1 C38.6 37.7 38.6 37.1 38.2 36.7 L33.5 32 C35.4 29.8 36.5 27 36.5 24 C36.5 17.1 30.9 11.5 24 11.5 Z M24 15.5 C28.7 15.5 32.5 19.3 32.5 24 C32.5 26.1 31.7 28 30.5 29.5 L28.9 27.9 C29.6 26.8 30 25.4 30 24 C30 20.7 27.3 18 24 18 C22.6 18 21.2 18.4 20.1 19.1 L18.5 17.5 C20 16.3 21.9 15.5 24 15.5 Z M15.5 24 C15.5 19.3 19.3 15.5 24 15.5 L24 18 C20.7 18 18 20.7 18 24 C18 25.4 18.4 26.8 19.1 27.9 L17.5 29.5 C16.3 28 15.5 26.1 15.5 24 Z"
-        fill="url(#qs-primary-grad)"
-      />
-
-      {/* Infinite Autonomic 'S' Winding Fiber Core */}
-      <path
-        d="M28.5 19.5 C28.5 18 26.5 17 24 17 C21 17 20 19 20 21 C20 23.5 28 23.5 28 26 C28 28.5 27 31 24 31 C21 31 19.5 29.5 19.5 28.5"
-        stroke="url(#qs-accent-grad)"
-        strokeWidth="3.2"
+      {/* Depth outline — SE offset */}
+      <g
+        transform="translate(9, 10)"
+        fill="none"
+        stroke="#134e4a"
         strokeLinecap="round"
         strokeLinejoin="round"
-        fill="none"
-      />
+        opacity="0.9"
+      >
+        <path d={hex} strokeWidth="20" />
+        <polygon points={cubeTop} strokeWidth="15" />
+        <polygon points={cubeLeft} strokeWidth="15" />
+        <polygon points={cubeRight} strokeWidth="15" />
+        <path d="M302 176 V300" strokeWidth="12" />
+        <path d="M302 192 H334" strokeWidth="12" />
+        <path d="M302 238 H334" strokeWidth="12" />
+        <path d="M302 284 H334" strokeWidth="12" />
+        <rect x="334" y="174" width="26" height="26" rx="6" strokeWidth="12" />
+        <rect x="334" y="220" width="26" height="26" rx="6" strokeWidth="12" />
+        <rect x="334" y="266" width="26" height="26" rx="6" strokeWidth="12" />
+      </g>
+
+      {/* Primary line art */}
+      <g fill="none" strokeLinecap="round" strokeLinejoin="round">
+        <path d={hex} stroke={`url(#${qGrad})`} strokeWidth="20" />
+
+        <polygon points={cubeTop} stroke={`url(#${cubeStroke})`} strokeWidth="16" />
+        <polygon points={cubeLeft} stroke="#0e7490" strokeWidth="16" />
+        <polygon points={cubeRight} stroke="#06b6d4" strokeWidth="16" />
+        <path d="M216 224 L216 316" stroke="#0891b2" strokeWidth="11" opacity="0.85" />
+        <path d="M148 186 L216 224 L284 186" stroke={`url(#${cubeStroke})`} strokeWidth="11" opacity="0.7" />
+
+        <g stroke={`url(#${nodeGrad})`} strokeWidth="12">
+          <path d="M302 176 V300" />
+          <path d="M302 192 H334" />
+          <path d="M302 238 H334" />
+          <path d="M302 284 H334" />
+          <rect x="334" y="174" width="26" height="26" rx="6" />
+          <rect x="334" y="220" width="26" height="26" rx="6" />
+          <rect x="334" y="266" width="26" height="26" rx="6" />
+        </g>
+      </g>
     </svg>
   );
 }
@@ -56,6 +108,8 @@ interface LogoProps {
   textColor?: string;
   subtextColor?: string;
   theme?: "dark" | "light";
+  showTagline?: boolean;
+  wordmark?: "full" | "qsa";
 }
 
 export function Logo({
@@ -64,47 +118,45 @@ export function Logo({
   textColor,
   subtextColor,
   theme = "dark",
+  showTagline = false,
+  wordmark = "full",
 }: LogoProps) {
   const isLight = theme === "light";
   const defaultText = textColor || (isLight ? "#0f172a" : "#f8fafc");
-  const defaultSub = subtextColor || (isLight ? "#475569" : "#22d3ee");
+  const defaultSub = subtextColor || (isLight ? "#0e7490" : "#22d3ee");
 
   return (
-    <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+    <div style={{ display: "flex", alignItems: "center", gap: Math.max(8, size * 0.28) }}>
       <LogoIcon size={size} glow={glow} />
-      <div style={{ display: "flex", flexDirection: "column", lineHeight: 1.1 }}>
+      <div style={{ display: "flex", flexDirection: "column", lineHeight: 1.05 }}>
         <span
           style={{
-            fontSize: size * 0.44,
-            fontWeight: 800,
+            fontSize: size * 0.5,
+            fontWeight: 750,
             color: defaultText,
-            letterSpacing: "-0.03em",
-            fontFamily: "'Outfit', 'Inter', system-ui, sans-serif",
-            background: "linear-gradient(to right, " + defaultText + " 70%, #22d3ee 100%)",
-            WebkitBackgroundClip: "text",
-            WebkitTextFillColor: "transparent",
-            transition: "all 0.3s ease",
+            letterSpacing: "-0.04em",
+            fontFamily: "var(--font-display), 'Outfit', system-ui, sans-serif",
           }}
         >
-          QS Asset
+          {wordmark === "qsa" ? "QSA" : "QS Assets"}
         </span>
-        <span
-          style={{
-            fontSize: size * 0.28,
-            fontWeight: 700,
-            color: defaultSub,
-            letterSpacing: "0.12em",
-            fontFamily: "'Outfit', 'Inter', system-ui, sans-serif",
-            textTransform: "uppercase",
-            marginTop: 1,
-            opacity: 0.9,
-            transition: "all 0.3s ease",
-          }}
-        >
-          APM Platform
-        </span>
+        {showTagline && (
+          <span
+            style={{
+              fontSize: size * 0.24,
+              fontWeight: 650,
+              color: defaultSub,
+              letterSpacing: "0.12em",
+              fontFamily: "var(--font-display), 'Outfit', system-ui, sans-serif",
+              textTransform: "uppercase",
+              marginTop: 2,
+              opacity: 0.9,
+            }}
+          >
+            Discovery &amp; Control
+          </span>
+        )}
       </div>
     </div>
   );
 }
-

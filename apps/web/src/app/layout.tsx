@@ -1,12 +1,44 @@
 import type { Metadata } from "next";
+import { Outfit, DM_Sans, DM_Serif_Display, Roboto_Mono } from "next/font/google";
 import "./globals.css";
+import { ClientProviders } from "@/components/ClientProviders";
+
+const outfit = Outfit({
+  subsets: ["latin"],
+  variable: "--font-display",
+  display: "swap",
+  weight: ["400", "500", "600", "700", "800"],
+});
+
+const dmSans = DM_Sans({
+  subsets: ["latin"],
+  variable: "--font-body",
+  display: "swap",
+  weight: ["300", "400", "500", "600", "700"],
+});
+
+const dmSerif = DM_Serif_Display({
+  subsets: ["latin"],
+  variable: "--font-serif",
+  display: "swap",
+  weight: ["400"],
+  style: ["normal", "italic"],
+});
+
+const robotoMono = Roboto_Mono({
+  subsets: ["latin"],
+  variable: "--font-mono",
+  display: "swap",
+  weight: ["400", "500"],
+});
 
 export const metadata: Metadata = {
   title: {
-    default: "QS Asset Management | Enterprise IT Asset & Security Platform",
-    template: "%s | QS Asset Management",
+    default: "QS Assets | IT Asset Discovery & Management",
+    template: "%s | QS Assets",
   },
-  description: "Unified IT & non-IT asset management platform with ITSM ticketing, vulnerability scanning, network monitoring, CCTV, fleet GPS, VDI, patch management, and CMDB. Trusted by enterprises for complete asset visibility and security control.",
+  description:
+    "Discover, track, and manage IT and non-IT assets with agent and agentless scanning, monitoring, ITSM, and vulnerability workflows — built by NeurQ AI Labs.",
   keywords: [
     "IT asset management",
     "ITAM software",
@@ -16,17 +48,9 @@ export const metadata: Metadata = {
     "network monitoring",
     "CMDB",
     "patch management",
-    "CCTV management",
-    "fleet GPS tracking",
-    "VDI management",
-    "IT security platform",
     "enterprise asset management",
-    "non-IT asset tracking",
-    "SaaS ITAM",
-    "India IT asset management",
-    "DPDP compliant",
     "NeurQ AI Labs",
-    "QS Asset",
+    "QS Assets",
     "qsasset",
   ],
   authors: [{ name: "NeurQ AI Labs", url: "https://qsasset.com" }],
@@ -34,18 +58,27 @@ export const metadata: Metadata = {
   publisher: "NeurQ AI Labs",
   icons: {
     icon: [
+      { url: "/favicon.ico", sizes: "48x48" },
+      { url: "/favicon-16x16.png", sizes: "16x16", type: "image/png" },
+      { url: "/favicon-32x32.png", sizes: "32x32", type: "image/png" },
       { url: "/favicon.png", sizes: "64x64", type: "image/png" },
+      { url: "/icon-192.png", sizes: "192x192", type: "image/png" },
+      { url: "/icon-512.png", sizes: "512x512", type: "image/png" },
+      { url: "/logo.svg", type: "image/svg+xml" },
     ],
-    apple: "/apple-icon.png",
+    apple: [{ url: "/apple-icon.png", sizes: "180x180", type: "image/png" }],
+    shortcut: "/favicon.ico",
   },
+  manifest: "/site.webmanifest",
   metadataBase: new URL("https://qsasset.com"),
   alternates: {
     canonical: "https://qsasset.com",
   },
   openGraph: {
-    title: "QS Asset Management — Enterprise IT Asset & Security Platform",
-    description: "Command every asset. Secure every endpoint. 12 unified modules for complete IT operations — from asset tracking to vulnerability scanning.",
-    siteName: "QS Asset Management",
+    title: "QS Assets — IT Asset Discovery & Management",
+    description:
+      "Unified asset discovery and operations: inventory, monitoring, tickets, and security workflows in one platform.",
+    siteName: "QS Assets",
     url: "https://qsasset.com",
     type: "website",
     locale: "en_IN",
@@ -54,14 +87,14 @@ export const metadata: Metadata = {
         url: "/og-image.png",
         width: 1200,
         height: 630,
-        alt: "QS Asset Management Platform",
+        alt: "QS Assets — Discovery and Control",
       },
     ],
   },
   twitter: {
     card: "summary_large_image",
-    title: "QS Asset Management — Enterprise IT Asset & Security Platform",
-    description: "12 unified modules for complete IT operations. Start free, scale to enterprise.",
+    title: "QS Assets — IT Asset Discovery & Management",
+    description: "Discover and manage every asset. Start free, scale when ready.",
     images: ["/og-image.png"],
   },
   robots: {
@@ -81,14 +114,14 @@ export const metadata: Metadata = {
   category: "technology",
 };
 
-// JSON-LD structured data for rich search results
 const jsonLd = {
   "@context": "https://schema.org",
   "@type": "SoftwareApplication",
-  name: "QS Asset Management",
+  name: "QS Assets",
   applicationCategory: "BusinessApplication",
   operatingSystem: "Web",
-  description: "Unified IT & non-IT asset management platform with 12 integrated modules for complete enterprise visibility and control.",
+  description:
+    "IT asset discovery and management platform with monitoring, ITSM, and security workflows.",
   url: "https://qsasset.com",
   author: {
     "@type": "Organization",
@@ -108,41 +141,22 @@ const jsonLd = {
       name: "Professional",
       price: "16999",
       priceCurrency: "INR",
-      description: "All 12 modules, unlimited users, vulnerability scanning, ITSM + SLA engine",
+      description: "Core modules, unlimited users, vulnerability scanning, ITSM",
     },
     {
       "@type": "Offer",
       name: "Enterprise",
       price: "39999",
       priceCurrency: "INR",
-      description: "On-premise deploy, SSO/SAML/LDAP, dedicated CSM, custom SLA",
+      description: "On-premise deploy, SSO options, dedicated support",
     },
-  ],
-  featureList: [
-    "IT Asset Management",
-    "Non-IT Asset Tracking",
-    "ITSM Service Desk",
-    "Vulnerability Scanning",
-    "Network Monitoring (NMS)",
-    "Patch Management",
-    "CCTV Surveillance",
-    "Fleet GPS Tracking",
-    "VDI Management",
-    "CMDB & Dependencies",
-    "Procurement & Contracts",
-    "Reports & Compliance",
   ],
 };
 
-import { ClientProviders } from "@/components/ClientProviders";
-
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" suppressHydrationWarning>
+    <html lang="en" className={`${outfit.variable} ${dmSans.variable} ${dmSerif.variable} ${robotoMono.variable}`} suppressHydrationWarning>
       <head>
-        <link rel="preconnect" href="https://fonts.googleapis.com" />
-        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
-        <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet" />
         <script
           type="application/ld+json"
           dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
@@ -153,7 +167,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
               (function() {
                 try {
                   var saved = localStorage.getItem('theme');
-                  var theme = saved || 'dark';
+                  var theme = saved || 'light';
                   document.documentElement.setAttribute('data-theme', theme);
                 } catch (e) {}
               })();

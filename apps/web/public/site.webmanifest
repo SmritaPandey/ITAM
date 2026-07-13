@@ -1,6 +1,7 @@
 {
-  "name": "QS Asset Management",
-  "short_name": "QS Asset",
+  "name": "QS Assets",
+  "short_name": "QSA",
+  "description": "IT asset discovery and management — qsasset.com",
   "icons": [
     {
       "src": "/android-chrome-192x192.png",
@@ -11,10 +12,16 @@
       "src": "/android-chrome-512x512.png",
       "sizes": "512x512",
       "type": "image/png"
+    },
+    {
+      "src": "/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
     }
   ],
-  "theme_color": "#0d0e12",
-  "background_color": "#0d0e12",
+  "theme_color": "#06b6d4",
+  "background_color": "#070b10",
   "display": "standalone",
   "start_url": "/"
 }

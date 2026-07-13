@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg width="512" height="512" viewBox="0 0 512 512" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="QSA">
+
+  <defs>
+    <linearGradient id="qGrad" x1="70" y1="30" x2="470" y2="490" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#a5f3fc"/>
+      <stop offset="35%" stop-color="#22d3ee"/>
+      <stop offset="70%" stop-color="#06b6d4"/>
+      <stop offset="100%" stop-color="#0e7490"/>
+    </linearGradient>
+    <linearGradient id="cubeStroke" x1="140" y1="140" x2="300" y2="320" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#ecfeff"/>
+      <stop offset="45%" stop-color="#67e8f9"/>
+      <stop offset="100%" stop-color="#0891b2"/>
+    </linearGradient>
+    <linearGradient id="nodeGrad" x1="300" y1="160" x2="380" y2="310" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#5eead4"/>
+      <stop offset="55%" stop-color="#14b8a6"/>
+      <stop offset="100%" stop-color="#0d9488"/>
+    </linearGradient>
+  </defs>
+
+  <g transform="translate(9, 10)" fill="none" stroke="#134e4a" stroke-linecap="round" stroke-linejoin="round" opacity="0.9">
+    <path d="M424 149 L424 323 L256 420 L88 323 L88 149 L256 52" stroke-width="20"/>
+    <polygon points="216,148 148,186 216,224 284,186" stroke-width="15"/>
+    <polygon points="148,186 148,278 216,316 216,224" stroke-width="15"/>
+    <polygon points="284,186 284,278 216,316 216,224" stroke-width="15"/>
+    <path d="M302 176 V300" stroke-width="12"/>
+    <path d="M302 192 H334" stroke-width="12"/>
+    <path d="M302 238 H334" stroke-width="12"/>
+    <path d="M302 284 H334" stroke-width="12"/>
+    <rect x="334" y="174" width="26" height="26" rx="6" stroke-width="12"/>
+    <rect x="334" y="220" width="26" height="26" rx="6" stroke-width="12"/>
+    <rect x="334" y="266" width="26" height="26" rx="6" stroke-width="12"/>
+  </g>
+  <g fill="none" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M424 149 L424 323 L256 420 L88 323 L88 149 L256 52" stroke="url(#qGrad)" stroke-width="20"/>
+    <polygon points="216,148 148,186 216,224 284,186" stroke="url(#cubeStroke)" stroke-width="16"/>
+    <polygon points="148,186 148,278 216,316 216,224" stroke="#0e7490" stroke-width="16"/>
+    <polygon points="284,186 284,278 216,316 216,224" stroke="#06b6d4" stroke-width="16"/>
+    <path d="M216 224 L216 316" stroke="#0891b2" stroke-width="11" opacity="0.85"/>
+    <path d="M148 186 L216 224 L284 186" stroke="url(#cubeStroke)" stroke-width="11" opacity="0.7"/>
+    <g stroke="url(#nodeGrad)" stroke-width="12">
+      <path d="M302 176 V300"/>
+      <path d="M302 192 H334"/>
+      <path d="M302 238 H334"/>
+      <path d="M302 284 H334"/>
+      <rect x="334" y="174" width="26" height="26" rx="6"/>
+      <rect x="334" y="220" width="26" height="26" rx="6"/>
+      <rect x="334" y="266" width="26" height="26" rx="6"/>
+    </g>
+  </g>
+</svg>

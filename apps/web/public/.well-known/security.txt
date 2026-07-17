@@ -1,0 +1,7 @@
+Contact: mailto:security@qsasset.com
+Contact: mailto:contact@qsasset.com
+Expires: 2027-07-14T00:00:00.000Z
+Preferred-Languages: en, hi
+Canonical: https://www.qsasset.com/.well-known/security.txt
+Policy: https://www.qsasset.com/security
+Acknowledgments: https://www.qsasset.com/security

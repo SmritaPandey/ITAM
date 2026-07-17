@@ -145,7 +145,7 @@ export default function TermsPage() {
                 <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginTop: 16 }}>
                   <div style={{ padding: 16, borderRadius: 12, background: boxBg, border: `1px solid ${border}` }}>
                     <div style={{ fontSize: 13, fontWeight: 700, color: "#06b6d4", marginBottom: 4 }}>STARTER & FREE PLAN</div>
-                    <p style={{ fontSize: 12, color: muted, margin: 0, lineHeight: 1.6 }}>Supports up to 100 discovered assets, 5 administrative user allocations, and standard priority community ticket boards.</p>
+                    <p style={{ fontSize: 12, color: muted, margin: 0, lineHeight: 1.6 }}>Supports up to 5 discovered assets, 4 administrative user allocations, and standard priority community ticket boards. See <a href="/pricing" style={{ color: "#06b6d4" }}>pricing</a> for paid tiers.</p>
                   </div>
                   <div style={{ padding: 16, borderRadius: 12, background: boxBg, border: `1px solid ${border}` }}>
                     <div className="font-mono-label" style={{ fontSize: 11, color: "#0e7490", marginBottom: 4 }}>Professional & Enterprise</div>
@@ -198,7 +198,8 @@ export default function TermsPage() {
                   7. 99.9% Uptime Service Level Agreement (SLA)
                 </h2>
                 <p style={{ margin: 0, color: pTxt, fontSize: 14, lineHeight: 1.8 }}>
-                  Professional and Enterprise tiers are governed by a strict <strong style={{ color: L ? "#0891b2" : "#06b6d4" }}>99.9% Uptime Commitment</strong>. In the event that monthly cumulative availability drops below this baseline, you are eligible for service credits applied to subsequent billing cycles:
+                  Professional and Enterprise tiers are governed by a strict <strong style={{ color: L ? "#0891b2" : "#06b6d4" }}>99.9% Uptime Commitment</strong>. The canonical SLA (credits, exclusions, and support targets) is published at{" "}
+                  <a href="/sla" style={{ color: L ? "#0891b2" : "#06b6d4", fontWeight: 600 }}>qsasset.com/sla</a>. In the event that monthly cumulative availability drops below this baseline, you are eligible for service credits applied to subsequent billing cycles:
                 </p>
                 <ul style={{ margin: "14px 0 0", paddingLeft: 20, color: pTxt, fontSize: 14, lineHeight: 1.8, display: "flex", flexDirection: "column", gap: 6 }}>
                   <li><strong style={{ color: txt }}>Availability &ge; 99.0% and &lt; 99.9%:</strong> 10% monthly subscription credit value back.</li>
@@ -249,7 +250,7 @@ export default function TermsPage() {
                   <div style={{ color: muted, fontSize: 13, marginBottom: 12 }}>NeurQ AI Labs Private Limited</div>
                   <div style={{ display: "flex", flexDirection: "column", gap: 8, fontSize: 13, color: pTxt }}>
                     <div>✉️ <span style={{ color: muted }}>Email:</span> legal@neurqai.com</div>
-                    <div>📍 <span style={{ color: muted }}>Registered Address:</span> Incubation Cell, IIIT Lucknow, Uttar Pradesh - 226002, India</div>
+                    <div>📍 <span style={{ color: muted }}>Registered Address:</span> C-403 Royal Estate Apartment, 7 Laplace Hazratganj, Lucknow - 226001, Uttar Pradesh, India</div>
                   </div>
                 </div>
               </section>

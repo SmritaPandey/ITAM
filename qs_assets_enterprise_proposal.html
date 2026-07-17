@@ -1,0 +1,1886 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>QS Assets — Enterprise Technical &amp; Commercial Proposal | NeurQ AI Labs</title>
+  <meta name="description" content="Enterprise proposal for QS Assets: ITAM, discovery, ITSM, monitoring, and security — SaaS or on-prem by NeurQ AI Labs." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=DM+Serif+Display:ital@0;1&family=Outfit:wght@500;600;700;800&family=Roboto+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --cyan: #06b6d4;
+      --cyan-bright: #22d3ee;
+      --cyan-deep: #0e7490;
+      --teal: #14b8a6;
+      --teal-deep: #0d9488;
+      --ink: #0f172a;
+      --ink-soft: #1a1d21;
+      --muted: #6b7280;
+      --p: #475569;
+      --bg: #f5f7f8;
+      --wash: #eef4f6;
+      --card: #ffffff;
+      --border: rgba(15, 23, 42, 0.08);
+      --success: #10b981;
+      --warning: #f59e0b;
+      --danger: #ef4444;
+      --shadow: 0 18px 50px rgba(15, 23, 42, 0.08);
+      --radius: 16px;
+      --font-body: "DM Sans", system-ui, sans-serif;
+      --font-serif: "DM Serif Display", Georgia, serif;
+      --font-display: "Outfit", system-ui, sans-serif;
+      --font-mono: "Roboto Mono", ui-monospace, monospace;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: var(--font-body);
+      color: var(--ink);
+      background:
+        radial-gradient(ellipse 90% 50% at 50% -5%, rgba(6, 182, 212, 0.14) 0%, transparent 55%),
+        linear-gradient(180deg, var(--wash) 0%, var(--bg) 40%);
+      line-height: 1.65;
+      padding: 32px 16px 64px;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    .mono {
+      font-family: var(--font-mono);
+      font-size: 11px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--muted);
+    }
+
+    .doc {
+      max-width: 980px;
+      margin: 0 auto;
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 28px;
+      box-shadow: var(--shadow);
+      overflow: hidden;
+    }
+
+    /* —— Cover —— */
+    .cover {
+      position: relative;
+      padding: 64px 64px 48px;
+      color: #f5f5f7;
+      background:
+        radial-gradient(ellipse 80% 70% at 85% 10%, rgba(6, 182, 212, 0.28) 0%, transparent 50%),
+        radial-gradient(ellipse 60% 50% at 10% 90%, rgba(20, 184, 166, 0.18) 0%, transparent 45%),
+        linear-gradient(165deg, #0a1218 0%, #070b10 55%, #12151a 100%);
+      overflow: hidden;
+    }
+
+    .cover::after {
+      content: "";
+      position: absolute;
+      inset: auto 0 0 0;
+      height: 3px;
+      background: linear-gradient(90deg, var(--cyan-deep), var(--cyan), var(--teal));
+    }
+
+    .cover-top {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 24px;
+      margin-bottom: 48px;
+      position: relative;
+      z-index: 1;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      text-decoration: none;
+      color: inherit;
+    }
+
+    .brand img { width: 52px; height: 52px; display: block; }
+
+    .brand-text strong {
+      display: block;
+      font-family: var(--font-display);
+      font-size: 22px;
+      font-weight: 800;
+      letter-spacing: -0.03em;
+    }
+
+    .brand-text span {
+      font-size: 12px;
+      color: #9f9fa0;
+      font-weight: 400;
+    }
+
+    .cover-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 16px;
+      border-radius: 999px;
+      border: 1px solid rgba(255, 255, 255, 0.14);
+      background: rgba(255, 255, 255, 0.06);
+      font-family: var(--font-mono);
+      font-size: 11px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: #a5f3fc;
+    }
+
+    .cover h1 {
+      font-family: var(--font-serif);
+      font-weight: 400;
+      font-size: clamp(36px, 5vw, 52px);
+      line-height: 0.98;
+      letter-spacing: -0.02em;
+      max-width: 720px;
+      margin-bottom: 18px;
+      position: relative;
+      z-index: 1;
+    }
+
+    .cover h1 em {
+      font-style: italic;
+      background: linear-gradient(120deg, #06b6d4 0%, #22d3ee 45%, #0e7490 100%);
+      -webkit-background-clip: text;
+      background-clip: text;
+      color: transparent;
+    }
+
+    .cover-lead {
+      font-size: 17px;
+      font-weight: 300;
+      color: #9f9fa0;
+      max-width: 640px;
+      margin-bottom: 36px;
+      position: relative;
+      z-index: 1;
+    }
+
+    .cover-meta {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 20px;
+      padding-top: 28px;
+      border-top: 1px solid rgba(255, 255, 255, 0.1);
+      position: relative;
+      z-index: 1;
+    }
+
+    .cover-meta label {
+      display: block;
+      font-family: var(--font-mono);
+      font-size: 10px;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: #64748b;
+      margin-bottom: 6px;
+    }
+
+    .cover-meta strong {
+      font-size: 14px;
+      font-weight: 600;
+      color: #e2e8f0;
+    }
+
+    /* —— Body —— */
+    .body { padding: 48px 64px 64px; }
+
+    .toc {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px 28px;
+      padding: 24px;
+      margin-bottom: 40px;
+      border-radius: var(--radius);
+      background: var(--bg);
+      border: 1px solid var(--border);
+    }
+
+    .toc a {
+      color: var(--p);
+      text-decoration: none;
+      font-size: 14px;
+      font-weight: 500;
+      display: flex;
+      gap: 10px;
+    }
+
+    .toc a:hover { color: var(--cyan-deep); }
+    .toc a span { color: var(--cyan); font-family: var(--font-mono); font-size: 12px; }
+
+    h2 {
+      font-family: var(--font-serif);
+      font-weight: 400;
+      font-size: clamp(26px, 3vw, 34px);
+      line-height: 1.05;
+      letter-spacing: -0.02em;
+      margin: 48px 0 16px;
+      padding-top: 8px;
+      page-break-after: avoid;
+    }
+
+    h2 .num {
+      display: inline-block;
+      font-family: var(--font-mono);
+      font-size: 12px;
+      color: var(--cyan-deep);
+      letter-spacing: 0.08em;
+      margin-right: 10px;
+      vertical-align: middle;
+      position: relative;
+      top: -4px;
+    }
+
+    h3 {
+      font-family: var(--font-display);
+      font-size: 18px;
+      font-weight: 700;
+      margin: 28px 0 12px;
+      color: var(--ink);
+      page-break-after: avoid;
+    }
+
+    p {
+      font-size: 15px;
+      color: var(--p);
+      font-weight: 400;
+      margin-bottom: 14px;
+    }
+
+    strong { color: var(--ink); font-weight: 600; }
+
+    .split {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+      margin: 24px 0;
+    }
+
+    .card {
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 22px;
+      background: var(--card);
+      page-break-inside: avoid;
+    }
+
+    .card.pain {
+      background: #fffbf7;
+      border-left: 4px solid var(--warning);
+    }
+
+    .card.win {
+      background: #f0fdf9;
+      border-left: 4px solid var(--success);
+    }
+
+    .card h4 {
+      font-family: var(--font-display);
+      font-size: 15px;
+      font-weight: 700;
+      margin-bottom: 12px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .card.pain h4 { color: #c2410c; }
+    .card.win h4 { color: #047857; }
+
+    .card ul { list-style: none; }
+    .card li {
+      position: relative;
+      padding-left: 22px;
+      margin-bottom: 10px;
+      font-size: 13.5px;
+      color: var(--p);
+    }
+    .card.pain li::before { content: "✕"; position: absolute; left: 0; color: var(--warning); font-weight: 700; }
+    .card.win li::before { content: "✓"; position: absolute; left: 0; color: var(--success); font-weight: 700; }
+
+    /* Capability tiles */
+    .tiles {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 12px;
+      margin: 24px 0 8px;
+    }
+
+    .tile {
+      border-radius: 22px;
+      padding: 22px 20px;
+      color: #fff;
+      min-height: 148px;
+      page-break-inside: avoid;
+    }
+
+    .tile .label {
+      font-family: var(--font-mono);
+      font-size: 10px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      opacity: 0.85;
+      margin-bottom: 10px;
+    }
+
+    .tile h4 {
+      font-family: var(--font-serif);
+      font-weight: 400;
+      font-size: 22px;
+      line-height: 1.05;
+      margin-bottom: 8px;
+    }
+
+    .tile p {
+      color: rgba(255, 255, 255, 0.88);
+      font-size: 12.5px;
+      font-weight: 300;
+      margin: 0;
+      line-height: 1.5;
+    }
+
+    /* Modules */
+    .modules {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+      margin: 20px 0;
+    }
+
+    .mod {
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 18px;
+      background: var(--bg);
+      page-break-inside: avoid;
+    }
+
+    .mod-top {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 8px;
+    }
+
+    .mod-dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
+
+    .mod h4 {
+      font-family: var(--font-display);
+      font-size: 14px;
+      font-weight: 700;
+      margin: 0;
+    }
+
+    .mod p {
+      font-size: 12.5px;
+      margin: 0;
+      color: var(--muted);
+      line-height: 1.5;
+    }
+
+    .kpis {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 12px;
+      margin: 24px 0;
+    }
+
+    .kpi {
+      text-align: center;
+      padding: 22px 12px;
+      border-radius: var(--radius);
+      border: 1px solid var(--border);
+      background: linear-gradient(180deg, #fff 0%, var(--bg) 100%);
+      page-break-inside: avoid;
+    }
+
+    .kpi .v {
+      font-family: var(--font-serif);
+      font-size: 28px;
+      color: var(--cyan-deep);
+      line-height: 1;
+      margin-bottom: 8px;
+    }
+
+    .kpi .t {
+      font-family: var(--font-mono);
+      font-size: 10px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--ink);
+      font-weight: 500;
+      margin-bottom: 6px;
+    }
+
+    .kpi .d { font-size: 12px; color: var(--muted); line-height: 1.4; }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 20px 0 28px;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      overflow: hidden;
+      font-size: 13px;
+    }
+
+    th, td {
+      padding: 12px 14px;
+      text-align: left;
+      border-bottom: 1px solid var(--border);
+      vertical-align: top;
+    }
+
+    th {
+      background: var(--ink);
+      color: #fff;
+      font-family: var(--font-display);
+      font-weight: 600;
+      font-size: 12.5px;
+    }
+
+    tr:nth-child(even) td { background: var(--bg); }
+    td strong { font-size: 13px; }
+
+    .pill {
+      display: inline-block;
+      padding: 3px 9px;
+      border-radius: 999px;
+      font-size: 11px;
+      font-weight: 700;
+      white-space: nowrap;
+    }
+    .pill-g { background: #d1fae5; color: #065f46; }
+    .pill-y { background: #fef3c7; color: #92400e; }
+    .pill-r { background: #fee2e2; color: #991b1b; }
+
+    .yes { color: var(--success); font-weight: 700; }
+    .no { color: #cbd5e1; font-weight: 700; }
+
+    /* Pricing cards */
+    .pricing {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 12px;
+      margin: 24px 0;
+    }
+
+    .plan {
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 22px 18px;
+      background: var(--card);
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      position: relative;
+      page-break-inside: avoid;
+    }
+
+    .plan.hot {
+      border-color: rgba(15, 23, 42, 0.35);
+      box-shadow: 0 10px 30px rgba(6, 182, 212, 0.12);
+    }
+
+    .plan.hot::before {
+      content: "Most popular";
+      position: absolute;
+      top: -10px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: var(--ink);
+      color: #fff;
+      font-family: var(--font-mono);
+      font-size: 10px;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      padding: 4px 10px;
+      border-radius: 999px;
+      white-space: nowrap;
+    }
+
+    .plan .name {
+      font-family: var(--font-mono);
+      font-size: 11px;
+      color: var(--muted);
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+    }
+
+    .plan .price {
+      font-family: var(--font-serif);
+      font-size: 30px;
+      line-height: 1;
+      color: var(--ink);
+    }
+
+    .plan .price small {
+      font-family: var(--font-body);
+      font-size: 13px;
+      color: var(--muted);
+      font-style: normal;
+    }
+
+    .plan .strike {
+      font-size: 12px;
+      color: var(--muted);
+    }
+
+    .plan .strike s { margin-right: 6px; }
+    .plan .save { color: var(--success); font-weight: 700; font-size: 11px; }
+
+    .plan .desc { font-size: 13px; color: var(--muted); }
+
+    .plan ul {
+      list-style: none;
+      border-top: 1px solid var(--border);
+      padding-top: 12px;
+      flex: 1;
+    }
+
+    .plan li {
+      font-size: 12.5px;
+      color: var(--ink);
+      padding: 4px 0;
+      display: flex;
+      gap: 8px;
+      align-items: flex-start;
+    }
+
+    .plan li::before { content: "✓"; color: var(--success); font-weight: 700; }
+
+    /* Architecture SVG block */
+    .arch {
+      margin: 24px 0;
+      padding: 20px;
+      border-radius: var(--radius);
+      border: 1px solid var(--border);
+      background: linear-gradient(180deg, #f8fcfd 0%, #fff 100%);
+      overflow-x: auto;
+    }
+
+    .arch svg { width: 100%; height: auto; display: block; }
+
+    .roadmap { margin: 24px 0 8px; position: relative; padding-left: 28px; }
+    .roadmap::before {
+      content: "";
+      position: absolute;
+      left: 7px;
+      top: 6px;
+      bottom: 6px;
+      width: 2px;
+      background: linear-gradient(180deg, var(--cyan), var(--teal));
+    }
+
+    .road-item {
+      position: relative;
+      margin-bottom: 22px;
+      page-break-inside: avoid;
+    }
+
+    .road-item::before {
+      content: "";
+      position: absolute;
+      left: -28px;
+      top: 6px;
+      width: 14px;
+      height: 14px;
+      border-radius: 50%;
+      background: var(--cyan);
+      border: 3px solid #fff;
+      box-shadow: 0 0 0 3px rgba(6, 182, 212, 0.25);
+    }
+
+    .road-item h4 {
+      font-family: var(--font-display);
+      font-size: 15px;
+      font-weight: 700;
+      margin-bottom: 4px;
+    }
+
+    .road-item p { font-size: 13.5px; margin: 0; }
+
+    .callout {
+      margin: 28px 0;
+      padding: 22px 24px;
+      border-radius: var(--radius);
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-left: 4px solid var(--cyan);
+    }
+
+    .callout .mono { margin-bottom: 8px; color: var(--cyan-deep); }
+
+    .cta {
+      margin-top: 40px;
+      padding: 40px;
+      border-radius: 24px;
+      background: linear-gradient(135deg, #1a1d21 0%, #0a1218 100%);
+      color: #f5f5f7;
+      text-align: center;
+    }
+
+    .cta h2 {
+      color: #fff;
+      margin: 0 0 12px;
+      padding: 0;
+      font-size: clamp(26px, 3.5vw, 36px);
+    }
+
+    .cta p { color: #9f9fa0; max-width: 560px; margin: 0 auto 22px; }
+
+    .cta-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      justify-content: center;
+    }
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 12px 20px;
+      border-radius: 8px;
+      font-size: 14px;
+      font-weight: 600;
+      text-decoration: none;
+      font-family: var(--font-body);
+    }
+
+    .btn-primary { background: #fff; color: var(--ink); }
+    .btn-ghost {
+      background: transparent;
+      color: #fff;
+      border: 1px solid rgba(255, 255, 255, 0.25);
+    }
+
+    .footer-bar {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: space-between;
+      gap: 16px;
+      margin-top: 28px;
+      padding-top: 20px;
+      border-top: 1px solid var(--border);
+      font-size: 12.5px;
+      color: var(--muted);
+    }
+
+    .footer-bar a { color: var(--cyan-deep); text-decoration: none; font-weight: 600; }
+
+    .page-break { page-break-before: always; height: 0; }
+
+    /* —— Covering letter / commercial quote —— */
+    .letter {
+      padding: 28px 40px 24px;
+      page-break-after: always;
+      break-after: page;
+    }
+
+    .letterhead {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 16px;
+      align-items: start;
+      padding-bottom: 12px;
+      border-bottom: 2px solid var(--ink);
+      margin-bottom: 14px;
+    }
+
+    .letterhead-brand {
+      display: flex;
+      gap: 14px;
+      align-items: flex-start;
+    }
+
+    .letterhead-logo {
+      width: 108px;
+      height: auto;
+      flex-shrink: 0;
+      display: block;
+    }
+
+    .letterhead h1 {
+      font-family: var(--font-display);
+      font-size: 20px;
+      font-weight: 800;
+      letter-spacing: -0.02em;
+      margin: 0 0 4px;
+      color: var(--ink);
+    }
+
+    .letterhead .company-meta {
+      font-size: 11.5px;
+      color: var(--p);
+      line-height: 1.5;
+    }
+
+    .letterhead .company-meta strong { color: var(--ink); }
+
+    .letter-ids {
+      margin-top: 6px;
+      font-size: 11px;
+      color: var(--muted);
+      line-height: 1.55;
+    }
+
+    .letter-badge {
+      text-align: right;
+      font-family: var(--font-mono);
+      font-size: 10px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--cyan-deep);
+      border: 1px solid rgba(14, 116, 144, 0.35);
+      background: #f0fdfa;
+      padding: 8px 12px;
+      border-radius: 10px;
+      white-space: nowrap;
+    }
+
+    .letter-intro {
+      font-size: 12.5px;
+      color: var(--p);
+      margin-bottom: 12px;
+      padding: 10px 12px;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-left: 4px solid var(--cyan);
+      border-radius: 8px;
+      line-height: 1.5;
+    }
+
+    .info-pair {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+      margin-bottom: 12px;
+    }
+
+    .info-box {
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      overflow: hidden;
+      page-break-inside: avoid;
+      break-inside: avoid;
+    }
+
+    .info-box h3 {
+      margin: 0;
+      padding: 8px 12px;
+      font-family: var(--font-display);
+      font-size: 12px;
+      font-weight: 700;
+      background: var(--ink);
+      color: #fff;
+    }
+
+    .info-box table {
+      margin: 0;
+      border: none;
+      border-radius: 0;
+      font-size: 12px;
+    }
+
+    .info-box th, .info-box td {
+      padding: 6px 10px;
+      border-bottom: 1px solid var(--border);
+      background: #fff !important;
+      color: var(--ink);
+      font-weight: 500;
+    }
+
+    .info-box tr:last-child th,
+    .info-box tr:last-child td { border-bottom: none; }
+
+    .info-box th {
+      width: 38%;
+      background: #f8fafc !important;
+      color: var(--muted);
+      font-family: var(--font-body);
+      font-weight: 600;
+      font-size: 11px;
+      text-transform: none;
+      letter-spacing: 0;
+    }
+
+    .letter-subject {
+      font-size: 13.5px;
+      margin: 0 0 12px;
+      color: var(--ink);
+      line-height: 1.4;
+    }
+
+    .letter-subject strong { font-weight: 700; }
+
+    .assumptions {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 8px;
+      margin: 0 0 12px;
+    }
+
+    .assump {
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 8px 10px;
+      background: var(--bg);
+      page-break-inside: avoid;
+      break-inside: avoid;
+    }
+
+    .assump label {
+      display: block;
+      font-family: var(--font-mono);
+      font-size: 9px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--muted);
+      margin-bottom: 2px;
+    }
+
+    .assump strong {
+      font-size: 14px;
+      font-weight: 700;
+      color: var(--ink);
+    }
+
+    .assump span {
+      display: block;
+      font-size: 10.5px;
+      color: var(--muted);
+      margin-top: 1px;
+    }
+
+    .quote-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 0 0 8px;
+      font-size: 12px;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      overflow: hidden;
+    }
+
+    .quote-table th {
+      background: var(--ink);
+      color: #fff;
+      font-family: var(--font-display);
+      font-weight: 600;
+      font-size: 11.5px;
+      padding: 8px 10px;
+      text-align: left;
+    }
+
+    .quote-table td {
+      padding: 8px 10px;
+      border-bottom: 1px solid var(--border);
+      vertical-align: top;
+      color: var(--p);
+    }
+
+    .quote-table tr:nth-child(even) td { background: var(--bg); }
+
+    .quote-table .num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; color: var(--ink); }
+    .quote-table .center { text-align: center; color: var(--ink); font-weight: 600; }
+    .quote-table .desc strong { display: block; margin-bottom: 2px; color: var(--ink); }
+    .quote-table .desc small { color: var(--muted); font-size: 11px; line-height: 1.35; }
+
+    .quote-table tfoot td {
+      background: #f8fafc !important;
+      font-weight: 700;
+      color: var(--ink);
+      border-bottom: 1px solid var(--border);
+    }
+
+    .quote-table tfoot .grand td {
+      background: var(--ink) !important;
+      color: #fff;
+      font-size: 13px;
+    }
+
+    .aftercare {
+      margin: 10px 0;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      overflow: hidden;
+      page-break-inside: avoid;
+      break-inside: avoid;
+    }
+
+    .aftercare h3 {
+      margin: 0;
+      padding: 8px 12px;
+      font-size: 12px;
+      background: #ecfeff;
+      color: var(--cyan-deep);
+      border-bottom: 1px solid var(--border);
+    }
+
+    .aftercare table { margin: 0; border: none; border-radius: 0; font-size: 12px; }
+    .aftercare th { background: #f8fafc; color: var(--ink); padding: 8px 10px; }
+    .aftercare td { padding: 8px 10px; }
+
+    .terms-block {
+      margin-top: 10px;
+    }
+
+    .terms-block h3 {
+      font-size: 14px;
+      margin: 0 0 6px;
+    }
+
+    .terms-block ul {
+      margin: 0;
+      padding-left: 16px;
+      color: var(--p);
+      font-size: 11.5px;
+      line-height: 1.5;
+    }
+
+    .terms-block li { margin-bottom: 2px; }
+
+    .letter-close {
+      /* keep terms + signatures flowing; avoid orphaning signatures on a blank page */
+    }
+
+    .sign-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 20px;
+      margin-top: 14px;
+    }
+
+    .sign-box {
+      border-top: 1px solid var(--border);
+      padding-top: 10px;
+      font-size: 12px;
+      color: var(--p);
+    }
+
+    .sign-box strong {
+      display: block;
+      color: var(--ink);
+      font-size: 13px;
+      margin-bottom: 2px;
+    }
+
+    .sign-box .space { height: 28px; }
+
+    @page {
+      size: A4 portrait;
+      margin: 12mm 14mm;
+    }
+
+    @media (max-width: 900px) {
+      .cover, .body, .letter { padding: 36px 24px; }
+      .cover-meta, .tiles, .kpis, .pricing, .modules, .split, .toc, .info-pair, .assumptions { grid-template-columns: 1fr 1fr; }
+    }
+
+    @media (max-width: 640px) {
+      .cover-meta, .tiles, .kpis, .pricing, .modules, .split, .toc, .info-pair, .assumptions, .sign-row { grid-template-columns: 1fr; }
+      .cover-top { flex-direction: column; }
+      .letterhead { grid-template-columns: 1fr; }
+    }
+
+    @media print {
+      html, body {
+        background: #fff;
+        padding: 0;
+        margin: 0;
+      }
+
+      body { background: #fff; padding: 0; }
+
+      .doc {
+        box-shadow: none;
+        border: none;
+        border-radius: 0;
+        max-width: 100%;
+        overflow: visible;
+      }
+
+      .cover {
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+        page-break-after: always;
+        break-after: page;
+        page-break-inside: avoid;
+        break-inside: avoid;
+        padding: 40px 44px 36px;
+        overflow: visible;
+      }
+
+      .cover h1 { font-size: 42px; }
+      .cover-lead { font-size: 15px; margin-bottom: 28px; }
+      .cover-meta { grid-template-columns: repeat(4, 1fr); gap: 16px; padding-top: 22px; }
+
+      .body { padding: 32px 44px 40px; }
+
+      .toc,
+      .split,
+      .arch,
+      .callout,
+      .cta,
+      .footer-bar,
+      .kpis,
+      .tiles,
+      .pricing,
+      .modules,
+      .letterhead,
+      .info-pair,
+      .assumptions,
+      .aftercare,
+      .terms-block,
+      .sign-row {
+        page-break-inside: avoid;
+        break-inside: avoid;
+      }
+
+      .letter {
+        padding: 0;
+        page-break-after: always;
+        break-after: page;
+      }
+
+      table {
+        page-break-inside: auto;
+        break-inside: auto;
+      }
+
+      thead { display: table-header-group; }
+      tr { page-break-inside: avoid; break-inside: avoid; }
+      td, th { orphans: 2; widows: 2; }
+
+      h2, h3, h4 { page-break-after: avoid; break-after: avoid; }
+
+      p, li {
+        orphans: 3;
+        widows: 3;
+      }
+
+      .tile, .plan.hot, th, .cta, .kpi, .mod, .card, .road-item {
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+        page-break-inside: avoid;
+        break-inside: avoid;
+      }
+
+      .plan.hot::before {
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+      }
+
+      .arch svg {
+        max-height: 220px;
+        width: 100%;
+      }
+
+      a { color: inherit; text-decoration: none; }
+
+      .page-break {
+        break-before: page;
+        page-break-before: always;
+      }
+    }
+  </style>
+</head>
+<body>
+  <article class="doc">
+
+    <!-- ================= COVER ================= -->
+    <header class="cover">
+      <div class="cover-top">
+        <a class="brand" href="https://www.qsasset.com" target="_blank" rel="noopener">
+          <span class="brand-mark" aria-label="QS Assets" style="display:inline-flex;width:52px;height:52px"><svg width="52" height="52" viewBox="0 0 512 512" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="QSA">
+
+  <defs>
+    <linearGradient id="qGrad" x1="70" y1="30" x2="470" y2="490" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#a5f3fc"/>
+      <stop offset="35%" stop-color="#22d3ee"/>
+      <stop offset="70%" stop-color="#06b6d4"/>
+      <stop offset="100%" stop-color="#0e7490"/>
+    </linearGradient>
+    <linearGradient id="cubeStroke" x1="140" y1="140" x2="300" y2="320" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#ecfeff"/>
+      <stop offset="45%" stop-color="#67e8f9"/>
+      <stop offset="100%" stop-color="#0891b2"/>
+    </linearGradient>
+    <linearGradient id="nodeGrad" x1="300" y1="160" x2="380" y2="310" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#5eead4"/>
+      <stop offset="55%" stop-color="#14b8a6"/>
+      <stop offset="100%" stop-color="#0d9488"/>
+    </linearGradient>
+  </defs>
+
+  <g transform="translate(9, 10)" fill="none" stroke="#134e4a" stroke-linecap="round" stroke-linejoin="round" opacity="0.9">
+    <path d="M424 149 L424 323 L256 420 L88 323 L88 149 L256 52" stroke-width="20"/>
+    <polygon points="216,148 148,186 216,224 284,186" stroke-width="15"/>
+    <polygon points="148,186 148,278 216,316 216,224" stroke-width="15"/>
+    <polygon points="284,186 284,278 216,316 216,224" stroke-width="15"/>
+    <path d="M302 176 V300" stroke-width="12"/>
+    <path d="M302 192 H334" stroke-width="12"/>
+    <path d="M302 238 H334" stroke-width="12"/>
+    <path d="M302 284 H334" stroke-width="12"/>
+    <rect x="334" y="174" width="26" height="26" rx="6" stroke-width="12"/>
+    <rect x="334" y="220" width="26" height="26" rx="6" stroke-width="12"/>
+    <rect x="334" y="266" width="26" height="26" rx="6" stroke-width="12"/>
+  </g>
+  <g fill="none" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M424 149 L424 323 L256 420 L88 323 L88 149 L256 52" stroke="url(#qGrad)" stroke-width="20"/>
+    <polygon points="216,148 148,186 216,224 284,186" stroke="url(#cubeStroke)" stroke-width="16"/>
+    <polygon points="148,186 148,278 216,316 216,224" stroke="#0e7490" stroke-width="16"/>
+    <polygon points="284,186 284,278 216,316 216,224" stroke="#06b6d4" stroke-width="16"/>
+    <path d="M216 224 L216 316" stroke="#0891b2" stroke-width="11" opacity="0.85"/>
+    <path d="M148 186 L216 224 L284 186" stroke="url(#cubeStroke)" stroke-width="11" opacity="0.7"/>
+    <g stroke="url(#nodeGrad)" stroke-width="12">
+      <path d="M302 176 V300"/>
+      <path d="M302 192 H334"/>
+      <path d="M302 238 H334"/>
+      <path d="M302 284 H334"/>
+      <rect x="334" y="174" width="26" height="26" rx="6"/>
+      <rect x="334" y="220" width="26" height="26" rx="6"/>
+      <rect x="334" y="266" width="26" height="26" rx="6"/>
+    </g>
+  </g>
+</svg></span>
+          <div class="brand-text">
+            <strong>QS Assets</strong>
+            <span>by NeurQ AI Labs</span>
+          </div>
+        </a>
+        <div class="cover-badge">Enterprise Proposal · 2026</div>
+      </div>
+
+      <h1>Discover everything.<br /><em>Command</em> anything.</h1>
+      <p class="cover-lead">
+        Technical &amp; commercial proposal for <strong style="color:#e2e8f0;font-weight:500">QS Assets</strong> —
+        unified IT &amp; non-IT asset discovery, monitoring, ITSM, and security workflows.
+        Deploy as managed SaaS or on your infrastructure.
+      </p>
+
+      <div class="cover-meta">
+        <div>
+          <label>Prepared by</label>
+          <strong>NeurQ AI Labs Pvt Ltd</strong>
+        </div>
+        <div>
+          <label>Reference</label>
+          <strong>QS-ENT-PROPOSAL-2026-07</strong>
+        </div>
+        <div>
+          <label>Valid through</label>
+          <strong>31 Aug 2026</strong>
+        </div>
+        <div>
+          <label>Contact</label>
+          <strong>+91 7752981110 · smrita@neurqai.com</strong>
+        </div>
+      </div>
+
+    </header>
+
+    <!-- ================= COVERING LETTER / COMMERCIAL QUOTE ================= -->
+    <section class="letter" id="covering-letter" aria-label="Commercial covering letter">
+      <div class="letterhead">
+        <div class="letterhead-brand">
+          <img class="letterhead-logo" src="proposal-assets/neurq-logo.png" alt="NeurQ AI Labs" />
+          <div>
+            <h1>NeurQ AI Labs Private Limited</h1>
+            <div class="company-meta">
+              <strong>QS Assets</strong> — Enterprise IT &amp; Non-IT Asset Management<br />
+              <strong>Registered Address:</strong> C-403 Royal Estate Apartment, 7 Laplace Hazratganj, Lucknow – 226001, Uttar Pradesh, India<br />
+              <strong>Contact:</strong> +91 7752981110 | smrita@neurqai.com | contact@qsasset.com | www.qsasset.com | www.neurqai.com<br />
+              <strong>GSTIN:</strong> 09AAKCN7956K1ZL
+            </div>
+            <div class="letter-ids">
+              CIN: U58200UP2025PTC231555 · PAN: AAKCN7956K · TAN: LKNN10569G · UDYAM: UDYAM-UP-50-0231464 · DIPP: DIPP226572 · StartinUP: R/STARTUP/UP/LKO/2025/000040941
+            </div>
+          </div>
+        </div>
+        <div class="letter-badge">Commercial<br />Proposal</div>
+      </div>
+
+      <p class="letter-intro">
+        <strong>Unique requirement-based pricing.</strong>
+        Enterprise and banking deployments are not sold as a flat SaaS list alone. Scope is sized from branches,
+        IT &amp; non-IT assets per site, deployment model (on-premise / hosted by customer / managed SaaS),
+        customization, training, AMC, and optional managed services. The quotation below is an
+        <strong>illustrative covering letter for Bank A</strong> — final commercials are shared after inventory confirmation.
+      </p>
+
+      <div class="info-pair">
+        <div class="info-box">
+          <h3>Customer Information</h3>
+          <table>
+            <tr><th>Name</th><td>Bank A</td></tr>
+            <tr><th>Location</th><td>Madhya Pradesh (M.P.)</td></tr>
+            <tr><th>Contact Person</th><td>Mr. [To be filled]</td></tr>
+            <tr><th>Contact Number</th><td>[To be filled]</td></tr>
+            <tr><th>Email ID</th><td>[To be filled]</td></tr>
+          </table>
+        </div>
+        <div class="info-box">
+          <h3>Quote Information</h3>
+          <table>
+            <tr><th>Ref No.</th><td>QS-ENT-Q-2026-0914</td></tr>
+            <tr><th>Date</th><td>14 July 2026</td></tr>
+            <tr><th>Account Manager</th><td>Smrita Pandey</td></tr>
+            <tr><th>Contact Number</th><td>+91 7752981110</td></tr>
+            <tr><th>Email ID</th><td>smrita@neurqai.com</td></tr>
+          </table>
+        </div>
+      </div>
+
+      <p class="letter-subject">
+        <strong>Subject:</strong> Commercial Proposal for QS Assets — On-Premise Implementation for Bank A
+        (20 Branches · IT &amp; Non-IT Asset Management)
+      </p>
+
+      <div class="assumptions">
+        <div class="assump">
+          <label>Branches</label>
+          <strong>20</strong>
+          <span>Bank A estate</span>
+        </div>
+        <div class="assump">
+          <label>IT assets / branch</label>
+          <strong>100</strong>
+          <span>2,000 IT assets total</span>
+        </div>
+        <div class="assump">
+          <label>Non-IT assets / branch</label>
+          <strong>50</strong>
+          <span>1,000 non-IT assets total</span>
+        </div>
+        <div class="assump">
+          <label>Total assets</label>
+          <strong>3,000</strong>
+          <span>Licensed Year-1 inventory</span>
+        </div>
+      </div>
+
+      <table class="quote-table">
+        <thead>
+          <tr>
+            <th>Sr. No.</th>
+            <th>Description</th>
+            <th class="center">Qty.</th>
+            <th class="num">Unit Price (₹)</th>
+            <th class="num">Total Amount (₹)</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td class="center">1</td>
+            <td class="desc">
+              <strong>QS Assets — IT Asset License (On-Premise / Hosted by Customer)</strong>
+              <small>1-year · 20 branches × 100 IT assets · discovery, CMDB, monitoring, ITSM</small>
+            </td>
+            <td class="center">2,000</td>
+            <td class="num">1,500</td>
+            <td class="num">30,00,000</td>
+          </tr>
+          <tr>
+            <td class="center">2</td>
+            <td class="desc">
+              <strong>QS Assets — Non-IT Asset License (On-Premise / Hosted by Customer)</strong>
+              <small>1-year · 20 branches × 50 non-IT assets · facilities / equipment / CCTV inventory</small>
+            </td>
+            <td class="center">1,000</td>
+            <td class="num">1,200</td>
+            <td class="num">12,00,000</td>
+          </tr>
+          <tr>
+            <td class="center">3</td>
+            <td class="desc">
+              <strong>One-time On-Premise Implementation, Customization &amp; Training</strong>
+              <small>Stand-up, branch rollout, configuration, admin/end-user training, Year-1 hypercare</small>
+            </td>
+            <td class="center">1</td>
+            <td class="num">8,00,000</td>
+            <td class="num">8,00,000</td>
+          </tr>
+        </tbody>
+        <tfoot>
+          <tr>
+            <td colspan="4" class="num">Total Amount (excl. GST)</td>
+            <td class="num">50,00,000</td>
+          </tr>
+          <tr>
+            <td colspan="4" class="num">GST @ 18%</td>
+            <td class="num">9,00,000</td>
+          </tr>
+          <tr class="grand">
+            <td colspan="4" class="num">Grand Total (incl. GST)</td>
+            <td class="num">59,00,000</td>
+          </tr>
+        </tfoot>
+      </table>
+      <p style="font-size:11px;color:var(--muted);margin:0 0 6px">
+        Amount in words: Indian Rupees Fifty-Nine Lakh Only (incl. GST). Illustrative — final unit pricing after estate / BOM confirmation.
+      </p>
+
+      <div class="aftercare">
+        <h3>Post Year-1 &amp; optional managed services (charged separately)</h3>
+        <table>
+          <thead>
+            <tr>
+              <th>Item</th>
+              <th>Basis</th>
+              <th class="num">Indicative annual (excl. GST)</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><strong>AMC / Annual Maintenance (from Year 2)</strong></td>
+              <td>18% of Year-1 license value (₹42,00,000)</td>
+              <td class="num">₹7,56,000 / year</td>
+            </tr>
+            <tr>
+              <td><strong>Managed Services (optional)</strong></td>
+              <td>NeurQ-operated monitoring, patch ops, desk assist — if required by Bank</td>
+              <td class="num">Quoted separately on SOW</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="letter-close">
+      <div class="terms-block">
+        <h3>Terms and Conditions</h3>
+        <ul>
+          <li><strong>Taxes:</strong> 18% GST extra on taxable items (included in Grand Total above).</li>
+          <li><strong>Payment Terms:</strong> 100% advance along with PO (or as per signed enterprise order form).</li>
+          <li><strong>Estimated Delivery:</strong> 2–3 weeks for environment readiness from order date; branch rollout per plan.</li>
+          <li><strong>Validity:</strong> Prices valid for 7 working days from the date of this Proposal.</li>
+          <li><strong>Price:</strong> Unique to confirmed branch / asset counts; may change with scope.</li>
+          <li><strong>Cancellation:</strong> Once order is placed, it cannot be cancelled.</li>
+          <li><strong>Freight / travel:</strong> Extra as per actual (if any) for on-site activities.</li>
+          <li><strong>PO &amp; Payment:</strong> In the name of “NeurQ AI Labs Private Limited”.</li>
+          <li><strong>AMC:</strong> Starts after Year-1 annually. Managed services optional &amp; billed separately.</li>
+        </ul>
+      </div>
+
+      <div class="sign-row">
+        <div class="sign-box">
+          <strong>For NeurQ AI Labs Private Limited</strong>
+          <div class="space"></div>
+          Smrita Pandey<br />
+          Authorized Signatory · Account Manager
+        </div>
+        <div class="sign-box">
+          <strong>For Bank A (Accepted)</strong>
+          <div class="space"></div>
+          Authorized Signatory<br />
+          Name / Designation
+        </div>
+      </div>
+      </div>
+    </section>
+
+    <div class="body">
+
+      <nav class="toc" aria-label="Contents">
+        <a href="#covering-letter"><span>00</span> Covering letter &amp; quote</a>
+        <a href="#s1"><span>01</span> Executive summary</a>
+        <a href="#s2"><span>02</span> Platform capabilities</a>
+        <a href="#s3"><span>03</span> Module catalogue</a>
+        <a href="#s4"><span>04</span> Architecture &amp; security</a>
+        <a href="#s5"><span>05</span> Competitive landscape</a>
+        <a href="#s6"><span>06</span> Commercial offer</a>
+        <a href="#s7"><span>07</span> Implementation roadmap</a>
+        <a href="#s8"><span>08</span> Next steps</a>
+      </nav>
+
+      <!-- 1 -->
+      <h2 id="s1"><span class="num">01</span>Executive summary</h2>
+      <p>
+        Distributed estates — endpoints, network gear, facilities equipment, cameras, fleet, and cloud resources —
+        still live in spreadsheets and siloed tools. That creates blind inventory, slow incident triage, software audit risk,
+        and expired contracts that become emergency spend.
+      </p>
+      <p>
+        <strong>QS Assets</strong> (product of <strong>NeurQ AI Labs Private Limited</strong>) is a production platform that unifies
+        agent + agentless discovery, a living asset / CMDB record, ITIL-style service desk, monitoring, vulnerability &amp; patch workflows,
+        and non-IT modules (CCTV, fleet, facility) in one control plane. Customers can run <strong>managed SaaS</strong> at
+        <a href="https://www.qsasset.com" style="color:#0e7490;font-weight:600;text-decoration:none">www.qsasset.com</a>
+        or <strong>self-host</strong> with Docker and PostgreSQL when residency requires it.
+      </p>
+
+      <div class="kpis">
+        <div class="kpi">
+          <div class="v">200+</div>
+          <div class="t">Teams</div>
+          <div class="d">Active customer teams on the platform</div>
+        </div>
+        <div class="kpi">
+          <div class="v">50K+</div>
+          <div class="t">Assets</div>
+          <div class="d">Assets under management worldwide</div>
+        </div>
+        <div class="kpi">
+          <div class="v">99.9%</div>
+          <div class="t">SLA target</div>
+          <div class="d">Pro &amp; Enterprise managed SaaS uptime</div>
+        </div>
+        <div class="kpi">
+          <div class="v">SOC 2</div>
+          <div class="t">Controls</div>
+          <div class="d">DPDP Act 2023–oriented practices</div>
+        </div>
+      </div>
+
+      <div class="split">
+        <div class="card pain">
+          <h4>Typical enterprise pains</h4>
+          <ul>
+            <li><strong>Blind spots:</strong> Manual tracking leaves large shares of network assets unmonitored.</li>
+            <li><strong>Technician friction:</strong> Tickets lack hardware / patch context, extending MTTR.</li>
+            <li><strong>License liability:</strong> Weak SAM invites audit exposure and shelfware spend.</li>
+            <li><strong>Contract oversights:</strong> Expired AMC / warranty triggers emergency repair cost.</li>
+          </ul>
+        </div>
+        <div class="card win">
+          <h4>QS Assets outcomes</h4>
+          <ul>
+            <li><strong>Auto discovery:</strong> Agent + SNMP / SSH / WMI / nmap sweeps keep inventory alive.</li>
+            <li><strong>ITSM + CMDB:</strong> Incidents open against the same asset record technicians need.</li>
+            <li><strong>SAM &amp; renewals:</strong> Installation counts and contract alarms before expiry.</li>
+            <li><strong>Deploy your way:</strong> SaaS today, on-prem / private VPC when policy demands.</li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="page-break"></div>
+
+      <!-- 2 -->
+      <h2 id="s2"><span class="num">02</span>Platform capabilities</h2>
+      <p class="mono" style="margin-bottom:8px">From discovery to action</p>
+      <div class="tiles">
+        <div class="tile" style="background:#06b6d4">
+          <div class="label">01 · Discover</div>
+          <h4>Auto-discovery</h4>
+          <p>Find devices with agents or agentless SNMP, SSH, WMI, and nmap sweeps.</p>
+        </div>
+        <div class="tile" style="background:#14b8a6">
+          <div class="label">02 · Observe</div>
+          <h4>Live monitoring</h4>
+          <p>CPU, RAM, disk, and network telemetry from agents on a steady cadence.</p>
+        </div>
+        <div class="tile" style="background:#f59e0b">
+          <div class="label">03 · Alert</div>
+          <h4>Alert engine</h4>
+          <p>Threshold alerts via email, Slack, webhooks, and in-app notifications.</p>
+        </div>
+        <div class="tile" style="background:#0e7490">
+          <div class="label">04 · Secure</div>
+          <h4>Threat signals</h4>
+          <p>USB monitoring, unexpected port changes, and file integrity detection.</p>
+        </div>
+        <div class="tile" style="background:#10b981">
+          <div class="label">05 · Automate</div>
+          <h4>Automation rules</h4>
+          <p>Event-driven rules to notify teams, open tickets, or run approved scripts.</p>
+        </div>
+        <div class="tile" style="background:#475569">
+          <div class="label">06 · Deploy</div>
+          <h4>Flexible hosting</h4>
+          <p>Run as SaaS or self-host with Docker and PostgreSQL on your infrastructure.</p>
+        </div>
+      </div>
+
+      <h3>Reference architecture</h3>
+      <div class="arch">
+        <svg viewBox="0 0 900 320" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="QS Assets architecture diagram">
+          <rect width="900" height="320" fill="#f8fcfd"/>
+          <!-- Agents -->
+          <rect x="24" y="40" width="180" height="100" rx="14" fill="#fff" stroke="#06b6d4" stroke-width="2"/>
+          <text x="114" y="78" text-anchor="middle" font-family="Outfit,sans-serif" font-size="14" font-weight="700" fill="#0f172a">Discovery Agents</text>
+          <text x="114" y="100" text-anchor="middle" font-family="DM Sans,sans-serif" font-size="11" fill="#6b7280">Windows · macOS · Linux</text>
+          <text x="114" y="118" text-anchor="middle" font-family="DM Sans,sans-serif" font-size="11" fill="#6b7280">Heartbeat · inventory</text>
+
+          <rect x="24" y="180" width="180" height="100" rx="14" fill="#fff" stroke="#0d9488" stroke-width="2"/>
+          <text x="114" y="218" text-anchor="middle" font-family="Outfit,sans-serif" font-size="14" font-weight="700" fill="#0f172a">Agentless sweeps</text>
+          <text x="114" y="240" text-anchor="middle" font-family="DM Sans,sans-serif" font-size="11" fill="#6b7280">SNMP · SSH · WMI · nmap</text>
+          <text x="114" y="258" text-anchor="middle" font-family="DM Sans,sans-serif" font-size="11" fill="#6b7280">Network &amp; OT-adjacent</text>
+
+          <!-- Platform -->
+          <rect x="280" y="70" width="340" height="180" rx="18" fill="#0f172a"/>
+          <text x="450" y="110" text-anchor="middle" font-family="DM Serif Display,serif" font-size="22" fill="#fff">QS Assets Platform</text>
+          <text x="450" y="136" text-anchor="middle" font-family="DM Sans,sans-serif" font-size="12" fill="#9f9fa0">NestJS API · Next.js web · Prisma · Redis queues</text>
+          <rect x="310" y="156" width="90" height="56" rx="10" fill="rgba(6,182,212,0.2)" stroke="#06b6d4"/>
+          <text x="355" y="180" text-anchor="middle" font-family="DM Sans,sans-serif" font-size="11" fill="#a5f3fc">CMDB</text>
+          <text x="355" y="196" text-anchor="middle" font-family="DM Sans,sans-serif" font-size="10" fill="#94a3b8">Assets</text>
+          <rect x="415" y="156" width="90" height="56" rx="10" fill="rgba(20,184,166,0.2)" stroke="#14b8a6"/>
+          <text x="460" y="180" text-anchor="middle" font-family="DM Sans,sans-serif" font-size="11" fill="#99f6e4">ITSM</text>
+          <text x="460" y="196" text-anchor="middle" font-family="DM Sans,sans-serif" font-size="10" fill="#94a3b8">Tickets</text>
+          <rect x="520" y="156" width="70" height="56" rx="10" fill="rgba(245,158,11,0.2)" stroke="#f59e0b"/>
+          <text x="555" y="180" text-anchor="middle" font-family="DM Sans,sans-serif" font-size="11" fill="#fde68a">Sec</text>
+          <text x="555" y="196" text-anchor="middle" font-family="DM Sans,sans-serif" font-size="10" fill="#94a3b8">Vuln</text>
+
+          <!-- Data -->
+          <rect x="700" y="40" width="176" height="100" rx="14" fill="#fff" stroke="#0891b2" stroke-width="2"/>
+          <text x="788" y="78" text-anchor="middle" font-family="Outfit,sans-serif" font-size="14" font-weight="700" fill="#0f172a">PostgreSQL</text>
+          <text x="788" y="100" text-anchor="middle" font-family="DM Sans,sans-serif" font-size="11" fill="#6b7280">RLS · audit trails</text>
+          <text x="788" y="118" text-anchor="middle" font-family="DM Sans,sans-serif" font-size="11" fill="#6b7280">PostGIS ready</text>
+
+          <rect x="700" y="180" width="176" height="100" rx="14" fill="#fff" stroke="#14b8a6" stroke-width="2"/>
+          <text x="788" y="218" text-anchor="middle" font-family="Outfit,sans-serif" font-size="14" font-weight="700" fill="#0f172a">Identity</text>
+          <text x="788" y="240" text-anchor="middle" font-family="DM Sans,sans-serif" font-size="11" fill="#6b7280">MFA · SAML / OIDC</text>
+          <text x="788" y="258" text-anchor="middle" font-family="DM Sans,sans-serif" font-size="11" fill="#6b7280">RBAC · SSO</text>
+
+          <path d="M204 90 H280" stroke="#06b6d4" stroke-width="2"/>
+          <path d="M204 230 H280" stroke="#0d9488" stroke-width="2"/>
+          <path d="M620 110 H700" stroke="#0891b2" stroke-width="2"/>
+          <path d="M620 210 H700" stroke="#14b8a6" stroke-width="2"/>
+        </svg>
+      </div>
+
+      <div class="page-break"></div>
+
+      <!-- 3 -->
+      <h2 id="s3"><span class="num">03</span>Module catalogue</h2>
+      <p>Twelve production modules shipped in the live product — same catalogue as the QS Assets marketing platform.</p>
+
+      <div class="modules">
+        <div class="mod"><div class="mod-top"><span class="mod-dot" style="background:#06b6d4"></span><h4>IT Asset Management</h4></div><p>Lifecycle from procurement to retirement — discovery, depreciation, checkout / attestation.</p></div>
+        <div class="mod"><div class="mod-top"><span class="mod-dot" style="background:#0d9488"></span><h4>Non-IT Asset Management</h4></div><p>Facilities, furniture, equipment with QR / barcode tagging and maintenance schedules.</p></div>
+        <div class="mod"><div class="mod-top"><span class="mod-dot" style="background:#10b981"></span><h4>ITSM Service Desk</h4></div><p>Incident, problem, and change with SLA timers, escalation, and end-user portal.</p></div>
+        <div class="mod"><div class="mod-top"><span class="mod-dot" style="background:#ef4444"></span><h4>Vulnerability Scanning</h4></div><p>Agent-based and agentless CVE detection, CVSS scoring, remediation tracking.</p></div>
+        <div class="mod"><div class="mod-top"><span class="mod-dot" style="background:#f59e0b"></span><h4>Network Monitoring</h4></div><p>SNMP polling, bandwidth, topology views, syslog / traps, NetFlow top talkers.</p></div>
+        <div class="mod"><div class="mod-top"><span class="mod-dot" style="background:#0891b2"></span><h4>Patch Management</h4></div><p>OS / third-party visibility, compliance scoring, pilot rings and rollback paths.</p></div>
+        <div class="mod"><div class="mod-top"><span class="mod-dot" style="background:#14b8a6"></span><h4>CCTV Surveillance</h4></div><p>Camera fleet inventory, health monitoring, stream status, zone maintenance.</p></div>
+        <div class="mod"><div class="mod-top"><span class="mod-dot" style="background:#0e7490"></span><h4>Fleet &amp; GPS</h4></div><p>Vehicle tracking, trip history, driver assignment where GPS feeds are available.</p></div>
+        <div class="mod"><div class="mod-top"><span class="mod-dot" style="background:#155e75"></span><h4>VDI Management</h4></div><p>Virtual desktop sessions, pool visibility, and resource utilization.</p></div>
+        <div class="mod"><div class="mod-top"><span class="mod-dot" style="background:#f97316"></span><h4>CMDB &amp; Dependencies</h4></div><p>Configuration items, relationship mapping, change impact context.</p></div>
+        <div class="mod"><div class="mod-top"><span class="mod-dot" style="background:#06b6d4"></span><h4>Procurement &amp; Contracts</h4></div><p>Vendors, POs, renewals, budget tracking, warranty / AMC alerts.</p></div>
+        <div class="mod"><div class="mod-top"><span class="mod-dot" style="background:#10b981"></span><h4>Reports &amp; Compliance</h4></div><p>Dashboards, scheduled reports, audit-friendly activity trails, DPDP alignment.</p></div>
+      </div>
+
+      <!-- 4 -->
+      <h2 id="s4"><span class="num">04</span>Architecture &amp; security</h2>
+      <div class="split">
+        <div class="card">
+          <h4 style="color:var(--cyan-deep)">Stack (as-built)</h4>
+          <p style="margin:0;font-size:13.5px;line-height:1.7">
+            <strong>Web:</strong> Next.js (Vercel for SaaS)<br />
+            <strong>API:</strong> NestJS on Railway (or customer host)<br />
+            <strong>Data:</strong> PostgreSQL / PostGIS + Redis<br />
+            <strong>Agent:</strong> Node discovery agent (Win / macOS / Linux)<br />
+            <strong>Packaging:</strong> Docker Compose for on-prem
+          </p>
+        </div>
+        <div class="card">
+          <h4 style="color:var(--teal-deep)">Security posture</h4>
+          <p style="margin:0;font-size:13.5px;line-height:1.7">
+            TLS in transit · secrets encryption · tenant RBAC<br />
+            Postgres row-level security · MFA (TOTP) · SSO (SAML / OIDC)<br />
+            Activity trails · SOC 2 control program<br />
+            DPDP Act 2023–oriented practices · published DPA &amp; SLA
+          </p>
+        </div>
+      </div>
+
+      <div class="callout">
+        <div class="mono">Trust center</div>
+        <p style="margin:0">
+          Full security narrative, subprocessors, and disclosure contacts:
+          <a href="https://www.qsasset.com/security" style="color:#0e7490;font-weight:600">www.qsasset.com/security</a> ·
+          DPA <a href="https://www.qsasset.com/dpa" style="color:#0e7490;font-weight:600">/dpa</a> ·
+          SLA <a href="https://www.qsasset.com/sla" style="color:#0e7490;font-weight:600">/sla</a> ·
+          Status <a href="https://www.qsasset.com/status" style="color:#0e7490;font-weight:600">/status</a>
+        </p>
+      </div>
+
+      <h3>On-prem sizing (self-host)</h3>
+      <table>
+        <thead>
+          <tr>
+            <th>Profile</th>
+            <th>CPU</th>
+            <th>RAM</th>
+            <th>Storage</th>
+            <th>Runtime</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>Up to ~1,000 assets</strong></td>
+            <td>2 cores</td>
+            <td>4 GB</td>
+            <td>20 GB SSD</td>
+            <td>Docker Engine 24+ / Compose 2.20+</td>
+          </tr>
+          <tr>
+            <td><strong>10,000+ assets</strong></td>
+            <td>8 cores</td>
+            <td>16 GB</td>
+            <td>100 GB SSD</td>
+            <td>PostgreSQL 15+ · Redis 7+ · Node 20+</td>
+          </tr>
+          <tr>
+            <td><strong>Host OS</strong></td>
+            <td colspan="4">Ubuntu 22.04 LTS · Rocky Linux 9 · Windows Server 2022 (container host)</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <div class="page-break"></div>
+
+      <!-- 5 -->
+      <h2 id="s5"><span class="num">05</span>Competitive landscape</h2>
+      <p>Illustrative capability comparison — packaging varies by edition and region.</p>
+      <table>
+        <thead>
+          <tr>
+            <th>Capability</th>
+            <th>QS Assets</th>
+            <th>ManageEngine-class</th>
+            <th>ServiceNow-class</th>
+            <th>JSM-class</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>IT + Non-IT asset management</strong></td>
+            <td><span class="yes">✓</span></td>
+            <td><span class="yes">✓</span></td>
+            <td><span class="yes">✓</span></td>
+            <td><span class="no">—</span></td>
+          </tr>
+          <tr>
+            <td><strong>Agent + agentless discovery</strong></td>
+            <td><span class="yes">✓</span></td>
+            <td><span class="yes">✓</span></td>
+            <td><span class="pill pill-y">Addon / partner</span></td>
+            <td><span class="pill pill-y">Insight</span></td>
+          </tr>
+          <tr>
+            <td><strong>Built-in ITSM</strong></td>
+            <td><span class="yes">✓</span></td>
+            <td><span class="yes">✓</span></td>
+            <td><span class="yes">✓</span></td>
+            <td><span class="yes">✓</span></td>
+          </tr>
+          <tr>
+            <td><strong>CCTV / Fleet modules</strong></td>
+            <td><span class="yes">✓</span></td>
+            <td><span class="no">—</span></td>
+            <td><span class="pill pill-y">Custom</span></td>
+            <td><span class="no">—</span></td>
+          </tr>
+          <tr>
+            <td><strong>SaaS + true self-host</strong></td>
+            <td><span class="pill pill-g">Both</span></td>
+            <td><span class="pill pill-g">Both</span></td>
+            <td><span class="pill pill-y">Cloud-first</span></td>
+            <td><span class="pill pill-r">Cloud</span></td>
+          </tr>
+          <tr>
+            <td><strong>India DPDP-oriented controls</strong></td>
+            <td><span class="yes">✓</span></td>
+            <td><span class="pill pill-y">Varies</span></td>
+            <td><span class="pill pill-y">Varies</span></td>
+            <td><span class="pill pill-y">Varies</span></td>
+          </tr>
+          <tr>
+            <td><strong>Typical time-to-value</strong></td>
+            <td><span class="pill pill-g">2–8 weeks</span></td>
+            <td><span class="pill pill-y">3–6 months</span></td>
+            <td><span class="pill pill-r">6–12 months</span></td>
+            <td><span class="pill pill-y">3–5 months</span></td>
+          </tr>
+          <tr>
+            <td><strong>Licensing shape</strong></td>
+            <td><span class="pill pill-g">Plan + assets</span></td>
+            <td><span class="pill pill-y">Per tech + node</span></td>
+            <td><span class="pill pill-r">Enterprise FUL</span></td>
+            <td><span class="pill pill-y">Per agent</span></td>
+          </tr>
+        </tbody>
+      </table>
+
+      <!-- 6 -->
+      <h2 id="s6"><span class="num">06</span>Commercial offer</h2>
+      <p>
+        <strong>Enterprise / bank deployments use unique requirement-based pricing</strong> —
+        branches, IT &amp; non-IT assets per site, on-premise vs SaaS, customization, training,
+        Year-2+ AMC, and optional managed services. See the
+        <a href="#covering-letter" style="color:#0e7490;font-weight:600;text-decoration:none">covering letter quotation</a>
+        (Bank A sample). Public SaaS catalogue below is indicative for self-serve plans only.
+      </p>
+      <div class="callout">
+        <div class="mono">Pricing model (enterprise)</div>
+        <p style="margin:0;font-size:14px;color:var(--p)">
+          <strong>License</strong> = ∑ (assets × unit rate) by IT / non-IT ·
+          <strong>One-time</strong> = implementation + customization + training ·
+          <strong>GST 18%</strong> on taxable totals ·
+          <strong>AMC from Year 2</strong> (typically ~18% of Year-1 license) ·
+          <strong>Managed services</strong> quoted separately if required.
+        </p>
+      </div>
+
+      <p>
+        Indicative public list pricing on
+        <a href="https://www.qsasset.com/pricing" style="color:#0e7490;font-weight:600;text-decoration:none">www.qsasset.com/pricing</a>
+        (INR, monthly). Promotional rates shown where currently active.
+      </p>
+
+      <div class="pricing">
+        <div class="plan">
+          <div class="name">Starter</div>
+          <div class="price">Free</div>
+          <div class="desc">Up to 5 assets · 4 users</div>
+          <ul>
+            <li>IT asset tracking</li>
+            <li>Basic reports</li>
+            <li>Email support</li>
+            <li>Community access</li>
+          </ul>
+        </div>
+        <div class="plan hot">
+          <div class="name">Professional</div>
+          <div class="price">₹8,500 <small>/mo</small></div>
+          <div class="strike"><s>₹16,999</s> <span class="save">Save 50%</span></div>
+          <div class="desc">Unlimited assets</div>
+          <ul>
+            <li>Core platform modules</li>
+            <li>Unlimited users</li>
+            <li>Vulnerability scanning</li>
+            <li>ITSM + SLA engine</li>
+            <li>API access · Priority support</li>
+          </ul>
+        </div>
+        <div class="plan">
+          <div class="name">Enterprise</div>
+          <div class="price">₹20,000 <small>/mo</small></div>
+          <div class="strike"><s>₹39,999</s> <span class="save">Save 50%</span></div>
+          <div class="desc">On-prem + SaaS</div>
+          <ul>
+            <li>Everything in Professional</li>
+            <li>On-premise deploy</li>
+            <li>SSO / SAML / LDAP</li>
+            <li>Dedicated support</li>
+            <li>Custom SLA options</li>
+          </ul>
+        </div>
+        <div class="plan">
+          <div class="name">Custom</div>
+          <div class="price">Quote</div>
+          <div class="desc">Tailored SLA models</div>
+          <ul>
+            <li>Everything in Enterprise</li>
+            <li>Custom asset limits</li>
+            <li>Negotiated pricing</li>
+            <li>Dedicated account manager</li>
+            <li>Priority onboarding</li>
+          </ul>
+        </div>
+      </div>
+
+      <p style="font-size:13px;color:var(--muted)">
+        USD list for reference: Professional $199/mo (promo $99.50) · Enterprise $499/mo (promo $249.50).
+        Starter asset ceiling is enforced at <strong>5 assets / 4 users</strong> in product metering.
+        Professional &amp; Enterprise managed SaaS include a <strong>99.9% monthly uptime</strong> commitment with published service credits —
+        see <a href="https://www.qsasset.com/sla" style="color:#0e7490">SLA</a>.
+      </p>
+
+      <div class="page-break"></div>
+
+      <!-- 7 -->
+      <h2 id="s7"><span class="num">07</span>Implementation roadmap</h2>
+      <p>Phased rollout designed for controlled cutover. SaaS customers typically compress Phase 1 significantly.</p>
+
+      <div class="roadmap">
+        <div class="road-item">
+          <h4>Weeks 1–2 · Foundation</h4>
+          <p>Tenant / environment stand-up (SaaS or Docker). SSO or directory hooks. Role model. Sites &amp; departments. Branding and alert channels.</p>
+        </div>
+        <div class="road-item">
+          <h4>Weeks 3–5 · Discovery pilot</h4>
+          <p>Credential vault for SNMP / SSH / WMI. Agentless sweep of approved CIDRs. Pilot agent rollout (~50–100 endpoints). Discovery → managed asset approvals.</p>
+        </div>
+        <div class="road-item">
+          <h4>Weeks 6–8 · Service desk &amp; scale-out</h4>
+          <p>ITSM queues, SLA policies, portal users. Broader agent deployment via GPO / MDM / packaging. Patch &amp; vulnerability workflows enabled.</p>
+        </div>
+        <div class="road-item">
+          <h4>Weeks 9–12 · Harden &amp; handover</h4>
+          <p>Automation rules, contract / AMC alarms, attestation cycles, report schedules. Admin training, runbooks, go-live checklist, hypercare.</p>
+        </div>
+      </div>
+
+      <h3>Illustrative ROI (2,500 assets · 20 agent seats)</h3>
+      <table>
+        <thead>
+          <tr>
+            <th>Annualized model</th>
+            <th>Traditional tools stack</th>
+            <th>QS Assets</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>Estimated annual spend</strong></td>
+            <td>₹76,08,000</td>
+            <td>₹20,40,000</td>
+          </tr>
+          <tr>
+            <td><strong>Implied savings</strong></td>
+            <td colspan="2"><strong style="color:#047857">≈ ₹55.7L / year</strong> at this scale (illustrative; actual TCO depends on edition &amp; scope)</td>
+          </tr>
+        </tbody>
+      </table>
+      <p style="font-size:12.5px;color:var(--muted)">Model mirrors the public calculator on the QS Assets homepage (asset unit cost + agent overhead). For a customer-specific ROI sheet, contact sales.</p>
+
+      <!-- 8 -->
+      <h2 id="s8"><span class="num">08</span>Next steps</h2>
+      <ol style="margin:0 0 20px 18px;color:var(--p);font-size:15px;line-height:1.8">
+        <li>Confirm estate size (IT + non-IT assets), hosting preference (SaaS / on-prem), and must-have modules.</li>
+        <li>Book a live demo — discovery sweep + ticket↔asset walkthrough on a sandboxed estate.</li>
+        <li>Start a Starter workspace free at <a href="https://www.qsasset.com/register" style="color:#0e7490;font-weight:600">www.qsasset.com/register</a>, or request an Enterprise order form.</li>
+        <li>Security questionnaire pack: Trust Center, DPA, SLA, and subprocessors list.</li>
+      </ol>
+
+      <div class="cta">
+        <h2>Ready to inventory your <em style="font-style:italic;color:#67e8f9">estate</em>?</h2>
+        <p>Talk to NeurQ AI Labs — Hazratganj, Lucknow · Mon–Fri 10:00–18:00 IST</p>
+        <div class="cta-row">
+          <a class="btn btn-primary" href="https://www.qsasset.com/contact">Contact sales</a>
+          <a class="btn btn-ghost" href="https://www.qsasset.com/register">Start free trial</a>
+          <a class="btn btn-ghost" href="mailto:contact@qsasset.com">contact@qsasset.com</a>
+        </div>
+        <p style="margin-top:18px;font-size:13px;color:#64748b">
+          +91 7752981110 · smrita@neurqai.com ·
+          <a href="https://www.qsasset.com" style="color:#67e8f9">www.qsasset.com</a>
+        </p>
+      </div>
+
+      <div class="footer-bar">
+        <div>© 2026 NeurQ AI Labs Private Limited · Confidential for intended recipient</div>
+        <div>
+          <a href="https://www.qsasset.com/privacy">Privacy</a> ·
+          <a href="https://www.qsasset.com/terms">Terms</a> ·
+          <a href="https://www.qsasset.com/security">Security</a> ·
+          Ref QS-ENT-PROPOSAL-2026-07
+        </div>
+      </div>
+    </div>
+  </article>
+</body>
+</html>

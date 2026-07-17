@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Outfit, DM_Sans, DM_Serif_Display, Roboto_Mono } from "next/font/google";
 import "./globals.css";
 import { ClientProviders } from "@/components/ClientProviders";
+import { LANDING_FAQS, offerPriceINR } from "@/lib/pricing";
 
 const outfit = Outfit({
   subsets: ["latin"],
@@ -32,6 +33,8 @@ const robotoMono = Roboto_Mono({
   weight: ["400", "500"],
 });
 
+const googleVerification = process.env.NEXT_PUBLIC_GOOGLE_SITE_VERIFICATION;
+
 export const metadata: Metadata = {
   title: {
     default: "QS Assets | IT Asset Discovery & Management",
@@ -53,7 +56,7 @@ export const metadata: Metadata = {
     "QS Assets",
     "qsasset",
   ],
-  authors: [{ name: "NeurQ AI Labs", url: "https://qsasset.com" }],
+  authors: [{ name: "NeurQ AI Labs", url: "https://www.qsasset.com" }],
   creator: "NeurQ AI Labs Private Limited",
   publisher: "NeurQ AI Labs",
   icons: {
@@ -70,16 +73,16 @@ export const metadata: Metadata = {
     shortcut: "/favicon.ico",
   },
   manifest: "/site.webmanifest",
-  metadataBase: new URL("https://qsasset.com"),
+  metadataBase: new URL("https://www.qsasset.com"),
   alternates: {
-    canonical: "https://qsasset.com",
+    canonical: "https://www.qsasset.com",
   },
   openGraph: {
     title: "QS Assets — IT Asset Discovery & Management",
     description:
       "Unified asset discovery and operations: inventory, monitoring, tickets, and security workflows in one platform.",
     siteName: "QS Assets",
-    url: "https://qsasset.com",
+    url: "https://www.qsasset.com",
     type: "website",
     locale: "en_IN",
     images: [
@@ -108,13 +111,48 @@ export const metadata: Metadata = {
       "max-snippet": -1,
     },
   },
-  verification: {
-    google: process.env.NEXT_PUBLIC_GOOGLE_SITE_VERIFICATION || "google-site-verification-id-placeholder",
-  },
+  ...(googleVerification
+    ? { verification: { google: googleVerification } }
+    : {}),
   category: "technology",
 };
 
-const jsonLd = {
+const organizationLd = {
+  "@context": "https://schema.org",
+  "@type": "Organization",
+  name: "NeurQ AI Labs Private Limited",
+  url: "https://www.qsasset.com",
+  logo: "https://www.qsasset.com/logo.svg",
+  email: "contact@qsasset.com",
+  sameAs: [
+    "https://www.linkedin.com/company/neurq-ai-labs",
+    "https://x.com/neurqailabs",
+    "https://github.com/neurq-ai-labs",
+  ],
+  address: {
+    "@type": "PostalAddress",
+    streetAddress: "C-403 Royal Estate Apartment, 7 Laplace Hazratganj",
+    addressLocality: "Lucknow",
+    postalCode: "226001",
+    addressRegion: "UP",
+    addressCountry: "IN",
+  },
+};
+
+const websiteLd = {
+  "@context": "https://schema.org",
+  "@type": "WebSite",
+  name: "QS Assets",
+  url: "https://www.qsasset.com",
+  publisher: { "@type": "Organization", name: "NeurQ AI Labs Private Limited" },
+  potentialAction: {
+    "@type": "SearchAction",
+    target: "https://www.qsasset.com/docs?q={search_term_string}",
+    "query-input": "required name=search_term_string",
+  },
+};
+
+const softwareLd = {
   "@context": "https://schema.org",
   "@type": "SoftwareApplication",
   name: "QS Assets",
@@ -122,11 +160,11 @@ const jsonLd = {
   operatingSystem: "Web",
   description:
     "IT asset discovery and management platform with monitoring, ITSM, and security workflows.",
-  url: "https://qsasset.com",
+  url: "https://www.qsasset.com",
   author: {
     "@type": "Organization",
     name: "NeurQ AI Labs Private Limited",
-    url: "https://qsasset.com",
+    url: "https://www.qsasset.com",
   },
   offers: [
     {
@@ -134,33 +172,43 @@ const jsonLd = {
       name: "Starter",
       price: "0",
       priceCurrency: "INR",
-      description: "Free plan — IT asset tracking, 4 users, basic reports",
+      description: "Free plan — up to 5 assets, 4 users, basic reports",
     },
     {
       "@type": "Offer",
       name: "Professional",
-      price: "16999",
+      price: offerPriceINR("professional"),
       priceCurrency: "INR",
-      description: "Core modules, unlimited users, vulnerability scanning, ITSM",
+      description: "Core modules, unlimited assets, vulnerability scanning, ITSM",
     },
     {
       "@type": "Offer",
       name: "Enterprise",
-      price: "39999",
+      price: offerPriceINR("enterprise"),
       priceCurrency: "INR",
       description: "On-premise deploy, SSO options, dedicated support",
     },
   ],
 };
 
+const faqLd = {
+  "@context": "https://schema.org",
+  "@type": "FAQPage",
+  mainEntity: LANDING_FAQS.map((f) => ({
+    "@type": "Question",
+    name: f.q,
+    acceptedAnswer: { "@type": "Answer", text: f.a },
+  })),
+};
+
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en" className={`${outfit.variable} ${dmSans.variable} ${dmSerif.variable} ${robotoMono.variable}`} suppressHydrationWarning>
       <head>
-        <script
-          type="application/ld+json"
-          dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
-        />
+        <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(organizationLd) }} />
+        <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(websiteLd) }} />
+        <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(softwareLd) }} />
+        <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(faqLd) }} />
         <script
           dangerouslySetInnerHTML={{
             __html: `

@@ -109,6 +109,12 @@ vercel --prod
 
 Also set any server-only web env from [`apps/web/.env.example`](apps/web/.env.example) as needed.
 
+### Canonical host & Search Console
+
+1. **Canonical domain** is `https://www.qsasset.com` (Vercel production alias). Point apex `qsasset.com` → `www.qsasset.com` in the Vercel Domains UI (do **not** add a conflicting www→apex redirect in `vercel.json` — that creates a loop).
+2. Set `NEXT_PUBLIC_GOOGLE_SITE_VERIFICATION` in Vercel to your Google Search Console meta token (omit the env var until you have a real token — the app will not emit a placeholder).
+3. After deploy, confirm `https://www.qsasset.com/sitemap.xml` and `https://www.qsasset.com/robots.txt` return 200, then submit the sitemap in Search Console.
+
 ### CORS / OAuth alignment
 
 1. **CORS**: On Railway API, `CORS_ORIGIN` must include the exact Vercel production URL (and `www` / preview domains you use), e.g. `https://your-app.vercel.app`.
@@ -122,6 +128,8 @@ Also set any server-only web env from [`apps/web/.env.example`](apps/web/.env.ex
 - [ ] Web loads against `NEXT_PUBLIC_API_URL`
 - [ ] Browser login works (password; MFA if enforced)
 - [ ] CORS: browser network tab shows no blocked origin on API calls
+- [ ] `https://qsasset.com/sitemap.xml` returns 200
+- [ ] `https://qsasset.com/pricing`, `/security`, `/dpa`, `/sla`, `/status` return 200
 - [ ] Agent download endpoints reachable
 - [ ] One agentless scan against an **allowed** lab range only
 - [ ] Discovery → cloud connectors list

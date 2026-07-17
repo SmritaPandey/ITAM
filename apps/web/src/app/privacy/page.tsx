@@ -171,7 +171,11 @@ export default function PrivacyPage() {
                   4. Data Storage & SOC 2 Security Protocols
                 </h2>
                 <p style={{ margin: 0, color: pTxt, fontSize: 14, lineHeight: 1.8 }}>
-                  We mandate state-of-the-art technical protections across our infrastructure to preserve the integrity of your telemetry data:
+                  We mandate state-of-the-art technical protections across our infrastructure to preserve the integrity of your telemetry data. QS Assets operates under SOC 2 security controls — see the{" "}
+                  <a href="/security" style={{ color: "#06b6d4", fontWeight: 600 }}>Security Trust Center</a>
+                  {" "}and{" "}
+                  <a href="/dpa" style={{ color: "#06b6d4", fontWeight: 600 }}>Data Processing Addendum</a>
+                  {" "}for processing and subprocessor details:
                 </p>
                 <ul style={{ margin: "14px 0 0", paddingLeft: 20, color: pTxt, fontSize: 14, lineHeight: 1.8, display: "flex", flexDirection: "column", gap: 10 }}>
                   <li>
@@ -262,9 +266,9 @@ export default function PrivacyPage() {
                   <div style={{ color: muted, fontSize: 13, marginBottom: 10 }}>NeurQ AI Labs Private Limited</div>
                   
                   <div style={{ display: "flex", flexDirection: "column", gap: 8, fontSize: 13, color: pTxt }}>
-                    <div>📍 <span style={{ color: muted }}>Address:</span> Incubation Cell, IIIT Lucknow, Chak Ganjaria, Lucknow - 226002, India</div>
+                    <div>📍 <span style={{ color: muted }}>Address:</span> C-403 Royal Estate Apartment, 7 Laplace Hazratganj, Lucknow - 226001, India</div>
                     <div>✉️ <span style={{ color: muted }}>Direct Desk:</span> privacy@neurqai.com</div>
-                    <div>📞 <span style={{ color: muted }}>Emergency Line:</span> +91 (522) 430-1020</div>
+                    <div>📞 <span style={{ color: muted }}>Emergency Line:</span> +91 7752981110</div>
                   </div>
                 </div>
               </section>

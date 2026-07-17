@@ -1,0 +1,35 @@
+# QS Assets
+
+> IT asset discovery and management platform with monitoring, ITSM, vulnerability, and patch workflows — SaaS or self-host. Built by NeurQ AI Labs (India).
+
+## Product
+- Website: https://www.qsasset.com
+- Docs: https://www.qsasset.com/docs
+- Pricing: https://www.qsasset.com/pricing
+- Security / Trust: https://www.qsasset.com/security
+- Status: https://www.qsasset.com/status
+- Blog: https://www.qsasset.com/blog
+- Changelog: https://www.qsasset.com/changelog
+- Customers: https://www.qsasset.com/customers
+- Contact: https://www.qsasset.com/contact
+
+## Legal
+- Privacy: https://www.qsasset.com/privacy
+- Terms: https://www.qsasset.com/terms
+- Cookies: https://www.qsasset.com/cookies
+- DPA: https://www.qsasset.com/dpa
+- SLA: https://www.qsasset.com/sla
+- security.txt: https://www.qsasset.com/.well-known/security.txt
+
+## Docs topics
+- Quick start: https://www.qsasset.com/docs/quickstart
+- Agent install: https://www.qsasset.com/docs/agent-install
+- Agentless discovery: https://www.qsasset.com/docs/agentless
+- API: https://www.qsasset.com/docs/api
+- On-prem: https://www.qsasset.com/docs/onprem
+- SSO/MFA: https://www.qsasset.com/docs/saas-sso
+
+## Company
+- Legal name: NeurQ AI Labs Private Limited
+- Email: contact@qsasset.com
+- HQ: C-403 Royal Estate Apartment, 7 Laplace Hazratganj, Lucknow – 226001, India

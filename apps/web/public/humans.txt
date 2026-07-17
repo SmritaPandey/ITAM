@@ -1,0 +1,9 @@
+/* TEAM */
+NeurQ AI Labs Private Limited
+Contact: contact@qsasset.com
+From: Lucknow, India
+
+/* SITE */
+Canonical: https://www.qsasset.com
+Standards: HTML, CSS, Next.js
+Software: QS Assets

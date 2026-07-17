@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { Mail, MessageSquare, MapPin, Phone, Send, CheckCircle2, Loader2, Clock } from "lucide-react";
 import { PublicShell, MonoEyebrow, usePublicTheme } from "@/components/landing/PublicShell";
+import { trackEvent } from "@/components/Analytics";
 
 export default function ContactPage() {
   const t = usePublicTheme();
@@ -45,6 +46,7 @@ export default function ContactPage() {
         const data = await res.json().catch(() => ({}));
         throw new Error(data.message || "Failed to send message");
       }
+      trackEvent("contact_submit_success", { subject: form.subject || "general" });
       setSent(true);
     } catch (err: unknown) {
       alert(err instanceof Error ? err.message : "Failed to send. Please try again.");
@@ -56,8 +58,8 @@ export default function ContactPage() {
   const channels = [
     { icon: Mail, label: "General", value: "contact@qsasset.com", sub: "Partnerships and business discussions" },
     { icon: MessageSquare, label: "Support", value: "contact@qsasset.com", sub: "Technical help and product questions" },
-    { icon: Phone, label: "Phone", value: "+91 (522) 430-1020", sub: "Mon–Fri, 10 AM–6 PM IST" },
-    { icon: MapPin, label: "Headquarters", value: "Incubation Cell, IIIT Lucknow", sub: "Chak Ganjaria, Lucknow - 226002, UP, India" },
+    { icon: Phone, label: "Phone", value: "+91 7752981110", sub: "Mon–Fri, 10 AM–6 PM IST" },
+    { icon: MapPin, label: "Headquarters", value: "C-403 Royal Estate Aptt", sub: "7 Laplace Hazratganj, Lucknow - 226001, UP, India" },
   ];
 
   return (

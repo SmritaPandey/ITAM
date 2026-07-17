@@ -1,7 +1,7 @@
 "use client";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
 import { Logo } from "@/components/Logo";
+import { NewsletterForm } from "@/components/landing/NewsletterForm";
 
 interface FooterProps {
   theme: "dark" | "light";
@@ -20,35 +20,37 @@ const SOCIAL_LINKS = [
 ];
 
 const PRODUCT_LINKS = [
-  { label: "Platform", hash: "platform" },
-  { label: "Security", hash: "security" },
-  { label: "Modules", hash: "modules-grid" },
-  { label: "Pricing", hash: "pricing" },
+  { label: "Platform", href: "/#platform" },
+  { label: "Modules", href: "/#modules-grid" },
+  { label: "Pricing", href: "/pricing" },
+  { label: "Security", href: "/security" },
 ];
 
 const COMPANY_LINKS = [
+  { label: "About", href: "/about" },
+  { label: "Customers", href: "/customers" },
+  { label: "Blog", href: "/blog" },
+  { label: "Changelog", href: "/changelog" },
   { label: "Contact Sales", href: "/contact" },
   { label: "Documentation", href: "/docs" },
+  { label: "Security", href: "/security" },
+  { label: "Status", href: "/status" },
 ];
 
 const LEGAL_LINKS = [
   { label: "Privacy Policy", href: "/privacy" },
   { label: "Terms of Service", href: "/terms" },
   { label: "Cookie Policy", href: "/cookies" },
+  { label: "Data Processing Addendum", href: "/dpa" },
+  { label: "Service Level Agreement", href: "/sla" },
 ];
 
 export default function Footer({ theme }: FooterProps) {
-  const pathname = usePathname();
   const L = theme === "light";
-  const isHome = pathname === "/";
 
   const border = L ? "rgba(15, 23, 42, 0.08)" : "rgba(255, 255, 255, 0.06)";
   const muted = L ? "#475569" : "#8a8f98";
   const txt = L ? "#0f172a" : "#f3f4f6";
-
-  function sectionHref(hash: string) {
-    return isHome ? `#${hash}` : `/#${hash}`;
-  }
 
   return (
     <footer style={{
@@ -99,11 +101,11 @@ export default function Footer({ theme }: FooterProps) {
         <div>
           <h4 style={{ fontSize: 11, fontWeight: 800, textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 16, color: muted }}>Product</h4>
           {PRODUCT_LINKS.map(a => (
-            <a key={a.label} href={sectionHref(a.hash)}
+            <Link key={a.label} href={a.href}
               style={{ display: "block", fontSize: 13, color: txt, textDecoration: "none", marginBottom: 10, opacity: 0.7, fontWeight: 600, transition: "opacity 0.2s" }}
               onMouseEnter={e => (e.currentTarget.style.opacity = "1")}
               onMouseLeave={e => (e.currentTarget.style.opacity = "0.7")}
-            >{a.label}</a>
+            >{a.label}</Link>
           ))}
         </div>
 
@@ -130,6 +132,36 @@ export default function Footer({ theme }: FooterProps) {
             >{a.label}</Link>
           ))}
         </div>
+      </div>
+
+      <div
+        style={{
+          padding: "28px 0 8px",
+          marginBottom: 24,
+          borderTop: `1px solid ${border}`,
+          display: "flex",
+          flexWrap: "wrap",
+          gap: 24,
+          justifyContent: "space-between",
+          alignItems: "flex-start",
+        }}
+      >
+        <div style={{ maxWidth: 320 }}>
+          <h4 style={{ fontSize: 11, fontWeight: 800, textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 8, color: muted }}>
+            Product updates
+          </h4>
+          <p style={{ fontSize: 12.5, color: muted, lineHeight: 1.6, margin: "0 0 4px" }}>
+            Release notes and operational tips. No ad pixels.
+          </p>
+        </div>
+        <NewsletterForm
+          muted={muted}
+          txt={txt}
+          border={border}
+          L={L}
+          voidBtn={L ? "#0f172a" : "#ffffff"}
+          voidTxt={L ? "#ffffff" : "#0f172a"}
+        />
       </div>
 
       {/* Bottom Bar */}

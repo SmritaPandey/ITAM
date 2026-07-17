@@ -1,15 +1,19 @@
 "use client";
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Logo } from "@/components/Logo";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import AssetEstateVisual from "@/components/landing/AssetEstateVisual";
+import { PricingGrid } from "@/components/landing/PricingGrid";
+import { TrustStrip } from "@/components/landing/TrustStrip";
 import { useTheme } from "@/components/ThemeProvider";
+import { trackEvent } from "@/components/Analytics";
+import { LANDING_FAQS } from "@/lib/pricing";
+import { Logo } from "@/components/Logo";
 import {
   Shield, Monitor, Ticket, Package, BarChart3, ChevronRight,
   ArrowRight, CheckCircle2, Camera, Car, Laptop,
-  FileText, Check, Search, GitBranch, Cloud, Bell,
+  FileText, Search, GitBranch, Cloud, Bell,
   Router, Workflow, Bot, ScanLine, X,
 } from "lucide-react";
 
@@ -52,15 +56,6 @@ const COMPARE = [
   { feature: "Multi-Tenant RBAC", us: true, ivanti: true, manage: true },
 ];
 
-interface PlanConfig { priceUSD: number; priceINR: number; discountPercent: number; features: string[]; }
-
-const FALLBACK_PRICING: Record<string, PlanConfig> = {
-  starter: { priceUSD: 0, priceINR: 0, discountPercent: 0, features: ["IT Asset Tracking", "4 Users", "Basic Reports", "Email Support", "Community Access"] },
-  professional: { priceUSD: 199, priceINR: 16999, discountPercent: 50, features: ["Core Platform Modules", "Unlimited Users", "Vulnerability Scanning", "ITSM + SLA Engine", "Priority Support", "API Access"] },
-  enterprise: { priceUSD: 499, priceINR: 39999, discountPercent: 50, features: ["Everything in Pro", "On-Premise Deploy", "SSO / SAML / LDAP", "Dedicated Support", "Custom SLA"] },
-  custom: { priceUSD: -1, priceINR: -1, discountPercent: 0, features: ["Everything in Enterprise", "Custom asset limits", "Negotiated pricing", "Dedicated account manager", "Custom SLA", "Priority onboarding"] },
-};
-
 export default function LandingPage() {
   const router = useRouter();
   const { theme, toggleTheme } = useTheme();
@@ -73,9 +68,6 @@ export default function LandingPage() {
   const voidBtn = L ? "#0f172a" : "#ffffff";
   const voidTxt = L ? "#ffffff" : "#0f172a";
 
-  const [pricingData, setPricingData] = useState(FALLBACK_PRICING);
-  const [currency, setCurrency] = useState<"USD" | "INR">("INR");
-  const [applyPromo] = useState(true);
   const [activeFaq, setActiveFaq] = useState<number | null>(null);
   const [roiAssets, setRoiAssets] = useState(2500);
   const [roiAgents, setRoiAgents] = useState(20);
@@ -83,21 +75,6 @@ export default function LandingPage() {
   const tradCost = (roiAssets * 220 + roiAgents * 4200) * 12;
   const qsCost = (roiAssets * 60 + roiAgents * 1000) * 12;
   const netSavings = tradCost - qsCost;
-
-  useEffect(() => {
-    const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4100/api/v1";
-    fetch(`${API_BASE}/settings/pricing`)
-      .then(r => r.ok ? r.json() : null)
-      .then(d => { if (d?.starter) setPricingData(d); })
-      .catch(() => {});
-  }, []);
-
-  const plans = [
-    { id: "starter" as const, name: "Starter", desc: "Up to 5 assets", popular: false, cta: "Get Started Free" },
-    { id: "professional" as const, name: "Professional", desc: "Unlimited assets", popular: true, cta: "Start Free Trial" },
-    { id: "enterprise" as const, name: "Enterprise", desc: "On-premise + SaaS", popular: false, cta: "Start Scaling" },
-    { id: "custom" as const, name: "Custom", desc: "Tailored SLA models", popular: false, cta: "Talk to Sales" },
-  ];
 
   return (
     <div style={{ minHeight: "100vh", background: bg, color: txt, fontFamily: "var(--font-body), 'DM Sans', system-ui, sans-serif", transition: "background 0.4s, color 0.4s", overflowX: "hidden" }}>
@@ -198,7 +175,10 @@ export default function LandingPage() {
           >
             <button
               className="hero-cta-primary"
-              onClick={() => router.push("/register")}
+              onClick={() => {
+                trackEvent("cta_start_trial", { source: "hero" });
+                router.push("/register");
+              }}
             >
               <span className="hero-cta-glow" aria-hidden />
               <span className="hero-cta-label">Start trial</span>
@@ -212,6 +192,10 @@ export default function LandingPage() {
               <span className="hero-cta-label">Login</span>
               <ChevronRight size={16} className="hero-cta-arrow" />
             </button>
+          </div>
+
+          <div style={{ marginTop: 48, animation: "qsHeroIn 2.5s cubic-bezier(0.455, 0.03, 0.515, 0.955) 0.32s both" }}>
+            <TrustStrip muted={muted} txt={txt} border={border} L={L} />
           </div>
         </div>
       </section>
@@ -463,96 +447,9 @@ export default function LandingPage() {
 
       {/* ===== PRICING ===== */}
       <section id="pricing" style={{ padding: "0 6% 80px", maxWidth: 1200, margin: "0 auto", position: "relative", zIndex: 1 }}>
-        <div style={{ textAlign: "center", marginBottom: 40 }}>
-          <div className="font-mono-label" style={{ fontSize: 11, color: muted, marginBottom: 14 }}>Pricing</div>
-          <h2 className="font-serif" style={{ fontSize: "clamp(32px, 5vw, 48px)", lineHeight: 0.95, marginBottom: 12 }}>Simple, transparent pricing</h2>
-          <p style={{ fontSize: 15, fontWeight: 300, color: muted }}>Start free. Scale when you are ready.</p>
-          <div style={{ display: "inline-flex", background: L ? "rgba(15,23,42,0.05)" : "rgba(255,255,255,0.05)", borderRadius: 8, padding: 3, marginTop: 24, border: `1px solid ${border}` }}>
-            {(["USD", "INR"] as const).map((c) => (
-              <button key={c} onClick={() => setCurrency(c)} style={{ padding: "7px 18px", borderRadius: 6, border: "none", background: currency === c ? voidBtn : "transparent", color: currency === c ? voidTxt : muted, fontSize: 12, fontWeight: 500, cursor: "pointer", fontFamily: "var(--font-mono), monospace", letterSpacing: "0.06em", transition: "all 0.2s ease" }}>
-                {c}
-              </button>
-            ))}
-          </div>
-        </div>
-        <div id="pricing-grid" className="landing-pricing" style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 14, alignItems: "stretch" }}>
-          {plans.map((p) => {
-            const config = pricingData[p.id] || FALLBACK_PRICING[p.id];
-            const isFree = p.id === "starter" || config.priceUSD === 0;
-            const isCustom = p.id === "custom" || config.priceUSD < 0;
-            const basePrice = currency === "USD" ? config.priceUSD : config.priceINR;
-            const discount = applyPromo && config.discountPercent > 0 ? config.discountPercent : 0;
-            const finalPrice = basePrice * (1 - discount / 100);
-            const symbol = currency === "USD" ? "$" : "₹";
-            const locale = currency === "USD" ? "en-US" : "en-IN";
-
-            return (
-              <div
-                key={p.id}
-                style={{
-                  padding: 28,
-                  borderRadius: 16,
-                  background: cardBg,
-                  border: `1px solid ${p.popular ? (L ? "rgba(15,23,42,0.35)" : "rgba(255,255,255,0.35)") : border}`,
-                  position: "relative",
-                  display: "flex",
-                  flexDirection: "column",
-                  gap: 16,
-                }}
-              >
-                {p.popular && (
-                  <div className="font-mono-label" style={{ position: "absolute", top: -10, left: "50%", transform: "translateX(-50%)", padding: "4px 12px", borderRadius: 9999, background: voidBtn, color: voidTxt, fontSize: 10, whiteSpace: "nowrap" }}>
-                    Most popular
-                  </div>
-                )}
-                <div className="font-mono-label" style={{ fontSize: 11, color: muted }}>{p.name}</div>
-                <div>
-                  {isFree && <div className="font-serif" style={{ fontSize: 36, lineHeight: 1 }}>Free</div>}
-                  {isCustom && <div className="font-serif" style={{ fontSize: 32, lineHeight: 1 }}>Custom</div>}
-                  {!isFree && !isCustom && (
-                    <>
-                      <div style={{ display: "flex", alignItems: "baseline", gap: 6 }}>
-                        <span className="font-serif" style={{ fontSize: 36, lineHeight: 1 }}>{symbol}{Math.round(finalPrice).toLocaleString(locale)}</span>
-                        <span style={{ fontSize: 13, color: muted }}>/mo</span>
-                      </div>
-                      {discount > 0 && (
-                        <div style={{ fontSize: 12, color: muted, marginTop: 4 }}>
-                          <span style={{ textDecoration: "line-through" }}>{symbol}{basePrice.toLocaleString(locale)}</span>
-                          <span className="font-mono-label" style={{ marginLeft: 8, fontSize: 10, color: "#10b981" }}>Save {discount}%</span>
-                        </div>
-                      )}
-                    </>
-                  )}
-                  <p style={{ fontSize: 13, color: muted, marginTop: 8, fontWeight: 300 }}>{p.desc}</p>
-                </div>
-                <div style={{ borderTop: `1px solid ${border}`, paddingTop: 14, flex: 1 }}>
-                  {config.features.map((f) => (
-                    <div key={f} style={{ display: "flex", alignItems: "center", gap: 8, padding: "5px 0", fontSize: 13, color: txt }}>
-                      <Check size={14} color="#10b981" /><span>{f}</span>
-                    </div>
-                  ))}
-                </div>
-                <button
-                  onClick={() => router.push(isCustom ? "/contact" : "/register")}
-                  style={{
-                    marginTop: "auto",
-                    padding: "12px 0",
-                    borderRadius: 8,
-                    border: p.popular ? "none" : `1px solid ${border}`,
-                    background: p.popular ? voidBtn : "transparent",
-                    color: p.popular ? voidTxt : txt,
-                    fontSize: 14,
-                    fontWeight: 500,
-                    cursor: "pointer",
-                    transition: "opacity 0.2s ease",
-                  }}
-                >
-                  {p.cta}
-                </button>
-              </div>
-            );
-          })}
-        </div>
+        <PricingGrid
+          theme={{ L, cardBg, border, muted, txt, voidBtn, voidTxt }}
+        />
       </section>
 
       {/* ===== FAQ ===== */}
@@ -560,13 +457,7 @@ export default function LandingPage() {
         <h2 className="font-serif" style={{ fontSize: "clamp(28px, 4vw, 40px)", textAlign: "center", lineHeight: 0.95, marginBottom: 32 }}>
           Frequently asked questions
         </h2>
-        {[
-          { q: "Can the agent run on major operating systems?", a: "Yes. The QS Discovery Agent runs on Windows (Service), macOS (LaunchDaemon), and Linux (systemd). It starts on boot and reports inventory and telemetry in the background." },
-          { q: "Does the platform work without installing agents?", a: "Yes. Agentless discovery uses SNMP, SSH, WMI, and nmap to find and profile network devices without installing software on them." },
-          { q: "How is data secured?", a: "Agent traffic is designed for TLS-protected channels. Tenants can configure access controls and review activity trails. Controls are oriented toward DPDP Act 2023 requirements; formal third-party certifications depend on your deployment and engagement." },
-          { q: "Can I deploy on-premise?", a: "Yes. QS Assets supports Docker Compose-style self-hosting on infrastructure that can run PostgreSQL and Node.js." },
-          { q: "How does threat detection work?", a: "Where agents are installed, the platform can surface USB insertions, open-port changes, file integrity changes, and unexpected software. Anomalies can raise alerts and feed automation rules." },
-        ].map((faq, i) => (
+        {LANDING_FAQS.map((faq, i) => (
           <div key={faq.q} style={{ borderBottom: `1px solid ${border}` }}>
             <button
               onClick={() => setActiveFaq(activeFaq === i ? null : i)}
@@ -588,7 +479,13 @@ export default function LandingPage() {
           </h2>
           <p style={{ fontSize: 16, color: "#9f9fa0", marginBottom: 28, fontWeight: 300 }}>Start a trial and connect your first discovery source.</p>
           <div style={{ display: "flex", gap: 12, justifyContent: "center", flexWrap: "wrap" }}>
-            <button onClick={() => router.push("/register")} style={{ padding: "12px 24px", borderRadius: 8, border: "none", background: "#fff", color: "#0f172a", fontSize: 16, fontWeight: 400, cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 8 }}>
+            <button
+              onClick={() => {
+                trackEvent("cta_start_trial", { source: "footer_cta" });
+                router.push("/register");
+              }}
+              style={{ padding: "12px 24px", borderRadius: 8, border: "none", background: "#fff", color: "#0f172a", fontSize: 16, fontWeight: 400, cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 8 }}
+            >
               Start trial <ArrowRight size={16} />
             </button>
             <button onClick={() => router.push("/login")} style={{ padding: "12px 24px", borderRadius: 8, border: "1px solid rgba(255,255,255,0.25)", background: "transparent", color: "#fff", fontSize: 16, fontWeight: 400, cursor: "pointer" }}>

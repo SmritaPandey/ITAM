@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRouter, usePathname } from "next/navigation";
 import { Logo } from "@/components/Logo";
 import { Sun, Moon, ArrowRight, Menu, X } from "lucide-react";
+import { trackEvent } from "@/components/Analytics";
 
 interface HeaderProps {
   theme: "dark" | "light";
@@ -12,13 +13,14 @@ interface HeaderProps {
 
 const NAV_SECTIONS = [
   { label: "Platform", hash: "platform" },
-  { label: "Security", hash: "security" },
   { label: "Modules", hash: "modules-grid" },
-  { label: "Pricing", hash: "pricing" },
 ];
 
 const NAV_PAGES = [
+  { label: "Security", href: "/security" },
+  { label: "Pricing", href: "/pricing" },
   { label: "Docs", href: "/docs" },
+  { label: "Blog", href: "/blog" },
   { label: "Contact", href: "/contact" },
 ];
 
@@ -38,6 +40,16 @@ export default function Header({ theme, onToggleTheme }: HeaderProps) {
 
   function handleNavClick() {
     setMobileOpen(false);
+  }
+
+  function goTrial() {
+    trackEvent("cta_start_trial", { source: "header" });
+    setMobileOpen(false);
+    router.push("/register");
+  }
+
+  function goContact() {
+    trackEvent("cta_contact_sales", { source: "header_nav" });
   }
 
   return (
@@ -63,7 +75,6 @@ export default function Header({ theme, onToggleTheme }: HeaderProps) {
           <Logo size={38} glow={!L} theme={theme} />
         </Link>
 
-        {/* Desktop Navigation */}
         <div className="header-desktop-nav" style={{ display: "flex", alignItems: "center", gap: 28 }}>
           {NAV_SECTIONS.map(t => (
             <a key={t.label} href={sectionHref(t.hash)} style={{ fontSize: 13, fontWeight: 600, color: muted, textDecoration: "none", transition: "color 0.2s" }}
@@ -72,7 +83,11 @@ export default function Header({ theme, onToggleTheme }: HeaderProps) {
             >{t.label}</a>
           ))}
           {NAV_PAGES.map(t => (
-            <Link key={t.label} href={t.href} style={{ fontSize: 13, fontWeight: 600, color: pathname === t.href ? "#06b6d4" : muted, textDecoration: "none", transition: "color 0.2s" }}
+            <Link
+              key={t.label}
+              href={t.href}
+              onClick={() => { if (t.href === "/contact") goContact(); }}
+              style={{ fontSize: 13, fontWeight: 600, color: pathname === t.href ? "#06b6d4" : muted, textDecoration: "none", transition: "color 0.2s" }}
               onMouseEnter={e => (e.currentTarget.style.color = "#06b6d4")}
               onMouseLeave={e => (e.currentTarget.style.color = pathname === t.href ? "#06b6d4" : muted)}
             >{t.label}</Link>
@@ -85,12 +100,11 @@ export default function Header({ theme, onToggleTheme }: HeaderProps) {
           <button onClick={() => router.push("/login")} style={{ padding: "8px 16px", borderRadius: 8, border: `1px solid ${border}`, background: "transparent", color: L ? "#0f172a" : "#f3f4f6", fontSize: 13, fontWeight: 500, cursor: "pointer", letterSpacing: "-0.01em" }}>
             Login
           </button>
-          <button onClick={() => router.push("/register")} style={{ padding: "8px 18px", borderRadius: 8, border: "none", background: L ? "#0f172a" : "#ffffff", color: L ? "#ffffff" : "#0f172a", fontSize: 13, fontWeight: 500, cursor: "pointer", display: "flex", alignItems: "center", gap: 6, letterSpacing: "-0.01em", transition: "opacity 0.2s ease" }}>
+          <button onClick={goTrial} style={{ padding: "8px 18px", borderRadius: 8, border: "none", background: L ? "#0f172a" : "#ffffff", color: L ? "#ffffff" : "#0f172a", fontSize: 13, fontWeight: 500, cursor: "pointer", display: "flex", alignItems: "center", gap: 6, letterSpacing: "-0.01em", transition: "opacity 0.2s ease" }}>
             Start trial <ArrowRight size={13} />
           </button>
         </div>
 
-        {/* Mobile Hamburger */}
         <button
           className="header-mobile-toggle"
           onClick={() => setMobileOpen(!mobileOpen)}
@@ -108,7 +122,6 @@ export default function Header({ theme, onToggleTheme }: HeaderProps) {
         </button>
       </nav>
 
-      {/* Mobile Drawer Overlay */}
       {mobileOpen && (
         <div
           onClick={() => setMobileOpen(false)}
@@ -120,7 +133,6 @@ export default function Header({ theme, onToggleTheme }: HeaderProps) {
         />
       )}
 
-      {/* Mobile Drawer */}
       <div style={{
         position: "fixed",
         top: 0, right: 0, bottom: 0,
@@ -146,7 +158,7 @@ export default function Header({ theme, onToggleTheme }: HeaderProps) {
         <div style={{ fontSize: 10, fontWeight: 800, color: muted, textTransform: "uppercase", letterSpacing: "0.1em", marginTop: 16, marginBottom: 8 }}>Pages</div>
 
         {NAV_PAGES.map(t => (
-          <Link key={t.label} href={t.href} onClick={handleNavClick}
+          <Link key={t.label} href={t.href} onClick={() => { handleNavClick(); if (t.href === "/contact") goContact(); }}
             style={{ display: "block", padding: "12px 16px", borderRadius: 10, fontSize: 15, fontWeight: 700, color: pathname === t.href ? "#06b6d4" : (L ? "#0f172a" : "#f3f4f6"), textDecoration: "none", background: pathname === t.href ? (L ? "rgba(6,182,212,0.06)" : "rgba(6,182,212,0.08)") : (L ? "#f8fafc" : "rgba(255,255,255,0.03)"), border: `1px solid ${pathname === t.href ? "rgba(6,182,212,0.2)" : border}` }}
           >{t.label}</Link>
         ))}
@@ -159,7 +171,7 @@ export default function Header({ theme, onToggleTheme }: HeaderProps) {
           <button onClick={() => { setMobileOpen(false); router.push("/login"); }} style={{ width: "100%", padding: "12px", borderRadius: 10, border: `1px solid ${border}`, background: "transparent", color: L ? "#0f172a" : "#f3f4f6", fontSize: 14, fontWeight: 700, cursor: "pointer" }}>
             Login
           </button>
-          <button onClick={() => { setMobileOpen(false); router.push("/register"); }} style={{ width: "100%", padding: "14px", borderRadius: 8, border: "none", background: L ? "#0f172a" : "#ffffff", color: L ? "#ffffff" : "#0f172a", fontSize: 15, fontWeight: 500, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}>
+          <button onClick={goTrial} style={{ width: "100%", padding: "14px", borderRadius: 8, border: "none", background: L ? "#0f172a" : "#ffffff", color: L ? "#ffffff" : "#0f172a", fontSize: 15, fontWeight: 500, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}>
             Start trial <ArrowRight size={16} />
           </button>
         </div>

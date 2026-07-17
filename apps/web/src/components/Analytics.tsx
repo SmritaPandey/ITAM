@@ -4,14 +4,8 @@ import { usePathname } from "next/navigation";
 import { hasAnalyticsConsent } from "./CookieConsent";
 
 const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4100/api/v1";
-
-/**
- * First-party analytics tracker.
- * Only tracks if user has given analytics consent.
- * Collects: page views, session duration, feature usage.
- * Does NOT collect: PII, keystrokes, form content, cookie values,
- * credentials, or screen recordings.
- */
+const UTM_KEYS = ["utm_source", "utm_medium", "utm_campaign", "utm_term", "utm_content"] as const;
+const UTM_STORAGE_KEY = "qs_utm";
 
 function getSessionId(): string {
   if (typeof window === "undefined") return "";
@@ -23,10 +17,34 @@ function getSessionId(): string {
   return sid;
 }
 
-/**
- * Only cookie NAMES are collected (for consent/compliance auditing).
- * Cookie values are never read or transmitted.
- */
+function captureUtmsFromUrl() {
+  if (typeof window === "undefined") return;
+  try {
+    const params = new URLSearchParams(window.location.search);
+    const found: Record<string, string> = {};
+    for (const key of UTM_KEYS) {
+      const v = params.get(key);
+      if (v) found[key] = v;
+    }
+    if (Object.keys(found).length > 0) {
+      sessionStorage.setItem(UTM_STORAGE_KEY, JSON.stringify(found));
+    }
+  } catch {
+    /* ignore */
+  }
+}
+
+function getStoredUtms(): Record<string, string> {
+  if (typeof window === "undefined") return {};
+  try {
+    const raw = sessionStorage.getItem(UTM_STORAGE_KEY);
+    if (!raw) return {};
+    return JSON.parse(raw) as Record<string, string>;
+  } catch {
+    return {};
+  }
+}
+
 function getCookieNames(): string[] {
   if (typeof document === "undefined" || !document.cookie) return [];
   return document.cookie
@@ -36,7 +54,6 @@ function getCookieNames(): string[] {
 }
 
 function sendEvent(event: string, props?: Record<string, any>) {
-  // Respect the user's cookie/analytics consent choice — no consent, no tracking.
   if (!hasAnalyticsConsent()) return;
 
   const payload = {
@@ -50,10 +67,10 @@ function sendEvent(event: string, props?: Record<string, any>) {
     language: typeof navigator !== "undefined" ? navigator.language : "en",
     timestamp: new Date().toISOString(),
     cookieNames: getCookieNames(),
+    ...getStoredUtms(),
     ...props,
   };
 
-  // Authenticate via standard header (never embed tokens in analytics payloads).
   const token = typeof window !== "undefined" ? localStorage.getItem("accessToken") : null;
 
   if (typeof window !== "undefined") {
@@ -64,32 +81,24 @@ function sendEvent(event: string, props?: Record<string, any>) {
         ...(token ? { Authorization: `Bearer ${token}` } : {}),
       },
       body: JSON.stringify(payload),
-      keepalive: true, // survives page unload, like sendBeacon
+      keepalive: true,
     }).catch(() => {});
   }
 }
 
-/**
- * Track a custom event (feature usage, button clicks, etc.)
- */
 export function trackEvent(event: string, props?: Record<string, any>) {
   sendEvent(event, props);
 }
 
-/**
- * Analytics provider component — place in layout.
- * Automatically tracks page views on route changes.
- */
 export function AnalyticsProvider({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const startTime = useRef(Date.now());
 
   useEffect(() => {
-    // Track page view
+    captureUtmsFromUrl();
     sendEvent("page_view");
     startTime.current = Date.now();
 
-    // Track time on page when leaving
     return () => {
       const duration = Math.round((Date.now() - startTime.current) / 1000);
       if (duration > 2) {

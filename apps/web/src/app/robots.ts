@@ -9,6 +9,6 @@ export default function robots(): MetadataRoute.Robots {
         disallow: ["/dashboard/", "/admin/", "/portal/", "/setup/", "/api/"],
       },
     ],
-    sitemap: "https://qsasset.com/sitemap.xml",
+    sitemap: "https://www.qsasset.com/sitemap.xml",
   };
 }

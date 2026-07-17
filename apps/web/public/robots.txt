@@ -1,8 +1,0 @@
-User-agent: *
-Allow: /
-Disallow: /dashboard/
-Disallow: /portal/
-Disallow: /setup/
-Disallow: /api/
-
-Sitemap: https://qsasset.com/sitemap.xml

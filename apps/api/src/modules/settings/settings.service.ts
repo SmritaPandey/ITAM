@@ -148,8 +148,8 @@ export class SettingsService {
       where: { key: 'pricing_settings' }
     });
     return (config?.value as any) || {
-      starter: { priceUSD: 0, priceINR: 0, discountPercent: 0, features: ["IT Asset Tracking", "4 Users", "Basic Reports", "Email Support", "Community Access"] },
-      professional: { priceUSD: 199, priceINR: 16999, discountPercent: 50, features: ["All 12 Modules", "Unlimited Users", "Vulnerability Scanning", "ITSM + SLA Engine", "Priority Support", "API Access"] },
+      starter: { priceUSD: 0, priceINR: 0, discountPercent: 0, features: ["IT Asset Tracking", "Up to 5 assets", "4 Users", "Basic Reports", "Email Support", "Community Access"] },
+      professional: { priceUSD: 199, priceINR: 16999, discountPercent: 50, features: ["Core Platform Modules", "Unlimited assets", "Unlimited Users", "Vulnerability Scanning", "ITSM + SLA Engine", "Priority Support", "API Access"] },
       enterprise: { priceUSD: 499, priceINR: 39999, discountPercent: 50, features: ["Everything in Pro", "On-Premise Deploy", "SSO / SAML / LDAP", "Dedicated CSM", "Custom SLA", "White-Label Option"] },
       custom: { priceUSD: -1, priceINR: -1, discountPercent: 0, features: ["Everything in Enterprise", "Custom asset limits", "Negotiated pricing", "Dedicated account manager", "Custom SLA", "White-label option", "Priority onboarding"] }
     };

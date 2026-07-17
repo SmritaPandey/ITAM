@@ -6,6 +6,8 @@ import Link from "next/link";
 import { LogoIcon } from "@/components/Logo";
 import { Eye, EyeOff, Loader2, ArrowRight, Sun, Moon, Shield, Lock, Fingerprint, Globe2, Zap, BarChart3, Mail, CheckCircle } from "lucide-react";
 import { useTheme } from "@/components/ThemeProvider";
+import { trackEvent } from "@/components/Analytics";
+import { TrustStrip } from "@/components/landing/TrustStrip";
 
 function decodeJwt(token: string) {
   try { return JSON.parse(atob(token.split(".")[1])); } catch { return null; }
@@ -41,6 +43,7 @@ function LoginContent() {
     const decoded = decodeJwt(data.accessToken);
     localStorage.setItem("userRole", decoded?.role || "");
     localStorage.setItem("userEmail", decoded?.email || fallbackEmail);
+    trackEvent("login_success", { role: decoded?.role || "unknown" });
     router.push(decoded?.role === "Employee" ? "/portal" : "/dashboard");
   }
 
@@ -215,21 +218,14 @@ function LoginContent() {
           </div>
 
           {/* Social proof */}
-          <div style={{ marginTop: 40, display: "flex", alignItems: "center", gap: 12 }}>
-            <div style={{ display: "flex" }}>
-              {["#06b6d4", "#8b5cf6", "#10b981", "#f59e0b"].map((c, i) => (
-                <div key={i} style={{
-                  width: 28, height: 28, borderRadius: "50%", border: `2px solid ${dk ? "#111" : "#fafafa"}`,
-                  background: `linear-gradient(135deg, ${c}, ${c}dd)`,
-                  marginLeft: i > 0 ? -8 : 0, display: "flex", alignItems: "center", justifyContent: "center",
-                  fontSize: 10, fontWeight: 700, color: "white",
-                }}>{["S", "A", "V", "K"][i]}</div>
-              ))}
-            </div>
-            <div>
-              <div style={{ fontSize: 12, fontWeight: 700, color: dk ? "#e2e8f0" : "#1e293b" }}>Trusted by 200+ teams</div>
-              <div style={{ fontSize: 11, color: dk ? "#64748b" : "#94a3b8" }}>Managing 50K+ assets worldwide</div>
-            </div>
+          <div style={{ marginTop: 40 }}>
+            <TrustStrip
+              compact
+              muted={dk ? "#64748b" : "#94a3b8"}
+              txt={dk ? "#e2e8f0" : "#1e293b"}
+              border={dk ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.08)"}
+              L={!dk}
+            />
           </div>
         </div>
       </div>

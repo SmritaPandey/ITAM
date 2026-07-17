@@ -1,0 +1,17 @@
+<svg viewBox="0 0 512 512" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="QS Assets">
+  <defs>
+    <linearGradient id="qG" x1="70" y1="30" x2="470" y2="490" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#D1C9FF"/>
+      <stop offset="40%" stop-color="#847DFF"/>
+      <stop offset="100%" stop-color="#4B49AA"/>
+    </linearGradient>
+    <linearGradient id="cube" x1="140" y1="140" x2="300" y2="320" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#90B8F0"/>
+      <stop offset="100%" stop-color="#00B3DD"/>
+    </linearGradient>
+  </defs>
+  <path d="M424 149 L424 323 L256 420 L88 323 L88 149 L256 52" stroke="url(#qG)" stroke-width="20"/>
+  <polygon points="216,148 148,186 216,224 284,186" stroke="url(#cube)" stroke-width="16"/>
+  <polygon points="148,186 148,278 216,316 216,224" stroke="#4B49AA" stroke-width="16"/>
+  <polygon points="284,186 284,278 216,316 216,224" stroke="#847DFF" stroke-width="16"/>
+</svg>

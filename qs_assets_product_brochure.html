@@ -13,7 +13,6 @@
       --deep: #4B49AA;
       --soft: #D1C9FF;
       --peri: #90B8F0;
-      --orchid: #DD90D8;
       --ink: #090A0B;
       --muted: #5C6370;
       --line: rgba(9,10,11,0.08);
@@ -24,7 +23,6 @@
     }
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body { font-family: var(--font-b); color: var(--ink); background: #E4E6EE; -webkit-font-smoothing: antialiased; }
-
     .deck { max-width: 794px; margin: 0 auto; }
 
     .p {
@@ -36,7 +34,6 @@
       page-break-after: always;
       break-after: page;
     }
-
     .p.dark { background: var(--ink); color: #fff; }
     .p.wash { background: linear-gradient(180deg, #FAFBFE 0%, var(--wash) 100%); }
 
@@ -50,23 +47,21 @@
     }
     .p.dark .eyebrow { color: var(--peri); }
 
-    h1, h2, h3 { font-family: var(--font-h); font-weight: 600; letter-spacing: -0.03em; line-height: 1.02; }
-    h1 { font-size: 56px; }
-    h2 { font-size: 38px; margin-bottom: 12px; }
-    h3 { font-size: 17px; margin-bottom: 6px; }
+    h1, h2, h3 { font-family: var(--font-h); font-weight: 600; letter-spacing: -0.03em; line-height: 1.05; }
+    h2 { font-size: 36px; margin-bottom: 10px; }
+    h3 { font-size: 15px; margin-bottom: 4px; }
 
-    .sub { font-size: 15px; line-height: 1.55; color: var(--muted); font-weight: 400; max-width: 520px; }
+    .sub { font-size: 14px; line-height: 1.55; color: var(--muted); max-width: 480px; }
     .p.dark .sub { color: rgba(255,255,255,0.62); }
 
-    .pad { padding: 52px 56px 48px; height: 100%; display: flex; flex-direction: column; }
+    .pad { padding: 48px 56px 44px; height: 100%; min-height: 1123px; display: flex; flex-direction: column; }
     .foot {
       margin-top: auto;
-      padding-top: 20px;
+      padding-top: 16px;
       border-top: 1px solid var(--line);
       display: flex;
       justify-content: space-between;
-      align-items: center;
-      font-size: 10px;
+      font-size: 9px;
       color: var(--muted);
       font-family: var(--font-n);
       letter-spacing: 0.06em;
@@ -74,574 +69,307 @@
     }
     .p.dark .foot { border-color: rgba(255,255,255,0.1); color: rgba(255,255,255,0.4); }
 
-    .logo-row { display: flex; align-items: center; gap: 12px; }
-    .logo-row img, .logo-row svg { width: 36px; height: 36px; }
-    .logo-row strong { font-family: var(--font-h); font-size: 15px; font-weight: 700; letter-spacing: -0.02em; }
-    .logo-row span { display: block; font-size: 10px; color: var(--muted); font-weight: 400; }
+    .logo-row { display: flex; align-items: center; gap: 10px; }
+    .logo-row img { width: 32px; height: 32px; }
+    .logo-row strong { font-family: var(--font-h); font-size: 14px; }
+    .logo-row span { display: block; font-size: 9px; color: var(--muted); }
     .p.dark .logo-row span { color: rgba(255,255,255,0.45); }
 
-    .glow {
-      position: absolute;
-      border-radius: 50%;
-      filter: blur(80px);
-      pointer-events: none;
-    }
+    .glow { position: absolute; border-radius: 50%; filter: blur(80px); pointer-events: none; }
 
-    /* —— P1 COVER —— */
-    .p-cover .glow-a { width: 420px; height: 420px; background: var(--deep); opacity: 0.55; top: -80px; right: -60px; }
-    .p-cover .glow-b { width: 300px; height: 300px; background: var(--cyan); opacity: 0.25; bottom: 120px; left: -40px; }
-    .p-cover .glow-c { width: 200px; height: 200px; background: var(--orchid); opacity: 0.2; top: 40%; right: 20%; }
+    /* —— Print slots —— */
+    .slot { overflow: hidden; border-radius: 12px; }
+    .slot img { width: 100%; height: 100%; object-fit: cover; display: block; }
 
-    .p-cover h1 em {
-      font-style: normal;
-      background: linear-gradient(135deg, var(--iris), var(--cyan));
-      -webkit-background-clip: text;
-      background-clip: text;
-      color: transparent;
-    }
+    .slot-hero { width: 682px; height: 360px; }
+    .slot-accent { width: 260px; height: 340px; }
+    .slot-banking-ai { width: 682px; height: 380px; }
+    .slot-inset { width: 300px; height: 170px; }
+    .slot-banner { width: 682px; height: 120px; }
+    .slot-arch { width: 682px; height: 200px; }
 
-    .p-cover .hero-art {
-      position: absolute;
-      right: 0;
-      bottom: 0;
-      width: 62%;
-      height: 58%;
-      opacity: 1;
-      z-index: 1;
-      mask-image: linear-gradient(to left, #000 70%, transparent 100%);
-      -webkit-mask-image: linear-gradient(to left, #000 70%, transparent 100%);
-    }
-
-    .p-cover .hero-art img {
-      width: 100%;
-      height: 100%;
-      object-fit: contain;
-      object-position: right bottom;
-      display: block;
-    }
-
-    .gen-art {
-      border-radius: 16px;
+    .device-frame {
+      border-radius: 14px;
       overflow: hidden;
       border: 1px solid var(--line);
+      background: var(--ink);
+      box-shadow: 0 24px 64px rgba(75, 73, 170, 0.14);
     }
+    .device-frame img { width: 100%; height: 360px; object-fit: cover; object-position: top left; }
 
-    .gen-art img {
+    /* —— P1 Cover (full bleed) —— */
+    .p-cover { background: var(--ink); }
+    .p-cover .cover-bg {
+      position: absolute;
+      inset: 0;
+      z-index: 0;
+    }
+    .p-cover .cover-bg img {
       width: 100%;
       height: 100%;
       object-fit: cover;
-      display: block;
+      object-position: center top;
     }
-
-    .problem-visual {
-      margin: 20px 0 16px;
-      height: 168px;
-      box-shadow: 0 16px 48px rgba(75, 73, 170, 0.12);
-    }
-
-    .problem-layout {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 14px;
-      flex: 1;
-    }
-
-    .chaos-grid.compact {
-      grid-template-columns: 1fr;
-      margin-top: 0;
-      gap: 10px;
-    }
-
-    .chaos-grid.compact .chaos-card { padding: 14px 16px; }
-    .chaos-grid.compact .chaos-card p { margin: 0; font-size: 11.5px; }
-
-    .p-cover .cover-body { position: relative; z-index: 2; max-width: 58%; margin-top: 48px; }
-    .p-cover .cover-sub { font-size: 17px; color: rgba(255,255,255,0.7); margin: 20px 0 0; line-height: 1.5; font-weight: 300; }
-    .p-cover .year-badge {
+    .p-cover .cover-overlay {
       position: absolute;
-      bottom: 52px;
-      left: 56px;
+      inset: 0;
+      z-index: 1;
+      background: linear-gradient(90deg, rgba(9,10,11,0.92) 0%, rgba(9,10,11,0.55) 42%, rgba(9,10,11,0.15) 100%);
+    }
+    .p-cover .pad { position: relative; z-index: 2; justify-content: space-between; }
+    .p-cover .cover-meta {
       font-family: var(--font-n);
       font-size: 10px;
       letter-spacing: 0.12em;
       text-transform: uppercase;
-      color: rgba(255,255,255,0.45);
-      z-index: 2;
+      color: rgba(255,255,255,0.5);
+    }
+    .p-cover .cover-meta strong {
+      display: block;
+      font-family: var(--font-h);
+      font-size: 13px;
+      letter-spacing: 0.04em;
+      color: rgba(255,255,255,0.85);
+      margin-bottom: 6px;
     }
 
-    /* —— P2 PROBLEM —— */
-    .chaos-grid {
+    /* —— P2 CIO snapshot —— */
+    .snapshot-layout {
       display: grid;
-      grid-template-columns: repeat(3, 1fr);
-      gap: 14px;
-      margin-top: 32px;
+      grid-template-columns: 1fr 260px;
+      gap: 20px;
+      margin-top: 24px;
       flex: 1;
     }
-    .chaos-card {
-      border: 1px solid var(--line);
-      border-radius: 16px;
-      padding: 20px 18px;
-      background: #fff;
-      display: flex;
-      flex-direction: column;
-      gap: 10px;
+    .pain-list { list-style: none; margin-top: 20px; }
+    .pain-list li {
+      font-size: 12.5px;
+      line-height: 1.45;
+      color: var(--muted);
+      padding: 10px 0;
+      border-bottom: 1px solid var(--line);
+      padding-left: 14px;
+      position: relative;
     }
-    .chaos-card .ico {
-      width: 40px; height: 40px;
-      border-radius: 10px;
-      background: linear-gradient(135deg, rgba(132,125,255,0.12), rgba(0,179,221,0.08));
-      display: flex; align-items: center; justify-content: center;
-      color: var(--deep);
+    .pain-list li::before {
+      content: "";
+      position: absolute;
+      left: 0; top: 16px;
+      width: 5px; height: 5px;
+      border-radius: 50%;
+      background: var(--iris);
     }
-    .chaos-card h3 { font-size: 14px; }
-    .chaos-card p { font-size: 12px; color: var(--muted); line-height: 1.45; }
+    .slot-accent { border: 1px solid var(--line); box-shadow: 0 12px 40px rgba(75,73,170,0.1); }
 
     .stat-strip {
       display: grid;
       grid-template-columns: repeat(4, 1fr);
-      gap: 12px;
-      margin-top: 24px;
-      padding: 18px;
-      border-radius: 16px;
-      background: var(--ink);
-      color: #fff;
-    }
-    .stat-strip .n { font-family: var(--font-h); font-size: 28px; color: var(--iris); }
-    .stat-strip .l { font-family: var(--font-n); font-size: 9px; letter-spacing: 0.1em; text-transform: uppercase; color: rgba(255,255,255,0.5); margin-top: 4px; }
-
-    /* —— P3 SOLUTION FLOW —— */
-    .flow-v {
-      display: flex;
-      flex-direction: column;
-      gap: 0;
-      margin-top: 24px;
-      flex: 1;
-    }
-    .flow-step {
-      display: grid;
-      grid-template-columns: 48px 1fr auto;
-      gap: 16px;
-      align-items: center;
-      padding: 14px 0;
-      border-bottom: 1px solid var(--line);
-    }
-    .flow-step:last-child { border: none; }
-    .flow-num {
-      width: 48px; height: 48px;
-      border-radius: 12px;
-      background: linear-gradient(135deg, var(--iris), var(--deep));
-      color: #fff;
-      font-family: var(--font-n);
-      font-size: 13px;
-      font-weight: 600;
-      display: flex; align-items: center; justify-content: center;
-    }
-    .flow-step p { font-size: 12.5px; color: var(--muted); }
-    .flow-tag {
-      font-family: var(--font-n);
-      font-size: 9px;
-      letter-spacing: 0.08em;
-      text-transform: uppercase;
-      color: var(--iris);
-      padding: 6px 10px;
-      border: 1px solid rgba(132,125,255,0.3);
-      border-radius: 999px;
-      white-space: nowrap;
-    }
-
-    .sol-visual {
-      position: absolute;
-      right: 36px;
-      top: 120px;
-      width: 300px;
-      height: 300px;
-      border-radius: 20px;
-      overflow: hidden;
-      border: 1px solid var(--line);
-      box-shadow: 0 24px 64px rgba(75, 73, 170, 0.14);
-    }
-
-    .sol-visual img { width: 100%; height: 100%; object-fit: cover; object-position: center; display: block; }
-
-    /* Cropped screenshot frames */
-    .shot-frame {
-      border-radius: 14px;
-      overflow: hidden;
-      border: 1px solid var(--line);
-      background: var(--ink);
-      box-shadow: 0 20px 56px rgba(75, 73, 170, 0.12);
-    }
-
-    .shot-chrome {
-      display: flex;
-      align-items: center;
-      gap: 6px;
-      padding: 8px 12px;
-      background: #12131a;
-      border-bottom: 1px solid rgba(255,255,255,0.06);
-    }
-
-    .shot-chrome i {
-      width: 8px; height: 8px; border-radius: 50%; display: block;
-    }
-
-    .shot-chrome i:nth-child(1) { background: #ff5f57; }
-    .shot-chrome i:nth-child(2) { background: #febc2e; }
-    .shot-chrome i:nth-child(3) { background: #28c840; }
-
-    .shot-chrome span {
-      margin-left: auto;
-      font-family: var(--font-n);
-      font-size: 8px;
-      letter-spacing: 0.08em;
-      text-transform: uppercase;
-      color: rgba(255,255,255,0.35);
-    }
-
-    .shot-frame img {
-      width: 100%;
-      display: block;
-      object-fit: cover;
-      object-position: top center;
-    }
-
-    .hybrid {
-      position: relative;
-      border-radius: 16px;
-      overflow: hidden;
-      border: 1px solid var(--line);
-    }
-
-    .hybrid .ai-layer {
-      width: 100%;
-      height: 100%;
-      object-fit: cover;
-      object-position: center;
-      display: block;
-    }
-
-    .hybrid .inset-shot {
-      position: absolute;
-      right: 16px;
-      bottom: 16px;
-      width: 52%;
-      border-radius: 10px;
-      overflow: hidden;
-      border: 2px solid rgba(255,255,255,0.9);
-      box-shadow: 0 16px 40px rgba(0,0,0,0.35);
-    }
-
-    .hybrid .inset-shot img {
-      width: 100%;
-      display: block;
-      object-fit: cover;
-      object-position: top center;
-    }
-
-    .p.dark .hybrid { border-color: rgba(132,125,255,0.25); }
-
-    .mod-thumbs {
-      display: grid;
-      grid-template-columns: repeat(3, 1fr);
       gap: 10px;
-      margin-top: 18px;
-    }
-
-    .mod-thumbs .shot-frame img { height: 88px; object-fit: cover; object-position: top center; }
-
-    .band-shot {
       margin-top: 20px;
+      padding: 16px;
       border-radius: 14px;
-      overflow: hidden;
-      border: 1px solid var(--line);
-      box-shadow: 0 12px 36px rgba(75, 73, 170, 0.08);
-    }
-
-    .band-shot img { width: 100%; display: block; object-fit: cover; object-position: top center; }
-
-    .mesh-banner {
-      height: 150px;
-      margin-top: 16px;
-      border-radius: 14px;
-      overflow: hidden;
-      border: 1px solid var(--line);
-    }
-
-    .mesh-banner img { width: 100%; height: 100%; object-fit: cover; object-position: center; }
-
-    /* —— P4 DASHBOARD —— */
-    .dash-wrap {
-      margin-top: 24px;
-      border-radius: 20px;
-      border: 1px solid var(--line);
       background: var(--ink);
-      padding: 12px;
-      box-shadow: 0 32px 80px rgba(75,73,170,0.15);
-      flex: 1;
-      position: relative;
+      color: #fff;
     }
-    .dash-inner { border-radius: 12px; overflow: hidden; height: 100%; min-height: 420px; }
-    .dash-inner img { width: 100%; height: 100%; object-fit: cover; object-position: top left; display: block; }
+    .stat-strip .n { font-family: var(--font-h); font-size: 24px; color: var(--iris); }
+    .stat-strip .l { font-family: var(--font-n); font-size: 8px; letter-spacing: 0.08em; text-transform: uppercase; color: rgba(255,255,255,0.5); margin-top: 2px; }
+
+    /* —— P3 Four moves —— */
+    .four-moves {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 14px;
+      margin-top: 28px;
+      flex: 1;
+    }
+    .move-card {
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      padding: 18px 16px;
+      background: #fff;
+    }
+    .move-card .num {
+      font-family: var(--font-n);
+      font-size: 10px;
+      color: var(--iris);
+      letter-spacing: 0.1em;
+      margin-bottom: 8px;
+    }
+    .move-card h3 { font-size: 16px; }
+    .move-card p { font-size: 11.5px; color: var(--muted); line-height: 1.45; margin-top: 6px; }
+    .ring-art { margin-top: 20px; flex: 1; min-height: 200px; }
+
+    /* —— P4 Dashboard —— */
+    .dash-wrap { margin-top: 20px; flex: 1; position: relative; }
     .callout {
       position: absolute;
       background: #fff;
       border: 1px solid var(--line);
-      border-radius: 10px;
-      padding: 8px 12px;
-      font-size: 10px;
+      border-radius: 8px;
+      padding: 6px 10px;
+      font-size: 9px;
       font-weight: 600;
-      box-shadow: 0 8px 24px rgba(0,0,0,0.08);
-      color: var(--ink);
+      box-shadow: 0 6px 20px rgba(0,0,0,0.08);
     }
     .callout::before {
       content: "";
       position: absolute;
-      width: 8px; height: 8px;
+      width: 6px; height: 6px;
       background: var(--iris);
       border-radius: 50%;
-      left: -4px; top: 50%;
+      left: -3px; top: 50%;
       transform: translateY(-50%);
     }
-    .c1 { top: 18%; left: -8%; }
-    .c2 { top: 42%; right: -6%; }
-    .c3 { bottom: 28%; left: 4%; }
-    .c4 { bottom: 12%; right: 8%; }
+    .c1 { top: 14%; left: -6%; }
+    .c2 { top: 38%; right: -4%; }
+    .c3 { bottom: 30%; left: 2%; }
+    .c4 { bottom: 10%; right: 6%; }
 
-    /* —— P5 DISCOVERY —— */
-    .disc-grid {
+    /* —— P5 Banking —— */
+    .banking-layout { margin-top: 20px; flex: 1; display: flex; flex-direction: column; gap: 14px; }
+    .slot-banking-ai { border: 1px solid var(--line); box-shadow: 0 12px 36px rgba(75,73,170,0.08); }
+    .banking-bottom {
       display: grid;
-      grid-template-columns: repeat(4, 1fr);
-      gap: 12px;
-      margin-top: 28px;
+      grid-template-columns: 1fr 300px;
+      gap: 16px;
+      align-items: end;
     }
-    .disc-cell {
-      aspect-ratio: 1;
-      border-radius: 16px;
-      border: 1px solid var(--line);
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      gap: 8px;
-      background: #fff;
-      transition: none;
+    .bank-tags { display: flex; flex-wrap: wrap; gap: 6px; }
+    .bank-tag {
+      font-size: 9px;
+      font-weight: 600;
+      padding: 5px 10px;
+      border-radius: 999px;
+      background: rgba(132,125,255,0.1);
+      color: var(--deep);
     }
-    .disc-cell svg { width: 28px; height: 28px; stroke: var(--deep); }
-    .disc-cell span { font-size: 11px; font-weight: 600; color: var(--ink); }
-    .disc-cell.accent {
-      background: linear-gradient(145deg, var(--deep), var(--iris));
-      border: none;
-      color: #fff;
-    }
-    .disc-cell.accent span { color: #fff; }
-    .disc-cell.accent svg { stroke: #fff; }
+    .slot-inset { border: 1px solid var(--line); box-shadow: 0 8px 24px rgba(75,73,170,0.1); }
+    .banking-note { font-size: 11px; color: var(--muted); line-height: 1.5; margin-top: 8px; }
 
-    .net-art { margin-top: 20px; height: 220px; border-radius: 16px; background: var(--ink); overflow: hidden; border: 1px solid var(--line); }
-
-    /* —— P6 LIFECYCLE —— */
-    .timeline {
-      display: flex;
-      align-items: stretch;
-      gap: 0;
-      margin-top: 40px;
-      position: relative;
-    }
-    .timeline::before {
-      content: "";
-      position: absolute;
-      top: 24px; left: 0; right: 0;
-      height: 2px;
-      background: linear-gradient(90deg, var(--iris), var(--cyan));
-    }
-    .tl-step {
-      flex: 1;
-      text-align: center;
-      padding-top: 48px;
-      position: relative;
-    }
-    .tl-dot {
-      position: absolute;
-      top: 16px; left: 50%;
-      transform: translateX(-50%);
-      width: 18px; height: 18px;
-      border-radius: 50%;
-      background: #fff;
-      border: 3px solid var(--iris);
-      z-index: 1;
-    }
-    .tl-step strong { display: block; font-size: 11px; font-family: var(--font-h); margin-bottom: 4px; }
-    .tl-step span { font-size: 9px; color: var(--muted); line-height: 1.3; display: block; padding: 0 4px; }
-
-    /* —— P7 MODULES —— */
+    /* —— P6 Modules —— */
     .mod-grid {
       display: grid;
       grid-template-columns: repeat(3, 1fr);
       gap: 10px;
-      margin-top: 24px;
+      margin-top: 22px;
+      flex: 1;
     }
     .mod-card {
       border: 1px solid var(--line);
-      border-radius: 14px;
-      padding: 16px 14px;
+      border-radius: 12px;
+      padding: 14px 12px;
       background: #fff;
-      page-break-inside: avoid;
     }
     .mod-card .ic {
-      width: 32px; height: 32px;
-      border-radius: 8px;
-      margin-bottom: 10px;
+      width: 28px; height: 28px;
+      border-radius: 7px;
+      margin-bottom: 8px;
       display: flex; align-items: center; justify-content: center;
       background: linear-gradient(135deg, rgba(132,125,255,0.15), rgba(0,179,221,0.1));
     }
-    .mod-card h3 { font-size: 13px; }
-    .mod-card p { font-size: 11px; color: var(--muted); line-height: 1.35; }
+    .mod-card h3 { font-size: 12px; }
+    .mod-card p { font-size: 10px; color: var(--muted); line-height: 1.35; }
 
-    /* —— P8 SECURITY —— */
-    .sec-grid {
+    /* —— P7 Discovery —— */
+    .slot-banner { border: 1px solid var(--line); margin-top: 20px; }
+    .disc-grid {
       display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 12px;
-      margin-top: 28px;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 8px;
+      margin-top: 16px;
     }
-    .sec-item {
-      padding: 18px;
-      border-radius: 14px;
-      background: rgba(255,255,255,0.04);
-      border: 1px solid rgba(255,255,255,0.08);
-    }
-    .sec-item h3 { font-size: 14px; color: #fff; }
-    .sec-item p { font-size: 11.5px; color: rgba(255,255,255,0.55); line-height: 1.45; margin-top: 6px; }
-    .sec-arch { margin-top: 20px; height: 200px; border-radius: 14px; overflow: hidden; border: 1px solid rgba(132,125,255,0.25); position: relative; }
-    .sec-arch img { object-fit: cover; object-position: center; }
-    .sec-arch .inset-shot { width: 46%; right: 12px; bottom: 12px; }
-
-    .sec-arch img { object-fit: cover; object-position: top center; }
-
-    .bank-visual {
-      margin: 20px 0 16px;
-      flex: 1;
-      min-height: 300px;
-      position: relative;
-    }
-
-    .bank-visual .ai-layer { min-height: 300px; }
-    .bank-visual .inset-shot { width: 48%; right: 14px; bottom: 14px; }
-
-    .lifecycle-shot {
-      margin-top: 28px;
-      flex: 1;
-      min-height: 280px;
-      border-radius: 16px;
-      overflow: hidden;
-      border: 1px solid var(--line);
-      box-shadow: 0 16px 48px rgba(75, 73, 170, 0.1);
-    }
-
-    .lifecycle-shot img { width: 100%; height: 220px; object-fit: cover; object-position: top left; display: block; }
-
-    .deploy-shot {
-      margin-top: 20px;
-      height: 200px;
-      border-radius: 16px;
-      overflow: hidden;
-      border: 1px solid var(--line);
-      box-shadow: 0 12px 36px rgba(75, 73, 170, 0.08);
-      position: relative;
-    }
-
-    .deploy-shot .ai-layer { width: 100%; height: 100%; object-fit: cover; }
-
-    .bank-tree {
-      margin-top: 24px;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      gap: 0;
-      flex: 1;
-    }
-    .bank-node {
-      padding: 10px 20px;
+    .disc-cell {
       border-radius: 10px;
       border: 1px solid var(--line);
-      background: #fff;
-      font-size: 12px;
-      font-weight: 600;
+      padding: 10px 6px;
       text-align: center;
-      min-width: 140px;
-      position: relative;
+      font-size: 9px;
+      font-weight: 600;
+      background: #fff;
     }
-    .bank-node.hq {
-      background: linear-gradient(135deg, var(--deep), var(--iris));
+    .disc-cell.accent {
+      background: linear-gradient(145deg, var(--deep), var(--iris));
       color: #fff;
       border: none;
-      font-size: 13px;
-      padding: 14px 28px;
     }
-    .bank-connector { width: 2px; height: 16px; background: linear-gradient(var(--iris), var(--cyan)); }
-    .bank-row { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; }
-    .bank-tags { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; margin-top: 20px; }
-    .bank-tag {
-      font-size: 10px;
-      font-weight: 600;
-      padding: 6px 12px;
-      border-radius: 999px;
-      background: rgba(132,125,255,0.1);
-      color: var(--deep);
-      border: 1px solid rgba(132,125,255,0.25);
+    .ops-list { margin-top: 16px; list-style: none; flex: 1; }
+    .ops-list li {
+      font-size: 12px;
+      color: var(--muted);
+      padding: 8px 0 8px 16px;
+      border-bottom: 1px solid var(--line);
+      position: relative;
+      line-height: 1.45;
     }
+    .ops-list li::before { content: "→"; position: absolute; left: 0; color: var(--iris); font-weight: 700; }
 
-    /* —— P10 DEPLOY —— */
+    /* —— P8 Security —— */
+    .sec-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 10px;
+      margin-top: 18px;
+    }
+    .sec-item {
+      border: 1px solid rgba(132,125,255,0.2);
+      border-radius: 10px;
+      padding: 12px 14px;
+      background: rgba(255,255,255,0.04);
+    }
+    .sec-item h3 { font-size: 13px; color: #fff; }
+    .sec-item p { font-size: 10.5px; color: rgba(255,255,255,0.55); line-height: 1.4; margin-top: 4px; }
+    .slot-arch { margin-top: 16px; border: 1px solid rgba(132,125,255,0.25); }
+
+    /* —— P9 Deploy —— */
     .deploy-split {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+      margin-top: 22px;
+    }
+    .deploy-half {
+      border-radius: 14px;
+      padding: 20px 18px;
+      border: 1px solid var(--line);
+    }
+    .deploy-half.saas { background: linear-gradient(160deg, #FAFBFE, rgba(132,125,255,0.08)); }
+    .deploy-half.onprem { background: linear-gradient(160deg, #FAFBFE, rgba(0,179,221,0.08)); }
+    .deploy-half h3 { font-size: 15px; margin-bottom: 10px; }
+    .deploy-half ul { list-style: none; }
+    .deploy-half li {
+      font-size: 11px;
+      color: var(--muted);
+      padding: 5px 0 5px 14px;
+      border-bottom: 1px solid var(--line);
+      position: relative;
+    }
+    .deploy-half li::before {
+      content: "";
+      position: absolute;
+      left: 0; top: 11px;
+      width: 5px; height: 5px;
+      border-radius: 50%;
+      background: var(--iris);
+    }
+    .topo-art { margin-top: 18px; flex: 1; min-height: 180px; }
+
+    /* —— P10 Compare —— */
+    .compare {
       display: grid;
       grid-template-columns: 1fr 1fr;
       gap: 16px;
       margin-top: 24px;
       flex: 1;
     }
-    .deploy-half {
-      border-radius: 18px;
-      padding: 24px 20px;
-      border: 1px solid var(--line);
-      display: flex;
-      flex-direction: column;
-    }
-    .deploy-half.saas { background: linear-gradient(160deg, #FAFBFE, rgba(132,125,255,0.08)); }
-    .deploy-half.onprem { background: linear-gradient(160deg, #FAFBFE, rgba(0,179,221,0.08)); }
-    .deploy-half h3 { font-size: 16px; margin-bottom: 12px; }
-    .deploy-half ul { list-style: none; flex: 1; }
-    .deploy-half li {
-      font-size: 11.5px;
-      color: var(--muted);
-      padding: 6px 0;
-      border-bottom: 1px solid var(--line);
-      display: flex; align-items: center; gap: 8px;
-    }
-    .deploy-half li::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: var(--iris); flex-shrink: 0; }
-
-    /* —— P11 WHY —— */
-    .compare {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 20px;
-      margin-top: 32px;
-      flex: 1;
-    }
-    .compare-col {
-      border-radius: 18px;
-      padding: 28px 24px;
-    }
+    .compare-col { border-radius: 14px; padding: 24px 20px; }
     .compare-col.old { background: #F0F1F4; border: 1px solid var(--line); }
-    .compare-col.new {
-      background: var(--ink);
-      color: #fff;
-      border: 1px solid transparent;
-    }
-    .compare-col h3 { font-size: 15px; margin-bottom: 16px; }
+    .compare-col.new { background: var(--ink); color: #fff; }
+    .compare-col h3 { font-size: 14px; margin-bottom: 14px; }
     .compare-col li {
-      font-size: 12.5px;
-      line-height: 1.5;
-      margin-bottom: 12px;
-      padding-left: 18px;
+      font-size: 11.5px;
+      line-height: 1.45;
+      margin-bottom: 10px;
+      padding-left: 16px;
       position: relative;
       list-style: none;
     }
@@ -650,18 +378,17 @@
     .compare-col.new li { color: rgba(255,255,255,0.75); }
     .compare-col.new li::before { content: "✓"; position: absolute; left: 0; color: var(--iris); font-weight: 700; }
 
-    /* —— P12 ROADMAP —— */
+    /* —— P11 Roadmap —— */
     .road {
-      margin-top: 32px;
       display: grid;
       grid-template-columns: repeat(4, 1fr);
-      gap: 14px;
-      flex: 1;
+      gap: 10px;
+      margin-top: 24px;
     }
     .road-phase {
-      border-radius: 16px;
+      border-radius: 12px;
       border: 1px solid var(--line);
-      padding: 20px 16px;
+      padding: 16px 12px;
       background: #fff;
       position: relative;
       overflow: hidden;
@@ -673,54 +400,49 @@
       height: 3px;
       background: linear-gradient(90deg, var(--iris), var(--cyan));
     }
-    .road-phase .wk { font-family: var(--font-n); font-size: 9px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--iris); margin-bottom: 8px; }
-    .road-phase h3 { font-size: 14px; margin-bottom: 8px; }
-    .road-phase p { font-size: 11px; color: var(--muted); line-height: 1.45; }
+    .road-phase .wk { font-family: var(--font-n); font-size: 8px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--iris); margin-bottom: 6px; }
+    .road-phase h3 { font-size: 13px; margin-bottom: 6px; }
+    .road-phase p { font-size: 10px; color: var(--muted); line-height: 1.4; }
 
-    /* —— P13 CONTACT —— */
-    .p-end { background: var(--ink); color: #fff; position: relative; }
-    .p-end .bg-art {
-      position: absolute;
-      inset: 0;
-      z-index: 0;
-      opacity: 0.5;
-    }
+    /* —— P12 Contact —— */
+    .p-end { background: var(--ink); color: #fff; }
+    .p-end .bg-art { position: absolute; inset: 0; z-index: 0; opacity: 0.4; }
     .p-end .bg-art img { width: 100%; height: 100%; object-fit: cover; }
-    .p-end .glow-a { width: 500px; height: 500px; background: var(--deep); opacity: 0.3; bottom: -100px; left: 50%; transform: translateX(-50%); z-index: 1; }
     .p-end .pad { position: relative; z-index: 2; }
     .p-end .end-body {
-      position: relative; z-index: 2;
-      display: flex; flex-direction: column;
-      align-items: center; justify-content: center;
-      text-align: center;
       flex: 1;
-      padding: 40px 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      padding: 32px 0;
     }
-    .p-end h2 { font-size: 42px; max-width: 520px; margin-bottom: 16px; }
+    .p-end h2 { font-size: 38px; max-width: 480px; margin-bottom: 12px; }
     .p-end h2 em { font-style: normal; color: var(--iris); }
-    .p-end .cta-row { display: flex; gap: 12px; margin: 32px 0; flex-wrap: wrap; justify-content: center; }
+    .cta-row { display: flex; gap: 10px; margin: 24px 0; flex-wrap: wrap; justify-content: center; }
     .btn {
-      padding: 14px 28px;
-      border-radius: 10px;
-      font-size: 13px;
+      padding: 12px 24px;
+      border-radius: 8px;
+      font-size: 12px;
       font-weight: 600;
       text-decoration: none;
       font-family: var(--font-h);
     }
     .btn-fill { background: var(--iris); color: #fff; }
     .btn-line { background: transparent; color: #fff; border: 1px solid rgba(255,255,255,0.25); }
-    .contact-meta { font-size: 12px; color: rgba(255,255,255,0.5); line-height: 1.8; }
+    .contact-meta { font-size: 11px; color: rgba(255,255,255,0.5); line-height: 1.75; }
 
     @page { size: A4 portrait; margin: 0; }
     @media print {
       body { background: #fff; }
       .deck { max-width: none; }
-      .p { width: 210mm; min-height: 297mm; margin: 0; box-shadow: none; }
-      .p-cover, .p-end, .p.dark, .stat-strip, .flow-num, .bank-node.hq, .compare-col.new, .disc-cell.accent {
+      .p { width: 210mm; min-height: 297mm; margin: 0; }
+      .p-cover, .p-end, .p.dark, .stat-strip, .compare-col.new, .disc-cell.accent {
         -webkit-print-color-adjust: exact;
         print-color-adjust: exact;
       }
-      .chaos-card, .mod-card, .road-phase, .flow-step, .sec-item, .deploy-half, .compare-col {
+      .mod-card, .road-phase, .move-card, .sec-item, .deploy-half, .compare-col {
         page-break-inside: avoid;
         break-inside: avoid;
       }
@@ -732,71 +454,41 @@
 
 <!-- PAGE 1 — COVER -->
 <section class="p p-cover dark">
-  <div class="glow glow-a"></div>
-  <div class="glow glow-b"></div>
-  <div class="glow glow-c"></div>
+  <div class="cover-bg"><img src="brochure-assets/cover-hub.png" alt="" /></div>
+  <div class="cover-overlay"></div>
   <div class="pad">
     <div class="logo-row">
-      <img src="brochure-assets/qs-logo-mark.svg" alt="" width="36" height="36" />
-      <div><strong>QS Assets</strong><span>by NeurQ AI Labs</span></div>
+      <img src="brochure-assets/qs-logo-mark.svg" alt="" width="32" height="32" />
+      <div><strong style="color:#fff">QS Assets</strong><span>by NeurQ AI Labs</span></div>
     </div>
-    <div class="cover-body">
-      <h1>Discover Everything.<br /><em>Command Anything.</em></h1>
-      <p class="cover-sub">Unified IT &amp; Non-IT Asset Management Platform</p>
+    <div class="cover-meta">
+      <strong>Enterprise Product Brochure · 2026</strong>
+      Unified IT &amp; Non-IT Asset Management<br />
+      www.qsasset.com
     </div>
-    <div class="foot" style="border:none;padding-top:0">
+    <div class="foot" style="border:none;color:rgba(255,255,255,0.4)">
       <span>Enterprise · Trust · Scale</span>
       <span>200+ Teams · 50K+ Assets</span>
     </div>
   </div>
-  <div class="hero-art gen-art">
-    <img src="brochure-assets/cover-hub.png" alt="QS Assets unified asset management hub" />
-  </div>
-  <div class="year-badge">Enterprise Brochure · 2026</div>
 </section>
 
-<!-- PAGE 2 — PROBLEM -->
+<!-- PAGE 2 — CIO SNAPSHOT -->
 <section class="p wash">
   <div class="pad">
-    <div class="eyebrow">The challenge</div>
-    <h2>Enterprise assets are growing.<br />Visibility isn't.</h2>
-    <p class="sub">Distributed estates outpace manual inventory. Spreadsheets fracture. Legacy tools silo data. Security and finance inherit the blind spots.</p>
-    <div class="problem-layout">
-      <div class="chaos-grid compact">
-        <div class="chaos-card">
-          <div class="ico"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/></svg></div>
-          <h3>Disconnected spreadsheets</h3>
-          <p>Procurement, IT, and facilities maintain separate lists that diverge within weeks.</p>
-        </div>
-        <div class="chaos-card">
-          <div class="ico"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="10"/><path d="M12 8v4M12 16h.01"/></svg></div>
-          <h3>Unknown &amp; shadow assets</h3>
-          <p>Orphan devices, rogue APs, and unapproved software evade quarterly audits.</p>
-        </div>
-        <div class="chaos-card">
-          <div class="ico"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg></div>
-          <h3>Security blind spots</h3>
-          <p>Incidents open without hardware context. Patch workflows lack a single CI record.</p>
-        </div>
-        <div class="chaos-card">
-          <div class="ico"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/></svg></div>
-          <h3>License &amp; audit risk</h3>
-          <p>Weak SAM invites shelfware spend and compliance exposure during audits.</p>
-        </div>
-        <div class="chaos-card">
-          <div class="ico"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="7" width="20" height="14" rx="2"/></svg></div>
-          <h3>Expired warranties &amp; AMC</h3>
-          <p>Contract oversights trigger emergency repair budgets and downtime.</p>
-        </div>
-        <div class="chaos-card">
-          <div class="ico"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/></svg></div>
-          <h3>Technician friction</h3>
-          <p>Long MTTR when tickets lack the asset record technicians need at triage.</p>
-        </div>
+    <div class="eyebrow">For CIOs &amp; IT leaders</div>
+    <h2>Visibility gaps cost audits,<br />incidents, and spend.</h2>
+    <p class="sub">Regulated enterprises run branch estates, core banking infra, and facilities assets on fragmented tools. QS Assets unifies them under one control plane.</p>
+    <div class="snapshot-layout">
+      <div>
+        <ul class="pain-list">
+          <li><strong>Branch blind spots</strong> — ATMs, routers, and endpoints missing from the CMDB until audit season.</li>
+          <li><strong>Security without context</strong> — CVE and patch workflows disconnected from the asset record.</li>
+          <li><strong>AMC &amp; license leakage</strong> — expired contracts and shelfware discovered too late.</li>
+          <li><strong>MTTR drag</strong> — tickets opened without the CI technicians need at triage.</li>
+        </ul>
       </div>
-      <div class="gen-art problem-visual hybrid" style="height:100%;min-height:360px">
-        <img class="ai-layer" src="brochure-assets/problem-chaos.png" alt="Enterprise IT chaos illustration" />
-      </div>
+      <div class="slot slot-accent"><img src="brochure-assets/problem-chaos.png" alt="" /></div>
     </div>
     <div class="stat-strip">
       <div><div class="n">65%</div><div class="l">Audit prep reduction*</div></div>
@@ -804,141 +496,140 @@
       <div><div class="n">50%</div><div class="l">Faster asset locate*</div></div>
       <div><div class="n">2–8 wk</div><div class="l">Typical time-to-value</div></div>
     </div>
-    <div class="foot"><span>QS Assets · Enterprise Brochure</span><span>02 / 13 · *Customer deployments</span></div>
+    <div class="foot"><span>QS Assets · Enterprise Brochure</span><span>02 / 12 · *Customer deployments</span></div>
   </div>
 </section>
 
-<!-- PAGE 3 — SOLUTION -->
+<!-- PAGE 3 — PLATFORM IN FOUR MOVES -->
 <section class="p">
   <div class="pad">
     <div class="eyebrow">The platform</div>
-    <h2>Meet QS Assets</h2>
-    <p class="sub">One living inventory — discovery through retirement — for IT, facilities, fleet, cameras, and cloud.</p>
-    <div class="sol-visual gen-art">
-      <img src="brochure-assets/discovery-mesh.png" alt="QS Assets discovery mesh" />
+    <h2>Four moves.<br />One estate.</h2>
+    <p class="sub">Replace seven disconnected tools with a single lifecycle — from auto-discovery through audit-ready reporting.</p>
+    <div class="four-moves">
+      <div class="move-card"><div class="num">01 · DISCOVER</div><h3>Find every asset</h3><p>Agents + agentless sweeps across endpoints, network, cloud, OT, and directory.</p></div>
+      <div class="move-card"><div class="num">02 · INVENTORY</div><h3>Govern the CMDB</h3><p>Living records with owners, sites, relationships, and lifecycle state.</p></div>
+      <div class="move-card"><div class="num">03 · OPERATE</div><h3>Run the estate</h3><p>Monitoring, ITSM, patch, vuln, automation — tied to the same CI.</p></div>
+      <div class="move-card"><div class="num">04 · ASSURE</div><h3>Prove compliance</h3><p>Audit trails, attestation, DPDP-aligned controls, executive dashboards.</p></div>
     </div>
-    <div class="flow-v" style="max-width:62%">
-      <div class="flow-step"><div class="flow-num">01</div><div><h3>Discovery</h3><p>Agent + agentless sweeps across endpoints, network, cloud, and OT.</p></div><span class="flow-tag">Auto</span></div>
-      <div class="flow-step"><div class="flow-num">02</div><div><h3>Inventory</h3><p>Living asset records with owners, sites, and lifecycle state.</p></div><span class="flow-tag">CMDB</span></div>
-      <div class="flow-step"><div class="flow-num">03</div><div><h3>Monitoring</h3><p>SNMP, telemetry, traps, and health dashboards.</p></div><span class="flow-tag">NMS</span></div>
-      <div class="flow-step"><div class="flow-num">04</div><div><h3>Security</h3><p>CVE detection, patch workflows, threat signals, NAC.</p></div><span class="flow-tag">SecOps</span></div>
-      <div class="flow-step"><div class="flow-num">05</div><div><h3>Automation</h3><p>Event-driven rules — notify, ticket, script.</p></div><span class="flow-tag">Rules</span></div>
-      <div class="flow-step"><div class="flow-num">06</div><div><h3>ITSM</h3><p>Incidents, changes, SLA — tied to the same asset record.</p></div><span class="flow-tag">Desk</span></div>
-      <div class="flow-step"><div class="flow-num">07</div><div><h3>Analytics</h3><p>Executive dashboards, scheduled reports, audit trails.</p></div><span class="flow-tag">Reports</span></div>
-    </div>
-    <div class="foot"><span>QS Assets · Enterprise Brochure</span><span>03 / 13</span></div>
+    <svg class="ring-art" viewBox="0 0 682 200" aria-hidden="true">
+      <defs><linearGradient id="rg" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#847DFF"/><stop offset="1" stop-color="#00B3DD"/></linearGradient></defs>
+      <circle cx="341" cy="100" r="88" fill="none" stroke="url(#rg)" stroke-width="1.5" opacity="0.5"/>
+      <circle cx="341" cy="100" r="58" fill="rgba(132,125,255,0.06)" stroke="rgba(0,179,221,0.3)" stroke-width="1"/>
+      <text x="341" y="96" text-anchor="middle" fill="#4B49AA" font-size="11" font-weight="600" font-family="system-ui">QS Assets</text>
+      <text x="341" y="112" text-anchor="middle" fill="#5C6370" font-size="9" font-family="system-ui">Single source of truth</text>
+      <text x="341" y="28" text-anchor="middle" fill="#847DFF" font-size="9" font-weight="600" font-family="system-ui">DISCOVER</text>
+      <text x="560" y="108" text-anchor="middle" fill="#847DFF" font-size="9" font-weight="600" font-family="system-ui">INVENTORY</text>
+      <text x="341" y="188" text-anchor="middle" fill="#00B3DD" font-size="9" font-weight="600" font-family="system-ui">OPERATE</text>
+      <text x="122" y="108" text-anchor="middle" fill="#00B3DD" font-size="9" font-weight="600" font-family="system-ui">ASSURE</text>
+    </svg>
+    <div class="foot"><span>QS Assets · Enterprise Brochure</span><span>03 / 12</span></div>
   </div>
 </section>
 
-<!-- PAGE 4 — PRODUCT OVERVIEW -->
+<!-- PAGE 4 — COMMAND CENTER (single product proof) -->
 <section class="p wash">
   <div class="pad">
     <div class="eyebrow">Command center</div>
     <h2>One workspace.<br />Complete visibility.</h2>
-    <p class="sub">Inventory, health, alerts, tickets, and compliance — unified in a single enterprise control plane.</p>
+    <p class="sub">Inventory, health, alerts, tickets, and compliance — unified for operations and leadership.</p>
     <div class="dash-wrap">
-      <div class="dash-inner shot-frame">
-        <div class="shot-chrome"><i></i><i></i><i></i><span>app.qsasset.com / dashboard</span></div>
-        <img src="brochure-assets/cropped/dashboard.png" alt="QS Assets enterprise dashboard" />
+      <div class="device-frame slot-hero">
+        <img src="brochure-assets/cropped/hero.png" alt="QS Assets dashboard" />
       </div>
       <div class="callout c1">Asset inventory</div>
       <div class="callout c2">Health &amp; alerts</div>
       <div class="callout c3">ITSM tickets</div>
       <div class="callout c4">Compliance reports</div>
     </div>
-    <div class="foot"><span>QS Assets · Enterprise Brochure</span><span>04 / 13</span></div>
+    <div class="foot"><span>QS Assets · Enterprise Brochure</span><span>04 / 12</span></div>
   </div>
 </section>
 
-<!-- PAGE 5 — DISCOVERY -->
+<!-- PAGE 5 — BANKING -->
 <section class="p">
   <div class="pad">
-    <div class="eyebrow">Discovery engine</div>
-    <h2>Discover everything<br />automatically.</h2>
-    <p class="sub">Agents on endpoints. Agentless sweeps on the network. Directory and cloud connectors. One correlation engine.</p>
-    <div class="disc-grid">
-      <div class="disc-cell accent"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg><span>Windows</span></div>
-      <div class="disc-cell"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg><span>Linux</span></div>
-      <div class="disc-cell"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg><span>macOS</span></div>
-      <div class="disc-cell"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15.3 15.3 0 014 10 15.3 15.3 0 01-4 10 15.3 15.3 0 01-4-10 15.3 15.3 0 014-10z"/></svg><span>Network</span></div>
-      <div class="disc-cell"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg><span>SNMP</span></div>
-      <div class="disc-cell"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="2" width="20" height="8" rx="2"/><rect x="2" y="14" width="20" height="8" rx="2"/></svg><span>SSH / WMI</span></div>
-      <div class="disc-cell accent"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M18 10h-1.26A8 8 0 109 20h9a5 5 0 000-10z"/></svg><span>Cloud</span></div>
-      <div class="disc-cell"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="3"/><path d="M12 1v4M12 19v4M4.22 4.22l2.83 2.83M16.95 16.95l2.83 2.83M1 12h4M19 12h4"/></svg><span>IoT / OT</span></div>
+    <div class="eyebrow">Banking &amp; regulated estates</div>
+    <h2>Every branch.<br />Every asset.<br />One record.</h2>
+    <p class="sub">Head office to ATM — servers, routers, CCTV, biometrics, UPS, furniture, and fleet under one control plane.</p>
+    <div class="banking-layout">
+      <div class="slot slot-banking-ai"><img src="brochure-assets/banking-estate.png" alt="" /></div>
+      <div class="banking-bottom">
+        <div>
+          <div class="bank-tags">
+            <span class="bank-tag">ATMs</span>
+            <span class="bank-tag">Core banking servers</span>
+            <span class="bank-tag">Branch routers</span>
+            <span class="bank-tag">CCTV</span>
+            <span class="bank-tag">Biometric</span>
+            <span class="bank-tag">UPS</span>
+            <span class="bank-tag">Fleet</span>
+            <span class="bank-tag">Non-IT assets</span>
+          </div>
+          <p class="banking-note">Ideal for banks, NBFCs, government, PSUs, and regulated enterprises. Requirement-based pricing by branches and per-asset counts — detailed commercial terms in the enterprise proposal.</p>
+        </div>
+        <div class="slot slot-inset"><img src="brochure-assets/cropped/inset.png" alt="Asset inventory" /></div>
+      </div>
     </div>
-    <div class="mesh-banner gen-art">
-      <img src="brochure-assets/discovery-mesh.png" alt="" />
-    </div>
-    <div class="shot-frame" style="margin-top:14px">
-      <div class="shot-chrome"><i></i><i></i><i></i><span>Discovery engine</span></div>
-      <img src="brochure-assets/cropped/discovery.png" alt="QS Assets discovery console" style="height:200px" />
-    </div>
-    <div class="foot"><span>QS Assets · Enterprise Brochure</span><span>05 / 13</span></div>
+    <div class="foot"><span>QS Assets · Enterprise Brochure</span><span>05 / 12</span></div>
   </div>
 </section>
 
-<!-- PAGE 6 — LIFECYCLE -->
+<!-- PAGE 6 — MODULES -->
 <section class="p wash">
-  <div class="pad">
-    <div class="eyebrow">Asset lifecycle</div>
-    <h2>From procurement<br />to retirement.</h2>
-    <p class="sub">Every stage connected. One record. Full audit trail.</p>
-    <div class="timeline">
-      <div class="tl-step"><div class="tl-dot"></div><strong>Procure</strong><span>PO &amp; vendor</span></div>
-      <div class="tl-step"><div class="tl-dot"></div><strong>Deploy</strong><span>Rollout</span></div>
-      <div class="tl-step"><div class="tl-dot"></div><strong>Discover</strong><span>Auto-find</span></div>
-      <div class="tl-step"><div class="tl-dot"></div><strong>Inventory</strong><span>CMDB</span></div>
-      <div class="tl-step"><div class="tl-dot"></div><strong>Monitor</strong><span>Telemetry</span></div>
-      <div class="tl-step"><div class="tl-dot"></div><strong>Maintain</strong><span>WO &amp; AMC</span></div>
-      <div class="tl-step"><div class="tl-dot"></div><strong>Patch</strong><span>Compliance</span></div>
-      <div class="tl-step"><div class="tl-dot"></div><strong>Audit</strong><span>Attest</span></div>
-      <div class="tl-step"><div class="tl-dot"></div><strong>Retire</strong><span>Dispose</span></div>
-    </div>
-    <div class="lifecycle-shot shot-frame">
-      <div class="shot-chrome"><i></i><i></i><i></i><span>Network operations</span></div>
-      <img src="brochure-assets/cropped/network-noc.png" alt="QS Assets network operations center" />
-    </div>
-    <div class="foot"><span>QS Assets · Enterprise Brochure</span><span>06 / 13</span></div>
-  </div>
-</section>
-
-<!-- PAGE 7 — MODULES -->
-<section class="p">
   <div class="pad">
     <div class="eyebrow">Platform modules</div>
     <h2>Twelve modules.<br />One workspace.</h2>
     <p class="sub">Production-ready capabilities — same catalogue as the live QS Assets platform.</p>
     <div class="mod-grid">
-      <div class="mod-card"><div class="ic"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#4B49AA" stroke-width="1.5"><rect x="2" y="3" width="20" height="14" rx="2"/></svg></div><h3>IT Assets</h3><p>Lifecycle, depreciation, checkout, attestation.</p></div>
-      <div class="mod-card"><div class="ic"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#4B49AA" stroke-width="1.5"><path d="M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 003 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0021 16z"/></svg></div><h3>Non-IT Assets</h3><p>Facilities, QR tags, maintenance schedules.</p></div>
-      <div class="mod-card"><div class="ic"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#4B49AA" stroke-width="1.5"><circle cx="6" cy="6" r="3"/><circle cx="18" cy="18" r="3"/><path d="M8.5 8.5L15.5 15.5"/></svg></div><h3>CMDB</h3><p>CI relationships and change impact.</p></div>
-      <div class="mod-card"><div class="ic"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#4B49AA" stroke-width="1.5"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/></svg></div><h3>ITSM</h3><p>Incidents, SLA, escalation, portal.</p></div>
-      <div class="mod-card"><div class="ic"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#4B49AA" stroke-width="1.5"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg></div><h3>Patch Mgmt</h3><p>Compliance scoring, pilot rings, rollback.</p></div>
-      <div class="mod-card"><div class="ic"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#4B49AA" stroke-width="1.5"><circle cx="12" cy="12" r="10"/><path d="M2 12h20"/></svg></div><h3>Network</h3><p>SNMP, topology, traps, NetFlow.</p></div>
-      <div class="mod-card"><div class="ic"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#4B49AA" stroke-width="1.5"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/></svg></div><h3>Vulnerability</h3><p>CVE, CVSS, remediation tracking.</p></div>
-      <div class="mod-card"><div class="ic"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#4B49AA" stroke-width="1.5"><rect x="1" y="3" width="15" height="13"/><polygon points="16 8 20 8 23 11 23 16 16 16 16 8"/></svg></div><h3>Fleet &amp; GPS</h3><p>Vehicles, trips, driver assignment.</p></div>
-      <div class="mod-card"><div class="ic"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#4B49AA" stroke-width="1.5"><path d="M23 19a2 2 0 01-2 2H3a2 2 0 01-2-2V8a2 2 0 012-2h4l2-3h6l2 3h4a2 2 0 012 2z"/><circle cx="12" cy="13" r="4"/></svg></div><h3>CCTV</h3><p>Camera health, stream status, zones.</p></div>
-      <div class="mod-card"><div class="ic"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#4B49AA" stroke-width="1.5"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg></div><h3>VDI</h3><p>Sessions, pools, resource utilization.</p></div>
-      <div class="mod-card"><div class="ic"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#4B49AA" stroke-width="1.5"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><path d="M14 2v6h6"/></svg></div><h3>Contracts</h3><p>POs, renewals, warranty / AMC alerts.</p></div>
-      <div class="mod-card"><div class="ic"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#4B49AA" stroke-width="1.5"><path d="M18 20V10M12 20V4M6 20v-6"/></svg></div><h3>Reports</h3><p>Dashboards, audit trails, DPDP alignment.</p></div>
+      <div class="mod-card"><div class="ic"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#4B49AA" stroke-width="1.5"><rect x="2" y="3" width="20" height="14" rx="2"/></svg></div><h3>IT Assets</h3><p>Lifecycle, depreciation, checkout, attestation.</p></div>
+      <div class="mod-card"><div class="ic"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#4B49AA" stroke-width="1.5"><path d="M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 003 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0021 16z"/></svg></div><h3>Non-IT Assets</h3><p>Facilities, QR tags, maintenance schedules.</p></div>
+      <div class="mod-card"><div class="ic"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#4B49AA" stroke-width="1.5"><circle cx="6" cy="6" r="3"/><circle cx="18" cy="18" r="3"/><path d="M8.5 8.5L15.5 15.5"/></svg></div><h3>CMDB</h3><p>CI relationships and change impact.</p></div>
+      <div class="mod-card"><div class="ic"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#4B49AA" stroke-width="1.5"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/></svg></div><h3>ITSM</h3><p>Incidents, SLA, escalation, portal.</p></div>
+      <div class="mod-card"><div class="ic"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#4B49AA" stroke-width="1.5"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg></div><h3>Patch Mgmt</h3><p>Compliance scoring, pilot rings, rollback.</p></div>
+      <div class="mod-card"><div class="ic"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#4B49AA" stroke-width="1.5"><circle cx="12" cy="12" r="10"/><path d="M2 12h20"/></svg></div><h3>Network</h3><p>SNMP, topology, traps, NetFlow.</p></div>
+      <div class="mod-card"><div class="ic"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#4B49AA" stroke-width="1.5"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/></svg></div><h3>Vulnerability</h3><p>CVE, CVSS, remediation tracking.</p></div>
+      <div class="mod-card"><div class="ic"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#4B49AA" stroke-width="1.5"><rect x="1" y="3" width="15" height="13"/><polygon points="16 8 20 8 23 11 23 16 16 16 16 8"/></svg></div><h3>Fleet &amp; GPS</h3><p>Vehicles, trips, driver assignment.</p></div>
+      <div class="mod-card"><div class="ic"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#4B49AA" stroke-width="1.5"><path d="M23 19a2 2 0 01-2 2H3a2 2 0 01-2-2V8a2 2 0 012-2h4l2-3h6l2 3h4a2 2 0 012 2z"/><circle cx="12" cy="13" r="4"/></svg></div><h3>CCTV</h3><p>Camera health, stream status, zones.</p></div>
+      <div class="mod-card"><div class="ic"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#4B49AA" stroke-width="1.5"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg></div><h3>VDI</h3><p>Sessions, pools, resource utilization.</p></div>
+      <div class="mod-card"><div class="ic"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#4B49AA" stroke-width="1.5"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><path d="M14 2v6h6"/></svg></div><h3>Contracts</h3><p>POs, renewals, warranty / AMC alerts.</p></div>
+      <div class="mod-card"><div class="ic"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#4B49AA" stroke-width="1.5"><path d="M18 20V10M12 20V4M6 20v-6"/></svg></div><h3>Reports</h3><p>Dashboards, audit trails, DPDP alignment.</p></div>
     </div>
-    <div class="mod-thumbs">
-      <div class="shot-frame"><div class="shot-chrome"><i></i><i></i><i></i><span>CMDB</span></div><img src="brochure-assets/cropped/thumb-cmdb.png" alt="" /></div>
-      <div class="shot-frame"><div class="shot-chrome"><i></i><i></i><i></i><span>ITSM</span></div><img src="brochure-assets/cropped/thumb-tickets.png" alt="" /></div>
-      <div class="shot-frame"><div class="shot-chrome"><i></i><i></i><i></i><span>Fleet</span></div><img src="brochure-assets/cropped/thumb-fleet.png" alt="" /></div>
-      <div class="shot-frame"><div class="shot-chrome"><i></i><i></i><i></i><span>Vuln</span></div><img src="brochure-assets/cropped/thumb-vuln.png" alt="" /></div>
-      <div class="shot-frame"><div class="shot-chrome"><i></i><i></i><i></i><span>NOC</span></div><img src="brochure-assets/cropped/thumb-noc.png" alt="" /></div>
-      <div class="shot-frame"><div class="shot-chrome"><i></i><i></i><i></i><span>Reports</span></div><img src="brochure-assets/cropped/thumb-reports.png" alt="" /></div>
-    </div>
-    <div class="foot"><span>QS Assets · Enterprise Brochure</span><span>07 / 13</span></div>
+    <div class="foot"><span>QS Assets · Enterprise Brochure</span><span>06 / 12</span></div>
   </div>
 </section>
 
-<!-- PAGE 8 — SECURITY -->
-<section class="p dark">
-  <div class="glow glow-a" style="width:400px;height:400px;background:var(--deep);opacity:0.35;top:-100px;right:-80px"></div>
+<!-- PAGE 7 — DISCOVERY & OPERATIONS -->
+<section class="p">
   <div class="pad">
-    <div class="eyebrow">Trust &amp; security</div>
+    <div class="eyebrow">Discovery &amp; operations</div>
+    <h2>Discover automatically.<br />Operate continuously.</h2>
+    <p class="sub">Agents on endpoints. Agentless sweeps on the network. Directory and cloud connectors. One correlation engine through retirement.</p>
+    <div class="slot slot-banner"><img src="brochure-assets/discovery-mesh.png" alt="" /></div>
+    <div class="disc-grid">
+      <div class="disc-cell accent">Windows</div>
+      <div class="disc-cell">Linux</div>
+      <div class="disc-cell">macOS</div>
+      <div class="disc-cell">Network</div>
+      <div class="disc-cell">SNMP</div>
+      <div class="disc-cell">SSH / WMI</div>
+      <div class="disc-cell accent">Cloud</div>
+      <div class="disc-cell">IoT / OT</div>
+    </div>
+    <ul class="ops-list">
+      <li><strong>Auto-inventory</strong> — new devices appear in CMDB within minutes of joining the network.</li>
+      <li><strong>Lifecycle linkage</strong> — procurement, deployment, maintenance, patch, and retirement on one CI record.</li>
+      <li><strong>Operational telemetry</strong> — SNMP, traps, NetFlow, and health dashboards without a separate NMS.</li>
+    </ul>
+    <div class="foot"><span>QS Assets · Enterprise Brochure</span><span>07 / 12</span></div>
+  </div>
+</section>
+
+<!-- PAGE 8 — TRUST & COMPLIANCE -->
+<section class="p dark">
+  <div class="glow" style="width:400px;height:400px;background:var(--deep);opacity:0.35;top:-80px;right:-60px"></div>
+  <div class="pad">
+    <div class="eyebrow">Trust &amp; compliance</div>
     <h2 style="color:#fff">Enterprise-grade.<br />India-ready.</h2>
     <p class="sub">SOC 2 control program. DPDP Act 2023 practices. Deploy where your data must live.</p>
     <div class="sec-grid">
@@ -951,51 +642,15 @@
       <div class="sec-item"><h3>Data residency</h3><p>Managed SaaS or self-host on your infrastructure.</p></div>
       <div class="sec-item"><h3>Trust Center</h3><p>Security, DPA, SLA at qsasset.com/security</p></div>
     </div>
-    <div class="sec-arch hybrid gen-art">
-      <img class="ai-layer" src="brochure-assets/security-arch.png" alt="" />
-      <div class="inset-shot shot-frame">
-        <div class="shot-chrome"><i></i><i></i><i></i><span>Audit trail</span></div>
-        <img src="brochure-assets/cropped/audit-logs.png" alt="QS Assets audit trail" style="height:120px" />
-      </div>
-    </div>
-    <div class="foot"><span>QS Assets · Enterprise Brochure</span><span>08 / 13</span></div>
+    <div class="slot slot-arch"><img src="brochure-assets/security-arch.png" alt="" /></div>
+    <div class="foot"><span>QS Assets · Enterprise Brochure</span><span>08 / 12</span></div>
   </div>
 </section>
 
-<!-- PAGE 9 — BANKING -->
+<!-- PAGE 9 — DEPLOYMENT -->
 <section class="p wash">
   <div class="pad">
-    <div class="eyebrow">Industry · Banking &amp; government</div>
-    <h2>Every branch.<br />Every asset.<br />One estate.</h2>
-    <p class="sub">Head office to ATM — servers, routers, CCTV, biometrics, UPS, furniture, and fleet unified under one control plane.</p>
-    <div class="gen-art bank-visual hybrid">
-      <img class="ai-layer" src="brochure-assets/banking-estate.png" alt="Banking asset hierarchy illustration" />
-      <div class="inset-shot shot-frame">
-        <div class="shot-chrome"><i></i><i></i><i></i><span>Asset inventory</span></div>
-        <img src="brochure-assets/cropped/assets.png" alt="National Digital Bank assets" style="height:130px" />
-      </div>
-    </div>
-    <div class="bank-tags">
-        <span class="bank-tag">ATMs</span>
-        <span class="bank-tag">Servers</span>
-        <span class="bank-tag">Routers</span>
-        <span class="bank-tag">CCTV</span>
-        <span class="bank-tag">Biometric</span>
-        <span class="bank-tag">UPS</span>
-        <span class="bank-tag">Furniture</span>
-        <span class="bank-tag">Vehicles</span>
-        <span class="bank-tag">Non-IT Assets</span>
-    </div>
-    <p style="text-align:center;font-size:12px;color:var(--muted);margin-top:24px;font-weight:500">Ideal for · Banks · NBFCs · Government · PSUs · Regulated enterprises</p>
-    <p style="text-align:center;font-size:11px;color:var(--muted);margin-top:8px">Requirement-based pricing by branches, IT/non-IT assets per site, on-prem deployment, AMC &amp; managed services.</p>
-    <div class="foot"><span>QS Assets · Enterprise Brochure</span><span>09 / 13</span></div>
-  </div>
-</section>
-
-<!-- PAGE 10 — DEPLOYMENT -->
-<section class="p">
-  <div class="pad">
-    <div class="eyebrow">Deployment architecture</div>
+    <div class="eyebrow">Deployment</div>
     <h2>Cloud SaaS or<br />on your infrastructure.</h2>
     <p class="sub">Same platform capabilities. Your choice of hosting, residency, and control.</p>
     <div class="deploy-split">
@@ -1020,19 +675,23 @@
         </ul>
       </div>
     </div>
-    <div class="deploy-shot hybrid gen-art" style="height:200px">
-      <img class="ai-layer" src="brochure-assets/cover-hero.png" alt="" />
-      <div class="inset-shot shot-frame" style="width:55%">
-        <div class="shot-chrome"><i></i><i></i><i></i><span>qsasset.com / security</span></div>
-        <img src="brochure-assets/cropped/security-band.png" alt="QS Assets trust center" style="height:100px" />
-      </div>
-    </div>
-    <div class="foot"><span>QS Assets · Enterprise Brochure</span><span>10 / 13</span></div>
+    <svg class="topo-art" viewBox="0 0 682 180" aria-hidden="true">
+      <rect x="20" y="16" width="642" height="148" rx="12" fill="#F6F7FB" stroke="rgba(132,125,255,0.2)" stroke-width="1"/>
+      <rect x="60" y="48" width="90" height="44" rx="8" fill="#fff" stroke="#847DFF" stroke-width="1"/><text x="105" y="75" text-anchor="middle" fill="#090A0B" font-size="9" font-weight="600" font-family="system-ui">Web UI</text>
+      <rect x="190" y="48" width="90" height="44" rx="8" fill="#fff" stroke="#847DFF" stroke-width="1"/><text x="235" y="75" text-anchor="middle" fill="#090A0B" font-size="9" font-weight="600" font-family="system-ui">API</text>
+      <rect x="320" y="48" width="90" height="44" rx="8" fill="#fff" stroke="#00B3DD" stroke-width="1"/><text x="365" y="75" text-anchor="middle" fill="#090A0B" font-size="9" font-weight="600" font-family="system-ui">Postgres</text>
+      <rect x="450" y="48" width="90" height="44" rx="8" fill="#fff" stroke="#00B3DD" stroke-width="1"/><text x="495" y="75" text-anchor="middle" fill="#090A0B" font-size="9" font-weight="600" font-family="system-ui">Redis</text>
+      <rect x="120" y="108" width="442" height="36" rx="8" fill="rgba(132,125,255,0.08)" stroke="rgba(132,125,255,0.25)" stroke-width="1"/><text x="341" y="130" text-anchor="middle" fill="#4B49AA" font-size="9" font-weight="600" font-family="system-ui">Discovery Agents · SNMP · SSH · WMI · Cloud Connectors</text>
+      <line x1="150" y1="70" x2="190" y2="70" stroke="#847DFF" stroke-width="1"/>
+      <line x1="280" y1="70" x2="320" y2="70" stroke="#847DFF" stroke-width="1"/>
+      <line x1="410" y1="70" x2="450" y2="70" stroke="#00B3DD" stroke-width="1"/>
+    </svg>
+    <div class="foot"><span>QS Assets · Enterprise Brochure</span><span>09 / 12</span></div>
   </div>
 </section>
 
-<!-- PAGE 11 — WHY -->
-<section class="p wash">
+<!-- PAGE 10 — WHY -->
+<section class="p">
   <div class="pad">
     <div class="eyebrow">Why QS Assets</div>
     <h2>Consolidate the stack.<br />Recover the spend.</h2>
@@ -1061,68 +720,44 @@
         </ul>
       </div>
     </div>
-    <div class="band-shot">
-      <img src="brochure-assets/cropped/pricing-band.png" alt="QS Assets pricing — qsasset.com" style="height:140px" />
-    </div>
-    <div class="foot"><span>QS Assets · Enterprise Brochure</span><span>11 / 13</span></div>
+    <div class="foot"><span>QS Assets · Enterprise Brochure</span><span>10 / 12</span></div>
   </div>
 </section>
 
-<!-- PAGE 12 — IMPLEMENTATION -->
-<section class="p">
+<!-- PAGE 11 — IMPLEMENTATION -->
+<section class="p wash">
   <div class="pad">
     <div class="eyebrow">Implementation</div>
     <h2>Phased rollout.<br />Controlled cutover.</h2>
     <p class="sub">Designed for enterprise estates. SaaS customers typically compress Phase 1 significantly.</p>
     <div class="road">
-      <div class="road-phase">
-        <div class="wk">Weeks 1–2</div>
-        <h3>Foundation</h3>
-        <p>Tenant stand-up. SSO. Roles, sites, branding, alert channels.</p>
-      </div>
-      <div class="road-phase">
-        <div class="wk">Weeks 3–5</div>
-        <h3>Discovery pilot</h3>
-        <p>Credential vault. Agentless CIDR sweeps. 50–100 agent endpoints.</p>
-      </div>
-      <div class="road-phase">
-        <div class="wk">Weeks 6–8</div>
-        <h3>Scale-out</h3>
-        <p>ITSM queues, SLA, GPO/MDM agent rollout, patch &amp; vuln workflows.</p>
-      </div>
-      <div class="road-phase">
-        <div class="wk">Weeks 9–12</div>
-        <h3>Harden &amp; handover</h3>
-        <p>Automation, contract alarms, attestation, training, hypercare.</p>
-      </div>
+      <div class="road-phase"><div class="wk">Weeks 1–2</div><h3>Foundation</h3><p>Tenant stand-up. SSO. Roles, sites, branding, alert channels.</p></div>
+      <div class="road-phase"><div class="wk">Weeks 3–5</div><h3>Discovery pilot</h3><p>Credential vault. Agentless CIDR sweeps. 50–100 agent endpoints.</p></div>
+      <div class="road-phase"><div class="wk">Weeks 6–8</div><h3>Scale-out</h3><p>ITSM queues, SLA, GPO/MDM agent rollout, patch &amp; vuln workflows.</p></div>
+      <div class="road-phase"><div class="wk">Weeks 9–12</div><h3>Harden &amp; handover</h3><p>Automation, contract alarms, attestation, training, hypercare.</p></div>
     </div>
-    <div class="stat-strip" style="margin-top:28px;background:linear-gradient(135deg,var(--deep),var(--iris))">
+    <div class="stat-strip" style="margin-top:24px;background:linear-gradient(135deg,var(--deep),var(--iris))">
       <div><div class="n" style="color:#fff">₹55.7L</div><div class="l">Illustrative annual savings*</div></div>
       <div><div class="n" style="color:#fff">2,500</div><div class="l">Assets in ROI model</div></div>
       <div><div class="n" style="color:#fff">40+</div><div class="l">MSP client tenants</div></div>
       <div><div class="n" style="color:#fff">99.9%</div><div class="l">SaaS uptime SLA</div></div>
     </div>
-    <p style="font-size:10px;color:var(--muted);margin-top:10px">*2,500 assets / 20 agent seats vs. fragmented tool stack — illustrative TCO model.</p>
-    <div class="shot-frame" style="margin-top:16px">
-      <div class="shot-chrome"><i></i><i></i><i></i><span>Discovery pilot</span></div>
-      <img src="brochure-assets/cropped/discovery.png" alt="Discovery pilot workspace" style="height:150px" />
-    </div>
-    <div class="foot"><span>QS Assets · Enterprise Brochure</span><span>12 / 13</span></div>
+    <p style="font-size:9px;color:var(--muted);margin-top:8px">*2,500 assets / 20 agent seats vs. fragmented tool stack — illustrative TCO model.</p>
+    <div class="foot"><span>QS Assets · Enterprise Brochure</span><span>11 / 12</span></div>
   </div>
 </section>
 
-<!-- PAGE 13 — CONTACT -->
+<!-- PAGE 12 — CONTACT -->
 <section class="p p-end dark">
   <div class="bg-art"><img src="brochure-assets/backcover-bg.png" alt="" /></div>
-  <div class="glow glow-a"></div>
   <div class="pad">
     <div class="logo-row" style="align-self:flex-start">
-      <img src="brochure-assets/qs-logo-mark.svg" alt="" width="36" height="36" />
+      <img src="brochure-assets/qs-logo-mark.svg" alt="" width="32" height="32" />
       <div><strong style="color:#fff">QS Assets</strong><span>by NeurQ AI Labs</span></div>
     </div>
     <div class="end-body">
       <h2>Ready to take control of every <em>enterprise asset</em>?</h2>
-      <p class="sub" style="text-align:center;max-width:440px">Book a live demo, start a free trial, or request an enterprise quote with requirement-based pricing.</p>
+      <p class="sub" style="text-align:center;max-width:420px">Book a live demo, start a free trial, or request an enterprise quote with requirement-based pricing.</p>
       <div class="cta-row">
         <a class="btn btn-fill" href="https://www.qsasset.com/contact">Book demo</a>
         <a class="btn btn-line" href="https://www.qsasset.com/register">Start trial</a>
@@ -1136,7 +771,7 @@
         © 2026 NeurQ AI Labs Pvt Ltd · Enterprise Brochure 2026
       </div>
     </div>
-    <div class="foot"><span>Confidential · For intended recipient</span><span>13 / 13</span></div>
+    <div class="foot"><span>Confidential · For intended recipient</span><span>12 / 12</span></div>
   </div>
 </section>
 

@@ -1,4 +1,4 @@
-import { readFileSync, writeFileSync } from "fs";
+import { readFileSync, writeFileSync, existsSync } from "fs";
 import { dirname, join, resolve } from "path";
 import { fileURLToPath } from "url";
 import { execFileSync } from "child_process";
@@ -8,8 +8,21 @@ const root = join(__dirname, "..");
 const htmlFile = resolve(root, "qs_assets_product_brochure.html");
 const pdfFile = resolve(root, "QS_Assets_Product_Brochure.pdf");
 const docxFile = resolve(root, "QS_Assets_Product_Brochure.docx");
-const chromePath =
-  "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
+const chromeCandidates = [
+  process.env.CHROME_PATH,
+  process.platform === "darwin"
+    ? "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
+    : null,
+  "/usr/local/bin/google-chrome",
+  "/usr/bin/google-chrome",
+  "/usr/bin/chromium",
+  "/usr/bin/chromium-browser",
+].filter(Boolean);
+
+const chromePath = chromeCandidates.find((p) => existsSync(p));
+if (!chromePath) {
+  throw new Error(`Chrome/Chromium not found. Set CHROME_PATH. Tried: ${chromeCandidates.join(", ")}`);
+}
 
 function exportPdf() {
   execFileSync(

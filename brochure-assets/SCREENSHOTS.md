@@ -1,36 +1,49 @@
-# Brochure visuals
+# Brochure visuals — 12-page CIO edition
 
-Hybrid layout: **AI concept art** for covers, problems, architecture + **cropped real screenshots** as proof.
+## Visual tiers
+
+| Tier | Use | Count |
+|------|-----|-------|
+| A — AI concept | Cover, problem, banking, discovery banner, security, back cover | 6 |
+| B — Product proof | Dashboard hero + banking assets inset | 2 |
+| C — Text / SVG | Modules, compare, roadmap, deployment | 0 photos |
 
 ## Regenerate
 
 ```bash
-# 1. Capture (optional — requires puppeteer + local dev)
+# Optional: capture from local demo (requires API + web running)
 node scripts/capture-brochure-screenshots.mjs
 
-# 2. Crop screenshots (removes sidebar, focuses content)
+# Crop to layout slots (dashboard + assets)
 node scripts/crop-brochure-images.mjs
 
-# 3. Export PDF + DOCX
+# Export PDF + DOCX
 node scripts/export-brochure.mjs
 ```
 
-## Asset map
+Outputs: `hero.png` and `inset.png` in `brochure-assets/cropped/` (682×360 and 300×170).
 
-| Page | AI art | Cropped screenshot |
-|------|--------|-------------------|
-| 1 Cover | `cover-hub.png` (ChatGPT hub) | — |
-| 2 Problem | `problem-chaos.png` | — |
-| 3 Solution | `discovery-mesh.png` | — |
-| 4 Dashboard | — | `cropped/dashboard.png` |
-| 5 Discovery | `discovery-mesh.png` banner | `cropped/discovery.png` |
-| 6 Lifecycle | — | `cropped/network-noc.png` |
-| 7 Modules | — | 6× `cropped/thumb-*.png` |
-| 8 Security | `security-arch.png` | inset `cropped/audit-logs.png` |
-| 9 Banking | `banking-estate.png` | inset `cropped/assets.png` |
-| 10 Deploy | `cover-hero.png` | inset `cropped/security-band.png` |
-| 11 Why | — | `cropped/pricing-band.png` |
-| 12 Rollout | — | `cropped/discovery.png` |
-| 13 Contact | `backcover-bg.png` | — |
+Slot definitions: `brochure-assets/crop-manifest.json`.
 
-AI originals live in `brochure-assets/`. Raw captures in `screenshots/`. Print-ready crops in `cropped/`.
+## Page map
+
+| # | Title | Visual |
+|---|-------|--------|
+| 1 | Cover | `cover-hub.png` full bleed |
+| 2 | CIO snapshot | `problem-chaos.png` accent |
+| 3 | Four moves | SVG ring only |
+| 4 | Command center | `cropped/hero.png` |
+| 5 | Banking | `banking-estate.png` + `cropped/inset.png` |
+| 6 | Modules | Text grid only |
+| 7 | Discovery | `discovery-mesh.png` banner |
+| 8 | Security | `security-arch.png` |
+| 9 | Deployment | SVG topology |
+| 10 | Why | Compare columns |
+| 11 | Implementation | Roadmap |
+| 12 | Contact | `backcover-bg.png` |
+
+## Demo login (local capture)
+
+`director@demobank.com` / `Demo@2026` on National Digital Bank tenant.
+
+Production Railway auth may be unavailable; brochure proof shots use demo UI or AI mockups until production API is healthy.

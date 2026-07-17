@@ -1,0 +1,20 @@
+{
+  "sourceDir": "brochure-assets/screenshots",
+  "outputDir": "brochure-assets/cropped",
+  "slots": {
+    "slot-hero": {
+      "source": "dashboard.png",
+      "extract": { "left": 500, "top": 110, "width": 2320, "height": 1180 },
+      "output": { "width": 682, "height": 360 },
+      "fit": "cover",
+      "position": "left top"
+    },
+    "slot-inset": {
+      "source": "assets.png",
+      "extract": { "left": 500, "top": 90, "width": 2320, "height": 900 },
+      "output": { "width": 300, "height": 170 },
+      "fit": "cover",
+      "position": "top"
+    }
+  }
+}

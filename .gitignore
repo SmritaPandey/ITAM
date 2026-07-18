@@ -45,3 +45,4 @@ docker-data/
 *.log
 npm-debug.log*
 .vercel
+.secrets/

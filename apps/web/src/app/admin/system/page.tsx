@@ -1,7 +1,7 @@
 "use client";
 import { useState, useEffect } from "react";
 import { apiFetch } from "@/lib/api";
-import { Activity, Database, Server, Cpu, HardDrive, Clock, RefreshCw, Shield } from "lucide-react";
+import { Database, Server, Cpu, HardDrive, Clock, RefreshCw, Shield, CheckCircle2, XCircle } from "lucide-react";
 
 export default function SystemPage() {
   const [health, setHealth] = useState<any>(null);
@@ -87,6 +87,39 @@ export default function SystemPage() {
                 <div style={{ fontSize: 18, fontWeight: 800, color: "var(--text-primary)" }}>{m.value}</div>
               </div>
             ))}
+          </div>
+
+          <div style={{ padding: 18, borderRadius: 12, background: "var(--bg-card)", border: "1px solid var(--border-primary)", marginBottom: 24 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "flex-start", marginBottom: 14 }}>
+              <div>
+                <h3 style={{ fontSize: 14, fontWeight: 700, color: "var(--text-primary)", margin: 0 }}>Operational readiness</h3>
+                <p style={{ fontSize: 11, color: "var(--text-tertiary)", margin: "4px 0 0" }}>
+                  Configuration presence only; secrets are never returned to the browser.
+                </p>
+              </div>
+              <span style={{ fontSize: 10, color: "var(--text-tertiary)", fontFamily: "monospace" }}>
+                {health.deployment?.mode || "saas"} · {health.deployment?.processRole || "all"} · {health.deployment?.version || "unknown"}
+              </span>
+            </div>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(190px, 1fr))", gap: 8 }}>
+              {Object.entries({
+                "Redis / distributed state": health.operationalReadiness?.redis,
+                "Vault encryption": health.operationalReadiness?.vaultEncryption,
+                "Product-license signing": health.operationalReadiness?.licenseSigning,
+                "Platform-update signing": health.operationalReadiness?.platformUpdateSigning,
+                "Agent-update signing": health.operationalReadiness?.agentUpdateSigning,
+                "SMTP delivery": health.operationalReadiness?.smtp,
+                "Enterprise identity": health.operationalReadiness?.oidcOrSaml,
+              }).map(([label, configured]) => (
+                <div key={label} style={{ display: "flex", alignItems: "center", gap: 7, padding: "8px 10px", borderRadius: 8, background: "var(--bg-base)" }}>
+                  {configured ? <CheckCircle2 size={14} color="#10b981" /> : <XCircle size={14} color="#f59e0b" />}
+                  <span style={{ fontSize: 11, color: "var(--text-secondary)" }}>{label}</span>
+                  <span style={{ marginLeft: "auto", fontSize: 9, fontWeight: 700, color: configured ? "#10b981" : "#f59e0b" }}>
+                    {configured ? "CONFIGURED" : "ACTION NEEDED"}
+                  </span>
+                </div>
+              ))}
+            </div>
           </div>
         </>
       ) : null}

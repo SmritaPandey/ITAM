@@ -108,6 +108,14 @@ export class ProductLicenseController {
     return this.service.activateChallenge(body);
   }
 
+  @Get('summary')
+  @ApiBearerAuth()
+  @UseGuards(AuthGuard('jwt'), SuperAdminGuard)
+  @ApiOperation({ summary: 'Get product license operational summary' })
+  summary() {
+    return this.service.getLicenseSummary();
+  }
+
   @Get()
   @ApiBearerAuth()
   @UseGuards(AuthGuard('jwt'), SuperAdminGuard)

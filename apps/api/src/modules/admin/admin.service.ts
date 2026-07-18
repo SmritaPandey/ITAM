@@ -584,6 +584,29 @@ export class AdminService {
         heapUsed: `${Math.round(process.memoryUsage().heapUsed / 1024 / 1024)}MB`,
       },
       environment: process.env.NODE_ENV,
+      deployment: {
+        mode: process.env.DEPLOYMENT_MODE || 'saas',
+        processRole: process.env.PROCESS_ROLE || 'all',
+        version: process.env.PLATFORM_VERSION || process.env.npm_package_version || 'unknown',
+      },
+      operationalReadiness: {
+        redis: Boolean(process.env.REDIS_URL),
+        vaultEncryption: Boolean(process.env.VAULT_ENCRYPTION_KEY),
+        licenseSigning: Boolean(process.env.LICENSE_PRIVATE_KEY && process.env.LICENSE_PUBLIC_KEY),
+        platformUpdateSigning: Boolean(
+          process.env.PLATFORM_UPDATE_PRIVATE_KEY && process.env.PLATFORM_UPDATE_PUBLIC_KEY,
+        ),
+        agentUpdateSigning: Boolean(
+          process.env.AGENT_UPDATE_PRIVATE_KEY && process.env.AGENT_UPDATE_PUBLIC_KEY,
+        ),
+        smtp: Boolean(process.env.SMTP_HOST && process.env.SMTP_USER),
+        oidcOrSaml: Boolean(
+          process.env.OIDC_CLIENT_ID ||
+            process.env.SAML_ENTRY_POINT ||
+            process.env.GOOGLE_CLIENT_ID ||
+            process.env.MICROSOFT_CLIENT_ID,
+        ),
+      },
     };
   }
 

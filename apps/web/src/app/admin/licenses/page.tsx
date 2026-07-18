@@ -3,7 +3,22 @@ import { useEffect, useState } from "react";
 import { apiFetch, getApiBase, getToken } from "@/lib/api";
 import {
   Key, Plus, Download, Ban, RefreshCw, Search, Copy, CheckCircle2, X,
+  Boxes, Server, Users, AlertTriangle,
 } from "lucide-react";
+
+const MODULES = [
+  ["DASHBOARD", "Dashboard"], ["MY_PORTAL", "My Portal"], ["ALL_ASSETS", "All Assets"],
+  ["IT_ASSETS", "IT Assets"], ["NON_IT_ASSETS", "Non-IT Assets"], ["TICKETS", "Tickets"],
+  ["SERVICE_CATALOG", "Service Catalog"], ["USERS", "Users"], ["SETTINGS", "Settings"],
+  ["HELP", "Help & Docs"], ["CMDB", "CMDB"], ["WORK_ORDERS", "Work Orders"],
+  ["FACILITY", "Facility & EAM"], ["DISCOVERY", "Discovery"], ["PATCH_MGMT", "Patch Mgmt"],
+  ["SOFTWARE_DEPLOYMENT", "Software Deploy"], ["NETWORK", "Network (NMS)"],
+  ["SECURITY_SCAN", "Security Scan"], ["LICENSES", "Licenses"], ["KNOWLEDGE_BASE", "Knowledge Base"],
+  ["REPORTS", "Reports"], ["AUDIT_LOGS", "Audit Logs"], ["CCTV", "CCTV"], ["ALERTS", "Alerts"],
+  ["COMPLIANCE", "Compliance"], ["PROCUREMENT", "Procurement"], ["CHANGES", "Changes"],
+  ["PROBLEMS", "Problems"], ["FLEET", "Fleet / GPS"], ["VDI", "VDI"], ["AUTOMATION", "Automation"],
+  ["NAC", "NAC"], ["INTELLIGENCE", "Intelligence"], ["REMOTE_TERMINAL", "Remote Terminal"],
+] as const;
 
 const STATUS_COLORS: Record<string, string> = {
   ISSUED: "#64748b",
@@ -14,9 +29,11 @@ const STATUS_COLORS: Record<string, string> = {
 
 export default function AdminLicensesPage() {
   const [licenses, setLicenses] = useState<any[]>([]);
+  const [summary, setSummary] = useState<any>(null);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
+  const [statusFilter, setStatusFilter] = useState("");
   const [showIssue, setShowIssue] = useState(false);
   const [issuing, setIssuing] = useState(false);
   const [issuedResult, setIssuedResult] = useState<any>(null);
@@ -30,15 +47,24 @@ export default function AdminLicensesPage() {
     maxUsers: "-1",
     expiresAt: "",
     notes: "",
+    allowedModules: MODULES.map(([key]) => key) as string[],
   });
 
-  function load(q?: string) {
+  function load(q?: string, status = statusFilter) {
     setLoading(true);
-    apiFetch(`/product-licenses?limit=50${q ? `&search=${encodeURIComponent(q)}` : ""}`)
-      .then((d) => {
+    const params = new URLSearchParams({ limit: "50" });
+    if (q) params.set("search", q);
+    if (status) params.set("status", status);
+    Promise.all([
+      apiFetch(`/product-licenses?${params}`),
+      apiFetch("/product-licenses/summary"),
+    ])
+      .then(([d, s]) => {
+        setSummary(s);
         setLicenses(d.data || []);
         setTotal(d.total || 0);
       })
+      .catch((err) => alert(err?.message || "Failed to load licenses"))
       .finally(() => setLoading(false));
   }
 
@@ -64,11 +90,12 @@ export default function AdminLicensesPage() {
           maxUsers: Number(form.maxUsers),
           expiresAt: new Date(form.expiresAt).toISOString(),
           notes: form.notes || undefined,
+          allowedModules: form.allowedModules,
         }),
       });
       setIssuedResult(res);
       setShowIssue(false);
-      load(search);
+      load(search, statusFilter);
     } catch (err: any) {
       alert(err?.message || "Failed to issue license");
     } finally {
@@ -93,7 +120,7 @@ export default function AdminLicensesPage() {
   async function revoke(id: string) {
     if (!confirm("Revoke this license? On-prem installs will fail future online activations.")) return;
     await apiFetch(`/product-licenses/${id}/revoke`, { method: "POST" });
-    load(search);
+    load(search, statusFilter);
   }
 
   async function renew(id: string) {
@@ -104,7 +131,7 @@ export default function AdminLicensesPage() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ expiresAt: new Date(next).toISOString() }),
     });
-    load(search);
+    load(search, statusFilter);
   }
 
   function copyText(text: string) {
@@ -146,6 +173,28 @@ export default function AdminLicensesPage() {
                 }}
               />
             </div>
+            <select
+              aria-label="Filter by status"
+              value={statusFilter}
+              onChange={(e) => {
+                setStatusFilter(e.target.value);
+                load(search, e.target.value);
+              }}
+              style={{
+                padding: "8px 10px",
+                borderRadius: 8,
+                border: "1px solid var(--border-primary)",
+                background: "var(--bg-input)",
+                color: "var(--text-primary)",
+                fontSize: 12,
+              }}
+            >
+              <option value="">All statuses</option>
+              <option value="ISSUED">Issued</option>
+              <option value="ACTIVE">Active</option>
+              <option value="EXPIRED">Expired</option>
+              <option value="REVOKED">Revoked</option>
+            </select>
           </form>
           <button
             onClick={() => setShowIssue(true)}
@@ -167,6 +216,36 @@ export default function AdminLicensesPage() {
           </button>
         </div>
       </div>
+
+      {summary && (
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))", gap: 12, marginBottom: 16 }}>
+          {[
+            { label: "Total entitlements", value: summary.total, icon: Key, color: "#06b6d4" },
+            { label: "Active installs", value: summary.byStatus?.active ?? 0, icon: Server, color: "#10b981" },
+            {
+              label: "Licensed users",
+              value: summary.activeCapacity?.includesUnlimitedUsers ? "Unlimited" : summary.activeCapacity?.maxUsers ?? 0,
+              icon: Users,
+              color: "#8b5cf6",
+            },
+            {
+              label: "Licensed assets",
+              value: summary.activeCapacity?.includesUnlimitedAssets ? "Unlimited" : summary.activeCapacity?.maxAssets ?? 0,
+              icon: Boxes,
+              color: "#3b82f6",
+            },
+            { label: "Expire within 30 days", value: summary.expiringSoon ?? 0, icon: AlertTriangle, color: "#f59e0b" },
+          ].map((item) => (
+            <div key={item.label} style={{ padding: 14, borderRadius: 12, border: "1px solid var(--border-primary)", background: "var(--bg-card)" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 7, marginBottom: 7, color: item.color }}>
+                <item.icon size={14} />
+                <span style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: .5 }}>{item.label}</span>
+              </div>
+              <div style={{ fontSize: 20, fontWeight: 800, color: "var(--text-primary)" }}>{item.value}</div>
+            </div>
+          ))}
+        </div>
+      )}
 
       {issuedResult && (
         <div
@@ -347,6 +426,8 @@ export default function AdminLicensesPage() {
               border: "1px solid var(--border-primary)",
               borderRadius: 14,
               padding: 24,
+              maxHeight: "90vh",
+              overflowY: "auto",
             }}
           >
             <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 16 }}>
@@ -402,11 +483,54 @@ export default function AdminLicensesPage() {
                 <option value="ENTERPRISE">ENTERPRISE</option>
               </select>
             </label>
+            <fieldset style={{ margin: "0 0 16px", padding: 12, borderRadius: 8, border: "1px solid var(--border-primary)" }}>
+              <legend style={{ padding: "0 5px", fontSize: 12, color: "var(--text-secondary)" }}>
+                Licensed modules ({form.allowedModules.length}/{MODULES.length})
+              </legend>
+              <div style={{ display: "flex", gap: 8, marginBottom: 10 }}>
+                <button
+                  type="button"
+                  onClick={() => setForm((f) => ({ ...f, allowedModules: MODULES.map(([key]) => key) }))}
+                  style={{ padding: "4px 8px", borderRadius: 6, border: "1px solid var(--border-primary)", background: "transparent", color: "var(--text-secondary)", fontSize: 10, cursor: "pointer" }}
+                >
+                  Select all
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setForm((f) => ({ ...f, allowedModules: [] }))}
+                  style={{ padding: "4px 8px", borderRadius: 6, border: "1px solid var(--border-primary)", background: "transparent", color: "var(--text-secondary)", fontSize: 10, cursor: "pointer" }}
+                >
+                  Clear
+                </button>
+              </div>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: "6px 12px", maxHeight: 180, overflowY: "auto" }}>
+                {MODULES.map(([key, label]) => (
+                  <label key={key} style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 11, color: "var(--text-secondary)" }}>
+                    <input
+                      type="checkbox"
+                      checked={form.allowedModules.includes(key)}
+                      onChange={(e) => setForm((f) => ({
+                        ...f,
+                        allowedModules: e.target.checked
+                          ? [...f.allowedModules, key]
+                          : f.allowedModules.filter((module) => module !== key),
+                      }))}
+                    />
+                    {label}
+                  </label>
+                ))}
+              </div>
+              {form.allowedModules.length === 0 && (
+                <p style={{ margin: "8px 0 0", fontSize: 10, color: "#f59e0b" }}>
+                  No selection means the server will issue all modules. Select the intended modules explicitly.
+                </p>
+              )}
+            </fieldset>
             <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
               <button type="button" onClick={() => setShowIssue(false)} style={{ padding: "8px 14px", borderRadius: 8, border: "1px solid var(--border-primary)", background: "transparent", color: "var(--text-secondary)", cursor: "pointer" }}>
                 Cancel
               </button>
-              <button type="submit" disabled={issuing} style={{ padding: "8px 14px", borderRadius: 8, border: "none", background: "#06b6d4", color: "#fff", fontWeight: 600, cursor: "pointer" }}>
+              <button type="submit" disabled={issuing || form.allowedModules.length === 0} style={{ padding: "8px 14px", borderRadius: 8, border: "none", background: "#06b6d4", color: "#fff", fontWeight: 600, cursor: "pointer", opacity: issuing || form.allowedModules.length === 0 ? .6 : 1 }}>
                 {issuing ? "Issuing…" : "Issue"}
               </button>
             </div>

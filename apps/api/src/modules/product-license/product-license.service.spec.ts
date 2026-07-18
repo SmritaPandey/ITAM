@@ -75,6 +75,43 @@ describe('ProductLicenseService', () => {
     ).resolves.toEqual(['DASHBOARD']);
   });
 
+  it('summarizes license operations for the owner console', async () => {
+    const count = jest
+      .fn()
+      .mockResolvedValueOnce(12)
+      .mockResolvedValueOnce(3)
+      .mockResolvedValueOnce(5)
+      .mockResolvedValueOnce(2)
+      .mockResolvedValueOnce(2)
+      .mockResolvedValueOnce(1)
+      .mockResolvedValueOnce(1)
+      .mockResolvedValueOnce(0);
+    const prisma: any = {
+      productLicense: {
+        count,
+        aggregate: jest.fn().mockResolvedValue({
+          _sum: { maxAssets: 2500, maxUsers: 120 },
+        }),
+      },
+    };
+    const service = new ProductLicenseService(prisma);
+
+    const result = await service.getLicenseSummary();
+
+    expect(result).toMatchObject({
+      total: 12,
+      byStatus: { issued: 3, active: 5, revoked: 2, expired: 2 },
+      expiringSoon: 1,
+      activeCapacity: {
+        maxAssets: 2500,
+        maxUsers: 120,
+        includesUnlimitedAssets: 1,
+        includesUnlimitedUsers: 0,
+      },
+    });
+    expect(result.generatedAt).toEqual(expect.any(String));
+  });
+
   it('refuses first-boot bootstrap with ChangeMe passwords', async () => {
     const oldOwner = process.env.OWNER_PASSWORD;
     const oldAdmin = process.env.TENANT_ADMIN_PASSWORD;

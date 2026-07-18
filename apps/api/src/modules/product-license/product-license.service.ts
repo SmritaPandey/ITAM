@@ -346,6 +346,50 @@ export class ProductLicenseService implements OnModuleInit {
     return { data, total };
   }
 
+  async getLicenseSummary() {
+    const now = new Date();
+    const expiringBefore = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
+    const [total, issued, active, revoked, expired, expiringSoon, activeCapacity] =
+      await Promise.all([
+        this.prisma.productLicense.count(),
+        this.prisma.productLicense.count({ where: { status: 'ISSUED' } }),
+        this.prisma.productLicense.count({ where: { status: 'ACTIVE' } }),
+        this.prisma.productLicense.count({ where: { status: 'REVOKED' } }),
+        this.prisma.productLicense.count({
+          where: {
+            OR: [{ status: 'EXPIRED' }, { expiresAt: { lt: now } }],
+          },
+        }),
+        this.prisma.productLicense.count({
+          where: {
+            status: { in: ['ISSUED', 'ACTIVE'] },
+            expiresAt: { gte: now, lte: expiringBefore },
+          },
+        }),
+        this.prisma.productLicense.aggregate({
+          where: { status: 'ACTIVE' },
+          _sum: { maxAssets: true, maxUsers: true },
+        }),
+      ]);
+
+    return {
+      total,
+      byStatus: { issued, active, revoked, expired },
+      expiringSoon,
+      activeCapacity: {
+        maxAssets: activeCapacity._sum.maxAssets ?? 0,
+        maxUsers: activeCapacity._sum.maxUsers ?? 0,
+        includesUnlimitedAssets: await this.prisma.productLicense.count({
+          where: { status: 'ACTIVE', maxAssets: -1 },
+        }),
+        includesUnlimitedUsers: await this.prisma.productLicense.count({
+          where: { status: 'ACTIVE', maxUsers: -1 },
+        }),
+      },
+      generatedAt: now.toISOString(),
+    };
+  }
+
   async getLicense(id: string) {
     const lic = await this.prisma.productLicense.findUnique({ where: { id } });
     if (!lic) throw new NotFoundException('License not found');

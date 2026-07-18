@@ -8,18 +8,18 @@ on:
 
 permissions:
   contents: read
-  issues: write
 
 jobs:
   zap-web:
     name: ZAP baseline — web
     runs-on: ubuntu-latest
     steps:
+      # Issues are disabled on this repo; reports are uploaded as artifacts.
       - name: ZAP baseline scan (marketing + app shell)
         uses: zaproxy/action-baseline@v0.14.0
         with:
           target: "https://www.qsasset.com"
-          allow_issue_writing: true
+          allow_issue_writing: false
           artifact_name: zap-web-report
           cmd_options: "-a"
 
@@ -31,5 +31,5 @@ jobs:
         uses: zaproxy/action-baseline@v0.14.0
         with:
           target: "https://api-production-fe27.up.railway.app/api/v1/health"
-          allow_issue_writing: true
+          allow_issue_writing: false
           artifact_name: zap-api-report

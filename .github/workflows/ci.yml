@@ -245,35 +245,27 @@ jobs:
         env:
           NEXT_PUBLIC_API_URL: https://api-production-fe27.up.railway.app/api/v1
 
-  # ─── Deploy API (Railway) ───────────────────────────────────
-  deploy-api:
-    name: Deploy API
+  # ─── Post-deploy verification ────────────────────────────────
+  # Railway (API) and Vercel (web) auto-deploy from GitHub on push to main;
+  # this job verifies production health after the platforms roll out.
+  verify-production:
+    name: Verify Production
     runs-on: ubuntu-latest
     needs: [test, build]
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
     steps:
-      - uses: actions/checkout@v4
-
-      - name: Deploy to Railway
-        uses: bervProject/railway-deploy@main
-        with:
-          railway_token: ${{ secrets.RAILWAY_TOKEN }}
-          service: api
-
-  # ─── Deploy Web (Vercel) ────────────────────────────────────
-  deploy-web:
-    name: Deploy Web
-    runs-on: ubuntu-latest
-    needs: [test, build]
-    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Deploy to Vercel
-        uses: amondnet/vercel-action@v25
-        with:
-          vercel-token: ${{ secrets.VERCEL_TOKEN }}
-          vercel-org-id: ${{ secrets.VERCEL_ORG_ID }}
-          vercel-project-id: ${{ secrets.VERCEL_PROJECT_ID }}
-          vercel-args: --prod
-          working-directory: apps/web
+      - name: Wait for rollout and check health
+        run: |
+          set -uo pipefail
+          for i in $(seq 1 20); do
+            api=$(curl -fsS -m 10 https://api-production-fe27.up.railway.app/api/v1/health | grep -c '"status":"healthy"' || echo 0)
+            web=$(curl -fsS -o /dev/null -w '%{http_code}' -m 10 https://www.qsasset.com || echo 000)
+            echo "attempt $i: api_healthy=$api web_status=$web"
+            if [ "$api" -ge 1 ] && [ "$web" = "200" ]; then
+              echo "Production healthy."
+              exit 0
+            fi
+            sleep 30
+          done
+          echo "Production did not become healthy within 10 minutes."
+          exit 1

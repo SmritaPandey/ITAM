@@ -11,16 +11,16 @@ Drill date: 2026-07-18. No customer secrets were available in-session; drills ar
 | SAML / OIDC IdP | Metadata URL, certs, group claims | Blocked | `sso.service.spec.ts` / `sso.flow.spec.ts` green |
 | AD / LDAP sync | Bind DN, password, base DNs | Blocked | `ad-sync.service.ts` present |
 | Azure / GCP / AWS | Cloud credentials | Blocked | `cloud-connectors.service.ts` present |
-| SMTP report delivery | SMTP host/user/pass | Blocked | Scheduled report path unit-covered; live email pending |
+| SMTP report delivery | — | **Shipped** | Hostinger SMTP live on prod API (`support@neurqai.com`); test send verified 2026-07-19 |
 | IMAP ticket ingest | IMAP host + mailbox | Blocked | Requires `imapflow` + mailbox; see `/health/capabilities` |
-| Slack / Teams | Webhook URLs | Blocked | Channel senders present |
+| Slack / Teams | Webhook URLs | In progress | Slack signup pending human captcha; Teams needs M365 tenant |
 | RADIUS CoA | Switch webhook or RADIUS secret | Blocked | Webhook proxy + agent firewall fallback |
 | Traccar GPS | Device + protocol endpoint | Blocked | Ingest endpoint present |
 | ONVIF / HLS | Camera + ffmpeg on API host | Blocked | Probe via `/health/capabilities` |
 | NetFlow exporters | Lab exporter → collector port | Blocked | Collector + top-talkers UI present |
-| Meilisearch | `MEILI_HOST` / `MEILI_KEY` | Blocked | Search service present |
-| AI assistant | Ollama/vLLM or vendor API key | Blocked | Kill-switch + logging present |
-| NVD rate limits | Optional `NVD_API_KEY` | Optional | Ingest works without key at low rate |
+| Meilisearch | — | **Shipped** | Railway Meilisearch service live; `MEILI_HOST`/`MEILI_MASTER_KEY` on prod API (2026-07-19) |
+| AI assistant | — | **Shipped** | Groq (`llama-3.3-70b-versatile`) live via `AI_*` vars on prod API (2026-07-19) |
+| NVD rate limits | Optional `NVD_API_KEY` | Requested | Key requested 2026-07-19; set `NVD_API_KEY` once activation email arrives |
 
 ## What was validated without external secrets
 - API Jest suite: 149 tests green (includes MFA/SSO unit flows, CVE→ticket, SLA, CSAT, geofence geometry, cron-parser).

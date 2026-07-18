@@ -146,6 +146,9 @@ export default function SystemPage() {
                 "Agent-update signing": health.operationalReadiness?.agentUpdateSigning,
                 "SMTP delivery": health.operationalReadiness?.smtp,
                 "Enterprise identity": health.operationalReadiness?.oidcOrSaml,
+                "Meilisearch global search": health.operationalReadiness?.meilisearch,
+                "AI assistant": health.operationalReadiness?.aiAssistant,
+                "NVD API key": health.operationalReadiness?.nvdApiKey,
               }).map(([label, configured]) => (
                 <div key={label} style={{ display: "flex", alignItems: "center", gap: 7, padding: "8px 10px", borderRadius: 8, background: "var(--bg-base)" }}>
                   {configured ? <CheckCircle2 size={14} color="#10b981" /> : <XCircle size={14} color="#f59e0b" />}

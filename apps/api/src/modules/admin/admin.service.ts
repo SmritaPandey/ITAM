@@ -618,6 +618,9 @@ export class AdminService {
             process.env.GOOGLE_CLIENT_ID ||
             process.env.MICROSOFT_CLIENT_ID,
         ),
+        meilisearch: Boolean(process.env.MEILI_HOST || process.env.MEILISEARCH_HOST),
+        aiAssistant: process.env.AI_ENABLED === 'true',
+        nvdApiKey: Boolean(process.env.NVD_API_KEY),
       },
     };
   }

@@ -671,6 +671,25 @@ export class DiscoveryController {
 
   // ─── Agent Version Check ──────────────────────────────────────
 
+  @Get('agents/download/source')
+  @ApiOperation({
+    summary:
+      'Download the raw signed agent source (matches version/latest checksum + signature). Used by AUTO_UPDATE.',
+  })
+  async downloadAgentSource(@Res() res: any) {
+    const source = loadAgentSource();
+    if (!source) {
+      res.status(404).json({ error: 'Agent source not available' });
+      return;
+    }
+    res.set({
+      'Content-Type': 'application/javascript',
+      'Content-Disposition': 'attachment; filename=qs-discovery-agent.js',
+      'Content-Length': source.length,
+    });
+    res.end(source);
+  }
+
   @Get('agents/version/latest')
   @ApiOperation({ summary: 'Get latest agent version info (checksum + Ed25519 signature when keys configured)' })
   async getLatestAgentVersion() {
@@ -682,6 +701,7 @@ export class DiscoveryController {
       releaseDate: '2026-07-01',
       changelog: 'Enterprise v2: signed updates, ScriptLibrary-only remote execution, FILE_PULL allowlists',
       downloadUrls: {
+        source: '/discovery/agents/download/source',
         zip: '/discovery/agents/download',
         desktop: '/discovery/agents/download/desktop',
         service: '/discovery/agents/download/service',
@@ -689,6 +709,8 @@ export class DiscoveryController {
         win32: '/discovery/agents/download?platform=win32',
         linux: '/discovery/agents/download?platform=linux',
       },
+      // AUTO_UPDATE must download the raw signed source so checksum/signature match.
+      updateDownloadUrl: '/discovery/agents/download/source',
       updateChecksum: signed?.checksum || null,
       updateSignature: signed?.signature || null,
       updatePublicKey: publicKey,

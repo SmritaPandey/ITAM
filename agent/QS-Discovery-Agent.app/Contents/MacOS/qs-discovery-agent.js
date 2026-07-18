@@ -158,20 +158,26 @@ if (process.argv.includes('--insecure')) {
 
 const MAX_RETRIES = 3;
 const BASE_BACKOFF_MS = 2000;
+// Per-request network timeout so a hung/black-holed TCP connection can never
+// stall the setTimeout-chained heartbeat loop indefinitely.
+const REQUEST_TIMEOUT_MS = 30000;
 
 function request(method, apiPath, body, retries = MAX_RETRIES) {
   return new Promise(async (resolve, reject) => {
     const url = `${API_BASE}${apiPath}`;
-    const options = {
-      method,
-      headers: {
-        'Content-Type': 'application/json',
-        ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
-      },
-      body: body ? JSON.stringify(body) : undefined,
-    };
 
     for (let attempt = 0; attempt <= retries; attempt++) {
+      // Fresh AbortSignal per attempt (a signal can only fire once).
+      const options = {
+        method,
+        headers: {
+          'Content-Type': 'application/json',
+          ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+        },
+        body: body ? JSON.stringify(body) : undefined,
+        signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+      };
+
       try {
         const res = await fetch(url, options);
         const text = await res.text();
@@ -181,15 +187,25 @@ function request(method, apiPath, body, retries = MAX_RETRIES) {
         } catch {
           responseData = text;
         }
+        // Retry transient server errors (502/503/504) instead of surfacing them.
+        if ((res.status === 502 || res.status === 503 || res.status === 504) && attempt < retries) {
+          const delay = BASE_BACKOFF_MS * Math.pow(2, attempt);
+          log('info', `⏳ ${apiPath} returned ${res.status} (attempt ${attempt + 1}/${retries + 1}). Retrying in ${delay / 1000}s...`);
+          await new Promise(r => setTimeout(r, delay));
+          continue;
+        }
         resolve({ status: res.status, data: responseData });
         return;
       } catch (err) {
+        const reason = err.name === 'TimeoutError' || err.name === 'AbortError'
+          ? `timed out after ${REQUEST_TIMEOUT_MS / 1000}s`
+          : err.message;
         if (attempt < retries) {
           const delay = BASE_BACKOFF_MS * Math.pow(2, attempt);
-          log('info', `⏳ Request to ${apiPath} failed (attempt ${attempt + 1}/${retries + 1}): ${err.message}. Retrying in ${delay / 1000}s...`);
+          log('info', `⏳ Request to ${apiPath} failed (attempt ${attempt + 1}/${retries + 1}): ${reason}. Retrying in ${delay / 1000}s...`);
           await new Promise(r => setTimeout(r, delay));
         } else {
-          reject(new Error(`Request to ${apiPath} failed after ${retries + 1} attempts: ${err.message}`));
+          reject(new Error(`Request to ${apiPath} failed after ${retries + 1} attempts: ${reason}`));
         }
       }
     }
@@ -453,7 +469,20 @@ function getInstalledSoftware() {
   const platform = os.platform();
   try {
     if (platform === 'win32') {
-      const output = execCmd('powershell -command "Get-CimInstance Win32_Product | Select-Object Name,Version | ConvertTo-Json"');
+      // Enumerate registry Uninstall keys (32/64-bit + per-user) instead of
+      // Win32_Product, which is slow and triggers MSI self-repair on every scan.
+      const ps = [
+        '$paths=@(',
+        "'HKLM:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\*',",
+        "'HKLM:\\SOFTWARE\\WOW6432Node\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\*',",
+        "'HKCU:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\*'",
+        ');',
+        'Get-ItemProperty $paths -ErrorAction SilentlyContinue |',
+        'Where-Object { $_.DisplayName } |',
+        'Select-Object @{N=\'Name\';E={$_.DisplayName}},@{N=\'Version\';E={$_.DisplayVersion}} |',
+        'Sort-Object Name -Unique | ConvertTo-Json -Compress',
+      ].join(' ');
+      const output = execCmd(`powershell -NoProfile -NonInteractive -Command "${ps}"`);
       try {
         const parsed = JSON.parse(output);
         const items = Array.isArray(parsed) ? parsed : [parsed];
@@ -1762,8 +1791,10 @@ function getContainersAndVMs() {
         result.hypervisor = virt.trim();
       }
     } else if (platform === 'win32') {
-      const model = execCmd('wmic computersystem get model 2>nul');
-      if (model && (model.includes('Virtual') || model.includes('VMware') || model.includes('Hyper-V'))) {
+      // wmic is deprecated/removed on Windows 11 24H2+; prefer PowerShell CIM, fall back to wmic.
+      let model = execCmd('powershell -NoProfile -NonInteractive -Command "(Get-CimInstance Win32_ComputerSystem).Model" 2>nul');
+      if (!model) model = execCmd('wmic computersystem get model 2>nul');
+      if (model && (model.includes('Virtual') || model.includes('VMware') || model.includes('Hyper-V') || model.includes('KVM'))) {
         result.isVirtualMachine = true;
       }
     }
@@ -2944,7 +2975,10 @@ async function sendHeartbeat() {
                 log('success', `✅ Agent already at version ${currentVersion}. No update needed.`);
               } else {
                 log('info', `Current: ${currentVersion} → Target: ${targetVersion}`);
-                const downloadUrl = act.downloadUrl || `${API_BASE}/discovery/agents/download?platform=${os.platform()}`;
+                // Default to the raw signed source endpoint so the downloaded
+                // bytes match the checksum/signature the server computed over
+                // loadAgentSource(). The ZIP endpoint would never match.
+                const downloadUrl = act.downloadUrl || `${API_BASE}/discovery/agents/download/source`;
                 const trustedUrl = assertTrustedUpdateUrl(downloadUrl);
                 log('info', `Downloading update from ${downloadUrl}...`);
                 // Download to temp location
@@ -3050,6 +3084,15 @@ function launchDefaultBrowser(url) {
 
 // ─── Background HTTP Status Server & HTML Page Host ───────────
 const DASHBOARD_PORT = 49152;
+// Local-only token minted at startup. The dashboard HTML is served this token
+// (never the server JWT), and all data/control routes require it. This prevents
+// any other local process/user from reading posture/logs or exfiltrating the JWT.
+const DASHBOARD_TOKEN = require('crypto').randomBytes(24).toString('hex');
+
+function isDashboardAuthorized(req) {
+  const authHeader = req.headers.authorization;
+  return authHeader === 'Bearer ' + DASHBOARD_TOKEN;
+}
 
 function startStatusServer() {
   const server = http.createServer((req, res) => {
@@ -3075,13 +3118,12 @@ function startStatusServer() {
           res.end('Error loading status dashboard HTML. Please verify that "Status Dashboard.html" is in the same directory as the agent.');
           return;
         }
-        let processedHtml = html;
-        if (accessToken) {
-          processedHtml = processedHtml.replace(
-            "const API_URL = 'http://localhost:49152/api';",
-            `const API_URL = 'http://localhost:49152/api'; const accessToken = '${accessToken}';`
-          );
-        }
+        // Inject the local dashboard token (NOT the server JWT) so the page can
+        // call the localhost API without ever exposing server credentials.
+        const processedHtml = html.replace(
+          "const API_URL = 'http://localhost:49152/api';",
+          `const API_URL = 'http://localhost:49152/api'; const accessToken = '${DASHBOARD_TOKEN}';`
+        );
         res.writeHead(200, { 'Content-Type': 'text/html' });
         res.end(processedHtml);
       });
@@ -3089,6 +3131,11 @@ function startStatusServer() {
     }
 
     if (parsedUrl.pathname === '/api/status' && req.method === 'GET') {
+      if (!isDashboardAuthorized(req)) {
+        res.writeHead(401, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: 'Unauthorized' }));
+        return;
+      }
       const cpus = os.cpus();
       const loadAvg = os.loadavg();
       const freeMem = os.freemem();
@@ -3117,14 +3164,18 @@ function startStatusServer() {
     }
 
     if (parsedUrl.pathname === '/api/logs' && req.method === 'GET') {
+      if (!isDashboardAuthorized(req)) {
+        res.writeHead(401, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: 'Unauthorized' }));
+        return;
+      }
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify(localLogs));
       return;
     }
 
     if (parsedUrl.pathname === '/api/control' && req.method === 'POST') {
-      const authHeader = req.headers.authorization;
-      if (!authHeader || authHeader !== 'Bearer ' + accessToken) {
+      if (!isDashboardAuthorized(req)) {
         res.writeHead(401, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ error: 'Unauthorized' }));
         return;

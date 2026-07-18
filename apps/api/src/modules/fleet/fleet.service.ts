@@ -82,22 +82,55 @@ export class FleetService {
   }
 
   async getGeofences(tenantId: string) {
-    const tenant = await this.prisma.tenant.findUnique({ where: { id: tenantId } });
-    const settings = (tenant?.settings as any) || {};
-    return settings.geofences || [];
+    return this.prisma.withTenant(tenantId, async (tx) => {
+      const rows = await tx.geofence.findMany({
+        where: { tenantId },
+        include: { vehicleStates: true },
+        orderBy: { createdAt: 'desc' },
+      });
+      return rows.map((g) => this.toGeofenceDto(g));
+    });
   }
 
   async createGeofence(tenantId: string, body: any) {
-    const tenant = await this.prisma.tenant.findUnique({ where: { id: tenantId } });
-    const settings = (tenant?.settings as any) || {};
-    const geofences = settings.geofences || [];
-    const newFence = { id: Date.now().toString(), ...body, createdAt: new Date() };
-    geofences.push(newFence);
-    await this.prisma.tenant.update({
-      where: { id: tenantId },
-      data: { settings: { ...settings, geofences } },
+    return this.prisma.withTenant(tenantId, async (tx) => {
+      const type = body.type === 'polygon' ? 'polygon' : 'circle';
+      const center = body.center || {};
+      const created = await tx.geofence.create({
+        data: {
+          tenantId,
+          name: body.name || 'Geofence',
+          type,
+          centerLat: center.lat ?? center[0] ?? null,
+          centerLng: center.lng ?? center[1] ?? null,
+          radiusMeters: body.radius ?? null,
+          coordinates: body.coordinates || [],
+          meta: body.meta || {},
+        },
+      });
+      return this.toGeofenceDto(created);
     });
-    return newFence;
+  }
+
+  private toGeofenceDto(g: any) {
+    const vehicleStates: Record<string, boolean> = {};
+    for (const s of g.vehicleStates || []) {
+      vehicleStates[s.vehicleId] = s.isInside;
+    }
+    return {
+      id: g.id,
+      name: g.name,
+      type: g.type,
+      center:
+        g.centerLat != null && g.centerLng != null
+          ? { lat: g.centerLat, lng: g.centerLng }
+          : undefined,
+      radius: g.radiusMeters ?? undefined,
+      coordinates: g.coordinates || [],
+      vehicleStates,
+      createdAt: g.createdAt,
+      meta: g.meta,
+    };
   }
 
   async getAlerts(tenantId: string) {
@@ -529,87 +562,106 @@ export class FleetService {
     lat: number,
     lng: number,
   ) {
-    const tenant = await this.prisma.tenant.findUnique({ where: { id: tenantId } });
-    const settings = (tenant?.settings as any) || {};
-    const geofences: any[] = settings.geofences || [];
+    const { geofences, vehicle, transitions } = await this.prisma.withTenant(
+      tenantId,
+      async (tx) => {
+        const geofences = await tx.geofence.findMany({ where: { tenantId } });
+        if (geofences.length === 0) {
+          return { geofences: [], vehicle: null, transitions: [] as any[] };
+        }
 
-    if (geofences.length === 0) return;
-
-    const vehicle = await this.prisma.asset.findFirst({
-      where: { id: vehicleId, tenantId, deletedAt: null },
-      select: { id: true, name: true },
-    });
-    if (!vehicle) return;
-
-    for (const fence of geofences) {
-      const fenceId = fence.id;
-      let isInside = false;
-
-      if (fence.type === 'circle' && fence.center && fence.radius) {
-        // Circular geofence — use Haversine distance
-        const distanceMeters = this.haversineDistance(
-          lat, lng,
-          fence.center.lat ?? fence.center[0],
-          fence.center.lng ?? fence.center[1],
-        );
-        isInside = distanceMeters <= fence.radius;
-      } else if (fence.coordinates && Array.isArray(fence.coordinates) && fence.coordinates.length >= 3) {
-        // Polygon geofence — use ray-casting algorithm
-        isInside = this.pointInPolygon(lat, lng, fence.coordinates);
-      } else {
-        continue; // Unknown geofence type, skip
-      }
-
-      // Check for state transition using stored vehicle states in geofence settings
-      const vehicleStates = fence.vehicleStates || {};
-      const previousState = vehicleStates[vehicleId]; // true = was inside, false = was outside, undefined = first check
-      const stateChanged = previousState !== undefined && previousState !== isInside;
-
-      // Update the vehicle's in/out state for this geofence
-      if (!fence.vehicleStates) fence.vehicleStates = {};
-      fence.vehicleStates[vehicleId] = isInside;
-
-      // Only fire events on state transitions, not on every position update
-      if (stateChanged) {
-        const eventType = isInside ? 'ENTERED' : 'EXITED';
-        const fenceName = fence.name || `Geofence ${fenceId}`;
-
-        this.logger.warn(
-          `Geofence ${eventType}: Vehicle ${vehicle.name} (${vehicleId}) ` +
-          `${eventType.toLowerCase()} "${fenceName}" at [${lat}, ${lng}]`,
-        );
-
-        // Create notification for admins
-        await this.broadcastGeofenceAlert(tenantId, {
-          vehicleId,
-          vehicleName: vehicle.name,
-          geofenceId: fenceId,
-          geofenceName: fenceName,
-          eventType,
-          latitude: lat,
-          longitude: lng,
-          timestamp: new Date(),
+        const vehicle = await tx.asset.findFirst({
+          where: { id: vehicleId, tenantId, deletedAt: null },
+          select: { id: true, name: true },
         });
+        if (!vehicle) {
+          return { geofences, vehicle: null, transitions: [] as any[] };
+        }
 
-        // Emit event for automation engine
-        this.eventBus.emitAssetEvent(tenantId, 'fleet.geofence_breach', {
-          vehicleId,
-          vehicleName: vehicle.name,
-          geofenceId: fenceId,
-          geofenceName: fenceName,
-          eventType,
-          latitude: lat,
-          longitude: lng,
-          timestamp: new Date(),
-        });
-      }
+        const transitions: any[] = [];
+        for (const fence of geofences) {
+          let isInside = false;
+          if (fence.type === 'circle' && fence.centerLat != null && fence.centerLng != null && fence.radiusMeters) {
+            const distanceMeters = this.haversineDistance(
+              lat,
+              lng,
+              fence.centerLat,
+              fence.centerLng,
+            );
+            isInside = distanceMeters <= fence.radiusMeters;
+          } else if (
+            Array.isArray(fence.coordinates) &&
+            (fence.coordinates as any[]).length >= 3
+          ) {
+            isInside = this.pointInPolygon(lat, lng, fence.coordinates as any[]);
+          } else {
+            continue;
+          }
+
+          const prev = await tx.geofenceVehicleState.findUnique({
+            where: {
+              geofenceId_vehicleId: { geofenceId: fence.id, vehicleId },
+            },
+          });
+          const previousState = prev?.isInside;
+          const stateChanged = previousState !== undefined && previousState !== isInside;
+
+          await tx.geofenceVehicleState.upsert({
+            where: {
+              geofenceId_vehicleId: { geofenceId: fence.id, vehicleId },
+            },
+            create: {
+              tenantId,
+              geofenceId: fence.id,
+              vehicleId,
+              isInside,
+            },
+            update: { isInside },
+          });
+
+          if (stateChanged) {
+            transitions.push({
+              fenceId: fence.id,
+              fenceName: fence.name || `Geofence ${fence.id}`,
+              eventType: isInside ? 'ENTERED' : 'EXITED',
+            });
+          }
+        }
+
+        return { geofences, vehicle, transitions };
+      },
+    );
+
+    if (!vehicle || transitions.length === 0) return;
+
+    for (const t of transitions) {
+      this.logger.warn(
+        `Geofence ${t.eventType}: Vehicle ${vehicle.name} (${vehicleId}) ` +
+          `${t.eventType.toLowerCase()} "${t.fenceName}" at [${lat}, ${lng}]`,
+      );
+
+      await this.broadcastGeofenceAlert(tenantId, {
+        vehicleId,
+        vehicleName: vehicle.name,
+        geofenceId: t.fenceId,
+        geofenceName: t.fenceName,
+        eventType: t.eventType,
+        latitude: lat,
+        longitude: lng,
+        timestamp: new Date(),
+      });
+
+      this.eventBus.emitAssetEvent(tenantId, 'fleet.geofence_breach', {
+        vehicleId,
+        vehicleName: vehicle.name,
+        geofenceId: t.fenceId,
+        geofenceName: t.fenceName,
+        eventType: t.eventType,
+        latitude: lat,
+        longitude: lng,
+        timestamp: new Date(),
+      });
     }
-
-    // Persist updated vehicle states back to tenant settings
-    await this.prisma.tenant.update({
-      where: { id: tenantId },
-      data: { settings: { ...settings, geofences } },
-    });
   }
 
   /**

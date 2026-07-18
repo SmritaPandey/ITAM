@@ -1,6 +1,7 @@
 # QS Assets — production compose
 #
 # Bundled Postgres + Redis (LAN):
+#   export DB_PASSWORD JWT_SECRET JWT_REFRESH_SECRET VAULT_ENCRYPTION_KEY
 #   SERVER_IP=192.168.1.50 docker compose -f docker-compose.prod.yml up -d --build
 #
 # BYO Postgres/Redis (skip local db/cache containers):
@@ -9,7 +10,8 @@
 #   docker compose -f docker-compose.prod.yml up -d --build api web
 #
 # After startup: http://<SERVER_IP>:3100
-# On-prem first boot seeds OWNER_EMAIL / TENANT_ADMIN_EMAIL (change passwords immediately).
+# On-prem first boot: set OWNER_PASSWORD / TENANT_ADMIN_PASSWORD explicitly
+# (no ChangeMe defaults).
 
 services:
   postgres:
@@ -21,7 +23,7 @@ services:
     environment:
       POSTGRES_DB: assetcommand
       POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: ${DB_PASSWORD:-QSAsset@2026}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?Set DB_PASSWORD in .env}
     volumes:
       - pgdata:/var/lib/postgresql/data
       - ./infra/docker/init-extensions.sql:/docker-entrypoint-initdb.d/init-extensions.sql
@@ -61,10 +63,11 @@ services:
     restart: unless-stopped
     network_mode: host
     environment:
-      DATABASE_URL: ${EXTERNAL_DATABASE_URL:-postgresql://postgres:${DB_PASSWORD:-QSAsset@2026}@localhost:5434/assetcommand?connection_limit=20&statement_timeout=30000}
+      DATABASE_URL: ${EXTERNAL_DATABASE_URL:-postgresql://postgres:${DB_PASSWORD}@localhost:5434/assetcommand?connection_limit=20&statement_timeout=30000}
       REDIS_URL: ${EXTERNAL_REDIS_URL:-redis://localhost:6379}
-      JWT_SECRET: ${JWT_SECRET:-qsasset-jwt-secret-2026-change-me}
-      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:-qsasset-refresh-secret-2026-change-me}
+      JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET (min 32 chars)}
+      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:?Set JWT_REFRESH_SECRET (min 32 chars)}
+      VAULT_ENCRYPTION_KEY: ${VAULT_ENCRYPTION_KEY:?Set VAULT_ENCRYPTION_KEY}
       JWT_EXPIRATION: "15m"
       JWT_REFRESH_EXPIRATION: "7d"
       PORT: 4100
@@ -77,9 +80,9 @@ services:
       LICENSE_SERVER_URL: ${LICENSE_SERVER_URL:-}
       ONPREM_ORG_NAME: ${ONPREM_ORG_NAME:-Enterprise Organization}
       OWNER_EMAIL: ${OWNER_EMAIL:-owner@localhost}
-      OWNER_PASSWORD: ${OWNER_PASSWORD:-ChangeMe@123}
+      OWNER_PASSWORD: ${OWNER_PASSWORD:?Set OWNER_PASSWORD}
       TENANT_ADMIN_EMAIL: ${TENANT_ADMIN_EMAIL:-admin@localhost}
-      TENANT_ADMIN_PASSWORD: ${TENANT_ADMIN_PASSWORD:-ChangeMe@123}
+      TENANT_ADMIN_PASSWORD: ${TENANT_ADMIN_PASSWORD:?Set TENANT_ADMIN_PASSWORD}
       CORS_ORIGIN: "http://localhost:3100,http://${SERVER_IP:-0.0.0.0}:3100,https://qsasset.com,https://www.qsasset.com"
       ENABLE_SNMP_TRAPS: ${ENABLE_SNMP_TRAPS:-false}
       NODE_OPTIONS: "--max-old-space-size=768"

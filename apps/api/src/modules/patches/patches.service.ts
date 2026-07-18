@@ -23,11 +23,13 @@ export class PatchesService {
 
   // ─── LIST ────────────────────────────────────────────────────────
   async findAll(tenantId: string) {
-    const data = await this.prisma.patch.findMany({
-      where: { tenantId },
-      orderBy: { createdAt: 'desc' },
-      include: { _count: { select: { deployments: true } } },
-    });
+    const data = await this.prisma.withTenant(tenantId, async (tx) =>
+      tx.patch.findMany({
+        where: { tenantId },
+        orderBy: { createdAt: 'desc' },
+        include: { _count: { select: { deployments: true } } },
+      }),
+    );
     const deployed = data.filter(p => p.status === 'Deployed').length;
     const pending = data.filter(p => p.status === 'Pending').length;
     const failed = data.filter(p => p.status === 'Failed').length;

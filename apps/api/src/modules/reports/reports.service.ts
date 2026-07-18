@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { PrismaService } from '../../common/database/prisma.service';
+import { calculateNextRun } from '../../common/utils/cron-next-run';
 import { ReportGeneratorService } from './report-generator.service';
 import { EmailService } from '../notifications/email.service';
 
@@ -104,55 +105,24 @@ export class ReportsService {
     }
   }
 
-  /**
-   * Calculate the next run time from a cron expression.
-   * Simple parser for standard 5-field cron; falls back to +24h for complex expressions.
-   */
   private calculateNextRun(cronExpr: string): Date {
-    const now = new Date();
-    const parts = cronExpr.split(' ');
-    if (parts.length !== 5) return new Date(now.getTime() + 24 * 60 * 60 * 1000);
-    const [min, hour, dayOfMonth, month, dayOfWeek] = parts;
-    const next = new Date(now);
-    next.setSeconds(0, 0);
-    next.setMinutes(parseInt(min) || 0);
-    next.setHours(parseInt(hour) || 0);
-
-    // Advance to next occurrence
-    if (next <= now) {
-      if (dayOfWeek !== '*' && dayOfMonth === '*') {
-        // Weekly schedule — advance to next matching weekday
-        const targetDay = parseInt(dayOfWeek);
-        if (!isNaN(targetDay)) {
-          do {
-            next.setDate(next.getDate() + 1);
-          } while (next.getDay() !== targetDay);
-        } else {
-          next.setDate(next.getDate() + 7);
-        }
-      } else if (dayOfMonth !== '*') {
-        // Monthly schedule — advance to next month
-        next.setMonth(next.getMonth() + 1);
-        next.setDate(parseInt(dayOfMonth) || 1);
-      } else {
-        // Daily schedule — advance to tomorrow
-        next.setDate(next.getDate() + 1);
-      }
-    }
-
-    return next;
+    return calculateNextRun(cronExpr);
   }
 
   // ─── Report Data Methods ──────────────────────────────────────
 
   async getAssetSummary(tenantId: string) {
-    const [total, byType, byStatus, byDepartment, totalValue] = await Promise.all([
-      this.prisma.asset.count({ where: { tenantId, deletedAt: null } }),
-      this.prisma.asset.groupBy({ by: ['category'], where: { tenantId, deletedAt: null }, _count: true }),
-      this.prisma.asset.groupBy({ by: ['status'], where: { tenantId, deletedAt: null }, _count: true }),
-      this.prisma.asset.groupBy({ by: ['departmentId'], where: { tenantId, deletedAt: null }, _count: true }),
-      this.prisma.asset.aggregate({ where: { tenantId, deletedAt: null }, _sum: { currentValue: true } }),
-    ]);
+    const [total, byType, byStatus, byDepartment, totalValue] = await this.prisma.withTenant(
+      tenantId,
+      async (tx) =>
+        Promise.all([
+          tx.asset.count({ where: { tenantId, deletedAt: null } }),
+          tx.asset.groupBy({ by: ['category'], where: { tenantId, deletedAt: null }, _count: true }),
+          tx.asset.groupBy({ by: ['status'], where: { tenantId, deletedAt: null }, _count: true }),
+          tx.asset.groupBy({ by: ['departmentId'], where: { tenantId, deletedAt: null }, _count: true }),
+          tx.asset.aggregate({ where: { tenantId, deletedAt: null }, _sum: { currentValue: true } }),
+        ]),
+    );
     return {
       total,
       totalValue: totalValue._sum.currentValue || 0,

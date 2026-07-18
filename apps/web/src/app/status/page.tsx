@@ -6,10 +6,10 @@ import { CheckCircle2, AlertTriangle } from "lucide-react";
 import { PublicShell, MonoEyebrow, usePublicTheme } from "@/components/landing/PublicShell";
 
 const SERVICES = [
-  { id: "web", name: "Web application", detail: "qsasset.com dashboard and marketing" },
-  { id: "api", name: "API", detail: "Authentication, inventory, discovery, and ITSM APIs" },
-  { id: "agents", name: "Agent ingestion", detail: "Heartbeat and inventory ingest from discovery agents" },
-  { id: "email", name: "Transactional email", detail: "Verification, alerts, and notifications" },
+  { id: "web", name: "Web application", detail: "qsasset.com dashboard and marketing", measured: false },
+  { id: "api", name: "API", detail: "Authentication, inventory, discovery, and ITSM APIs", measured: true },
+  { id: "agents", name: "Agent ingestion", detail: "Heartbeat and inventory ingest from discovery agents", measured: false },
+  { id: "email", name: "Transactional email", detail: "Verification, alerts, and notifications", measured: false },
 ];
 
 export default function StatusPage() {
@@ -26,7 +26,7 @@ export default function StatusPage() {
       .catch(() => setApiOk(false));
   }, []);
 
-  const allOk = apiOk !== false;
+  const allOk = apiOk === true;
 
   return (
     <PublicShell maxWidth={720}>
@@ -55,19 +55,21 @@ export default function StatusPage() {
         {allOk ? <CheckCircle2 size={22} color="#10b981" /> : <AlertTriangle size={22} color="#f59e0b" />}
         <div>
           <div style={{ fontWeight: 700, fontSize: 15, color: t.txt }}>
-            {apiOk === null ? "Checking systems…" : allOk ? "All systems operational" : "Degraded performance"}
+            {apiOk === null ? "Checking API health…" : allOk ? "API health check passed" : "API health check failed"}
           </div>
           <div style={{ fontSize: 13, color: t.muted, marginTop: 2 }}>
             {apiOk === false
               ? "API health check did not succeed. Marketing site may still be available."
-              : "Core SaaS components are responding normally."}
+              : apiOk === null
+                ? "Waiting for the live health endpoint."
+                : "The configured API health endpoint is responding normally."}
           </div>
         </div>
       </div>
 
       <ul style={{ listStyle: "none", padding: 0, margin: "0 0 32px", display: "flex", flexDirection: "column", gap: 10 }}>
         {SERVICES.map((s) => {
-          const ok = s.id === "api" ? apiOk !== false : true;
+          const ok = s.id === "api" ? apiOk === true : null;
           return (
             <li
               key={s.id}
@@ -89,12 +91,14 @@ export default function StatusPage() {
                 style={{
                   fontSize: 12,
                   fontWeight: 700,
-                  color: ok ? "#059669" : "#d97706",
+                  color: ok === true ? "#059669" : ok === false ? "#d97706" : t.muted,
                   whiteSpace: "nowrap",
                   alignSelf: "center",
                 }}
               >
-                {s.id === "api" && apiOk === null ? "…" : ok ? "Operational" : "Issue"}
+                {s.measured
+                  ? apiOk === null ? "Checking…" : ok ? "Operational · measured" : "Issue · measured"
+                  : "Self-reported"}
               </div>
             </li>
           );

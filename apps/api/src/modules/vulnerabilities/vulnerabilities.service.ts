@@ -514,22 +514,24 @@ export class VulnerabilitiesService {
       where.vulnerability = { severity: query.severity.toUpperCase() };
     }
 
-    const [data, total] = await Promise.all([
-      this.prisma.assetVulnerability.findMany({
-        where,
-        include: {
-          vulnerability: true,
-          asset: { select: { id: true, name: true, assetTag: true, hostname: true } },
-        },
-        orderBy: [
-          { vulnerability: { cvssScore: 'desc' } },
-          { lastSeenAt: 'desc' },
-        ],
-        take: Math.min(query.limit || 50, 200),
-        skip: query.offset || 0,
-      }),
-      this.prisma.assetVulnerability.count({ where }),
-    ]);
+    const [data, total] = await this.prisma.withTenant(tenantId, async (tx) =>
+      Promise.all([
+        tx.assetVulnerability.findMany({
+          where,
+          include: {
+            vulnerability: true,
+            asset: { select: { id: true, name: true, assetTag: true, hostname: true } },
+          },
+          orderBy: [
+            { vulnerability: { cvssScore: 'desc' } },
+            { lastSeenAt: 'desc' },
+          ],
+          take: Math.min(query.limit || 50, 200),
+          skip: query.offset || 0,
+        }),
+        tx.assetVulnerability.count({ where }),
+      ]),
+    );
 
     return { data, total };
   }

@@ -71,6 +71,63 @@ export class HealthController {
   }
 
   /**
+   * Optional collector / binary availability for operators.
+   */
+  @Get('capabilities')
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('Tenant Admin', 'IT Admin')
+  @ApiOperation({ summary: 'Report optional host capabilities (imapflow, ffmpeg, package managers)' })
+  async capabilities() {
+    const which = async (bin: string) => {
+      try {
+        const { execFile } = await import('child_process');
+        const { promisify } = await import('util');
+        const execFileAsync = promisify(execFile);
+        await execFileAsync('which', [bin], { timeout: 2000 });
+        return true;
+      } catch {
+        return false;
+      }
+    };
+
+    let imapflow = false;
+    try {
+      require.resolve('imapflow');
+      imapflow = true;
+    } catch {
+      imapflow = false;
+    }
+
+    let mqtt = false;
+    try {
+      require.resolve('mqtt');
+      mqtt = true;
+    } catch {
+      mqtt = false;
+    }
+
+    const [ffmpeg, winget, apt, yum, brew, nmap] = await Promise.all([
+      which('ffmpeg'),
+      which('winget'),
+      which('apt'),
+      which('yum'),
+      which('brew'),
+      which('nmap'),
+    ]);
+
+    return {
+      timestamp: new Date().toISOString(),
+      note:
+        'Patch host-scan (winget/apt/brew) runs on the API host, not managed endpoints. Prefer agent-reported missing patches for endpoint coverage.',
+      packages: { imapflow, mqtt },
+      binaries: { ffmpeg, winget, apt, yum, brew, nmap },
+      redis: !!process.env.REDIS_URL,
+      meilisearch: !!(process.env.MEILI_HOST || process.env.MEILISEARCH_HOST),
+    };
+  }
+
+  /**
    * Detailed health — admin only, includes DB stats, memory, system info.
    */
   @Get('detailed')

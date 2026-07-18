@@ -19,13 +19,15 @@ export class EamService {
     const where: any = { tenantId };
     if (opts?.assetId) where.assetId = opts.assetId;
     if (opts?.isActive !== undefined) where.isActive = opts.isActive;
-    return this.prisma.maintenanceSchedule.findMany({
-      where,
-      include: {
-        asset: { select: { id: true, name: true, assetTag: true, status: true, siteId: true } },
-      },
-      orderBy: { nextDueAt: 'asc' },
-    });
+    return this.prisma.withTenant(tenantId, async (tx) =>
+      tx.maintenanceSchedule.findMany({
+        where,
+        include: {
+          asset: { select: { id: true, name: true, assetTag: true, status: true, siteId: true } },
+        },
+        orderBy: { nextDueAt: 'asc' },
+      }),
+    );
   }
 
   async getSchedule(id: string, tenantId: string) {

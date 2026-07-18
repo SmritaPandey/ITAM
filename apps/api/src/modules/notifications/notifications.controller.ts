@@ -30,6 +30,27 @@ export class NotificationsController {
     return this.service.getUnreadCount(req.user.sub);
   }
 
+  @Get('digest/preferences')
+  @Roles('*')
+  @ApiOperation({ summary: 'Get notification digest preference' })
+  async getDigestPreference(@Request() req: any) {
+    return this.service.getDigestPreference(req.user.sub);
+  }
+
+  @Patch('digest/preferences')
+  @Roles('*')
+  @ApiOperation({ summary: 'Enable or configure daily/weekly notification digests' })
+  async updateDigestPreference(@Request() req: any, @Body() body: any) {
+    return this.service.updateDigestPreference(req.user.sub, body);
+  }
+
+  @Post('digest/send-now')
+  @Roles('*')
+  @ApiOperation({ summary: 'Send the current user notification digest now' })
+  async sendDigestNow(@Request() req: any) {
+    return this.service.sendDigestNow(req.user.sub);
+  }
+
   @Patch(':id/read')
   @Roles('*')
   @ApiOperation({ summary: 'Mark notification as read' })

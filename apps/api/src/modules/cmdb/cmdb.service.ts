@@ -33,25 +33,27 @@ export class CmdbService {
   }
 
   async listServices(tenantId: string) {
-    const services = await this.prisma.businessService.findMany({
-      where: { tenantId },
-      include: {
-        assets: {
-          include: {
-            asset: {
-              select: {
-                id: true,
-                name: true,
-                assetTag: true,
-                status: true,
-                category: true,
+    const services = await this.prisma.withTenant(tenantId, async (tx) =>
+      tx.businessService.findMany({
+        where: { tenantId },
+        include: {
+          assets: {
+            include: {
+              asset: {
+                select: {
+                  id: true,
+                  name: true,
+                  assetTag: true,
+                  status: true,
+                  category: true,
+                },
               },
             },
           },
         },
-      },
-      orderBy: { name: 'asc' },
-    });
+        orderBy: { name: 'asc' },
+      }),
+    );
 
     return services.map((s) => ({
       ...s,

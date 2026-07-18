@@ -14,6 +14,7 @@ import { VdiHypervisorService } from './vdi-hypervisor.service';
 import { CameraHlsService } from './camera-hls.service';
 import { SyslogReceiverService } from './syslog-receiver.service';
 import { NetflowCollectorService } from './netflow-collector.service';
+import { TopologyService } from './topology.service';
 import { ModuleGuard } from '../../common/guards/module.guard';
 import { CreateDeviceDto } from './dto/create-device.dto';
 import { RequireModule } from '../../common/decorators/require-module.decorator';
@@ -33,6 +34,7 @@ export class MonitoringController {
     private cameraHls: CameraHlsService,
     private syslogReceiver: SyslogReceiverService,
     private netflowCollector: NetflowCollectorService,
+    private topologyService: TopologyService,
     private prisma: PrismaService,
   ) {}
 
@@ -150,6 +152,14 @@ export class MonitoringController {
   @ApiOperation({ summary: 'Get network topology map data (nodes + links)' })
   async getTopology(@Request() req: any) {
     return this.service.getTopology(req.user.tenantId);
+  }
+
+  @RequireModule('NETWORK')
+  @Post('network/devices/:id/topology/enrich')
+  @Roles('Tenant Admin', 'IT Admin')
+  @ApiOperation({ summary: 'Enrich and persist LLDP/CDP neighbors for a network device' })
+  async enrichTopology(@Request() req: any, @Param('id') id: string) {
+    return this.topologyService.enrichLldpNeighbors(req.user.tenantId, id);
   }
 
   @RequireModule('NETWORK')

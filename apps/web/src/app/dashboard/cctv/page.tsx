@@ -13,6 +13,8 @@ import EmptyState from "@/components/EmptyState";
 
 const STATUS_COLORS: Record<string, string> = { ONLINE: "green", WARNING: "amber", OFFLINE: "red" };
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4100/api/v1";
+const isTampered = (camera: any) =>
+  camera?.config?.tamperDetected === true || camera?.config?.signalLoss === true;
 
 function CameraHlsPlayer({ cameraId, onUnavailable }: { cameraId: string; onUnavailable: (reason: string) => void }) {
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -223,6 +225,21 @@ export default function CCTVPage() {
     }
   }
 
+  async function saveWallPreset(columns: 2 | 3) {
+    setWallSaving(true);
+    try {
+      const capacity = columns * columns;
+      const ids = filtered.slice(0, capacity).map((camera: any) => camera.id);
+      const saved = await apiFetch("/monitoring/cameras/video-wall", {
+        method: "POST",
+        body: JSON.stringify({ columns, rows: columns, cameraIds: ids }),
+      });
+      setWallLayout(saved);
+    } finally {
+      setWallSaving(false);
+    }
+  }
+
   if (loading) return (
     <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "60vh", color: "var(--text-tertiary)" }}>
       <Loader2 size={24} style={{ animation: "spin 1s linear infinite" }} />
@@ -293,29 +310,14 @@ export default function CCTVPage() {
                 Multi-camera HLS grid — layout saved to tenant settings
               </div>
             </div>
-            <button
-              className="btn btn-secondary"
-              disabled={wallSaving}
-              onClick={async () => {
-                setWallSaving(true);
-                try {
-                  const ids = filtered.slice(0, 8).map((c: any) => c.id);
-                  const saved = await apiFetch("/monitoring/cameras/video-wall", {
-                    method: "POST",
-                    body: JSON.stringify({
-                      columns: Math.min(4, Math.ceil(Math.sqrt(ids.length || 1))),
-                      rows: Math.min(2, Math.ceil((ids.length || 1) / 4)),
-                      cameraIds: ids,
-                    }),
-                  });
-                  setWallLayout(saved);
-                } finally {
-                  setWallSaving(false);
-                }
-              }}
-            >
-              {wallSaving ? "Saving…" : "Use visible cameras"}
-            </button>
+            <div style={{ display: "flex", gap: 6 }}>
+              <button className="btn btn-secondary" disabled={wallSaving} onClick={() => saveWallPreset(2)}>
+                2×2
+              </button>
+              <button className="btn btn-secondary" disabled={wallSaving} onClick={() => saveWallPreset(3)}>
+                {wallSaving ? "Saving…" : "3×3"}
+              </button>
+            </div>
           </div>
           <div
             style={{
@@ -336,6 +338,10 @@ export default function CCTVPage() {
                   </div>
                 )}
                 <div style={{ position: "absolute", bottom: 6, left: 8, fontSize: 11, color: "#fff", textShadow: "0 1px 3px #000" }}>{cam.name}</div>
+                <div style={{ position: "absolute", top: 6, right: 6, display: "flex", gap: 4 }}>
+                  {cam.status === "OFFLINE" && <span className="badge red"><WifiOff size={9} /> Offline</span>}
+                  {isTampered(cam) && <span className="badge amber"><AlertTriangle size={9} /> Tamper</span>}
+                </div>
               </div>
             ))}
           </div>
@@ -378,6 +384,11 @@ export default function CCTVPage() {
                     <div style={{ position: "absolute", top: 8, right: 8, display: "flex", alignItems: "center", gap: 4, background: "rgba(239,68,68,0.2)", padding: "2px 8px", borderRadius: 12, backdropFilter: "blur(4px)" }}>
                       <span style={{ width: 6, height: 6, borderRadius: "50%", background: "#ef4444", animation: "pulse 2s infinite" }} />
                       <span style={{ fontSize: 9, color: "#ef4444", fontWeight: 700 }}>REC</span>
+                    </div>
+                  )}
+                  {isTampered(cam) && (
+                    <div style={{ position: "absolute", top: cfg.recording ? 36 : 8, right: 8 }}>
+                      <span className="badge amber"><AlertTriangle size={9} /> Tamper / signal loss</span>
                     </div>
                   )}
                   <div style={{ position: "absolute", top: 8, left: 8 }}>

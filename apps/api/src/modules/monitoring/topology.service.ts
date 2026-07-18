@@ -1,12 +1,151 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../common/database/prisma.service';
 import { RelationshipType } from '@prisma/client';
+
+export const LLDP_CDP_OIDS = {
+  lldpRemoteChassisId: '1.0.8802.1.1.2.1.4.1.1.5',
+  lldpRemotePortId: '1.0.8802.1.1.2.1.4.1.1.7',
+  lldpRemotePortDescription: '1.0.8802.1.1.2.1.4.1.1.8',
+  lldpRemoteSystemName: '1.0.8802.1.1.2.1.4.1.1.9',
+  cdpRemoteAddress: '1.3.6.1.4.1.9.9.23.1.2.1.1.4',
+  cdpRemoteDeviceId: '1.3.6.1.4.1.9.9.23.1.2.1.1.6',
+  cdpRemotePortId: '1.3.6.1.4.1.9.9.23.1.2.1.1.7',
+  cdpRemoteSystemName: '1.3.6.1.4.1.9.9.23.1.2.1.1.17',
+} as const;
+
+export type TopologyNeighbor = {
+  localPortIndex?: number;
+  localPortName?: string;
+  remoteIp?: string;
+  remoteChassisId?: string;
+  remotePortName?: string;
+  remotePortDesc?: string;
+  remoteSysName?: string;
+  portSpeed?: string | number;
+};
+
+function valueOf(raw: unknown): string | undefined {
+  if (raw == null) return undefined;
+  if (Buffer.isBuffer(raw)) {
+    if (raw.length === 4) return [...raw].join('.');
+    const text = raw.toString('utf8').replace(/\0/g, '').trim();
+    const printable = [...raw].every((byte) => byte >= 0x20 && byte <= 0x7e);
+    return printable && text ? text : raw.toString('hex');
+  }
+  if (typeof raw === 'object' && raw && 'value' in raw) {
+    return valueOf((raw as { value: unknown }).value);
+  }
+  const value = String(raw).trim();
+  return value || undefined;
+}
+
+/**
+ * Parse raw SNMP walk maps (OID → value) into normalized LLDP/CDP neighbors.
+ * The table suffix is used as the stable row key, preserving local port indexes.
+ */
+export function parseNeighborOidMap(
+  values: Record<string, unknown>,
+  protocol: 'lldp' | 'cdp',
+): TopologyNeighbor[] {
+  const rows = new Map<string, TopologyNeighbor>();
+  const definitions =
+    protocol === 'lldp'
+      ? [
+          [LLDP_CDP_OIDS.lldpRemoteChassisId, 'remoteChassisId'],
+          [LLDP_CDP_OIDS.lldpRemotePortId, 'remotePortName'],
+          [LLDP_CDP_OIDS.lldpRemotePortDescription, 'remotePortDesc'],
+          [LLDP_CDP_OIDS.lldpRemoteSystemName, 'remoteSysName'],
+        ]
+      : [
+          [LLDP_CDP_OIDS.cdpRemoteAddress, 'remoteIp'],
+          [LLDP_CDP_OIDS.cdpRemoteDeviceId, 'remoteChassisId'],
+          [LLDP_CDP_OIDS.cdpRemotePortId, 'remotePortName'],
+          [LLDP_CDP_OIDS.cdpRemoteSystemName, 'remoteSysName'],
+        ];
+
+  for (const [oid, raw] of Object.entries(values || {})) {
+    const match = definitions.find(([base]) => oid === base || oid.startsWith(`${base}.`));
+    if (!match) continue;
+    const [base, field] = match;
+    const suffix = oid.slice(base.length + 1);
+    const parts = suffix.split('.').filter(Boolean);
+    const rowKey = protocol === 'lldp' ? parts.slice(-3).join('.') : parts.slice(-2).join('.');
+    const localPortIndex = Number(protocol === 'lldp' ? parts.at(-2) : parts.at(-2));
+    const row = rows.get(rowKey) || {};
+    if (Number.isFinite(localPortIndex)) row.localPortIndex = localPortIndex;
+    const value = valueOf(raw);
+    if (value) (row as Record<string, unknown>)[field] = value;
+    rows.set(rowKey, row);
+  }
+
+  return [...rows.values()].filter(
+    (row) => row.remoteIp || row.remoteChassisId || row.remoteSysName,
+  );
+}
 
 @Injectable()
 export class TopologyService {
   private readonly logger = new Logger(TopologyService.name);
 
   constructor(private prisma: PrismaService) {}
+
+  /**
+   * Normalize neighbor data supplied by an SNMP poller or discovery agent,
+   * persist it on the monitored device, then reconcile topology edges.
+   */
+  async enrichLldpNeighbors(tenantId: string, deviceId: string) {
+    const device = await this.prisma.monitoredDevice.findFirst({
+      where: { id: deviceId, tenantId, type: 'NETWORK_DEVICE' },
+    });
+    if (!device) throw new NotFoundException('Network device not found');
+
+    const config = (device.config as Record<string, any>) || {};
+    const sysdata = config.sysdata || config.sysData || config.agentData || {};
+    const oidValues = sysdata.snmpOids || sysdata.oidValues || config.snmpOids || {};
+    const lldpNeighbors: TopologyNeighbor[] = [
+      ...(Array.isArray(config.lldpNeighbors) ? config.lldpNeighbors : []),
+      ...(Array.isArray(sysdata.lldpNeighbors) ? sysdata.lldpNeighbors : []),
+      ...parseNeighborOidMap(oidValues, 'lldp'),
+    ];
+    const cdpNeighbors: TopologyNeighbor[] = [
+      ...(Array.isArray(config.cdpNeighbors) ? config.cdpNeighbors : []),
+      ...(Array.isArray(sysdata.cdpNeighbors) ? sysdata.cdpNeighbors : []),
+      ...parseNeighborOidMap(oidValues, 'cdp'),
+    ];
+
+    const dedupe = (neighbors: TopologyNeighbor[]) =>
+      [...new Map(neighbors.map((neighbor) => [
+        [
+          neighbor.localPortIndex ?? '',
+          neighbor.remoteIp ?? '',
+          neighbor.remoteChassisId ?? '',
+          neighbor.remoteSysName ?? '',
+        ].join('|'),
+        neighbor,
+      ])).values()];
+
+    const normalizedLldp = dedupe(lldpNeighbors);
+    const normalizedCdp = dedupe(cdpNeighbors);
+    await this.prisma.monitoredDevice.update({
+      where: { id: device.id },
+      data: {
+        config: {
+          ...config,
+          lldpNeighbors: normalizedLldp,
+          cdpNeighbors: normalizedCdp,
+          topologyEnrichedAt: new Date().toISOString(),
+        },
+      },
+    });
+
+    const relationships = await this.buildAndPersistTopology(tenantId);
+    return {
+      deviceId,
+      lldpNeighbors: normalizedLldp.length,
+      cdpNeighbors: normalizedCdp.length,
+      relationships,
+    };
+  }
 
   /**
    * Build and persist physical network relationships using SNMP LLDP/CDP MIB walks

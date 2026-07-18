@@ -65,16 +65,18 @@ export class SoftwareService {
       orderBy = { createdAt: 'desc' };
     }
 
-    const [data, total] = await Promise.all([
-      this.prisma.softwareCatalog.findMany({
-        where,
-        include: { _count: { select: { installations: true } } },
-        orderBy,
-        skip,
-        take,
-      }),
-      this.prisma.softwareCatalog.count({ where }),
-    ]);
+    const [data, total] = await this.prisma.withTenant(tenantId, async (tx) =>
+      Promise.all([
+        tx.softwareCatalog.findMany({
+          where,
+          include: { _count: { select: { installations: true } } },
+          orderBy,
+          skip,
+          take,
+        }),
+        tx.softwareCatalog.count({ where }),
+      ]),
+    );
 
     return { data, total, page: Number(page), limit: take };
   }
@@ -507,6 +509,16 @@ export class SoftwareService {
         where: { id: agent.id },
         data: { systemInfo: info },
       });
+      await this.prisma.softwarePolicySnapshot.upsert({
+        where: { tenantId_agentId: { tenantId, agentId: agent.id } },
+        create: {
+          tenantId,
+          agentId: agent.id,
+          blacklist: policy,
+          whitelist: [],
+        },
+        update: { blacklist: policy },
+      });
       enqueued++;
     }
 
@@ -552,17 +564,32 @@ export class SoftwareService {
       select: { id: true, systemInfo: true },
     });
 
-    for (const agent of agents) {
-      const info = (agent.systemInfo as any) || {};
-      const pending: any[] = Array.isArray(info._pendingActions) ? info._pendingActions : [];
-      pending.push({ type: 'SOFTWARE_POLICY', ...policy });
-      info._pendingActions = pending;
-      info._softwarePolicy = policy.blacklist;
-      await this.prisma.agent.update({
-        where: { id: agent.id },
-        data: { systemInfo: info },
-      });
-    }
+    await this.prisma.withTenant(tenantId, async (tx) => {
+      for (const agent of agents) {
+        const info = (agent.systemInfo as any) || {};
+        const pending: any[] = Array.isArray(info._pendingActions) ? info._pendingActions : [];
+        pending.push({ type: 'SOFTWARE_POLICY', ...policy });
+        info._pendingActions = pending;
+        info._softwarePolicy = policy.blacklist;
+        await tx.agent.update({
+          where: { id: agent.id },
+          data: { systemInfo: info },
+        });
+        await tx.softwarePolicySnapshot.upsert({
+          where: { tenantId_agentId: { tenantId, agentId: agent.id } },
+          create: {
+            tenantId,
+            agentId: agent.id,
+            blacklist: policy.blacklist,
+            whitelist: policy.whitelist,
+          },
+          update: {
+            blacklist: policy.blacklist,
+            whitelist: policy.whitelist,
+          },
+        });
+      }
+    });
 
     return {
       agentsUpdated: agents.length,

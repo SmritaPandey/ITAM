@@ -1,6 +1,12 @@
 node_modules
 dist
 .env
+.env.*
 .git
 *.md
 docker-data
+trigger-forgot.js
+src/check-db.ts
+coverage
+*.spec.ts
+**/*.spec.ts

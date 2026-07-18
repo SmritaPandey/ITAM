@@ -83,12 +83,12 @@
   <tr><td>Cost center, department, site, and owner tagging</td><td class="status-shipped">Shipped</td></tr>
   <tr><td>QR / barcode label generation and <code>/scan</code> lookup</td><td class="status-shipped">Shipped</td></tr>
   <tr><td>Asset checkout / check-in</td><td class="status-shipped">Shipped</td></tr>
-  <tr><td>Attestation campaigns (asset certification)</td><td class="status-partial">Partial</td></tr>
+  <tr><td>Attestation campaigns (asset certification)</td><td class="status-shipped">Shipped</td></tr>
   <tr><td>Bulk asset import</td><td class="status-shipped">Shipped</td></tr>
   <tr><td>Asset detail history and activity trail</td><td class="status-shipped">Shipped</td></tr>
-  <tr><td>Depreciation jobs (straight-line, declining balance) and finance reports</td><td class="status-partial">Partial / In-build</td></tr>
-  <tr><td>RFID / NFC tag field and scan path</td><td class="status-partial">Partial / In-build</td></tr>
-  <tr><td>License harvest → reclaim ticket workflow</td><td class="status-partial">Partial / In-build</td></tr>
+  <tr><td>Depreciation jobs (straight-line, declining balance) and finance reports</td><td class="status-shipped">Shipped</td></tr>
+  <tr><td>RFID / NFC tag field and scan path</td><td class="status-shipped">Shipped</td></tr>
+  <tr><td>License harvest → reclaim ticket workflow</td><td class="status-shipped">Shipped</td></tr>
 </table>
 <p><strong>UI routes:</strong> All Assets, IT Assets, Asset detail, Asset import</p>
 
@@ -98,10 +98,10 @@
   <tr><td>Custom non-IT asset types (facility, furniture, HVAC, medical, lab, etc.)</td><td class="status-shipped">Shipped</td></tr>
   <tr><td>Vendor and service provider on contracts</td><td class="status-shipped">Shipped</td></tr>
   <tr><td>Work orders linked to assets and maintenance</td><td class="status-shipped">Shipped</td></tr>
-  <tr><td>Facility dashboard (PM overdue, spares, consumables, pinned assets)</td><td class="status-partial">Partial</td></tr>
-  <tr><td>Preventive maintenance schedules → auto work order</td><td class="status-partial">Partial / In-build</td></tr>
-  <tr><td>Spare parts inventory with minimum stock alerts</td><td class="status-partial">Partial / In-build</td></tr>
-  <tr><td>Consumables with reorder-point alerts</td><td class="status-partial">Partial / In-build</td></tr>
+  <tr><td>Facility dashboard (PM overdue, spares, consumables, pinned assets)</td><td class="status-shipped">Shipped</td></tr>
+  <tr><td>Preventive maintenance schedules → auto work order</td><td class="status-shipped">Shipped</td></tr>
+  <tr><td>Spare parts inventory with minimum stock alerts</td><td class="status-shipped">Shipped</td></tr>
+  <tr><td>Consumables with reorder-point alerts</td><td class="status-shipped">Shipped</td></tr>
   <tr><td>Floor plan URL with asset pin coordinates</td><td class="status-partial">Partial / In-build</td></tr>
 </table>
 <p><strong>UI routes:</strong> Non-IT Assets, Facility, Work Orders</p>
@@ -120,7 +120,7 @@
   <tr><td>Software deploy rings (pilot → production via agent)</td><td class="status-shipped">Shipped</td></tr>
   <tr><td>Remote terminal / shell assist (agent-backed)</td><td class="status-partial">Partial</td></tr>
   <tr><td>MQTT, Modbus, BACnet probes (feature-flagged IoT/OT)</td><td class="status-partial">Partial</td></tr>
-  <tr><td>License blacklist / whitelist enforcement on endpoints</td><td class="status-partial">Partial / In-build</td></tr>
+  <tr><td>License blacklist / whitelist enforcement on endpoints</td><td class="status-shipped">Shipped</td></tr>
   <tr><td>Authenticated patch / product inventory for CVE correlation</td><td class="status-partial">Partial / In-build</td></tr>
 </table>
 <p><strong>UI routes:</strong> Discovery, Software Deploy, Remote Terminal</p>
@@ -133,11 +133,11 @@
   <tr><td>SNMP trap receiver → alerts</td><td class="status-shipped">Shipped</td></tr>
   <tr><td>Network topology (ARP / neighbor edges)</td><td class="status-shipped">Shipped</td></tr>
   <tr><td>Network configuration backup and hash-based drift detection</td><td class="status-shipped">Shipped</td></tr>
-  <tr><td>Config approve-and-push workflow</td><td class="status-partial">Partial</td></tr>
-  <tr><td>Syslog UDP ingest → alert / ticket</td><td class="status-partial">Partial / In-build</td></tr>
-  <tr><td>NetFlow / sFlow / IPFIX → top talkers and flow records</td><td class="status-partial">Partial / In-build</td></tr>
-  <tr><td>LLDP / CDP neighbor enrichment</td><td class="status-partial">Partial / In-build</td></tr>
-  <tr><td>NOC dashboard (topology, alarms, trap/syslog stream)</td><td class="status-partial">Partial / In-build</td></tr>
+  <tr><td>Config approve-and-push workflow</td><td class="status-shipped">Shipped</td></tr>
+  <tr><td>Syslog UDP ingest → alert / ticket</td><td class="status-shipped">Shipped</td></tr>
+  <tr><td>NetFlow / sFlow / IPFIX → top talkers and flow records</td><td class="status-shipped">Shipped</td></tr>
+  <tr><td>LLDP / CDP neighbor enrichment</td><td class="status-shipped">Shipped</td></tr>
+  <tr><td>NOC dashboard (topology, alarms, trap/syslog stream)</td><td class="status-shipped">Shipped</td></tr>
 </table>
 <p><strong>UI routes:</strong> Network (NMS), NOC, Network Configs</p>
 
@@ -148,12 +148,12 @@
   <tr><td>Vulnerability dashboard (CVSS, status, remediation tracking)</td><td class="status-shipped">Shipped</td></tr>
   <tr><td>Security scanning (open ports, SSL certificate expiry)</td><td class="status-shipped">Shipped</td></tr>
   <tr><td>Patch catalog and deployment records</td><td class="status-shipped">Shipped</td></tr>
-  <tr><td>Agent-reported missing patches</td><td class="status-partial">Partial</td></tr>
+  <tr><td>Agent-reported missing patches</td><td class="status-shipped">Shipped</td></tr>
   <tr><td>Live third-party patch catalogs (winget / apt / brew sync)</td><td class="status-partial">In-build</td></tr>
   <tr><td>Deploy rings: pilot → staged → all endpoints</td><td class="status-shipped">Shipped</td></tr>
   <tr><td>Patch rollback UI</td><td class="status-shipped">Shipped</td></tr>
   <tr><td>Air-gap patch bundle ZIP export</td><td class="status-shipped">Shipped</td></tr>
-  <tr><td>Critical CVE → automatic ticket creation</td><td class="status-partial">In-build</td></tr>
+  <tr><td>Critical CVE → automatic ticket creation</td><td class="status-shipped">Shipped</td></tr>
   <tr><td>Compliance policies and compliance score dashboard</td><td class="status-shipped">Shipped</td></tr>
   <tr><td>CIS evidence pack export (PDF / CSV)</td><td class="status-shipped">Shipped</td></tr>
   <tr><td>NAC: VLAN policies, segments, quarantine UI</td><td class="status-shipped">Shipped</td></tr>
@@ -174,8 +174,8 @@
   <tr><td>Knowledge base articles</td><td class="status-shipped">Shipped</td></tr>
   <tr><td>Work orders from tickets and maintenance</td><td class="status-shipped">Shipped</td></tr>
   <tr><td>Employee self-service portal</td><td class="status-shipped">Shipped</td></tr>
-  <tr><td>SLA escalation cron (notify + reassign)</td><td class="status-partial">In-build</td></tr>
-  <tr><td>CSAT survey on ticket resolution</td><td class="status-partial">In-build</td></tr>
+  <tr><td>SLA escalation cron (notify + reassign)</td><td class="status-shipped">Shipped</td></tr>
+  <tr><td>CSAT survey on ticket resolution</td><td class="status-shipped">Shipped</td></tr>
   <tr><td>Multi-level approval and CAB calendar for changes</td><td class="status-shipped">Shipped</td></tr>
   <tr><td>SSDLC 9-step change type (UAT / VAPT gates, evidence attachments)</td><td class="status-partial">In-build</td></tr>
   <tr><td>IMAP email → ticket ingest (omnichannel)</td><td class="status-partial">In-build</td></tr>
@@ -191,8 +191,8 @@
   <tr><td>CI relationship types (DEPENDS_ON, CONNECTED_TO, etc.)</td><td class="status-shipped">Shipped</td></tr>
   <tr><td>Discovery auto-sync without duplicate serial/MAC</td><td class="status-shipped">Shipped</td></tr>
   <tr><td>Data quality and attestation on CIs</td><td class="status-partial">Partial</td></tr>
-  <tr><td>Impact analysis API and UI drilldown (transitive dependents)</td><td class="status-partial">Partial / In-build</td></tr>
-  <tr><td>Business service health rollup (CSDM-lite)</td><td class="status-partial">Partial / In-build</td></tr>
+  <tr><td>Impact analysis API and UI drilldown (transitive dependents)</td><td class="status-shipped">Shipped</td></tr>
+  <tr><td>Business service health rollup (CSDM-lite)</td><td class="status-shipped">Shipped</td></tr>
 </table>
 <p><strong>UI route:</strong> CMDB</p>
 
@@ -202,9 +202,9 @@
   <tr><td>License entitlements and seat assignments</td><td class="status-shipped">Shipped</td></tr>
   <tr><td>Usage vs entitlement and expiry warnings</td><td class="status-shipped">Shipped</td></tr>
   <tr><td>Installed software inventory view</td><td class="status-shipped">Shipped</td></tr>
-  <tr><td>Software metering (last-used from agent)</td><td class="status-partial">In-build</td></tr>
-  <tr><td>Blacklist / whitelist policy enforcement on agents</td><td class="status-partial">In-build</td></tr>
-  <tr><td>Harvest recommendations and reclaim workflow</td><td class="status-partial">In-build</td></tr>
+  <tr><td>Software metering (last-used from agent)</td><td class="status-shipped">Shipped</td></tr>
+  <tr><td>Blacklist / whitelist policy enforcement on agents</td><td class="status-shipped">Shipped</td></tr>
+  <tr><td>Harvest recommendations and reclaim workflow</td><td class="status-shipped">Shipped</td></tr>
 </table>
 <p><strong>UI routes:</strong> Software Inventory, Licenses</p>
 
@@ -213,8 +213,8 @@
   <tr><th>Capability</th><th>Status</th></tr>
   <tr><td>GPS telemetry storage and map view</td><td class="status-shipped">Shipped</td></tr>
   <tr><td>Trip history</td><td class="status-shipped">Shipped</td></tr>
-  <tr><td>Geofence entry/exit, speeding, and idle alerts</td><td class="status-partial">In-build</td></tr>
-  <tr><td>Traccar-protocol GPS ingest endpoint</td><td class="status-partial">In-build</td></tr>
+  <tr><td>Geofence entry/exit, speeding, and idle alerts</td><td class="status-shipped">Shipped</td></tr>
+  <tr><td>Traccar-protocol GPS ingest endpoint</td><td class="status-shipped">Shipped</td></tr>
   <tr><td>Maintenance due from EAM schedules on fleet assets</td><td class="status-partial">In-build</td></tr>
 </table>
 <p><strong>UI route:</strong> Fleet / GPS</p>
@@ -225,8 +225,8 @@
   <tr><td>ONVIF camera discovery</td><td class="status-shipped">Shipped</td></tr>
   <tr><td>Snapshot and HLS stream proxy (when ffmpeg available)</td><td class="status-shipped">Shipped</td></tr>
   <tr><td>Manual camera add with RTSP URLs and health status</td><td class="status-shipped">Shipped</td></tr>
-  <tr><td>Multi-camera video wall layouts</td><td class="status-partial">In-build</td></tr>
-  <tr><td>Tamper and offline camera alerts</td><td class="status-partial">In-build</td></tr>
+  <tr><td>Multi-camera video wall layouts</td><td class="status-shipped">Shipped</td></tr>
+  <tr><td>Tamper and offline camera alerts</td><td class="status-shipped">Shipped</td></tr>
 </table>
 <p><strong>UI route:</strong> CCTV</p>
 
@@ -235,7 +235,7 @@
   <tr><th>Capability</th><th>Status</th></tr>
   <tr><td>Hypervisor connectors (e.g. Horizon, Proxmox) and session list</td><td class="status-shipped">Shipped</td></tr>
   <tr><td>Console launch deep-link</td><td class="status-shipped">Shipped</td></tr>
-  <tr><td>Session resource utilization charts over time</td><td class="status-partial">In-build</td></tr>
+  <tr><td>Session resource utilization charts over time</td><td class="status-shipped">Shipped</td></tr>
 </table>
 <p><strong>UI route:</strong> VDI</p>
 
@@ -259,7 +259,7 @@
   <tr><td>Cron and event-based rule triggers</td><td class="status-shipped">Shipped</td></tr>
   <tr><td>Alert rules and alert events (acknowledge, resolve)</td><td class="status-shipped">Shipped</td></tr>
   <tr><td>Realtime Socket.io push to tenant rooms</td><td class="status-shipped">Shipped</td></tr>
-  <tr><td>Notification digest / batched modes</td><td class="status-partial">In-build</td></tr>
+  <tr><td>Notification digest / batched modes</td><td class="status-shipped">Shipped</td></tr>
   <tr><td>Visual workflow builder polish (not ServiceNow Flow-class)</td><td class="status-partial">Partial</td></tr>
 </table>
 <p><strong>UI routes:</strong> Automation, Alerts</p>
@@ -270,11 +270,11 @@
   <tr><td>Template reports: assets, tickets, licenses, executive summary, audit</td><td class="status-shipped">Shipped</td></tr>
   <tr><td>Export to PDF, XLSX, and CSV</td><td class="status-shipped">Shipped</td></tr>
   <tr><td>Scheduled report model (cron + recipients)</td><td class="status-shipped">Shipped</td></tr>
-  <tr><td>Scheduled report email delivery</td><td class="status-partial">Partial</td></tr>
+  <tr><td>Scheduled report email delivery</td><td class="status-shipped">Shipped</td></tr>
   <tr><td>Custom saved-filter reports</td><td class="status-partial">In-build</td></tr>
   <tr><td>Global search (Cmd+K / Meilisearch)</td><td class="status-partial">Partial</td></tr>
   <tr><td>AI Intelligence dashboard — risk scores and recommendations</td><td class="status-shipped">Shipped</td></tr>
-  <tr><td>Role-specific executive dashboards (8 roles)</td><td class="status-partial">In-build</td></tr>
+  <tr><td>Role-specific executive dashboards (8 roles)</td><td class="status-shipped">Shipped</td></tr>
 </table>
 <p><strong>UI routes:</strong> Reports, Intelligence, Dashboard (overview)</p>
 
@@ -289,7 +289,7 @@
   <tr><td>Email verification and password reset</td><td class="status-shipped">Shipped</td></tr>
   <tr><td>MFA TOTP (enroll + login challenge)</td><td class="status-partial">Partial / In-build</td></tr>
   <tr><td>SAML 2.0 / OIDC SSO with group-to-role mapping</td><td class="status-partial">Partial / In-build</td></tr>
-  <tr><td>Postgres row-level security (tenant isolation)</td><td class="status-partial">Partial / In-build</td></tr>
+  <tr><td>Postgres row-level security (tenant isolation)</td><td class="status-shipped">Shipped</td></tr>
   <tr><td>Audit log with SHA-256 hash chain and verify API</td><td class="status-shipped">Shipped</td></tr>
   <tr><td>Credential vault for discovery secrets</td><td class="status-shipped">Shipped</td></tr>
   <tr><td>Product license: SaaS issuance and on-prem Ed25519 <code>.lic</code> files</td><td class="status-shipped">Shipped</td></tr>

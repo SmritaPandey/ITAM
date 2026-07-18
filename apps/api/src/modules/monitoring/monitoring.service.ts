@@ -553,8 +553,12 @@ export class MonitoringService {
     });
     const online = data.filter(d => d.status === 'ONLINE').length;
     const recording = data.filter(d => (d.config as any)?.recording).length;
-    const alerts = data.filter(d => d.status === 'OFFLINE').length;
-    return { data, total: data.length, online, recording, alerts };
+    const offline = data.filter(d => d.status === 'OFFLINE').length;
+    const tamper = data.filter(d => {
+      const config = (d.config as any) || {};
+      return config.tamperDetected === true || config.signalLoss === true;
+    }).length;
+    return { data, total: data.length, online, recording, offline, tamper, alerts: offline + tamper };
   }
 
   async getCameraStream(id: string, tenantId: string) {

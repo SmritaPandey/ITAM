@@ -20,10 +20,18 @@ export class NacService {
   ) {}
 
   async getDashboard(tenantId: string) {
-    const agents = await this.prisma.agent.findMany({
-      where: { tenantId },
-      select: { id: true, status: true, systemInfo: true, hostname: true },
+    const { agents, activeQuarantines } = await this.prisma.withTenant(tenantId, async (tx) => {
+      const agents = await tx.agent.findMany({
+        where: { tenantId },
+        select: { id: true, status: true, systemInfo: true, hostname: true },
+      });
+      const activeQuarantines = await tx.nacQuarantine.findMany({
+        where: { tenantId, active: true },
+        select: { agentId: true },
+      });
+      return { agents, activeQuarantines };
     });
+    const quarantinedIds = new Set(activeQuarantines.map((q) => q.agentId));
 
     let compliant = 0,
       nonCompliant = 0,
@@ -34,7 +42,8 @@ export class NacService {
     for (const agent of agents) {
       const info = (agent.systemInfo as any) || {};
       const posture = this.assessPostureFromInfo(info);
-      if (info._quarantined) quarantined++;
+      const isQuarantined = quarantinedIds.has(agent.id) || !!info._quarantined;
+      if (isQuarantined) quarantined++;
       else if (posture.score >= 70) compliant++;
       else if (posture.score > 0) nonCompliant++;
       else unknown++;
@@ -64,12 +73,32 @@ export class NacService {
   }
 
   async getDevicePosture(tenantId: string) {
-    const agents = await this.prisma.agent.findMany({
-      where: { tenantId },
-      select: { id: true, status: true, systemInfo: true, hostname: true, lastHeartbeat: true, ipAddress: true },
-    });
-
-    const policies = await this.prisma.nacVlanPolicy.findMany({ where: { tenantId }, orderBy: { priority: 'asc' } });
+    const { agents, policies, activeQuarantines } = await this.prisma.withTenant(
+      tenantId,
+      async (tx) => {
+        const agents = await tx.agent.findMany({
+          where: { tenantId },
+          select: {
+            id: true,
+            status: true,
+            systemInfo: true,
+            hostname: true,
+            lastHeartbeat: true,
+            ipAddress: true,
+          },
+        });
+        const policies = await tx.nacVlanPolicy.findMany({
+          where: { tenantId },
+          orderBy: { priority: 'asc' },
+        });
+        const activeQuarantines = await tx.nacQuarantine.findMany({
+          where: { tenantId, active: true },
+          select: { agentId: true },
+        });
+        return { agents, policies, activeQuarantines };
+      },
+    );
+    const quarantinedIds = new Set(activeQuarantines.map((q) => q.agentId));
 
     return agents.map((agent) => {
       const info = (agent.systemInfo as any) || {};
@@ -84,7 +113,7 @@ export class NacService {
         status: agent.status,
         lastSeen: agent.lastHeartbeat,
         lastAssessed: agent.lastHeartbeat,
-        quarantined: !!info._quarantined,
+        quarantined: quarantinedIds.has(agent.id) || !!info._quarantined,
         posture,
         postureScore: posture.score,
         level: posture.level,
@@ -356,25 +385,38 @@ export class NacService {
   }
 
   async quarantineDevice(tenantId: string, agentId: string, reason: string) {
-    const agent = await this.prisma.agent.findFirst({ where: { id: agentId, tenantId } });
-    if (!agent) throw new NotFoundException('Agent not found');
+    const agent = await this.prisma.withTenant(tenantId, async (tx) => {
+      const agent = await tx.agent.findFirst({ where: { id: agentId, tenantId } });
+      if (!agent) throw new NotFoundException('Agent not found');
 
-    const info = (agent.systemInfo as any) || {};
-    info._quarantined = true;
-    info._quarantineReason = reason;
-    info._quarantinedAt = new Date().toISOString();
+      const info = (agent.systemInfo as any) || {};
+      // Keep agent JSON flags for backward-compatible agent polling; durable source of truth is NacQuarantine.
+      info._quarantined = true;
+      info._quarantineReason = reason;
+      info._quarantinedAt = new Date().toISOString();
 
-    if (!info._pendingActions) info._pendingActions = [];
-    info._pendingActions.push({
-      type: 'QUARANTINE_DEVICE',
-      reason,
-      allowServerOnly: true,
-      timestamp: new Date().toISOString(),
-    });
+      if (!info._pendingActions) info._pendingActions = [];
+      info._pendingActions.push({
+        type: 'QUARANTINE_DEVICE',
+        reason,
+        allowServerOnly: true,
+        timestamp: new Date().toISOString(),
+      });
 
-    await this.prisma.agent.update({
-      where: { id: agentId },
-      data: { systemInfo: info },
+      await tx.agent.update({
+        where: { id: agentId },
+        data: { systemInfo: info },
+      });
+
+      await tx.nacQuarantine.updateMany({
+        where: { tenantId, agentId, active: true },
+        data: { active: false, clearedAt: new Date() },
+      });
+      await tx.nacQuarantine.create({
+        data: { tenantId, agentId, reason, active: true },
+      });
+
+      return agent;
     });
 
     this.eventBus.emit('nac.device_quarantined', { tenantId, agentId, reason });
@@ -402,23 +444,32 @@ export class NacService {
   }
 
   async unquarantineDevice(tenantId: string, agentId: string) {
-    const agent = await this.prisma.agent.findFirst({ where: { id: agentId, tenantId } });
-    if (!agent) throw new NotFoundException('Agent not found');
+    const agent = await this.prisma.withTenant(tenantId, async (tx) => {
+      const agent = await tx.agent.findFirst({ where: { id: agentId, tenantId } });
+      if (!agent) throw new NotFoundException('Agent not found');
 
-    const info = (agent.systemInfo as any) || {};
-    info._quarantined = false;
-    delete info._quarantineReason;
-    delete info._quarantinedAt;
+      const info = (agent.systemInfo as any) || {};
+      info._quarantined = false;
+      delete info._quarantineReason;
+      delete info._quarantinedAt;
 
-    if (!info._pendingActions) info._pendingActions = [];
-    info._pendingActions.push({
-      type: 'UNQUARANTINE_DEVICE',
-      timestamp: new Date().toISOString(),
-    });
+      if (!info._pendingActions) info._pendingActions = [];
+      info._pendingActions.push({
+        type: 'UNQUARANTINE_DEVICE',
+        timestamp: new Date().toISOString(),
+      });
 
-    await this.prisma.agent.update({
-      where: { id: agentId },
-      data: { systemInfo: info },
+      await tx.agent.update({
+        where: { id: agentId },
+        data: { systemInfo: info },
+      });
+
+      await tx.nacQuarantine.updateMany({
+        where: { tenantId, agentId, active: true },
+        data: { active: false, clearedAt: new Date() },
+      });
+
+      return agent;
     });
 
     this.eventBus.emit('nac.device_unquarantined', { tenantId, agentId });

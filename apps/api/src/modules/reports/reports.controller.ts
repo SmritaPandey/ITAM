@@ -9,6 +9,7 @@ import { PrismaService } from '../../common/database/prisma.service';
 import type { Response } from 'express';
 import { ModuleGuard } from '../../common/guards/module.guard';
 import { RequireModule } from '../../common/decorators/require-module.decorator';
+import { calculateNextRun } from '../../common/utils/cron-next-run';
 
 @ApiTags('reports')
 @ApiBearerAuth()
@@ -238,13 +239,6 @@ export class ReportsController {
   }
 
   private calculateNextRun(cronExpr: string): Date {
-    const now = new Date();
-    const parts = cronExpr.split(' ');
-    if (parts.length !== 5) return new Date(now.getTime() + 24 * 60 * 60 * 1000);
-    const [min, hour] = parts;
-    const next = new Date(now);
-    next.setHours(parseInt(hour) || 0, parseInt(min) || 0, 0, 0);
-    if (next <= now) next.setDate(next.getDate() + 1);
-    return next;
+    return calculateNextRun(cronExpr);
   }
 }

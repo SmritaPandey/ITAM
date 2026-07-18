@@ -104,6 +104,9 @@ model Tenant {
   patchPolicies       PatchDeployPolicy[]
   emailIngestConfigs  EmailIngestConfig[]
   searchIndexJobs     SearchIndexJob[]
+  geofences           Geofence[]
+  nacQuarantines      NacQuarantine[]
+  softwarePolicySnapshots SoftwarePolicySnapshot[]
 
   @@map("tenants")
 }
@@ -1142,6 +1145,8 @@ model Agent {
   tenant        Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   changes       EndpointChange[]
   baseline      AgentBaseline?
+  nacQuarantines NacQuarantine[]
+  softwarePolicySnapshots SoftwarePolicySnapshot[]
 
   @@index([tenantId])
   @@map("agents")
@@ -2352,6 +2357,80 @@ model SearchIndexJob {
 
   @@index([tenantId, status])
   @@map("search_index_jobs")
+}
+
+// ─── Fleet geofences (durable; replaces Tenant.settings.geofences) ───────────
+model Geofence {
+  id          String   @id @default(uuid()) @db.Uuid
+  tenantId    String   @map("tenant_id") @db.Uuid
+  name        String
+  type        String   @default("circle") // circle | polygon
+  centerLat   Float?   @map("center_lat")
+  centerLng   Float?   @map("center_lng")
+  radiusMeters Float?  @map("radius_meters")
+  coordinates Json     @default("[]") // polygon points [{lat,lng}]
+  meta        Json     @default("{}")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  vehicleStates GeofenceVehicleState[]
+
+  @@index([tenantId])
+  @@map("geofences")
+}
+
+model GeofenceVehicleState {
+  id         String   @id @default(uuid()) @db.Uuid
+  tenantId   String   @map("tenant_id") @db.Uuid
+  geofenceId String   @map("geofence_id") @db.Uuid
+  vehicleId  String   @map("vehicle_id") @db.Uuid
+  isInside   Boolean  @map("is_inside")
+  updatedAt  DateTime @updatedAt @map("updated_at")
+
+  geofence Geofence @relation(fields: [geofenceId], references: [id], onDelete: Cascade)
+
+  @@unique([geofenceId, vehicleId])
+  @@index([tenantId])
+  @@index([vehicleId])
+  @@map("geofence_vehicle_states")
+}
+
+// ─── NAC quarantine (durable; replaces Agent.systemInfo._quarantined) ───────
+model NacQuarantine {
+  id        String    @id @default(uuid()) @db.Uuid
+  tenantId  String    @map("tenant_id") @db.Uuid
+  agentId   String    @map("agent_id") @db.Uuid
+  reason    String?
+  active    Boolean   @default(true)
+  createdAt DateTime  @default(now()) @map("created_at")
+  clearedAt DateTime? @map("cleared_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  agent  Agent  @relation(fields: [agentId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, active])
+  @@index([agentId, active])
+  @@map("nac_quarantines")
+}
+
+// ─── Software policy snapshot per agent (replaces systemInfo._softwarePolicy) ─
+model SoftwarePolicySnapshot {
+  id        String   @id @default(uuid()) @db.Uuid
+  tenantId  String   @map("tenant_id") @db.Uuid
+  agentId   String   @map("agent_id") @db.Uuid
+  blacklist Json     @default("[]")
+  whitelist Json     @default("[]")
+  updatedAt DateTime @updatedAt @map("updated_at")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  agent  Agent  @relation(fields: [agentId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, agentId])
+  @@index([tenantId])
+  @@map("software_policy_snapshots")
 }
 
 // ============================================================================

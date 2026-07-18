@@ -104,7 +104,7 @@ jobs:
         env:
           POSTGRES_USER: test
           POSTGRES_PASSWORD: test
-          POSTGRES_DB: reconapm_test
+          POSTGRES_DB: qsasset_test
         options: >-
           --health-cmd "pg_isready -U test"
           --health-interval 10s
@@ -124,7 +124,7 @@ jobs:
           - 6379:6379
 
     env:
-      DATABASE_URL: postgresql://test:test@localhost:5432/reconapm_test
+      DATABASE_URL: postgresql://test:test@localhost:5432/qsasset_test
       REDIS_URL: redis://localhost:6379
       JWT_SECRET: test-secret-key-for-ci
       NODE_ENV: test
@@ -192,7 +192,7 @@ jobs:
           npm run build
         working-directory: apps/web
         env:
-          NEXT_PUBLIC_API_URL: https://api.reconapm.com/api/v1
+          NEXT_PUBLIC_API_URL: https://api-production-fe27.up.railway.app/api/v1
 
   # ─── Deploy API (Railway) ───────────────────────────────────
   deploy-api:

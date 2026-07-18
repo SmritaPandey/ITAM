@@ -8,6 +8,7 @@ import { RiskService } from '../risk/risk.service';
 import { SoftwareService } from '../software/software.service';
 import OpenAI from 'openai';
 import Redis from 'ioredis';
+import { createHash } from 'crypto';
 
 const MAX_TOOL_ROUNDS = 5; // Prevent infinite tool-calling loops
 
@@ -89,7 +90,10 @@ export class AiService {
   // ─── Chat ────────────────────────────────────────────────────
 
   async chat(tenantId: string, userId: string, message: string, history?: Array<{ role: string; content: string }>) {
-    if (!this.enabled) return { response: 'AI Copilot is not enabled. Ask your administrator to set AI_ENABLED=true.', toolsUsed: [] };
+    if (!(await this.isEnabledForTenant(tenantId))) {
+      return { response: 'AI Copilot is not enabled for this organization.', toolsUsed: [] };
+    }
+    const startedAt = Date.now();
 
     try {
       this.eventBus.emitDomainEvent({
@@ -131,7 +135,11 @@ export class AiService {
         });
 
         const choice = completion.choices[0];
-        if (!choice) return { response: 'No response from AI model.', toolsUsed };
+        if (!choice) {
+          const result = { response: 'No response from AI model.', toolsUsed };
+          await this.recordInteraction(tenantId, userId, 'chat', message, result.response, toolsUsed, startedAt);
+          return result;
+        }
 
         // If the model wants to call tools
         if (choice.finish_reason === 'tool_calls' && choice.message.tool_calls?.length) {
@@ -152,10 +160,14 @@ export class AiService {
         }
 
         // Final text response
-        return { response: choice.message.content || 'No response generated.', toolsUsed };
+        const result = { response: choice.message.content || 'No response generated.', toolsUsed };
+        await this.recordInteraction(tenantId, userId, 'chat', message, result.response, toolsUsed, startedAt);
+        return result;
       }
 
-      return { response: 'Reached maximum tool-calling rounds. Please try a simpler question.', toolsUsed };
+      const result = { response: 'Reached maximum tool-calling rounds. Please try a simpler question.', toolsUsed };
+      await this.recordInteraction(tenantId, userId, 'chat', message, result.response, toolsUsed, startedAt);
+      return result;
     } catch (err: any) {
       this.logger.error(`AI chat error: ${err.message}`);
       return { response: `AI service error: ${err.message}. The AI engine may be unavailable.`, toolsUsed };
@@ -163,10 +175,11 @@ export class AiService {
   }
 
   async *chatStream(tenantId: string, userId: string, message: string, history?: Array<{ role: string; content: string }>) {
-    if (!this.enabled) {
-      yield { content: 'AI Copilot is not enabled. Ask your administrator to set AI_ENABLED=true.' };
+    if (!(await this.isEnabledForTenant(tenantId))) {
+      yield { content: 'AI Copilot is not enabled for this organization.' };
       return;
     }
+    const startedAt = Date.now();
 
     try {
       this.eventBus.emitDomainEvent({
@@ -252,6 +265,15 @@ export class AiService {
           continue;
         }
 
+        await this.recordInteraction(
+          tenantId,
+          userId,
+          'chat/stream',
+          message,
+          textAccumulator,
+          toolsUsed,
+          startedAt,
+        );
         yield { done: true, toolsUsed };
         return;
       }
@@ -265,8 +287,9 @@ export class AiService {
 
   // ─── Analyze Asset ───────────────────────────────────────────
 
-  async analyzeAsset(tenantId: string, assetId: string) {
-    if (!this.enabled) return { riskScore: 0, riskLevel: 'UNKNOWN', analysis: 'AI not enabled.', recommendations: [], threats: [] };
+  async analyzeAsset(tenantId: string, assetId: string, userId?: string) {
+    if (!(await this.isEnabledForTenant(tenantId))) return { riskScore: 0, riskLevel: 'UNKNOWN', analysis: 'AI not enabled.', recommendations: [], threats: [] };
+    const startedAt = Date.now();
 
     const asset = await this.prisma.asset.findFirst({
       where: { id: assetId, tenantId },
@@ -296,7 +319,9 @@ export class AiService {
       });
 
       const text = completion.choices[0]?.message?.content || '';
-      return this.parseJsonResponse(text, { riskScore: 50, riskLevel: 'MEDIUM', analysis: text, recommendations: [], threats: [] });
+      const result = this.parseJsonResponse(text, { riskScore: 50, riskLevel: 'MEDIUM', analysis: text, recommendations: [], threats: [] });
+      await this.recordInteraction(tenantId, userId, 'analyze/asset', assetContext, text, [], startedAt);
+      return result;
     } catch (err: any) {
       this.logger.error(`Asset analysis error: ${err.message}`);
       return { riskScore: 0, riskLevel: 'UNKNOWN', analysis: `Analysis failed: ${err.message}`, recommendations: [], threats: [] };
@@ -306,7 +331,7 @@ export class AiService {
   // ─── Classify Ticket ─────────────────────────────────────────
 
   async classifyTicket(tenantId: string, ticketId: string) {
-    if (!this.enabled) return { classification: 'UNKNOWN', suggestedPriority: 'MEDIUM', suggestedCategory: 'General', resolution: 'AI not enabled.', similarTickets: [] };
+    if (!(await this.isEnabledForTenant(tenantId))) return { classification: 'UNKNOWN', suggestedPriority: 'MEDIUM', suggestedCategory: 'General', resolution: 'AI not enabled.', similarTickets: [] };
 
     const ticket = await this.prisma.ticket.findFirst({
       where: { id: ticketId, tenantId },
@@ -352,7 +377,7 @@ export class AiService {
   // ─── Dashboard Insights ──────────────────────────────────────
 
   async getDashboardInsights(tenantId: string) {
-    if (!this.enabled) return { insights: [{ title: 'AI Not Enabled', description: 'Enable AI_ENABLED=true for intelligent insights.', severity: 'INFO', action: 'Configure AI engine' }] };
+    if (!(await this.isEnabledForTenant(tenantId))) return { insights: [{ title: 'AI Not Enabled', description: 'AI is disabled for this organization.', severity: 'INFO', action: 'Contact an administrator' }] };
 
     const cacheKey = `ai:insights:${tenantId}`;
     if (this.redis) {
@@ -419,7 +444,7 @@ export class AiService {
   // ─── Patch Prioritization ────────────────────────────────────
 
   async prioritizePatches(tenantId: string) {
-    if (!this.enabled) return { plan: [] };
+    if (!(await this.isEnabledForTenant(tenantId))) return { plan: [] };
 
     const patches = await this.prisma.patch.findMany({
       where: { tenantId, status: { not: 'DEPLOYED' } },
@@ -451,7 +476,7 @@ export class AiService {
   // ─── Compliance Review ───────────────────────────────────────
 
   async reviewCompliance(tenantId: string) {
-    if (!this.enabled) return { overallScore: 0, gaps: [], recommendations: [], frameworks: {} };
+    if (!(await this.isEnabledForTenant(tenantId))) return { overallScore: 0, gaps: [], recommendations: [], frameworks: {} };
 
     const [assetCount, encryptedCount, agentCount, patchCompliance] = await Promise.all([
       this.prisma.asset.count({ where: { tenantId, status: 'ACTIVE' } }),
@@ -708,6 +733,45 @@ export class AiService {
       return { ...fallback, analysis: text, description: text };
     } catch {
       return { ...fallback, analysis: text, description: text };
+    }
+  }
+
+  private async isEnabledForTenant(tenantId: string): Promise<boolean> {
+    // Environment switch is a hard-off. Tenant setting is an administrative kill-switch.
+    if (!this.enabled) return false;
+    const tenant = await this.prisma.tenant.findUnique({
+      where: { id: tenantId },
+      select: { settings: true },
+    });
+    const settings = (tenant?.settings as Record<string, unknown>) || {};
+    return settings.aiEnabled !== false;
+  }
+
+  private async recordInteraction(
+    tenantId: string,
+    userId: string | undefined,
+    endpoint: string,
+    prompt: string,
+    response: string,
+    toolsUsed: string[],
+    startedAt: number,
+  ) {
+    try {
+      await this.prisma.aiInteractionLog.create({
+        data: {
+          tenantId,
+          userId: userId || null,
+          endpoint,
+          promptHash: createHash('sha256').update(prompt).digest('hex'),
+          promptChars: prompt.length,
+          responseChars: response.length,
+          model: this.model,
+          toolsUsed,
+          latencyMs: Date.now() - startedAt,
+        },
+      });
+    } catch (err: any) {
+      this.logger.warn(`AI metadata logging failed: ${err.message}`);
     }
   }
 }

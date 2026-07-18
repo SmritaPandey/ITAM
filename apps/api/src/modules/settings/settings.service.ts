@@ -2,10 +2,34 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../common/database/prisma.service';
 import { getResolvedModules, getActiveModules } from '../../common/utils/modules';
 import { PLAN_LIMITS } from '../../common/constants/plan-limits';
+import { redactSecrets } from '../../common/security/redact';
+import { sealVaultValue } from '../../common/security/vault-crypto';
 
 @Injectable()
 export class SettingsService {
   constructor(private prisma: PrismaService) {}
+
+  private protectSecrets(value: unknown): unknown {
+    if (Array.isArray(value)) return value.map((item) => this.protectSecrets(item));
+    if (!value || typeof value !== 'object') return value;
+    const protectedValue: Record<string, unknown> = {};
+    const secretKeys = new Set([
+      'password',
+      'bindpassword',
+      'snmpcommunity',
+      'clientsecret',
+      'privatekey',
+      'apikey',
+    ]);
+    for (const [key, nested] of Object.entries(value as Record<string, unknown>)) {
+      if (secretKeys.has(key.toLowerCase()) && typeof nested === 'string' && nested) {
+        protectedValue[key] = sealVaultValue(nested);
+      } else {
+        protectedValue[key] = this.protectSecrets(nested);
+      }
+    }
+    return protectedValue;
+  }
 
   async getSettings(tenantId: string) {
     const tenant = await this.prisma.tenant.findUnique({
@@ -15,11 +39,15 @@ export class SettingsService {
     if (!tenant) throw new NotFoundException('Tenant not found');
 
     const settingsObj = typeof tenant.settings === 'object' ? (tenant.settings as Record<string, any>) : {};
+    const publicSettings = redactSecrets(settingsObj, { preservePresence: true });
     const allowedModules = getResolvedModules(tenant.plan, tenant.settings);
     const activeModules = getActiveModules(tenant.plan, tenant.settings);
 
     return {
-      ...settingsObj,
+      ...publicSettings,
+      aiEnabled: publicSettings.aiEnabled !== false,
+      auditRetentionDays: Math.max(180, Number(publicSettings.auditRetentionDays) || 365),
+      retentionDays: Math.max(1, Number(publicSettings.retentionDays) || 90),
       tenantId: tenant.id,
       orgName: tenant.name,
       domain: tenant.domain,
@@ -73,6 +101,8 @@ export class SettingsService {
     'mfaEnforced',
     'passwordExpiry',
     'ipWhitelist',
+    'aiEnabled',
+    'auditRetentionDays',
     // Storage & System settings
     'storageProvider',
     'storagePath',
@@ -93,8 +123,14 @@ export class SettingsService {
     const sanitized: Record<string, any> = {};
     for (const key of Object.keys(data)) {
       if (SettingsService.ALLOWED_SETTINGS_KEYS.has(key)) {
-        sanitized[key] = data[key];
+        sanitized[key] = (this.protectSecrets({ [key]: data[key] }) as Record<string, unknown>)[key];
       }
+    }
+    if (sanitized.auditRetentionDays !== undefined) {
+      sanitized.auditRetentionDays = Math.max(180, Number(sanitized.auditRetentionDays) || 365);
+    }
+    if (sanitized.retentionDays !== undefined) {
+      sanitized.retentionDays = Math.max(1, Number(sanitized.retentionDays) || 90);
     }
 
     // Merge with existing settings
@@ -108,11 +144,15 @@ export class SettingsService {
 
     const result = await this.prisma.tenant.update({ where: { id: tenantId }, data: update });
     const settingsObj = typeof result.settings === 'object' ? (result.settings as Record<string, any>) : {};
+    const publicSettings = redactSecrets(settingsObj, { preservePresence: true });
     const allowedModules = getResolvedModules(result.plan, result.settings);
     const activeModules = getActiveModules(result.plan, result.settings);
 
     return {
-      ...settingsObj,
+      ...publicSettings,
+      aiEnabled: publicSettings.aiEnabled !== false,
+      auditRetentionDays: Math.max(180, Number(publicSettings.auditRetentionDays) || 365),
+      retentionDays: Math.max(1, Number(publicSettings.retentionDays) || 90),
       tenantId: result.id,
       orgName: result.name,
       domain: result.domain,

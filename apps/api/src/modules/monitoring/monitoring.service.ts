@@ -9,6 +9,8 @@ import { promisify } from 'util';
 import * as os from 'os';
 import * as net from 'net';
 import { TopologyService } from './topology.service';
+import { redactSecrets } from '../../common/security/redact';
+import { sealVaultValue } from '../../common/security/vault-crypto';
 
 const execAsync = promisify(exec);
 
@@ -20,6 +22,10 @@ const PORT_NAMES: Record<number, string> = {
 @Injectable()
 export class MonitoringService {
   private readonly logger = new Logger(MonitoringService.name);
+
+  private publicDevice<T>(device: T): T {
+    return redactSecrets(device, { preservePresence: true });
+  }
 
   constructor(
     private prisma: PrismaService,
@@ -621,7 +627,7 @@ export class MonitoringService {
     const up = data.filter(d => d.status === 'ONLINE').length;
     const warning = data.filter(d => d.status === 'WARNING').length;
     const down = data.filter(d => d.status === 'OFFLINE').length;
-    return { data, total: data.length, up, warning, down };
+    return { data: data.map((device) => this.publicDevice(device)), total: data.length, up, warning, down };
   }
 
   async getTopology(tenantId: string) {
@@ -747,8 +753,9 @@ export class MonitoringService {
   // ─── Generic CRUD ───────────────────────────────────────────────
   async createDevice(tenantId: string, body: any) {
     const { name, ipAddress, type, snmpCommunity, snmpVersion, location, notes, config: customConfig, metrics: customMetrics } = body;
-    const config: any = customConfig || {};
-    if (snmpCommunity) config.snmpCommunity = snmpCommunity;
+    const config: any = { ...(customConfig || {}) };
+    if (config.snmpCommunity) config.snmpCommunity = sealVaultValue(config.snmpCommunity);
+    if (snmpCommunity) config.snmpCommunity = sealVaultValue(snmpCommunity);
     if (snmpVersion) config.snmpVersion = snmpVersion;
     if (notes) config.notes = notes;
 
@@ -766,17 +773,36 @@ export class MonitoringService {
     if (device.status === 'OFFLINE') {
       this.eventBus.emitMonitoringEvent(tenantId, 'device_down', { deviceId: device.id, name: device.name, type: device.type });
     }
-    return device;
+    return this.publicDevice(device);
   }
 
   async updateDevice(id: string, tenantId: string, body: any) {
     const existing = await this.prisma.monitoredDevice.findFirst({ where: { id, tenantId } });
     if (!existing) throw new NotFoundException('Device not found');
-    const device = await this.prisma.monitoredDevice.update({ where: { id: existing.id }, data: body });
+    const update: Record<string, unknown> = {};
+    for (const key of ['name', 'ipAddress', 'type', 'status', 'location', 'metrics']) {
+      if (body[key] !== undefined) update[key] = body[key];
+    }
+    if (body.config !== undefined) {
+      const config = { ...((body.config || {}) as Record<string, unknown>) };
+      if (typeof config.snmpCommunity === 'string' && config.snmpCommunity) {
+        config.snmpCommunity = sealVaultValue(config.snmpCommunity);
+      }
+      update.config = config;
+    }
+    if (typeof body.snmpCommunity === 'string' && body.snmpCommunity) {
+      const config = { ...((existing.config || {}) as Record<string, unknown>) };
+      config.snmpCommunity = sealVaultValue(body.snmpCommunity);
+      update.config = config;
+    }
+    const device = await this.prisma.monitoredDevice.update({
+      where: { id: existing.id },
+      data: update,
+    });
     if (existing.status !== 'OFFLINE' && device.status === 'OFFLINE') {
       this.eventBus.emitMonitoringEvent(tenantId, 'device_down', { deviceId: device.id, name: device.name, type: device.type });
     }
-    return device;
+    return this.publicDevice(device);
   }
 
   async deleteDevice(id: string, tenantId: string) {

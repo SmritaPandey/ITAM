@@ -51,8 +51,11 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
       ]);
       this.logger.log('Database connected');
     } catch (err: any) {
-      this.logger.error(`Database connect failed: ${err?.message || err}`);
-      throw err;
+      // Do not crash the process — /health/live must stay up for orchestration.
+      // /health and /health/ready will report degraded until the DB recovers.
+      this.logger.error(
+        `Database connect failed (continuing in degraded mode): ${err?.message || err}`,
+      );
     }
   }
 
@@ -71,8 +74,10 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
   }
 
   /**
-   * Set session GUC for RLS on the current connection (non-transactional).
-   * Prefer withTenant() when using the connection pool.
+   * Set session GUC for RLS on the current connection.
+   * Must be paired with clear (null) after each request — see TenantRlsInterceptor —
+   * because Prisma connection pooling would otherwise leak tenant context.
+   * Prefer withTenant() for transactional SET LOCAL when possible.
    */
   async setCurrentTenant(tenantId: string | null): Promise<void> {
     if (tenantId) {

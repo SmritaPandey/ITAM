@@ -102,9 +102,9 @@ export class SsoController {
         return res.redirect(`${this.appUrl}/login?error=missing_oidc_code`);
       }
       const result = await this.ssoService.handleOidcCallback(code, state);
+      const exchangeCode = this.ssoService.createExchangeCode(result);
       const params = new URLSearchParams({
-        token: result.accessToken,
-        refresh: result.refreshToken,
+        code: exchangeCode,
         new: result.isNewUser ? '1' : '0',
       });
       return res.redirect(`${this.appUrl}/auth/callback?${params.toString()}`);
@@ -129,9 +129,9 @@ export class SsoController {
   async samlCallback(@Body() body: any, @Res() res: express.Response) {
     try {
       const result = await this.ssoService.handleSamlAcs(body);
+      const exchangeCode = this.ssoService.createExchangeCode(result);
       const params = new URLSearchParams({
-        token: result.accessToken,
-        refresh: result.refreshToken,
+        code: exchangeCode,
         new: result.isNewUser ? '1' : '0',
       });
       return res.redirect(`${this.appUrl}/auth/callback?${params.toString()}`);

@@ -56,21 +56,23 @@ export class AssetsService implements OnModuleInit {
       }),
     };
 
-    const [data, total] = await Promise.all([
-      this.prisma.asset.findMany({
-        where,
-        include: {
-          assetType: true,
-          assignedTo: { select: { id: true, firstName: true, lastName: true, email: true } },
-          site: { select: { id: true, name: true } },
-          department: { select: { id: true, name: true } },
-        },
-        skip,
-        take: _limit,
-        orderBy: { updatedAt: 'desc' },
-      }),
-      this.prisma.asset.count({ where }),
-    ]);
+    const [data, total] = await this.prisma.withTenant(tenantId, async (tx) =>
+      Promise.all([
+        tx.asset.findMany({
+          where,
+          include: {
+            assetType: true,
+            assignedTo: { select: { id: true, firstName: true, lastName: true, email: true } },
+            site: { select: { id: true, name: true } },
+            department: { select: { id: true, name: true } },
+          },
+          skip,
+          take: _limit,
+          orderBy: { updatedAt: 'desc' },
+        }),
+        tx.asset.count({ where }),
+      ]),
+    );
 
     return { data, total, page, limit, totalPages: Math.ceil(total / limit) };
   }
@@ -83,21 +85,23 @@ export class AssetsService implements OnModuleInit {
   }
 
   async findById(id: string, tenantId: string) {
-    const asset = await this.prisma.asset.findFirst({
-      where: { id, tenantId, deletedAt: null },
-      include: {
-        assetType: true,
-        assignedTo: { select: { id: true, firstName: true, lastName: true, email: true } },
-        managedBy: { select: { id: true, firstName: true, lastName: true, email: true } },
-        site: true,
-        department: true,
-        hardwareDetails: true,
-        osDetails: true,
-        securityPosture: true,
-        softwareInstalls: { include: { software: true } },
-        assetHistory: { orderBy: { timestamp: 'desc' }, take: 20 },
-      },
-    });
+    const asset = await this.prisma.withTenant(tenantId, async (tx) =>
+      tx.asset.findFirst({
+        where: { id, tenantId, deletedAt: null },
+        include: {
+          assetType: true,
+          assignedTo: { select: { id: true, firstName: true, lastName: true, email: true } },
+          managedBy: { select: { id: true, firstName: true, lastName: true, email: true } },
+          site: true,
+          department: true,
+          hardwareDetails: true,
+          osDetails: true,
+          securityPosture: true,
+          softwareInstalls: { include: { software: true } },
+          assetHistory: { orderBy: { timestamp: 'desc' }, take: 20 },
+        },
+      }),
+    );
     if (!asset) throw new NotFoundException('Asset not found');
     return asset;
   }

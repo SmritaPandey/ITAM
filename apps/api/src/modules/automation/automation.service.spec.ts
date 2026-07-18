@@ -2,11 +2,17 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { AutomationService } from './automation.service';
 import { PrismaService } from '../../common/database/prisma.service';
 import { EventBusService, DomainEvent } from '../../common/events/event-bus.service';
+import { EmailService } from '../notifications/email.service';
 
 describe('AutomationService', () => {
   let service: AutomationService;
   let prisma: any;
   let eventBus: EventBusService;
+
+  const mockEmailService = {
+    send: jest.fn().mockResolvedValue(undefined),
+    sendMail: jest.fn().mockResolvedValue(undefined),
+  };
 
   const mockPrisma = {
     automationRule: {
@@ -38,6 +44,7 @@ describe('AutomationService', () => {
         AutomationService,
         { provide: PrismaService, useValue: mockPrisma },
         { provide: EventBusService, useValue: new EventBusService() },
+        { provide: EmailService, useValue: mockEmailService },
       ],
     }).compile();
 
@@ -210,7 +217,7 @@ describe('AutomationService', () => {
       expect(mockPrisma.ticket.create).toHaveBeenCalledWith(
         expect.objectContaining({
           data: expect.objectContaining({
-            ticketNumber: 'AUTO-00006',
+            ticketNumber: expect.stringMatching(/^AUTO-[A-F0-9]+$/),
             priority: 'CRITICAL',
           }),
         }),

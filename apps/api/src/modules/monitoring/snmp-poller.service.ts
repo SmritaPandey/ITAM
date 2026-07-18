@@ -4,6 +4,7 @@ import { PrismaService } from '../../common/database/prisma.service';
 import { EventBusService } from '../../common/events/event-bus.service';
 import { SnmpScanner } from '../../common/scanners/snmp.scanner';
 import { TopologyService } from './topology.service';
+import { openVaultValue } from '../../common/security/vault-crypto';
 
 @Injectable()
 export class SnmpPollerService {
@@ -66,7 +67,9 @@ export class SnmpPollerService {
 
   private async pollSingleDevice(device: any, tenantId: string) {
     const config = (device.config as any) || {};
-    const community = config.snmpCommunity || 'public';
+    const community = config.snmpCommunity
+      ? openVaultValue(config.snmpCommunity)
+      : 'public';
 
     try {
       const info = await this.snmpScanner.pollDevice(device.ipAddress!, community);
@@ -157,7 +160,9 @@ export class SnmpPollerService {
     if (!device?.ipAddress) return { error: 'Device not found or no IP' };
 
     const config = (device.config as any) || {};
-    const community = config.snmpCommunity || 'public';
+    const community = config.snmpCommunity
+      ? openVaultValue(config.snmpCommunity)
+      : 'public';
     const info = await this.snmpScanner.pollDevice(device.ipAddress, community);
 
     if (!info) return { error: 'SNMP poll returned no data' };

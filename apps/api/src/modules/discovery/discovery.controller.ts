@@ -26,8 +26,13 @@ import { CredentialVaultService } from './credential-vault.service';
 import { AuthService } from '../auth/auth.service';
 import { ModuleGuard } from '../../common/guards/module.guard';
 import { RequireModule } from '../../common/decorators/require-module.decorator';
-import { SkipThrottle } from '@nestjs/throttler';
+import { Throttle } from '@nestjs/throttler';
 import { AdSyncService } from './ad-sync.service';
+import {
+  getAgentUpdatePublicKeyPem,
+  loadAgentSource,
+  signAgentArtifact,
+} from '../../common/security/agent-update-crypto';
 
 @ApiTags('discovery')
 @ApiBearerAuth()
@@ -112,9 +117,9 @@ export class DiscoveryController {
     return this.discoveryService.deleteScan(id, req.user.tenantId);
   }
 
-  @SkipThrottle()
+  @Throttle({ long: { limit: 60, ttl: 60000 } })
   @Post('scans/:id/results')
-  @Roles('Tenant Admin', 'IT Admin')
+  @Roles('Tenant Admin', 'IT Admin', 'agent')
   @ApiOperation({ summary: 'Submit scan results from discovery agent' })
   async submitScanResults(
     @Request() req: any,
@@ -290,18 +295,7 @@ export class DiscoveryController {
       'Download the lightweight Node.js discovery agent as a zip package',
   })
   async downloadAgent(@Request() req: any, @Res() res: any) {
-    const host =
-      req.headers['x-forwarded-host'] || req.headers.host || 'localhost:4100';
-    const protocol = req.headers['x-forwarded-proto'] || req.protocol || 'http';
-
-    let serverUrl = `${protocol}://${host}`;
-    serverUrl = serverUrl.replace(/\/api\/v1\/?$/, '');
-
-    // Pass the downloader's email so the agent config includes credential-based re-auth
-    const userEmail = req.user?.email || '';
-
-    // Generate a persistent 10-year JWT token for the agent enrollment
-    const agentToken = this.authService.generateAgentToken(req.user.tenantId, userEmail, req.user.sub);
+    const { serverUrl, agentToken, userEmail } = this.buildAgentDownloadContext(req);
 
     const buffer = this.discoveryService.getAgentZipPackage(
       serverUrl,
@@ -362,11 +356,22 @@ export class DiscoveryController {
   }
 
   private buildAgentDownloadContext(req: any) {
-    const host =
-      req.headers['x-forwarded-host'] || req.headers.host || 'localhost:4100';
-    const protocol = req.headers['x-forwarded-proto'] || req.protocol || 'http';
-    let serverUrl = `${protocol}://${host}`;
-    serverUrl = serverUrl.replace(/\/api\/v1\/?$/, '');
+    const configured =
+      process.env.API_PUBLIC_URL ||
+      process.env.OAUTH_CALLBACK_URL ||
+      process.env.API_URL;
+    let serverUrl: string;
+    if (configured) {
+      serverUrl = configured.replace(/\/$/, '').replace(/\/api\/v1\/?$/, '');
+    } else {
+      // Dev-only fallback — never trust Host headers in production
+      const host = req.headers.host || 'localhost:4100';
+      const protocol = req.protocol || 'http';
+      serverUrl = `${protocol}://${host}`.replace(/\/api\/v1\/?$/, '');
+      if (process.env.NODE_ENV === 'production') {
+        throw new Error('API_PUBLIC_URL must be set for agent downloads in production');
+      }
+    }
     const userEmail = req.user?.email || '';
     const agentToken = this.authService.generateAgentToken(req.user.tenantId, userEmail, req.user.sub);
     return { serverUrl, agentToken, userEmail: userEmail || undefined };
@@ -386,9 +391,9 @@ export class DiscoveryController {
     return this.discoveryService.deleteAgent(id, req.user.tenantId);
   }
 
-  @SkipThrottle()
+  @Throttle({ long: { limit: 20, ttl: 60000 } })
   @Post('agents/register')
-  @Roles('Tenant Admin', 'IT Admin')
+  @Roles('Tenant Admin', 'IT Admin', 'agent')
   @ApiOperation({ summary: 'Register / re-register a discovery agent' })
   async registerAgent(
     @Request() req: any,
@@ -498,9 +503,9 @@ export class DiscoveryController {
     };
   }
 
-  @SkipThrottle()
+  @Throttle({ long: { limit: 180, ttl: 60000 } })
   @Post('agents/:id/heartbeat')
-  @Roles('Tenant Admin', 'IT Admin')
+  @Roles('Tenant Admin', 'IT Admin', 'agent')
   @ApiOperation({ summary: 'Agent heartbeat — confirm alive + push data' })
   async agentHeartbeat(
     @Request() req: any,
@@ -511,17 +516,6 @@ export class DiscoveryController {
   }
 
   // ─── Remote Command Execution ──────────────────────────────────
-
-  @Post('agents/:agentId/remote-command')
-  @Roles('Tenant Admin')
-  @ApiOperation({ summary: 'Send a remote command to an agent for execution' })
-  async remoteCommand(
-    @Request() req: any,
-    @Param('agentId') agentId: string,
-    @Body() body: { command: string; timeout?: number },
-  ) {
-    return this.discoveryService.queueRemoteCommand(req.user.tenantId, agentId, body);
-  }
 
   @Post('agents/:agentId/run-script')
   @Roles('Tenant Admin')
@@ -555,11 +549,12 @@ export class DiscoveryController {
     return this.discoveryService.queueFilePull(req.user.tenantId, agentId, body);
   }
 
-  @SkipThrottle()
+  @Throttle({ long: { limit: 60, ttl: 60000 } })
   @Post('agents/file-pull-result')
+  @Roles('Tenant Admin', 'IT Admin', 'agent')
   @ApiOperation({ summary: 'Receive FILE_PULL content from agent' })
   async filePullResult(@Request() req: any, @Body() body: any) {
-    return this.discoveryService.storeFilePullResult(body);
+    return this.discoveryService.storeFilePullResult(body, req.user.tenantId);
   }
 
   @Get('agents/:agentId/remote-assist')
@@ -587,18 +582,19 @@ export class DiscoveryController {
     );
   }
 
-  @SkipThrottle()
+  @Throttle({ long: { limit: 120, ttl: 60000 } })
   @Post('agents/command-result')
+  @Roles('Tenant Admin', 'IT Admin', 'agent')
   @ApiOperation({ summary: 'Receive command execution result from agent' })
   async commandResult(@Request() req: any, @Body() body: any) {
-    return this.discoveryService.storeCommandResult(body);
+    return this.discoveryService.storeCommandResult(body, req.user.tenantId);
   }
 
   @Get('agents/:agentId/command-history')
   @Roles('Tenant Admin', 'IT Admin')
   @ApiOperation({ summary: 'Get command execution history for an agent' })
-  async commandHistory(@Param('agentId') agentId: string) {
-    return this.discoveryService.getCommandHistory(agentId);
+  async commandHistory(@Request() req: any, @Param('agentId') agentId: string) {
+    return this.discoveryService.getCommandHistory(agentId, req.user.tenantId);
   }
 
   // ─── Active Directory / LDAP Sync ───────────────────────────────
@@ -676,12 +672,15 @@ export class DiscoveryController {
   // ─── Agent Version Check ──────────────────────────────────────
 
   @Get('agents/version/latest')
-  @ApiOperation({ summary: 'Get latest agent version info' })
+  @ApiOperation({ summary: 'Get latest agent version info (checksum + Ed25519 signature when keys configured)' })
   async getLatestAgentVersion() {
+    const source = loadAgentSource();
+    const signed = source ? signAgentArtifact(source) : null;
+    const publicKey = getAgentUpdatePublicKeyPem();
     return {
       version: '2.0.0',
       releaseDate: '2026-07-01',
-      changelog: 'Enterprise v2: +Network Shares, +Printers, +Scheduled Tasks, +Docker/VM, +Bluetooth, +AD/Domain, +Patch History, +WiFi, +Display/Environment, +Security Hardening',
+      changelog: 'Enterprise v2: signed updates, ScriptLibrary-only remote execution, FILE_PULL allowlists',
       downloadUrls: {
         zip: '/discovery/agents/download',
         desktop: '/discovery/agents/download/desktop',
@@ -690,6 +689,10 @@ export class DiscoveryController {
         win32: '/discovery/agents/download?platform=win32',
         linux: '/discovery/agents/download?platform=linux',
       },
+      updateChecksum: signed?.checksum || null,
+      updateSignature: signed?.signature || null,
+      updatePublicKey: publicKey,
+      signingRequired: process.env.NODE_ENV === 'production',
     };
   }
 }

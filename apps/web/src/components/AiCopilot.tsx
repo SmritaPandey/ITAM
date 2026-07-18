@@ -711,6 +711,7 @@ export default function AiCopilot() {
             <div style={{
               fontSize: 10, color: '#475569', textAlign: 'center', marginTop: 6,
             }}>
+              AI is assistive, not authoritative ·{' '}
               <kbd style={{
                 padding: '1px 4px', borderRadius: 3, fontSize: 9,
                 background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.06)',

@@ -10,10 +10,13 @@ import { Server, Socket } from 'socket.io';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import { EventBusService, DomainEvent } from '../events/event-bus.service';
+import { PrismaService } from '../database/prisma.service';
 
 @WebSocketGateway({
   cors: {
-    origin: '*',
+    origin: process.env.CORS_ORIGIN
+      ? process.env.CORS_ORIGIN.split(',').map((s) => s.trim())
+      : ['http://localhost:3000', 'http://localhost:3100', 'https://qsasset.com', 'https://www.qsasset.com', 'https://qsasset.vercel.app'],
     credentials: true,
   },
   namespace: '/realtime',
@@ -32,6 +35,7 @@ export class EventsGateway
     private jwtService: JwtService,
     private configService: ConfigService,
     private eventBus: EventBusService,
+    private prisma: PrismaService,
   ) {}
 
   afterInit() {
@@ -85,11 +89,10 @@ export class EventsGateway
 
   async handleConnection(client: Socket) {
     try {
-      // Extract JWT from auth handshake
+      // Prefer auth handshake / Authorization header — avoid tokens in query strings
       const token =
         client.handshake.auth?.token ||
-        client.handshake.headers?.authorization?.replace('Bearer ', '') ||
-        client.handshake.query?.token;
+        client.handshake.headers?.authorization?.replace('Bearer ', '');
 
       if (!token) {
         this.logger.warn(`Client ${client.id} rejected: no token`);
@@ -98,13 +101,42 @@ export class EventsGateway
         return;
       }
 
-      const payload = this.jwtService.verify(token as string, {
-        secret: this.configService.get('JWT_SECRET', 'supersecret'),
-      });
+      const secret = this.configService.get<string>('JWT_SECRET');
+      if (!secret) {
+        this.logger.error('JWT_SECRET missing — rejecting WebSocket connection');
+        client.emit('auth_error', { message: 'Server misconfigured' });
+        client.disconnect();
+        return;
+      }
 
-      const tenantId = payload.tenantId;
-      const userId = payload.sub;
-      const email = payload.email;
+      const payload = this.jwtService.verify(token as string, { secret });
+
+      // Mirror HTTP JwtStrategy: reject inactive / deleted users
+      let user;
+      if (payload.sub === 'agent-session') {
+        user = await this.prisma.user.findFirst({
+          where: { email: payload.email, tenantId: payload.tenantId, deletedAt: null },
+        });
+      } else {
+        const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+        if (!uuidRegex.test(payload.sub)) {
+          client.emit('auth_error', { message: 'Invalid token' });
+          client.disconnect();
+          return;
+        }
+        user = await this.prisma.user.findFirst({
+          where: { id: payload.sub, deletedAt: null },
+        });
+      }
+      if (!user || user.status !== 'ACTIVE') {
+        client.emit('auth_error', { message: 'User is not active' });
+        client.disconnect();
+        return;
+      }
+
+      const tenantId = user.tenantId;
+      const userId = user.id;
+      const email = user.email;
 
       // Join tenant-specific room
       client.join(`tenant:${tenantId}`);

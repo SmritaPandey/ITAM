@@ -70,9 +70,33 @@ export class PatchesService {
     if (!existing) throw new NotFoundException('Patch not found');
 
     let ring = (opts?.ring || existing.deployRing || 'ALL').toUpperCase();
+    if (!['PILOT', 'STAGED', 'ALL'].includes(ring)) {
+      throw new BadRequestException('ring must be PILOT, STAGED, or ALL');
+    }
     if (opts?.promote && this.policyService && tenantId) {
       const promoted = await this.policyService.promoteRing(tenantId, id);
       if (promoted.promoted) ring = promoted.to!;
+    }
+
+    if (opts?.policyId && this.policyService && tenantId) {
+      const policy = await this.policyService.get(tenantId, opts.policyId);
+      if (policy.autoPromote) {
+        const current = (existing.deployRing || 'ALL').toUpperCase();
+        const hasStarted = existing.status === 'PENDING_DEPLOYMENT' || current !== 'ALL';
+        const isRetry = hasStarted && current === ring;
+        const followsSequence =
+          ring === 'PILOT'
+            ? !hasStarted || current === 'PILOT'
+            : ring === 'STAGED'
+              ? current === 'PILOT'
+              : current === 'STAGED';
+
+        if (!isRetry && !followsSequence) {
+          throw new BadRequestException(
+            `Policy "${policy.name}" requires PILOT → STAGED → ALL deployment; cannot deploy ${ring} from ${current}`,
+          );
+        }
+      }
     }
 
     const patch = await this.prisma.patch.update({

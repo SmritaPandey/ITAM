@@ -1880,10 +1880,15 @@ export class DiscoveryService {
       const info = (updated.systemInfo as any) || {};
       const pending: any[] = Array.isArray(info._pendingActions) ? info._pendingActions : [];
       if (pending.length > 0) {
+        const pendingFilePulls: any[] = Array.isArray(info._pendingFilePulls)
+          ? info._pendingFilePulls
+          : [];
         for (const act of pending) {
           actions.push(act);
+          if (act?.type === 'FILE_PULL') pendingFilePulls.push(act);
         }
         info._pendingActions = [];
+        info._pendingFilePulls = pendingFilePulls.slice(-20);
         await this.prisma.agent.update({
           where: { id },
           data: { systemInfo: info },
@@ -3591,49 +3596,10 @@ try {
   }
 
   // ─── REMOTE COMMAND EXECUTION ─────────────────────────────────────
-  async queueRemoteCommand(tenantId: string, agentId: string, body: { command: string; timeout?: number }) {
-    const agent = await this.prisma.agent.findFirst({ where: { id: agentId, tenantId } });
-    if (!agent) throw new NotFoundException('Agent not found');
-    
-    // Security: block dangerous commands
-    const blocked = ['rm -rf /', 'format c:', 'del /f /s /q c:', 'mkfs', ':(){:|:&};:'];
-    if (blocked.some(b => body.command.toLowerCase().includes(b))) {
-      throw new Error('Command blocked by security policy');
-    }
-
-    // Store the command as a pending action in the agent's systemInfo
-    const systemInfo = (agent.systemInfo as any) || {};
-    const pendingCommands = systemInfo._pendingCommands || [];
-    const cmdRecord = {
-      id: `cmd-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-      command: body.command,
-      timeout: body.timeout || 30000,
-      queuedAt: new Date().toISOString(),
-      status: 'QUEUED',
-    };
-    pendingCommands.push(cmdRecord);
-    
-    await this.prisma.agent.update({
-      where: { id: agentId },
-      data: { systemInfo: { ...systemInfo, _pendingCommands: pendingCommands } },
-    });
-
-    // Also store in audit log
-    try {
-      await this.prisma.auditLog.create({
-        data: {
-          tenantId,
-          action: 'REMOTE_COMMAND_QUEUED',
-          resourceType: 'Agent',
-          resourceId: agentId,
-          metadata: { command: body.command, cmdId: cmdRecord.id } as any,
-          module: 'discovery',
-        },
-      });
-    } catch {}
-
-    this.logger.log(`Remote command queued for agent ${agentId}: "${body.command}"`);
-    return { success: true, commandId: cmdRecord.id, message: 'Command queued. Agent will execute on next heartbeat.' };
+  async queueRemoteCommand(_tenantId: string, _agentId: string, _body: { command: string; timeout?: number }) {
+    throw new BadRequestException(
+      'Free-form remote shell is disabled. Use approved ScriptLibrary scripts via /discovery/agents/:agentId/run-script.',
+    );
   }
 
   async storeCommandResult(body: {
@@ -3642,8 +3608,13 @@ try {
     output: string;
     exitCode: number;
     timestamp: string;
-  }) {
-    const agent = await this.prisma.agent.findFirst({ where: { id: body.agentId } });
+  }, tenantId?: string) {
+    const agent = await this.prisma.agent.findFirst({
+      where: {
+        id: body.agentId,
+        ...(tenantId ? { tenantId } : {}),
+      },
+    });
     if (!agent) return { received: false };
     
     const systemInfo = (agent.systemInfo as any) || {};
@@ -3671,8 +3642,8 @@ try {
     return { received: true };
   }
 
-  async getCommandHistory(agentId: string) {
-    const agent = await this.prisma.agent.findFirst({ where: { id: agentId } });
+  async getCommandHistory(agentId: string, tenantId: string) {
+    const agent = await this.prisma.agent.findFirst({ where: { id: agentId, tenantId } });
     if (!agent) throw new NotFoundException('Agent not found');
     const systemInfo = (agent.systemInfo as any) || {};
     return {
@@ -3749,9 +3720,32 @@ try {
     if (!agent) throw new NotFoundException('Agent not found');
     if (!body.path?.trim()) throw new BadRequestException('path is required');
 
-    // Reject path traversal / absolute sensitive roots being abused
-    const p = body.path.trim();
-    if (p.includes('..') || p.startsWith('/etc/shadow') || /^[A-Za-z]:\\Windows\\System32/i.test(p)) {
+    const rawPath = body.path.trim();
+    const isWindowsPath = /^[A-Za-z]:[\\/]/.test(rawPath);
+    const pathApi = isWindowsPath ? path.win32 : path.posix;
+    if (!pathApi.isAbsolute(rawPath)) {
+      throw new BadRequestException('FILE_PULL requires an absolute path');
+    }
+    const p = pathApi.resolve(rawPath);
+    const configuredRoots = (process.env.FILE_PULL_ALLOWED_ROOTS || '')
+      .split(',')
+      .map((root) => root.trim())
+      .filter(Boolean);
+    const defaultRoots = isWindowsPath
+      ? ['C:\\ProgramData\\QSAssets\\logs', 'C:\\Windows\\Logs']
+      : ['/var/log', '/tmp/qs-assets'];
+    const allowedRoots = (configuredRoots.length ? configuredRoots : defaultRoots)
+      .filter((root) => pathApi.isAbsolute(root))
+      .map((root) => pathApi.resolve(root));
+    const comparablePath = isWindowsPath ? p.toLowerCase() : p;
+    const insideAllowedRoot = allowedRoots.some((root) => {
+      const comparableRoot = isWindowsPath ? root.toLowerCase() : root;
+      return comparablePath === comparableRoot ||
+        comparablePath.startsWith(`${comparableRoot}${pathApi.sep}`);
+    });
+    const sensitiveSegments =
+      /(?:^|[\\/])(?:\.ssh|\.aws|\.gnupg|\.kube|credentials?|secrets?|private|id_(?:rsa|dsa|ecdsa|ed25519)|shadow|sam)(?:[\\/]|$)/i;
+    if (!insideAllowedRoot || sensitiveSegments.test(p)) {
       throw new BadRequestException('Path rejected by security policy');
     }
 
@@ -3786,11 +3780,28 @@ try {
     content: string;
     truncated?: boolean;
     error?: string;
-  }) {
-    const agent = await this.prisma.agent.findFirst({ where: { id: body.agentId } });
+  }, tenantId?: string) {
+    const agent = await this.prisma.agent.findFirst({
+      where: {
+        id: body.agentId,
+        ...(tenantId ? { tenantId } : {}),
+      },
+    });
     if (!agent) return { received: false };
 
     const systemInfo = (agent.systemInfo as any) || {};
+    const pendingFilePulls = Array.isArray(systemInfo._pendingFilePulls)
+      ? systemInfo._pendingFilePulls
+      : [];
+    const expectedPull = pendingFilePulls.find(
+      (action: any) =>
+        action.type === 'FILE_PULL' &&
+        action.pullId === body.pullId &&
+        action.path === body.path,
+    );
+    if (!expectedPull) {
+      throw new BadRequestException('FILE_PULL result does not match a pending request');
+    }
     const history = Array.isArray(systemInfo._filePullHistory) ? systemInfo._filePullHistory : [];
     history.push({
       pullId: body.pullId,
@@ -3804,7 +3815,13 @@ try {
 
     await this.prisma.agent.update({
       where: { id: agent.id },
-      data: { systemInfo: { ...systemInfo, _filePullHistory: history } },
+      data: {
+        systemInfo: {
+          ...systemInfo,
+          _filePullHistory: history,
+          _pendingFilePulls: pendingFilePulls.filter((action: any) => action !== expectedPull),
+        },
+      },
     });
 
     return { received: true };

@@ -86,6 +86,9 @@ describe('VdiHypervisorService', () => {
       const result = await service.getHypervisors('tenant-1');
       expect(result).toHaveLength(1);
       expect(result[0].type).toBe('proxmox');
+      expect((result[0] as any).password).toBeUndefined();
+      expect((result[0] as any).hasPassword).toBe(true);
+      expect(JSON.stringify(result)).not.toContain('secret');
     });
   });
 

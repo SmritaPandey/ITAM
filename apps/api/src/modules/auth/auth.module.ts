@@ -50,23 +50,11 @@ tryRegisterOAuth();
             process.exit(1);
           }
           logger.warn('⚠️  WARNING: JWT_SECRET is not set — using insecure fallback. DO NOT run this configuration in production!');
+        } else if (secret.length < 32) {
+          logger.warn('⚠️  WARNING: JWT_SECRET is shorter than 32 characters — use a stronger secret.');
         }
-        const rawExpiry = configService.get<string>('JWT_EXPIRATION') || '4h';
-        const isShortExpiry = (val: string): boolean => {
-          const str = val.trim().toLowerCase();
-          if (/^\d+$/.test(str)) {
-            return parseInt(str, 10) < 3600;
-          }
-          const match = str.match(/^(\d+)\s*(s|m|h|d|w|y|min|minute|minutes|sec|second|seconds)?$/);
-          if (!match) return false;
-          const num = parseInt(match[1], 10);
-          const unit = match[2];
-          if (!unit) return num < 3600;
-          if (unit.startsWith('s')) return num < 3600;
-          if (unit.startsWith('m')) return num < 60;
-          return false;
-        };
-        const expiresIn = isShortExpiry(rawExpiry) ? '4h' : rawExpiry;
+        // Honor JWT_EXPIRATION as configured (e.g. 15m). Short-lived access + refresh rotation is intentional.
+        const expiresIn = configService.get<string>('JWT_EXPIRATION') || '15m';
         return {
           secret: secret || 'assetcommand-fallback-jwt-secret',
           signOptions: { expiresIn: expiresIn as any },

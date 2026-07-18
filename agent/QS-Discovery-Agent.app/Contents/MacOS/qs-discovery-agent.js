@@ -14,6 +14,7 @@ const os = require('os');
 const { execSync, exec } = require('child_process');
 const https = require('https');
 const http = require('http');
+const crypto = require('crypto');
 
 const fs = require('fs');
 const path = require('path');
@@ -57,8 +58,18 @@ const SILENT_MODE = args.includes('--silent') || process.env.QS_AGENT_SILENT ===
 let tokenFromFile = '';
 let configEmail = '';
 let configPassword = '';
+let updatePublicKey = (process.env.QS_AGENT_UPDATE_PUBLIC_KEY || '').replace(/\\n/g, '\n');
 let agentId = ''; // Declared early for config loading
 const configPath = path.join(__dirname, 'config.json');
+const AGENT_DATA_DIR = __dirname;
+let softwarePolicyState = { blacklist: [], whitelist: [], updatedAt: null };
+let blockedSoftwareList = [];
+try {
+  const polPath = path.join(AGENT_DATA_DIR, 'software-policy.json');
+  if (fs.existsSync(polPath)) softwarePolicyState = JSON.parse(fs.readFileSync(polPath, 'utf8'));
+  const blPath = path.join(AGENT_DATA_DIR, 'blocked-software.json');
+  if (fs.existsSync(blPath)) blockedSoftwareList = JSON.parse(fs.readFileSync(blPath, 'utf8'));
+} catch { /* ignore */ }
 
 if (fs.existsSync(configPath)) {
   try {
@@ -68,6 +79,7 @@ if (fs.existsSync(configPath)) {
     if (config.email) configEmail = config.email;
     if (config.password) configPassword = config.password;
     if (config.agentId) agentId = config.agentId;
+    if (config.updatePublicKey) updatePublicKey = String(config.updatePublicKey).replace(/\\n/g, '\n');
     log('info', '📦 Loaded local config.json successfully');
     try { if (process.platform !== 'win32') fs.chmodSync(configPath, 0o600); } catch {}
   } catch (e) {
@@ -76,6 +88,57 @@ if (fs.existsSync(configPath)) {
 }
 
 const API_BASE = `${SERVER}/api/v1`;
+
+function isPathAllowedForPull(filePath) {
+  if (typeof filePath !== 'string' || !path.isAbsolute(filePath)) return false;
+  const resolved = path.resolve(filePath);
+  const defaults = process.platform === 'win32'
+    ? ['C:\\ProgramData\\QSAssets\\logs', 'C:\\Windows\\Logs']
+    : ['/var/log', '/tmp/qs-assets'];
+  const configured = (process.env.QS_FILE_PULL_ALLOWED_ROOTS || '')
+    .split(path.delimiter)
+    .map((root) => root.trim())
+    .filter(Boolean);
+  const roots = (configured.length ? configured : defaults).map((root) => path.resolve(root));
+  const comparable = process.platform === 'win32' ? resolved.toLowerCase() : resolved;
+  const inAllowedRoot = roots.some((root) => {
+    const normalizedRoot = process.platform === 'win32' ? root.toLowerCase() : root;
+    return comparable === normalizedRoot || comparable.startsWith(`${normalizedRoot}${path.sep}`);
+  });
+  const sensitive =
+    /(?:^|[\\/])(?:\.ssh|\.aws|\.gnupg|\.kube|credentials?|secrets?|private|id_(?:rsa|dsa|ecdsa|ed25519)|shadow|sam)(?:[\\/]|$)/i;
+  return inAllowedRoot && !sensitive.test(resolved);
+}
+
+function assertTrustedUpdateUrl(downloadUrl) {
+  const target = new URL(downloadUrl);
+  const server = new URL(SERVER);
+  const localHost = ['localhost', '127.0.0.1', '::1'].includes(target.hostname);
+  if (target.origin !== server.origin) {
+    throw new Error('Update URL must use the configured QS Asset server origin');
+  }
+  if (target.protocol !== 'https:' && !localHost) {
+    throw new Error('Agent updates require HTTPS');
+  }
+  return target;
+}
+
+function verifyUpdateArtifact(content, expectedChecksum, signature) {
+  if (!expectedChecksum || !signature || !updatePublicKey) {
+    throw new Error('Update requires checksum, Ed25519 signature, and trusted public key');
+  }
+  const actualChecksum = crypto.createHash('sha256').update(content).digest('hex');
+  if (actualChecksum.toLowerCase() !== String(expectedChecksum).toLowerCase()) {
+    throw new Error('Update checksum mismatch');
+  }
+  const valid = crypto.verify(
+    null,
+    content,
+    updatePublicKey,
+    Buffer.from(signature, 'base64'),
+  );
+  if (!valid) throw new Error('Update signature verification failed');
+}
 
 // Merge credentials: CLI args > config.json > env vars
 if (!USER && configEmail) USER = configEmail;
@@ -2372,6 +2435,71 @@ async function sendHeartbeat() {
             } catch (err) {
               log('error', `Failed to execute active USB storage block: ${err.message}`);
             }
+          } else if (act.type === 'SOFTWARE_POLICY') {
+            const bl = Array.isArray(act.blacklist) ? act.blacklist : [];
+            softwarePolicyState = {
+              blacklist: bl,
+              whitelist: Array.isArray(act.whitelist) ? act.whitelist : [],
+              updatedAt: act.updatedAt || new Date().toISOString(),
+            };
+            try {
+              fs.writeFileSync(path.join(AGENT_DATA_DIR, 'software-policy.json'), JSON.stringify(softwarePolicyState, null, 2));
+            } catch { /* ignore */ }
+            log('security', `Software policy updated — ${bl.length} blacklisted package(s)`);
+            for (const item of bl) {
+              const processName = item.processName || `${(item.name || 'unknown').split(/\s+/)[0]}.exe`;
+              if (processName && /^[a-zA-Z0-9._\-]+$/.test(processName)) {
+                try {
+                  if (os.platform() === 'win32') {
+                    execSync(`taskkill /F /IM "${processName}"`, { timeout: 5000, stdio: 'ignore' });
+                  } else {
+                    execSync(`killall -9 "${processName.replace(/\.exe$/i, '')}"`, { timeout: 5000, stdio: 'ignore' });
+                  }
+                  log('success', `Terminated blacklisted process "${processName}"`);
+                } catch { /* not running */ }
+              }
+            }
+          } else if (act.type === 'BLOCK_INSTALL') {
+            const softwareName = act.softwareName || act.processName || 'unknown';
+            if (!blockedSoftwareList.find((s) => s.name === softwareName)) {
+              blockedSoftwareList.push({
+                name: softwareName,
+                processName: act.processName,
+                reason: act.reason || 'BLACKLISTED',
+                at: new Date().toISOString(),
+              });
+            }
+            try {
+              fs.writeFileSync(path.join(AGENT_DATA_DIR, 'blocked-software.json'), JSON.stringify(blockedSoftwareList, null, 2));
+            } catch { /* ignore */ }
+            log('security', `BLOCK_INSTALL recorded for "${softwareName}" — future installs will be flagged`);
+            if (act.processName && /^[a-zA-Z0-9._\-]+$/.test(act.processName)) {
+              try {
+                if (os.platform() === 'win32') {
+                  execSync(`taskkill /F /IM "${act.processName}"`, { timeout: 5000, stdio: 'ignore' });
+                } else {
+                  execSync(`killall -9 "${String(act.processName).replace(/\.exe$/i, '')}"`, { timeout: 5000, stdio: 'ignore' });
+                }
+              } catch { /* ignore */ }
+            }
+          } else if (act.type === 'UNINSTALL_SOFTWARE') {
+            const softwareName = act.softwareName || '';
+            log('security', `UNINSTALL_SOFTWARE requested for "${softwareName}"`);
+            try {
+              if (os.platform() === 'win32' && softwareName) {
+                execSync(
+                  `powershell -NoProfile -Command "Get-Package -Name '*${softwareName.replace(/'/g, '')}*' -ErrorAction SilentlyContinue | Uninstall-Package -Force"`,
+                  { timeout: 120000, stdio: 'ignore' },
+                );
+                log('success', `Uninstall attempted for "${softwareName}"`);
+              } else if (os.platform() === 'darwin' && softwareName) {
+                log('info', `macOS uninstall of "${softwareName}" — use package manager / MDM; recorded for admin follow-up`);
+              } else if (softwareName) {
+                log('info', `Linux uninstall of "${softwareName}" — recorded; use apt/yum via REMOTE_COMMAND if needed`);
+              }
+            } catch (err) {
+              log('error', `UNINSTALL_SOFTWARE failed: ${err.message}`);
+            }
           } else if (act.type === 'ALERT') {
             const { category, summary, details } = act;
             log('security', `[ALERT DETECTED] Category: ${category} | Summary: ${summary} | Details: ${JSON.stringify(details)}`);
@@ -2508,7 +2636,7 @@ async function sendHeartbeat() {
             const { pullId, path: filePath, maxBytes } = act;
             log('info', `📂 FILE_PULL: Reading ${filePath}...`);
             try {
-              if (!filePath || filePath.includes('..')) {
+              if (!isPathAllowedForPull(filePath)) {
                 log('error', 'FILE_PULL blocked: invalid path');
                 continue;
               }
@@ -2614,6 +2742,31 @@ async function sendHeartbeat() {
             } catch (err) {
               log('error', `Failed to install package "${packageName}": ${err.message}`);
             }
+          } else if (act.type === 'UNINSTALL_PACKAGE') {
+            const pkg = act.winget || act.packageId || act.packageName || act.brew || act.apt;
+            log('info', `🗑️ SOFTWARE UNINSTALL: Removing "${pkg}"...`);
+            try {
+              if (!pkg || /[;&|`$(){}\[\]<>!]/.test(String(pkg))) {
+                log('error', `UNINSTALL_PACKAGE BLOCKED: invalid package id`);
+              } else {
+                const platform = os.platform();
+                let uninstallCmd = '';
+                if (platform === 'win32') {
+                  const id = act.winget || act.packageId || pkg;
+                  uninstallCmd = `winget uninstall --id "${id}" --silent --accept-source-agreements 2>nul || choco uninstall "${pkg}" -y 2>nul`;
+                } else if (platform === 'darwin') {
+                  const brewId = act.brew || act.packageName || pkg;
+                  uninstallCmd = `brew uninstall "${brewId}" 2>/dev/null || true`;
+                } else {
+                  const aptId = act.apt || act.packageName || pkg;
+                  uninstallCmd = `sudo apt-get remove -y "${aptId}" 2>/dev/null || sudo yum remove -y "${aptId}" 2>/dev/null || true`;
+                }
+                execSync(uninstallCmd, { timeout: 300000 });
+                log('success', `✅ Package "${pkg}" uninstall attempted.`);
+              }
+            } catch (err) {
+              log('error', `Failed to uninstall package: ${err.message}`);
+            }
           } else if (act.type === 'UNINSTALL_SERVICE') {
             log('info', '🛑 Server requested removal of persistent background service...');
             try {
@@ -2660,6 +2813,9 @@ async function sendHeartbeat() {
               log('error', `Service uninstall failed: ${err.message}`);
             }
           } else if (act.type === 'REMOTE_COMMAND') {
+            log('security', 'REMOTE_COMMAND rejected: only approved ScriptLibrary executions are permitted.');
+            continue;
+          } else if (false && act.type === 'REMOTE_COMMAND') {
             const { command, timeout: cmdTimeout } = act;
             log('info', `🖥️ REMOTE COMMAND: Executing: ${command}`);
             try {
@@ -2788,17 +2944,18 @@ async function sendHeartbeat() {
                 log('success', `✅ Agent already at version ${currentVersion}. No update needed.`);
               } else {
                 log('info', `Current: ${currentVersion} → Target: ${targetVersion}`);
-                const downloadUrl = act.downloadUrl || `${SERVER}/discovery/agents/download?platform=${os.platform()}`;
+                const downloadUrl = act.downloadUrl || `${API_BASE}/discovery/agents/download?platform=${os.platform()}`;
+                const trustedUrl = assertTrustedUpdateUrl(downloadUrl);
                 log('info', `Downloading update from ${downloadUrl}...`);
                 // Download to temp location
                 const tempPath = path.join(os.tmpdir(), 'qs-agent-update.js');
                 try {
                   const https = require('https');
                   const http = require('http');
-                  const protocol = downloadUrl.startsWith('https') ? https : http;
+                  const protocol = trustedUrl.protocol === 'https:' ? https : http;
                   await new Promise((resolve, reject) => {
                     const file = fs.createWriteStream(tempPath);
-                    protocol.get(downloadUrl, (response) => {
+                    protocol.get(trustedUrl, (response) => {
                       if (response.statusCode === 200) {
                         response.pipe(file);
                         file.on('finish', () => { file.close(); resolve(true); });
@@ -2807,7 +2964,8 @@ async function sendHeartbeat() {
                       }
                     }).on('error', reject);
                   });
-                  // Verify download
+                  const updateContent = fs.readFileSync(tempPath);
+                  verifyUpdateArtifact(updateContent, act.checksum, act.signature);
                   const stat = fs.statSync(tempPath);
                   if (stat.size < 1000) {
                     log('error', 'Downloaded file is too small — aborting update.');
@@ -2824,6 +2982,7 @@ async function sendHeartbeat() {
                     setTimeout(() => { process.exit(0); }, 3000); // Process manager will restart
                   }
                 } catch (dlErr) {
+                  try { if (fs.existsSync(tempPath)) fs.unlinkSync(tempPath); } catch {}
                   log('error', `Update download failed: ${dlErr.message}`);
                 }
               }
@@ -2838,26 +2997,20 @@ async function sendHeartbeat() {
       if (res.data && res.data.updateAvailable && res.data.updateUrl) {
         log('info', `🔄 Agent update available. Downloading...`);
         try {
-          const updateFetch = await globalThis.fetch(res.data.updateUrl);
+          const trustedUrl = assertTrustedUpdateUrl(res.data.updateUrl);
+          const updateFetch = await globalThis.fetch(trustedUrl);
           if (updateFetch.ok) {
-            const newScript = await updateFetch.text();
+            const newScript = Buffer.from(await updateFetch.arrayBuffer());
+            verifyUpdateArtifact(
+              newScript,
+              res.data.updateChecksum,
+              res.data.updateSignature,
+            );
             const newPath = __filename + '.new';
             fs.writeFileSync(newPath, newScript);
-            if (res.data.updateChecksum) {
-              const hash = require('crypto').createHash('sha256').update(newScript).digest('hex');
-              if (hash !== res.data.updateChecksum) {
-                log('error', 'Update checksum mismatch — aborting update');
-                fs.unlinkSync(newPath);
-              } else {
-                fs.renameSync(newPath, __filename);
-                log('success', '✅ Agent updated successfully. Service manager will restart...');
-                process.exit(0);
-              }
-            } else {
-              // No checksum provided — refuse update for security
-              fs.unlinkSync(newPath);
-              log('error', '❌ Update rejected: Server did not provide a checksum for verification. This is required for security.');
-            }
+            fs.renameSync(newPath, __filename);
+            log('success', '✅ Signed agent update installed. Service manager will restart...');
+            process.exit(0);
           }
         } catch (e) { log('error', `Auto-update failed: ${e.message}`); }
       }

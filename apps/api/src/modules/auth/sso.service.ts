@@ -4,6 +4,7 @@ import {
   NotFoundException,
   BadRequestException,
   UnauthorizedException,
+  OnModuleDestroy,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../../common/database/prisma.service';
@@ -11,6 +12,11 @@ import { AuthService } from './auth.service';
 import * as crypto from 'crypto';
 import * as https from 'https';
 import * as http from 'http';
+import IORedis from 'ioredis';
+import { openVaultValue, sealVaultValue } from '../../common/security/vault-crypto';
+
+const OIDC_STATE_PREFIX = 'oidc:state:';
+const OIDC_STATE_TTL_SEC = 600;
 
 export interface SsoProviderPublic {
   id: string;
@@ -22,15 +28,43 @@ export interface SsoProviderPublic {
 }
 
 @Injectable()
-export class SsoService {
+export class SsoService implements OnModuleDestroy {
   private readonly logger = new Logger(SsoService.name);
   private readonly pendingStates = new Map<string, { configId: string; expiresAt: number }>();
+  private redis: IORedis | null = null;
 
   constructor(
     private prisma: PrismaService,
     private configService: ConfigService,
     private authService: AuthService,
-  ) {}
+  ) {
+    const redisUrl = this.configService.get<string>('REDIS_URL');
+    if (redisUrl) {
+      try {
+        this.redis = new IORedis(redisUrl, { maxRetriesPerRequest: 1, lazyConnect: true });
+        this.redis.connect().catch((err) => {
+          this.logger.warn(`OIDC Redis connect failed: ${err.message} — using in-memory state`);
+          this.redis = null;
+        });
+      } catch (err: any) {
+        this.logger.warn(`OIDC Redis init failed: ${err.message} — using in-memory state`);
+        this.redis = null;
+      }
+    }
+  }
+
+  async onModuleDestroy() {
+    if (this.redis) await this.redis.quit().catch(() => {});
+    this.redis = null;
+  }
+
+  /** Delegate to AuthService — one-time code instead of tokens in redirect URLs */
+  createExchangeCode(result: { accessToken: string; refreshToken: string; isNewUser: boolean }): string {
+    return this.authService.createOAuthExchangeCode(
+      { accessToken: result.accessToken, refreshToken: result.refreshToken },
+      result.isNewUser,
+    );
+  }
 
   /**
    * Public list for the login page: env Google/MS + enabled tenant SSO configs.
@@ -142,7 +176,7 @@ export class SsoService {
         ssoUrl: data.ssoUrl,
         certificate: data.certificate,
         clientId: data.clientId,
-        clientSecret: data.clientSecret,
+        clientSecret: data.clientSecret ? sealVaultValue(data.clientSecret) : undefined,
         issuer: data.issuer,
         metadataUrl: data.metadataUrl,
         groupRoleMap: data.groupRoleMap || {},
@@ -171,7 +205,9 @@ export class SsoService {
         ...(data.ssoUrl !== undefined ? { ssoUrl: data.ssoUrl } : {}),
         ...(data.certificate !== undefined ? { certificate: data.certificate } : {}),
         ...(data.clientId !== undefined ? { clientId: data.clientId } : {}),
-        ...(data.clientSecret !== undefined ? { clientSecret: data.clientSecret } : {}),
+        ...(data.clientSecret !== undefined
+          ? { clientSecret: data.clientSecret ? sealVaultValue(data.clientSecret) : null }
+          : {}),
         ...(data.issuer !== undefined ? { issuer: data.issuer } : {}),
         ...(data.metadataUrl !== undefined ? { metadataUrl: data.metadataUrl } : {}),
         ...(data.groupRoleMap !== undefined ? { groupRoleMap: data.groupRoleMap } : {}),
@@ -226,7 +262,7 @@ export class SsoService {
     }
 
     const state = crypto.randomBytes(24).toString('hex');
-    this.pendingStates.set(state, { configId: config.id, expiresAt: Date.now() + 10 * 60 * 1000 });
+    await this.storePendingState(state, config.id);
 
     const params = new URLSearchParams({
       client_id: clientId,
@@ -244,8 +280,7 @@ export class SsoService {
    * OIDC authorization-code callback skeleton — exchanges code, loads userinfo, issues app JWT.
    */
   async handleOidcCallback(code: string, state: string) {
-    const pending = this.pendingStates.get(state);
-    this.pendingStates.delete(state);
+    const pending = await this.takePendingState(state);
     if (!pending || pending.expiresAt < Date.now()) {
       throw new UnauthorizedException('Invalid or expired OIDC state');
     }
@@ -260,7 +295,8 @@ export class SsoService {
     const redirectUri = `${apiBase.replace(/\/$/, '')}/api/v1/auth/sso/oidc/callback`;
 
     let clientId = config.clientId || '';
-    let clientSecret = config.clientSecret || '';
+    // Stored values are opened only for the outbound token exchange.
+    let clientSecret = config.clientSecret ? openVaultValue(config.clientSecret) : '';
     let tokenUrl = '';
     let userInfoUrl = '';
 
@@ -318,6 +354,7 @@ export class SsoService {
       firstName: profile.given_name || profile.name?.split?.(' ')?.[0] || '',
       lastName: profile.family_name || '',
       avatarUrl: profile.picture || null,
+      tenantIdHint: config.tenantId,
     });
   }
 
@@ -439,14 +476,39 @@ export class SsoService {
       ? await this.prisma.ssoConfig.findUnique({ where: { id: configId } })
       : null;
 
-    if (!config) {
-      // Fall back to first enabled SAML config (IdP-initiated)
-      config = await this.prisma.ssoConfig.findFirst({
-        where: { provider: 'SAML', enabled: true },
-      });
+    // Never fall back to an arbitrary tenant's SAML config (cross-tenant auth risk).
+    // IdP-initiated SSO must include RelayState with configId, or match a unique issuer.
+    if (!config && body.SAMLResponse) {
+      // Attempt issuer-based unique match only when exactly one enabled config matches
+      try {
+        const decoded = Buffer.from(body.SAMLResponse, 'base64').toString('utf8');
+        const issuerMatch = decoded.match(/<(?:saml2?:)?Issuer[^>]*>([^<]+)</i);
+        const issuer = issuerMatch?.[1]?.trim();
+        if (issuer) {
+          const matches = await this.prisma.ssoConfig.findMany({
+            where: {
+              provider: 'SAML',
+              enabled: true,
+              OR: [{ issuer }, { entityId: issuer }],
+            },
+          });
+          if (matches.length === 1) {
+            config = matches[0];
+          } else if (matches.length > 1) {
+            throw new UnauthorizedException(
+              'Ambiguous SAML issuer — configure unique issuer per tenant and use SP-initiated RelayState',
+            );
+          }
+        }
+      } catch (err) {
+        if (err instanceof UnauthorizedException) throw err;
+        // ignore decode errors — fall through to reject
+      }
     }
     if (!config || !config.enabled) {
-      throw new UnauthorizedException('No enabled SAML configuration found');
+      throw new UnauthorizedException(
+        'SAML configuration could not be resolved. Use SP-initiated SSO so RelayState includes configId.',
+      );
     }
     if (!config.certificate) {
       throw new BadRequestException('SAML IdP certificate is required on SsoConfig');
@@ -533,6 +595,46 @@ export class SsoService {
       hasClientSecret: !!clientSecret,
       hasCertificate: !!certificate,
     };
+  }
+
+  private async storePendingState(state: string, configId: string) {
+    const pending = {
+      configId,
+      expiresAt: Date.now() + OIDC_STATE_TTL_SEC * 1000,
+    };
+    if (this.redis) {
+      try {
+        await this.redis.setex(
+          `${OIDC_STATE_PREFIX}${state}`,
+          OIDC_STATE_TTL_SEC,
+          JSON.stringify(pending),
+        );
+        return;
+      } catch (err: any) {
+        this.logger.warn(`OIDC Redis store failed: ${err.message} — using in-memory state`);
+      }
+    }
+    this.pendingStates.set(state, pending);
+  }
+
+  private async takePendingState(
+    state: string,
+  ): Promise<{ configId: string; expiresAt: number } | null> {
+    if (this.redis) {
+      try {
+        const key = `${OIDC_STATE_PREFIX}${state}`;
+        const raw = await this.redis.get(key);
+        if (raw) {
+          await this.redis.del(key);
+          return JSON.parse(raw);
+        }
+      } catch (err: any) {
+        this.logger.warn(`OIDC Redis read failed: ${err.message} — checking in-memory state`);
+      }
+    }
+    const pending = this.pendingStates.get(state);
+    this.pendingStates.delete(state);
+    return pending || null;
   }
 
   private normalizePem(cert: string): string {

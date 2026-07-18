@@ -2,7 +2,7 @@ FROM node:20.19-alpine AS builder
 WORKDIR /app
 
 # Bust Railway layer cache when source changes meaningfully
-ARG CACHE_BUST=20260713-enterprise
+ARG CACHE_BUST=20260718-vapt-auth
 RUN echo "cachebust=$CACHE_BUST"
 
 COPY package.json ./

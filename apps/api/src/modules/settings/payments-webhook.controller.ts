@@ -19,7 +19,10 @@ export class PaymentsWebhookController {
     const secret = process.env.STRIPE_WEBHOOK_SECRET;
 
     if (!secret) {
-      this.logger.warn('STRIPE_WEBHOOK_SECRET is not configured — webhook signature verification is DISABLED. Set this in production!');
+      if (process.env.NODE_ENV === 'production') {
+        throw new UnauthorizedException('Stripe webhook secret is not configured');
+      }
+      this.logger.warn('STRIPE_WEBHOOK_SECRET is not configured — webhook signature verification is DISABLED in non-production only.');
       return true;
     }
 
@@ -68,7 +71,10 @@ export class PaymentsWebhookController {
     const secret = process.env.RAZORPAY_WEBHOOK_SECRET;
 
     if (!secret) {
-      this.logger.warn('RAZORPAY_WEBHOOK_SECRET is not configured — webhook signature verification is DISABLED. Set this in production!');
+      if (process.env.NODE_ENV === 'production') {
+        throw new UnauthorizedException('Razorpay webhook secret is not configured');
+      }
+      this.logger.warn('RAZORPAY_WEBHOOK_SECRET is not configured — webhook signature verification is DISABLED in non-production only.');
       return true;
     }
 

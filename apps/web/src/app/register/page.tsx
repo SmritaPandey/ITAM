@@ -220,46 +220,53 @@ export default function RegisterPage() {
         <form onSubmit={handleSubmit} style={{ background: card, backdropFilter: "blur(20px)", border: `1px solid ${border}`, borderRadius: 18, padding: 30 }}>
           {/* Error Banner */}
           {error && (
-            <div style={{ padding: "10px 14px", borderRadius: 8, background: "rgba(239,68,68,0.1)", border: "1px solid rgba(239,68,68,0.2)", color: "#ef4444", fontSize: 12, fontWeight: 500, marginBottom: 16, display: "flex", alignItems: "center", gap: 8 }}>
+            <div role="alert" aria-live="assertive" style={{ padding: "10px 14px", borderRadius: 8, background: "rgba(239,68,68,0.1)", border: "1px solid rgba(239,68,68,0.2)", color: "#ef4444", fontSize: 12, fontWeight: 500, marginBottom: 16, display: "flex", alignItems: "center", gap: 8 }}>
               <XCircle size={15} style={{ flexShrink: 0 }} /> {error}
             </div>
           )}
 
           {/* Company Name */}
-          <FormField icon={<Building2 size={16} />} label="Company Name" value={form.company}
+          <FormField id="register-company" icon={<Building2 size={16} />} label="Company Name" value={form.company}
             onChange={v => update("company", v)} onBlur={() => touch("company")}
             placeholder="Acme Corp" required error={errors.company}
             tooltip="Your organization name. This will be your workspace name." />
 
           {/* Full Name */}
-          <FormField icon={<User size={16} />} label="Your Full Name" value={form.name}
+          <FormField id="register-name" icon={<User size={16} />} label="Your Full Name" value={form.name}
             onChange={v => update("name", v)} onBlur={() => touch("name")}
             placeholder="Jane Smith" required error={errors.name}
             tooltip="First and last name. You'll be the admin of this workspace." />
 
           {/* Email */}
-          <FormField icon={<Mail size={16} />} label="Work Email" value={form.email}
+          <FormField id="register-email" icon={<Mail size={16} />} label="Work Email" value={form.email}
             onChange={v => update("email", v)} onBlur={() => touch("email")}
             placeholder="jane@acme.com" type="email" required error={errors.email}
             tooltip="Use your work email. This will be your login credential." />
 
           {/* Password with strength meter */}
           <div style={{ marginBottom: 14 }}>
-            <label style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 12, fontWeight: 600, color: "#cbd5e1", marginBottom: 5 }}>
+            <label htmlFor="register-password" style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 12, fontWeight: 600, color: "#cbd5e1", marginBottom: 5 }}>
               Password
               <span title="Use a mix of uppercase, lowercase, numbers, and special characters" style={{ cursor: "help", color: muted }}><Info size={12} /></span>
             </label>
             <div style={{ position: "relative" }}>
               <Lock size={16} style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", color: muted }} />
-              <input type={showPw ? "text" : "password"} value={form.password}
+              <input id="register-password" type={showPw ? "text" : "password"} value={form.password}
                 onChange={e => update("password", e.target.value)} onBlur={() => touch("password")}
-                placeholder="Min 8 characters" required minLength={8}
+                placeholder="Min 8 characters" required minLength={8} aria-invalid={!!errors.password}
+                aria-describedby={errors.password ? "register-password-error" : undefined}
                 style={{ width: "100%", padding: "10px 40px 10px 36px", borderRadius: 8, border: `1px solid ${errors.password ? "rgba(239,68,68,0.5)" : border}`, background: "rgba(15,23,42,0.5)", color: "#f1f5f9", fontSize: 13, outline: "none", boxSizing: "border-box" }} />
               <button type="button" onClick={() => setShowPw(!showPw)} title={showPw ? "Hide password" : "Show password"}
+                aria-label={showPw ? "Hide password" : "Show password"} aria-pressed={showPw}
                 style={{ position: "absolute", right: 10, top: "50%", transform: "translateY(-50%)", background: "none", border: "none", color: muted, cursor: "pointer", padding: 2 }}>
                 {showPw ? <EyeOff size={15} /> : <Eye size={15} />}
               </button>
             </div>
+            {errors.password && (
+              <div id="register-password-error" role="alert" style={{ display: "flex", alignItems: "center", gap: 4, marginTop: 4, fontSize: 11, color: "#ef4444" }}>
+                <AlertCircle size={11} /> {errors.password}
+              </div>
+            )}
             {/* Strength Meter */}
             {form.password.length > 0 && (
               <div style={{ marginTop: 6 }}>
@@ -279,13 +286,13 @@ export default function RegisterPage() {
           </div>
 
           {/* Confirm Password */}
-          <FormField icon={<Lock size={16} />} label="Confirm Password" value={form.confirmPassword}
+          <FormField id="register-confirm-password" icon={<Lock size={16} />} label="Confirm Password" value={form.confirmPassword}
             onChange={v => update("confirmPassword", v)} onBlur={() => touch("confirmPassword")}
             placeholder="Repeat password" type="password" required error={errors.confirmPassword} />
 
           {/* Terms Acceptance */}
-          <label style={{ display: "flex", alignItems: "flex-start", gap: 8, marginTop: 8, cursor: "pointer" }}>
-            <input type="checkbox" checked={acceptedTerms} onChange={e => setAcceptedTerms(e.target.checked)}
+          <label htmlFor="register-terms" style={{ display: "flex", alignItems: "flex-start", gap: 8, marginTop: 8, cursor: "pointer" }}>
+            <input id="register-terms" type="checkbox" checked={acceptedTerms} onChange={e => setAcceptedTerms(e.target.checked)}
               style={{ width: 16, height: 16, accentColor: "#06b6d4", marginTop: 2, cursor: "pointer", flexShrink: 0 }} />
             <span style={{ fontSize: 11, color: "#94a3b8", lineHeight: 1.5 }}>
               I agree to the <a href="/terms" target="_blank" style={{ color: "#06b6d4", textDecoration: "underline" }}>Terms of Service</a>,{" "}
@@ -331,25 +338,26 @@ export default function RegisterPage() {
 }
 
 // ─── Reusable Field Component ───────────────────────────────────
-function FormField({ icon, label, value, onChange, onBlur, placeholder, type = "text", required = false, error, tooltip }: {
-  icon: React.ReactNode; label: string; value: string; onChange: (v: string) => void;
+function FormField({ id, icon, label, value, onChange, onBlur, placeholder, type = "text", required = false, error, tooltip }: {
+  id: string; icon: React.ReactNode; label: string; value: string; onChange: (v: string) => void;
   onBlur?: () => void; placeholder: string; type?: string; required?: boolean;
   error?: string | null; tooltip?: string;
 }) {
   return (
     <div style={{ marginBottom: 14 }}>
-      <label style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 12, fontWeight: 600, color: "#cbd5e1", marginBottom: 5 }}>
+      <label htmlFor={id} style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 12, fontWeight: 600, color: "#cbd5e1", marginBottom: 5 }}>
         {label}
         {tooltip && <span title={tooltip} style={{ cursor: "help", color: "#94a3b8" }}><Info size={12} /></span>}
       </label>
       <div style={{ position: "relative" }}>
         <span style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", color: "#94a3b8" }}>{icon}</span>
-        <input type={type} value={value} onChange={e => onChange(e.target.value)} onBlur={onBlur}
-          placeholder={placeholder} required={required}
+        <input id={id} type={type} value={value} onChange={e => onChange(e.target.value)} onBlur={onBlur}
+          placeholder={placeholder} required={required} aria-invalid={!!error}
+          aria-describedby={error ? `${id}-error` : undefined}
           style={{ width: "100%", padding: "10px 14px 10px 36px", borderRadius: 8, border: `1px solid ${error ? "rgba(239,68,68,0.5)" : "rgba(42,49,80,0.5)"}`, background: "rgba(15,23,42,0.5)", color: "#f1f5f9", fontSize: 13, outline: "none", boxSizing: "border-box", transition: "border-color 0.2s" }} />
       </div>
       {error && (
-        <div style={{ display: "flex", alignItems: "center", gap: 4, marginTop: 4, fontSize: 11, color: "#ef4444" }}>
+        <div id={`${id}-error`} role="alert" style={{ display: "flex", alignItems: "center", gap: 4, marginTop: 4, fontSize: 11, color: "#ef4444" }}>
           <AlertCircle size={11} /> {error}
         </div>
       )}

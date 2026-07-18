@@ -49,7 +49,10 @@ export class EmailVerificationService {
             },
             tls: {
               servername: host,
-              rejectUnauthorized: false,
+              // Enforce cert validation in production; allow lab SMTP overrides only via env
+              rejectUnauthorized: this.config.get<string>('SMTP_TLS_INSECURE') === 'true'
+                ? false
+                : process.env.NODE_ENV !== 'production',
             },
           } as any);
           this.logger.log(`Email service initialized with SMTP at ${resolvedHost}:${port} (secure: ${secure})`);
@@ -69,12 +72,14 @@ export class EmailVerificationService {
   async sendVerificationEmail(userId: string, email: string, firstName: string): Promise<string> {
     const token = uuidv4();
     const expiry = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours
+    const { createHash } = await import('crypto');
+    const tokenHash = createHash('sha256').update(token).digest('hex');
 
-    // Store token in the user record
+    // Store hashed token only
     await this.prisma.user.update({
       where: { id: userId },
       data: {
-        emailVerifyToken: token,
+        emailVerifyToken: tokenHash,
         emailVerifyExpiry: expiry,
         emailVerified: false,
       },
@@ -118,8 +123,18 @@ export class EmailVerificationService {
    * Verify the token and mark the user as email-verified.
    */
   async verifyToken(token: string): Promise<{ success: boolean; message: string; email?: string }> {
+    if (!token) {
+      return { success: false, message: 'Invalid or expired verification link.' };
+    }
+    const { createHash } = await import('crypto');
+    const tokenHash = createHash('sha256').update(token).digest('hex');
     const user = await this.prisma.user.findFirst({
-      where: { emailVerifyToken: token },
+      where: {
+        OR: [
+          { emailVerifyToken: tokenHash },
+          { emailVerifyToken: token }, // legacy plaintext during rollout
+        ],
+      },
     });
 
     if (!user) {
@@ -156,18 +171,29 @@ export class EmailVerificationService {
     });
 
     if (!user) {
-      return { success: false, message: 'No account found with this email.' };
+      return { success: true, message: 'If an unverified account exists for this email, a verification link will be sent shortly.' };
     }
 
     if (user.emailVerified) {
-      return { success: true, message: 'Email is already verified.' };
+      return { success: true, message: 'If an unverified account exists for this email, a verification link will be sent shortly.' };
     }
 
     await this.sendVerificationEmail(user.id, user.email, user.firstName);
-    return { success: true, message: 'Verification email sent. Check your inbox.' };
+    return { success: true, message: 'If an unverified account exists for this email, a verification link will be sent shortly.' };
+  }
+
+  private escapeHtml(value: string): string {
+    return String(value || '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
   }
 
   private buildVerificationHtml(name: string, verifyUrl: string): string {
+    const safeName = this.escapeHtml(name);
+    const safeUrl = this.escapeHtml(verifyUrl);
     return `
     <!DOCTYPE html>
     <html>
@@ -178,12 +204,12 @@ export class EmailVerificationService {
           <div style="display: inline-block; width: 48px; height: 48px; border-radius: 12px; background: linear-gradient(135deg, #06b6d4, #8b5cf6); line-height: 48px; text-align: center; color: white; font-weight: 800; font-size: 18px;">QS</div>
           <h1 style="margin: 12px 0 0; font-size: 22px; color: #f0f6fc;">QS Asset Management</h1>
         </div>
-        <h2 style="font-size: 18px; color: #f0f6fc; margin-bottom: 12px;">Welcome, ${name}!</h2>
+        <h2 style="font-size: 18px; color: #f0f6fc; margin-bottom: 12px;">Welcome, ${safeName}!</h2>
         <p style="font-size: 14px; color: #8b949e; line-height: 1.6; margin-bottom: 24px;">
           Thank you for registering with QS Asset Management. Please verify your email address to activate your account and start managing your IT infrastructure.
         </p>
         <div style="text-align: center; margin-bottom: 24px;">
-          <a href="${verifyUrl}" style="display: inline-block; padding: 12px 32px; background: linear-gradient(135deg, #06b6d4, #8b5cf6); color: white; font-weight: 700; font-size: 14px; text-decoration: none; border-radius: 8px;">
+          <a href="${safeUrl}" style="display: inline-block; padding: 12px 32px; background: linear-gradient(135deg, #06b6d4, #8b5cf6); color: white; font-weight: 700; font-size: 14px; text-decoration: none; border-radius: 8px;">
             Verify Email Address
           </a>
         </div>
@@ -233,6 +259,8 @@ export class EmailVerificationService {
   }
 
   private buildResetPasswordHtml(name: string, resetUrl: string): string {
+    const safeName = this.escapeHtml(name);
+    const safeUrl = this.escapeHtml(resetUrl);
     return `
     <!DOCTYPE html>
     <html>
@@ -243,12 +271,12 @@ export class EmailVerificationService {
           <div style="display: inline-block; width: 48px; height: 48px; border-radius: 12px; background: linear-gradient(135deg, #06b6d4, #8b5cf6); line-height: 48px; text-align: center; color: white; font-weight: 800; font-size: 18px;">QS</div>
           <h1 style="margin: 12px 0 0; font-size: 22px; color: #f0f6fc;">QS Asset Management</h1>
         </div>
-        <h2 style="font-size: 18px; color: #f0f6fc; margin-bottom: 12px;">Hello, ${name}!</h2>
+        <h2 style="font-size: 18px; color: #f0f6fc; margin-bottom: 12px;">Hello, ${safeName}!</h2>
         <p style="font-size: 14px; color: #8b949e; line-height: 1.6; margin-bottom: 24px;">
           We received a request to reset your password for your QS Asset Management account. Click the button below to choose a new password:
         </p>
         <div style="text-align: center; margin-bottom: 24px;">
-          <a href="${resetUrl}" style="display: inline-block; padding: 12px 32px; background: linear-gradient(135deg, #06b6d4, #8b5cf6); color: white; font-weight: 700; font-size: 14px; text-decoration: none; border-radius: 8px;">
+          <a href="${safeUrl}" style="display: inline-block; padding: 12px 32px; background: linear-gradient(135deg, #06b6d4, #8b5cf6); color: white; font-weight: 700; font-size: 14px; text-decoration: none; border-radius: 8px;">
             Reset Password
           </a>
         </div>

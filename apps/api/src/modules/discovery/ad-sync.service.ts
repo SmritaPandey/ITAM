@@ -8,6 +8,7 @@ import { Cron } from '@nestjs/schedule';
 import { Client } from 'ldapts';
 import { PrismaService } from '../../common/database/prisma.service';
 import { CredentialVaultService } from './credential-vault.service';
+import { openVaultValue, sealVaultValue } from '../../common/security/vault-crypto';
 
 export interface AdSyncConfig {
   enabled?: boolean;
@@ -70,6 +71,9 @@ export class AdSyncService {
       ...patch,
       baseDns: patch.baseDns !== undefined ? patch.baseDns : prev.baseDns,
     };
+    if (typeof patch.password === 'string' && patch.password) {
+      next.password = sealVaultValue(patch.password);
+    }
     // Strip empty password so we don't wipe a stored one accidentally
     if (patch.password === '' || patch.password === undefined) {
       delete (next as any).password;
@@ -410,7 +414,7 @@ export class AdSyncService {
         this.logger.warn(`AD credential vault lookup failed: ${err.message}`);
       }
     }
-    if (cfg.password) return cfg.password;
+    if (cfg.password) return openVaultValue(cfg.password);
     throw new BadRequestException(
       'AD bind password missing. Set credentialId (vault) or password in settings.adSync.',
     );

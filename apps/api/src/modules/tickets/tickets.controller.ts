@@ -61,7 +61,7 @@ export class TicketsController {
   @Roles('*')
   @ApiOperation({ summary: 'Get ticket details' })
   async findOne(@Request() req: any, @Param('id') id: string) {
-    return this.ticketsService.findById(id, req.user.tenantId);
+    return this.ticketsService.findById(id, req.user.tenantId, req.user.sub, req.user.role);
   }
 
   @Post()
@@ -80,14 +80,21 @@ export class TicketsController {
   @Roles('*')
   @ApiOperation({ summary: 'Get ticket comments' })
   async getComments(@Request() req: any, @Param('id') id: string) {
-    return this.ticketsService.getTimeline(id, req.user.tenantId);
+    return this.ticketsService.getTimeline(id, req.user.tenantId, req.user.sub, req.user.role);
   }
 
   @Post(':id/comments')
   @Roles('*')
   @ApiOperation({ summary: 'Add comment to ticket' })
   async addComment(@Request() req: any, @Param('id') id: string, @Body() body: { content: string; isInternal?: boolean }) {
-    return this.ticketsService.addComment(id, req.user.tenantId, req.user.sub, body.content, body.isInternal);
+    return this.ticketsService.addComment(
+      id,
+      req.user.tenantId,
+      req.user.sub,
+      body.content,
+      body.isInternal,
+      req.user.role,
+    );
   }
 
   @Patch(':id/status')
@@ -126,6 +133,7 @@ export class TicketsController {
   @Roles('*')
   @ApiOperation({ summary: 'Suggest KB articles linked to this ticket subject/description' })
   async kbSuggestForTicket(@Request() req: any, @Param('id') id: string, @Query('limit') limit?: string) {
+    await this.ticketsService.findById(id, req.user.tenantId, req.user.sub, req.user.role);
     return this.ticketsService.suggestKb(req.user.tenantId, id, {
       limit: limit ? parseInt(limit, 10) : 5,
     });
@@ -135,7 +143,7 @@ export class TicketsController {
   @Roles('*')
   @ApiOperation({ summary: 'Get ticket timeline/comments' })
   async getTimeline(@Request() req: any, @Param('id') id: string) {
-    return this.ticketsService.getTimeline(id, req.user.tenantId);
+    return this.ticketsService.getTimeline(id, req.user.tenantId, req.user.sub, req.user.role);
   }
 
   @Post('sla/policies')

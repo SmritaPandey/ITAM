@@ -8,6 +8,8 @@ import { execFile } from 'child_process';
 import { promisify } from 'util';
 import { PrismaService } from '../../common/database/prisma.service';
 import { EventBusService } from '../../common/events/event-bus.service';
+import { redactSecrets } from '../../common/security/redact';
+import { openVaultValue } from '../../common/security/vault-crypto';
 
 const execFileAsync = promisify(execFile);
 
@@ -511,13 +513,23 @@ try {
   /**
    * Get the list of configured hypervisors for a tenant (stored in settings)
    */
-  async getHypervisors(tenantId: string): Promise<HypervisorConfig[]> {
+  async getHypervisors(
+    tenantId: string,
+    includeSecrets = false,
+  ): Promise<Array<HypervisorConfig | Omit<HypervisorConfig, 'password'> & { hasPassword: boolean }>> {
     const tenant = await this.prisma.tenant.findUnique({
       where: { id: tenantId },
       select: { settings: true },
     });
     const settings = (tenant?.settings as any) || {};
-    return settings.hypervisors || [];
+    const hypervisors = (settings.hypervisors || []) as HypervisorConfig[];
+    if (includeSecrets) {
+      return hypervisors.map((config) => ({
+        ...config,
+        password: openVaultValue(config.password),
+      }));
+    }
+    return redactSecrets(hypervisors, { preservePresence: true });
   }
 
   /**
@@ -540,7 +552,7 @@ try {
 
     const cfg = (device.config as any) || {};
     const hypervisorType = (cfg.hypervisor || cfg.hypervisorType || '') as string;
-    const hypervisors = await this.getHypervisors(tenantId);
+    const hypervisors = (await this.getHypervisors(tenantId, true)) as HypervisorConfig[];
     const matched =
       hypervisors.find(
         (h) =>

@@ -1,6 +1,7 @@
 import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../common/database/prisma.service';
 import * as crypto from 'crypto';
+import { isVaultValue, openVaultValue, sealVaultValue } from '../../common/security/vault-crypto';
 
 const ALGORITHM = 'aes-256-cbc';
 
@@ -22,6 +23,11 @@ function getVaultKey(): string {
 @Injectable()
 export class CredentialVaultService {
   constructor(private prisma: PrismaService) {}
+
+  private publicCredential<T extends { encryptedData?: string }>(credential: T) {
+    const { encryptedData, ...safe } = credential;
+    return { ...safe, hasCredentials: !!encryptedData };
+  }
 
   private encrypt(text: string): string {
     const vaultKey = getVaultKey();
@@ -78,8 +84,8 @@ export class CredentialVaultService {
   async create(tenantId: string, userId: string, data: {
     name: string; type: string; credentials: Record<string, any>; scope?: any;
   }) {
-    const encryptedData = this.encrypt(JSON.stringify(data.credentials));
-    return this.prisma.scanCredential.create({
+    const encryptedData = sealVaultValue(JSON.stringify(data.credentials));
+    const credential = await this.prisma.scanCredential.create({
       data: {
         tenantId,
         name: data.name,
@@ -89,6 +95,7 @@ export class CredentialVaultService {
         createdById: userId,
       },
     });
+    return this.publicCredential(credential);
   }
 
   async update(id: string, tenantId: string, data: any) {
@@ -99,16 +106,18 @@ export class CredentialVaultService {
     if (data.name) updateData.name = data.name;
     if (data.scope) updateData.scope = data.scope;
     if (data.credentials) {
-      updateData.encryptedData = this.encrypt(JSON.stringify(data.credentials));
+      updateData.encryptedData = sealVaultValue(JSON.stringify(data.credentials));
     }
 
-    return this.prisma.scanCredential.update({ where: { id }, data: updateData });
+    const credential = await this.prisma.scanCredential.update({ where: { id }, data: updateData });
+    return this.publicCredential(credential);
   }
 
   async delete(id: string, tenantId: string) {
     const existing = await this.prisma.scanCredential.findFirst({ where: { id, tenantId } });
     if (!existing) throw new NotFoundException('Credential not found');
-    return this.prisma.scanCredential.delete({ where: { id } });
+    await this.prisma.scanCredential.delete({ where: { id } });
+    return { deleted: true, id };
   }
 
   /** Used internally by scan engine to get decrypted credentials */
@@ -116,6 +125,9 @@ export class CredentialVaultService {
     const cred = await this.prisma.scanCredential.findFirst({ where: { id, tenantId } });
     if (!cred) return null;
     await this.prisma.scanCredential.update({ where: { id }, data: { lastUsedAt: new Date() } });
-    return JSON.parse(this.decrypt(cred.encryptedData));
+    const plaintext = isVaultValue(cred.encryptedData)
+      ? openVaultValue(cred.encryptedData)
+      : this.decrypt(cred.encryptedData);
+    return JSON.parse(plaintext);
   }
 }

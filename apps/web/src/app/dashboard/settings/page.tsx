@@ -68,6 +68,7 @@ export default function SettingsPage() {
     wmiEnabled: false, emailAlerts: true, slackEnabled: false, webhookUrl: "",
     slackWebhookUrl: "", teamsWebhookUrl: "",
     sessionTimeout: 30, mfaEnforced: false, passwordExpiry: 90, ipWhitelist: "",
+    aiEnabled: true, auditRetentionDays: 365,
     scanInterval: 60, snmpCommunity: "public", agentPort: 8443,
     agentStartOnBoot: false,
     storageProvider: "local",
@@ -1101,6 +1102,7 @@ export default function SettingsPage() {
               <h2 style={{ fontSize: 16, fontWeight: 700, marginBottom: 20 }}>Security & Authentication</h2>
               <div style={{ display: "grid", gap: 16 }}>
                 <ToggleRow label="Enforce MFA" desc="Require multi-factor authentication for all users" value={settings.mfaEnforced} onChange={() => setSettings({ ...settings, mfaEnforced: !settings.mfaEnforced })} />
+                <ToggleRow label="AI assistance" desc="Tenant kill-switch for all AI analysis and Copilot requests" value={settings.aiEnabled} onChange={() => setSettings({ ...settings, aiEnabled: !settings.aiEnabled })} />
                 <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
                   <Field label="Session Timeout (minutes)" value={String(settings.sessionTimeout)} onChange={v => setSettings({ ...settings, sessionTimeout: Number(v) })} />
                   <Field label="Password Expiry (days)" value={String(settings.passwordExpiry)} onChange={v => setSettings({ ...settings, passwordExpiry: Number(v) })} />
@@ -1449,6 +1451,11 @@ export default function SettingsPage() {
                       label="Data Retention Period (Days)" 
                       value={String(settings.retentionDays || 90)} 
                       onChange={v => setSettings({ ...settings, retentionDays: Number(v) || 90 })} 
+                    />
+                    <Field
+                      label="Audit Retention Policy (Days, minimum 180)"
+                      value={String(settings.auditRetentionDays || 365)}
+                      onChange={v => setSettings({ ...settings, auditRetentionDays: Math.max(180, Number(v) || 365) })}
                     />
                   </div>
 

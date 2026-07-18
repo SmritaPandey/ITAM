@@ -104,9 +104,10 @@ export class AiController {
   @ApiResponse({ status: 200, type: AnalyzeAssetResponseDto })
   async analyzeAsset(@Param('id') assetId: string, @Req() req: any) {
     const tenantId = req.tenantId || req.user?.tenantId;
+    const userId = req.user?.id || req.user?.sub;
     if (!tenantId) throw new HttpException('Tenant context required', HttpStatus.BAD_REQUEST);
 
-    return this.aiService.analyzeAsset(tenantId, assetId);
+    return this.aiService.analyzeAsset(tenantId, assetId, userId);
   }
 
   // ─── Classify Ticket ──────────────────────────────────────

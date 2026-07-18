@@ -1,0 +1,347 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>QS Assets — Complete Feature List</title>
+  <style>
+    body { font-family: Calibri, Arial, sans-serif; font-size: 11pt; color: #111; line-height: 1.45; max-width: 720px; margin: 0 auto; padding: 24px; }
+    h1 { font-size: 22pt; margin: 0 0 6px; color: #4B49AA; }
+    h2 { font-size: 14pt; margin: 28px 0 10px; color: #4B49AA; border-bottom: 1px solid #ddd; padding-bottom: 4px; }
+    h3 { font-size: 12pt; margin: 18px 0 8px; color: #333; }
+    p.meta { font-size: 10pt; color: #555; margin: 0 0 16px; }
+    table { width: 100%; border-collapse: collapse; margin: 8px 0 16px; font-size: 10pt; }
+    th, td { border: 1px solid #ccc; padding: 6px 8px; text-align: left; vertical-align: top; }
+    th { background: #f3f2ff; font-weight: 600; }
+    .status-shipped { color: #0d6b3a; }
+    .status-partial { color: #9a6700; }
+    .status-build { color: #9a6700; }
+    ul { margin: 6px 0 12px; padding-left: 20px; }
+    li { margin-bottom: 4px; }
+    .note { background: #f8f8fa; border-left: 3px solid #847DFF; padding: 10px 12px; margin: 12px 0; font-size: 10pt; }
+    .footer { margin-top: 32px; font-size: 9pt; color: #666; border-top: 1px solid #ddd; padding-top: 12px; }
+  </style>
+</head>
+<body>
+
+<h1>QS Assets — Complete Feature List</h1>
+<p class="meta">
+  <strong>Product:</strong> QS Assets &nbsp;|&nbsp;
+  <strong>Vendor:</strong> NeurQ AI Labs Private Limited &nbsp;|&nbsp;
+  <strong>Document date:</strong> July 2026 &nbsp;|&nbsp;
+  <strong>Source:</strong> Product spec, codebase, and dashboard surfaces (honest status)
+</p>
+
+<div class="note">
+  <strong>How to read status</strong><br />
+  <span class="status-shipped"><strong>Shipped</strong></span> — Present in the product today; demoable in the app.<br />
+  <span class="status-partial"><strong>Partial / In-build</strong></span> — UI, API, or data model exists; depth, automation, or acceptance criteria not complete.<br />
+  <strong>Not listed as Future</strong> — Items not in this document are either out of scope for the current release wave or not started.
+</div>
+
+<h2>1. Platform summary</h2>
+<p>QS Assets is a unified enterprise platform for IT and non-IT asset management, discovery, network monitoring, patch and vulnerability management, ITSM, CMDB, fleet/GPS, CCTV, VDI, procurement, automation, reporting, and compliance — delivered as multi-tenant SaaS or self-hosted Docker deployment.</p>
+<p><strong>Lifecycle model:</strong> Procure → Discover → Inventory → Monitor → Secure / Patch → Service → Retire.</p>
+
+<h3>Commercial modules (12)</h3>
+<ol>
+  <li>IT Asset Management</li>
+  <li>Non-IT / Enterprise Asset Management</li>
+  <li>ITSM Service Desk</li>
+  <li>Vulnerability Scanning</li>
+  <li>Network Monitoring (NMS)</li>
+  <li>Patch Management</li>
+  <li>CCTV Surveillance</li>
+  <li>Fleet &amp; GPS</li>
+  <li>VDI Management</li>
+  <li>CMDB &amp; Dependencies</li>
+  <li>Procurement &amp; Contracts</li>
+  <li>Reports &amp; Compliance</li>
+</ol>
+
+<h3>Additional product surfaces (beyond the 12 modules)</h3>
+<ul>
+  <li>Intelligence / AI risk scoring</li>
+  <li>Automation rules engine</li>
+  <li>Unified alerts console</li>
+  <li>Network Access Control (NAC)</li>
+  <li>Security scanning (port / SSL checks)</li>
+  <li>Software deployment rings</li>
+  <li>Remote terminal assist</li>
+  <li>Employee self-service portal</li>
+  <li>QR / barcode scan PWA (<code>/scan</code>)</li>
+  <li>SaaS platform admin (<code>/admin</code>)</li>
+  <li>In-app AI copilot and help / docs hub</li>
+</ul>
+
+<h2>2. IT Asset Management (ITAM)</h2>
+<table>
+  <tr><th>Capability</th><th>Status</th></tr>
+  <tr><td>Hardware, network, and peripheral inventory with lifecycle states</td><td class="status-shipped">Shipped</td></tr>
+  <tr><td>Software inventory and installed versions (agent + discovery)</td><td class="status-shipped">Shipped</td></tr>
+  <tr><td>OS, BIOS, and security posture fields (firewall, encryption, AV)</td><td class="status-shipped">Shipped</td></tr>
+  <tr><td>Warranty, AMC, and contract linkage on assets</td><td class="status-shipped">Shipped</td></tr>
+  <tr><td>Cost center, department, site, and owner tagging</td><td class="status-shipped">Shipped</td></tr>
+  <tr><td>QR / barcode label generation and <code>/scan</code> lookup</td><td class="status-shipped">Shipped</td></tr>
+  <tr><td>Asset checkout / check-in</td><td class="status-shipped">Shipped</td></tr>
+  <tr><td>Attestation campaigns (asset certification)</td><td class="status-partial">Partial</td></tr>
+  <tr><td>Bulk asset import</td><td class="status-shipped">Shipped</td></tr>
+  <tr><td>Asset detail history and activity trail</td><td class="status-shipped">Shipped</td></tr>
+  <tr><td>Depreciation jobs (straight-line, declining balance) and finance reports</td><td class="status-partial">Partial / In-build</td></tr>
+  <tr><td>RFID / NFC tag field and scan path</td><td class="status-partial">Partial / In-build</td></tr>
+  <tr><td>License harvest → reclaim ticket workflow</td><td class="status-partial">Partial / In-build</td></tr>
+</table>
+<p><strong>UI routes:</strong> All Assets, IT Assets, Asset detail, Asset import</p>
+
+<h2>3. Non-IT / Enterprise Asset Management (EAM)</h2>
+<table>
+  <tr><th>Capability</th><th>Status</th></tr>
+  <tr><td>Custom non-IT asset types (facility, furniture, HVAC, medical, lab, etc.)</td><td class="status-shipped">Shipped</td></tr>
+  <tr><td>Vendor and service provider on contracts</td><td class="status-shipped">Shipped</td></tr>
+  <tr><td>Work orders linked to assets and maintenance</td><td class="status-shipped">Shipped</td></tr>
+  <tr><td>Facility dashboard (PM overdue, spares, consumables, pinned assets)</td><td class="status-partial">Partial</td></tr>
+  <tr><td>Preventive maintenance schedules → auto work order</td><td class="status-partial">Partial / In-build</td></tr>
+  <tr><td>Spare parts inventory with minimum stock alerts</td><td class="status-partial">Partial / In-build</td></tr>
+  <tr><td>Consumables with reorder-point alerts</td><td class="status-partial">Partial / In-build</td></tr>
+  <tr><td>Floor plan URL with asset pin coordinates</td><td class="status-partial">Partial / In-build</td></tr>
+</table>
+<p><strong>UI routes:</strong> Non-IT Assets, Facility, Work Orders</p>
+
+<h2>4. Discovery &amp; endpoint management</h2>
+<table>
+  <tr><th>Capability</th><th>Status</th></tr>
+  <tr><td>QS Discovery Agent (Windows, macOS, Linux) — inventory, heartbeat, baseline</td><td class="status-shipped">Shipped</td></tr>
+  <tr><td>Agent installer packages (MSI, PKG, DEB, ZIP) from Discovery UI</td><td class="status-shipped">Shipped</td></tr>
+  <tr><td>Agentless discovery: ICMP, TCP port scan, nmap-style sweeps</td><td class="status-shipped">Shipped</td></tr>
+  <tr><td>SNMP, WMI, and SSH-based remote inventory</td><td class="status-shipped">Shipped</td></tr>
+  <tr><td>Promote discovered hosts to managed assets</td><td class="status-shipped">Shipped</td></tr>
+  <tr><td>Active Directory / LDAP multi-OU sync (scheduled, vaulted credentials)</td><td class="status-shipped">Shipped</td></tr>
+  <tr><td>Azure and GCP cloud connector ingest</td><td class="status-shipped">Shipped</td></tr>
+  <tr><td>Approved script library — remote execution via agent</td><td class="status-shipped">Shipped</td></tr>
+  <tr><td>Software deploy rings (pilot → production via agent)</td><td class="status-shipped">Shipped</td></tr>
+  <tr><td>Remote terminal / shell assist (agent-backed)</td><td class="status-partial">Partial</td></tr>
+  <tr><td>MQTT, Modbus, BACnet probes (feature-flagged IoT/OT)</td><td class="status-partial">Partial</td></tr>
+  <tr><td>License blacklist / whitelist enforcement on endpoints</td><td class="status-partial">Partial / In-build</td></tr>
+  <tr><td>Authenticated patch / product inventory for CVE correlation</td><td class="status-partial">Partial / In-build</td></tr>
+</table>
+<p><strong>UI routes:</strong> Discovery, Software Deploy, Remote Terminal</p>
+
+<h2>5. Network monitoring (NMS)</h2>
+<table>
+  <tr><th>Capability</th><th>Status</th></tr>
+  <tr><td>ICMP and port availability monitoring</td><td class="status-shipped">Shipped</td></tr>
+  <tr><td>SNMP v1/v2c/v3 polling and metrics history</td><td class="status-shipped">Shipped</td></tr>
+  <tr><td>SNMP trap receiver → alerts</td><td class="status-shipped">Shipped</td></tr>
+  <tr><td>Network topology (ARP / neighbor edges)</td><td class="status-shipped">Shipped</td></tr>
+  <tr><td>Network configuration backup and hash-based drift detection</td><td class="status-shipped">Shipped</td></tr>
+  <tr><td>Config approve-and-push workflow</td><td class="status-partial">Partial</td></tr>
+  <tr><td>Syslog UDP ingest → alert / ticket</td><td class="status-partial">Partial / In-build</td></tr>
+  <tr><td>NetFlow / sFlow / IPFIX → top talkers and flow records</td><td class="status-partial">Partial / In-build</td></tr>
+  <tr><td>LLDP / CDP neighbor enrichment</td><td class="status-partial">Partial / In-build</td></tr>
+  <tr><td>NOC dashboard (topology, alarms, trap/syslog stream)</td><td class="status-partial">Partial / In-build</td></tr>
+</table>
+<p><strong>UI routes:</strong> Network (NMS), NOC, Network Configs</p>
+
+<h2>6. Security, patch &amp; vulnerability</h2>
+<table>
+  <tr><th>Capability</th><th>Status</th></tr>
+  <tr><td>NVD CVE ingest and asset vulnerability matching</td><td class="status-shipped">Shipped</td></tr>
+  <tr><td>Vulnerability dashboard (CVSS, status, remediation tracking)</td><td class="status-shipped">Shipped</td></tr>
+  <tr><td>Security scanning (open ports, SSL certificate expiry)</td><td class="status-shipped">Shipped</td></tr>
+  <tr><td>Patch catalog and deployment records</td><td class="status-shipped">Shipped</td></tr>
+  <tr><td>Agent-reported missing patches</td><td class="status-partial">Partial</td></tr>
+  <tr><td>Live third-party patch catalogs (winget / apt / brew sync)</td><td class="status-partial">In-build</td></tr>
+  <tr><td>Deploy rings: pilot → staged → all endpoints</td><td class="status-shipped">Shipped</td></tr>
+  <tr><td>Patch rollback UI</td><td class="status-shipped">Shipped</td></tr>
+  <tr><td>Air-gap patch bundle ZIP export</td><td class="status-shipped">Shipped</td></tr>
+  <tr><td>Critical CVE → automatic ticket creation</td><td class="status-partial">In-build</td></tr>
+  <tr><td>Compliance policies and compliance score dashboard</td><td class="status-shipped">Shipped</td></tr>
+  <tr><td>CIS evidence pack export (PDF / CSV)</td><td class="status-shipped">Shipped</td></tr>
+  <tr><td>NAC: VLAN policies, segments, quarantine UI</td><td class="status-shipped">Shipped</td></tr>
+  <tr><td>RADIUS Change of Authorization (CoA) / switch webhook quarantine</td><td class="status-partial">In-build</td></tr>
+  <tr><td>Threat actions: Approve / Quarantine / Block with realtime push</td><td class="status-partial">Partial</td></tr>
+</table>
+<p><strong>UI routes:</strong> Vulnerabilities, Patch Mgmt, Security Scan, Compliance, NAC, Audit Logs</p>
+
+<h2>7. ITSM — service desk &amp; ITIL</h2>
+<table>
+  <tr><th>Capability</th><th>Status</th></tr>
+  <tr><td>Incidents and service requests with comments and attachments</td><td class="status-shipped">Shipped</td></tr>
+  <tr><td>Link tickets to assets (configuration items)</td><td class="status-shipped">Shipped</td></tr>
+  <tr><td>Problem management with Known Error fields</td><td class="status-shipped">Shipped</td></tr>
+  <tr><td>Change requests with workflow states</td><td class="status-shipped">Shipped</td></tr>
+  <tr><td>SLA policies and breach timers</td><td class="status-shipped">Shipped</td></tr>
+  <tr><td>Service catalog and fulfillment requests</td><td class="status-shipped">Shipped</td></tr>
+  <tr><td>Knowledge base articles</td><td class="status-shipped">Shipped</td></tr>
+  <tr><td>Work orders from tickets and maintenance</td><td class="status-shipped">Shipped</td></tr>
+  <tr><td>Employee self-service portal</td><td class="status-shipped">Shipped</td></tr>
+  <tr><td>SLA escalation cron (notify + reassign)</td><td class="status-partial">In-build</td></tr>
+  <tr><td>CSAT survey on ticket resolution</td><td class="status-partial">In-build</td></tr>
+  <tr><td>Multi-level approval and CAB calendar for changes</td><td class="status-shipped">Shipped</td></tr>
+  <tr><td>SSDLC 9-step change type (UAT / VAPT gates, evidence attachments)</td><td class="status-partial">In-build</td></tr>
+  <tr><td>IMAP email → ticket ingest (omnichannel)</td><td class="status-partial">In-build</td></tr>
+  <tr><td>Catalog approval enforcement before fulfillment</td><td class="status-partial">Partial</td></tr>
+  <tr><td>KB article suggestions on ticket create</td><td class="status-partial">Partial</td></tr>
+</table>
+<p><strong>UI routes:</strong> Tickets, Problems, Changes, Work Orders, Knowledge Base, Service Catalog, My Portal</p>
+
+<h2>8. CMDB</h2>
+<table>
+  <tr><th>Capability</th><th>Status</th></tr>
+  <tr><td>Configuration items unified with asset records</td><td class="status-shipped">Shipped</td></tr>
+  <tr><td>CI relationship types (DEPENDS_ON, CONNECTED_TO, etc.)</td><td class="status-shipped">Shipped</td></tr>
+  <tr><td>Discovery auto-sync without duplicate serial/MAC</td><td class="status-shipped">Shipped</td></tr>
+  <tr><td>Data quality and attestation on CIs</td><td class="status-partial">Partial</td></tr>
+  <tr><td>Impact analysis API and UI drilldown (transitive dependents)</td><td class="status-partial">Partial / In-build</td></tr>
+  <tr><td>Business service health rollup (CSDM-lite)</td><td class="status-partial">Partial / In-build</td></tr>
+</table>
+<p><strong>UI route:</strong> CMDB</p>
+
+<h2>9. Software &amp; license management (SAM)</h2>
+<table>
+  <tr><th>Capability</th><th>Status</th></tr>
+  <tr><td>License entitlements and seat assignments</td><td class="status-shipped">Shipped</td></tr>
+  <tr><td>Usage vs entitlement and expiry warnings</td><td class="status-shipped">Shipped</td></tr>
+  <tr><td>Installed software inventory view</td><td class="status-shipped">Shipped</td></tr>
+  <tr><td>Software metering (last-used from agent)</td><td class="status-partial">In-build</td></tr>
+  <tr><td>Blacklist / whitelist policy enforcement on agents</td><td class="status-partial">In-build</td></tr>
+  <tr><td>Harvest recommendations and reclaim workflow</td><td class="status-partial">In-build</td></tr>
+</table>
+<p><strong>UI routes:</strong> Software Inventory, Licenses</p>
+
+<h2>10. Fleet &amp; GPS</h2>
+<table>
+  <tr><th>Capability</th><th>Status</th></tr>
+  <tr><td>GPS telemetry storage and map view</td><td class="status-shipped">Shipped</td></tr>
+  <tr><td>Trip history</td><td class="status-shipped">Shipped</td></tr>
+  <tr><td>Geofence entry/exit, speeding, and idle alerts</td><td class="status-partial">In-build</td></tr>
+  <tr><td>Traccar-protocol GPS ingest endpoint</td><td class="status-partial">In-build</td></tr>
+  <tr><td>Maintenance due from EAM schedules on fleet assets</td><td class="status-partial">In-build</td></tr>
+</table>
+<p><strong>UI route:</strong> Fleet / GPS</p>
+
+<h2>11. CCTV</h2>
+<table>
+  <tr><th>Capability</th><th>Status</th></tr>
+  <tr><td>ONVIF camera discovery</td><td class="status-shipped">Shipped</td></tr>
+  <tr><td>Snapshot and HLS stream proxy (when ffmpeg available)</td><td class="status-shipped">Shipped</td></tr>
+  <tr><td>Manual camera add with RTSP URLs and health status</td><td class="status-shipped">Shipped</td></tr>
+  <tr><td>Multi-camera video wall layouts</td><td class="status-partial">In-build</td></tr>
+  <tr><td>Tamper and offline camera alerts</td><td class="status-partial">In-build</td></tr>
+</table>
+<p><strong>UI route:</strong> CCTV</p>
+
+<h2>12. VDI monitoring</h2>
+<table>
+  <tr><th>Capability</th><th>Status</th></tr>
+  <tr><td>Hypervisor connectors (e.g. Horizon, Proxmox) and session list</td><td class="status-shipped">Shipped</td></tr>
+  <tr><td>Console launch deep-link</td><td class="status-shipped">Shipped</td></tr>
+  <tr><td>Session resource utilization charts over time</td><td class="status-partial">In-build</td></tr>
+</table>
+<p><strong>UI route:</strong> VDI</p>
+
+<h2>13. Procurement &amp; contracts</h2>
+<table>
+  <tr><th>Capability</th><th>Status</th></tr>
+  <tr><td>Vendor management</td><td class="status-shipped">Shipped</td></tr>
+  <tr><td>Purchase orders and approval workflow</td><td class="status-shipped">Shipped</td></tr>
+  <tr><td>Contracts with renewal and expiry tracking</td><td class="status-shipped">Shipped</td></tr>
+  <tr><td>Procurement dashboard (vendors, POs, expiring contracts)</td><td class="status-shipped">Shipped</td></tr>
+  <tr><td>Link procurement to asset birth records</td><td class="status-shipped">Shipped</td></tr>
+</table>
+<p><strong>UI route:</strong> Procurement</p>
+
+<h2>14. Automation, alerts &amp; notifications</h2>
+<table>
+  <tr><th>Capability</th><th>Status</th></tr>
+  <tr><td>IF/THEN automation rules (conditions → notify, ticket, script)</td><td class="status-shipped">Shipped</td></tr>
+  <tr><td>Notification channels: in-app, email, Slack, Teams, webhook</td><td class="status-shipped">Shipped</td></tr>
+  <tr><td>Script library with approval before execution</td><td class="status-shipped">Shipped</td></tr>
+  <tr><td>Cron and event-based rule triggers</td><td class="status-shipped">Shipped</td></tr>
+  <tr><td>Alert rules and alert events (acknowledge, resolve)</td><td class="status-shipped">Shipped</td></tr>
+  <tr><td>Realtime Socket.io push to tenant rooms</td><td class="status-shipped">Shipped</td></tr>
+  <tr><td>Notification digest / batched modes</td><td class="status-partial">In-build</td></tr>
+  <tr><td>Visual workflow builder polish (not ServiceNow Flow-class)</td><td class="status-partial">Partial</td></tr>
+</table>
+<p><strong>UI routes:</strong> Automation, Alerts</p>
+
+<h2>15. Reports, analytics &amp; intelligence</h2>
+<table>
+  <tr><th>Capability</th><th>Status</th></tr>
+  <tr><td>Template reports: assets, tickets, licenses, executive summary, audit</td><td class="status-shipped">Shipped</td></tr>
+  <tr><td>Export to PDF, XLSX, and CSV</td><td class="status-shipped">Shipped</td></tr>
+  <tr><td>Scheduled report model (cron + recipients)</td><td class="status-shipped">Shipped</td></tr>
+  <tr><td>Scheduled report email delivery</td><td class="status-partial">Partial</td></tr>
+  <tr><td>Custom saved-filter reports</td><td class="status-partial">In-build</td></tr>
+  <tr><td>Global search (Cmd+K / Meilisearch)</td><td class="status-partial">Partial</td></tr>
+  <tr><td>AI Intelligence dashboard — risk scores and recommendations</td><td class="status-shipped">Shipped</td></tr>
+  <tr><td>Role-specific executive dashboards (8 roles)</td><td class="status-partial">In-build</td></tr>
+</table>
+<p><strong>UI routes:</strong> Reports, Intelligence, Dashboard (overview)</p>
+
+<h2>16. Platform, security &amp; administration</h2>
+<table>
+  <tr><th>Capability</th><th>Status</th></tr>
+  <tr><td>Multi-tenant architecture with RBAC</td><td class="status-shipped">Shipped</td></tr>
+  <tr><td>Module gating by subscription plan</td><td class="status-shipped">Shipped</td></tr>
+  <tr><td>Email/password authentication with JWT refresh tokens</td><td class="status-shipped">Shipped</td></tr>
+  <tr><td>Google and Microsoft OAuth login</td><td class="status-shipped">Shipped</td></tr>
+  <tr><td>API keys with scoped access</td><td class="status-shipped">Shipped</td></tr>
+  <tr><td>Email verification and password reset</td><td class="status-shipped">Shipped</td></tr>
+  <tr><td>MFA TOTP (enroll + login challenge)</td><td class="status-partial">Partial / In-build</td></tr>
+  <tr><td>SAML 2.0 / OIDC SSO with group-to-role mapping</td><td class="status-partial">Partial / In-build</td></tr>
+  <tr><td>Postgres row-level security (tenant isolation)</td><td class="status-partial">Partial / In-build</td></tr>
+  <tr><td>Audit log with SHA-256 hash chain and verify API</td><td class="status-shipped">Shipped</td></tr>
+  <tr><td>Credential vault for discovery secrets</td><td class="status-shipped">Shipped</td></tr>
+  <tr><td>Product license: SaaS issuance and on-prem Ed25519 <code>.lic</code> files</td><td class="status-shipped">Shipped</td></tr>
+  <tr><td>SaaS admin console (tenants, billing, licenses)</td><td class="status-shipped">Shipped</td></tr>
+  <tr><td>User and role management</td><td class="status-shipped">Shipped</td></tr>
+  <tr><td>Tenant branding and settings</td><td class="status-shipped">Shipped</td></tr>
+  <tr><td>REST API <code>/api/v1</code> with OpenAPI docs</td><td class="status-shipped">Shipped</td></tr>
+  <tr><td>Health endpoints (<code>/health/live</code>, <code>/health</code>)</td><td class="status-shipped">Shipped</td></tr>
+  <tr><td>In-app help, walkthrough, and docs hub</td><td class="status-shipped">Shipped</td></tr>
+  <tr><td>AI copilot sidebar in dashboard</td><td class="status-shipped">Shipped</td></tr>
+</table>
+<p><strong>UI routes:</strong> Users, Settings, Audit Logs, Help &amp; Docs; external <code>/admin</code> for platform operators</p>
+
+<h2>17. Deployment options</h2>
+<table>
+  <tr><th>Option</th><th>Description</th><th>Status</th></tr>
+  <tr><td>Managed SaaS</td><td>Next.js web (Vercel) + NestJS API (Railway) + PostgreSQL + Redis</td><td class="status-shipped">Shipped</td></tr>
+  <tr><td>Self-hosted / on-premise</td><td>Docker Compose stack; customer-hosted Postgres; signed license</td><td class="status-shipped">Shipped</td></tr>
+  <tr><td>Air-gap capable</td><td>On-prem with offline license file; optional air-gap patch bundles</td><td class="status-shipped">Shipped</td></tr>
+</table>
+
+<h2>18. Optional collectors (feature-flagged)</h2>
+<ul>
+  <li>SNMP trap UDP receiver</li>
+  <li>Syslog UDP receiver</li>
+  <li>NetFlow / sFlow / IPFIX collector</li>
+  <li>Modbus TCP and BACnet/IP probes</li>
+  <li>MQTT broker integration for IoT</li>
+</ul>
+
+<h2>19. Known gaps (honest summary)</h2>
+<p>The following are commonly marketed in enterprise RFPs but are <strong>not yet complete</strong> in QS Assets as of July 2026:</p>
+<ul>
+  <li>Full MFA and SAML/OIDC enterprise hardening with acceptance tests green</li>
+  <li>SSDLC change gates, CSAT, and IMAP ticket ingest</li>
+  <li>Fleet geofencing, CCTV video wall, VDI session metric charts</li>
+  <li>NAC RADIUS CoA live quarantine on switches</li>
+  <li>Scheduled report email delivery and eight role-specific dashboards</li>
+  <li>Postgres RLS bypass hardening for all tenant paths</li>
+</ul>
+<p><strong>Explicit non-goals (current wave):</strong> Qualys-class proprietary vuln signatures; ServiceNow IntegrationHub-style visual flow designer; Kafka/NATS as primary event bus; remote super-admin access into customer on-prem databases.</p>
+
+<h2>20. API modules (backend)</h2>
+<p>39 NestJS modules: admin, ai, alerts, analytics, asset-types, assets, audit-logs, auth, automation, changes, cloud-connectors, cmdb, compliance, contact, discovery, eam, fleet, health, iot, knowledge-base, licenses, monitoring, notifications, patches, problems, procurement, product-license, reports, risk, scanning, search, service-catalog, settings, setup, software, tenants, tickets, users, vulnerabilities, work-orders.</p>
+
+<div class="footer">
+  <strong>NeurQ AI Labs Private Limited</strong><br />
+  C-403 Royal Estate Apartment, 7 Laplace Hazratganj, Lucknow – 226001, Uttar Pradesh, India<br />
+  GSTIN: 09AAKCN7956K1ZL &nbsp;|&nbsp; CIN: U58200UP2025PTC231555<br />
+  +91 7752981110 &nbsp;|&nbsp; smrita@neurqai.com &nbsp;|&nbsp; contact@qsasset.com &nbsp;|&nbsp; www.qsasset.com<br />
+  <em>Confidential — feature status reflects codebase and spec as of July 2026. Verify in live demo before contractual commitments.</em>
+</div>
+
+</body>
+</html>

@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException, ForbiddenException } from '@nestjs/common';
 import { PrismaService } from '../../common/database/prisma.service';
 import { Prisma } from '@prisma/client';
 import { EventBusService } from '../../common/events/event-bus.service';
@@ -9,6 +9,21 @@ export class TicketsService {
     private prisma: PrismaService,
     private eventBus: EventBusService,
   ) {}
+
+  private isPrivilegedRole(role?: string): boolean {
+    return ['tenant admin', 'it admin', 'platform owner'].includes((role || '').toLowerCase());
+  }
+
+  private assertTicketAccess(
+    ticket: { requesterId: string; assignedToId?: string | null },
+    userId?: string,
+    role?: string,
+  ): void {
+    if (!userId || this.isPrivilegedRole(role)) return;
+    if (ticket.requesterId !== userId && ticket.assignedToId !== userId) {
+      throw new ForbiddenException('You do not have access to this ticket');
+    }
+  }
 
   private async generateTicketNumber(tenantId: string): Promise<string> {
     // Use last-created ticket's number instead of count to reduce race window
@@ -45,40 +60,51 @@ export class TicketsService {
       ...(role === 'Employee' && userId && { requesterId: userId }),
     };
 
-    const [data, total] = await Promise.all([
-      this.prisma.ticket.findMany({
-        where,
-        include: {
-          requester: { select: { id: true, firstName: true, lastName: true } },
-          assignedTo: { select: { id: true, firstName: true, lastName: true } },
-          assets: { include: { asset: { select: { id: true, name: true, assetTag: true } } } },
-        },
-        skip,
-        take: _limit,
-        orderBy: { createdAt: 'desc' },
-      }),
-      this.prisma.ticket.count({ where }),
-    ]);
+    const [data, total] = await this.prisma.withTenant(tenantId, async (tx) =>
+      Promise.all([
+        tx.ticket.findMany({
+          where,
+          include: {
+            requester: { select: { id: true, firstName: true, lastName: true } },
+            assignedTo: { select: { id: true, firstName: true, lastName: true } },
+            assets: { include: { asset: { select: { id: true, name: true, assetTag: true } } } },
+          },
+          skip,
+          take: _limit,
+          orderBy: { createdAt: 'desc' },
+        }),
+        tx.ticket.count({ where }),
+      ]),
+    );
 
     return { data, total, page, limit, totalPages: Math.ceil(total / limit) };
   }
 
-  async findById(id: string, tenantId: string) {
-    const ticket = await this.prisma.ticket.findFirst({
-      where: { id, tenantId },
-      include: {
-        requester: { select: { id: true, firstName: true, lastName: true, email: true } },
-        assignedTo: { select: { id: true, firstName: true, lastName: true, email: true } },
-        comments: {
-          orderBy: { createdAt: 'asc' },
-          include: {
-            author: { select: { id: true, firstName: true, lastName: true, email: true } },
+  async findById(id: string, tenantId: string, userId?: string, role?: string) {
+    const ticket = await this.prisma.withTenant(tenantId, async (tx) =>
+      tx.ticket.findFirst({
+        where: { id, tenantId },
+        include: {
+          requester: { select: { id: true, firstName: true, lastName: true, email: true } },
+          assignedTo: { select: { id: true, firstName: true, lastName: true, email: true } },
+          comments: {
+            orderBy: { createdAt: 'asc' },
+            include: {
+              author: { select: { id: true, firstName: true, lastName: true, email: true } },
+            },
           },
+          assets: { include: { asset: true } },
         },
-        assets: { include: { asset: true } },
-      },
-    });
+      }),
+    );
     if (!ticket) throw new NotFoundException('Ticket not found');
+    this.assertTicketAccess(ticket, userId, role);
+    if (!this.isPrivilegedRole(role) && userId) {
+      return {
+        ...ticket,
+        comments: ticket.comments.filter((comment) => !comment.isInternal),
+      };
+    }
     return ticket;
   }
 
@@ -129,10 +155,22 @@ export class TicketsService {
     throw new Error('Failed to generate unique ticket number after maximum retries');
   }
 
-  async addComment(ticketId: string, tenantId: string, authorId: string, content: string, isInternal = false) {
-    await this.findById(ticketId, tenantId);
+  async addComment(
+    ticketId: string,
+    tenantId: string,
+    authorId: string,
+    content: string,
+    isInternal = false,
+    role?: string,
+  ) {
+    await this.findById(ticketId, tenantId, authorId, role);
     return this.prisma.ticketComment.create({
-      data: { ticketId, authorId, content, isInternal },
+      data: {
+        ticketId,
+        authorId,
+        content,
+        isInternal: this.isPrivilegedRole(role) ? isInternal : false,
+      },
     });
   }
 
@@ -173,10 +211,13 @@ export class TicketsService {
     });
   }
 
-  async getTimeline(id: string, tenantId: string) {
-    await this.findById(id, tenantId);
+  async getTimeline(id: string, tenantId: string, userId?: string, role?: string) {
+    await this.findById(id, tenantId, userId, role);
     return this.prisma.ticketComment.findMany({
-      where: { ticketId: id },
+      where: {
+        ticketId: id,
+        ...(!this.isPrivilegedRole(role) && userId ? { isInternal: false } : {}),
+      },
       include: { author: { select: { firstName: true, lastName: true, email: true } } },
       orderBy: { createdAt: 'asc' },
     });

@@ -4,6 +4,8 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense } from "react";
 import { Loader2, CheckCircle2, XCircle, Sparkles } from "lucide-react";
 
+const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4100/api/v1";
+
 function decodeJwt(token: string) {
   try { return JSON.parse(atob(token.split(".")[1])); } catch { return null; }
 }
@@ -16,8 +18,7 @@ function OAuthCallbackContent() {
   const [isNew, setIsNew] = useState(false);
 
   useEffect(() => {
-    const token = searchParams.get("token");
-    const refresh = searchParams.get("refresh");
+    const code = searchParams.get("code");
     const isNewUser = searchParams.get("new") === "1";
     const error = searchParams.get("error");
 
@@ -27,28 +28,51 @@ function OAuthCallbackContent() {
       return;
     }
 
-    if (!token || !refresh) {
-      setStatus("error");
-      setMessage("Authentication failed. No credentials received.");
+    async function complete(accessToken: string, refreshToken: string) {
+      localStorage.setItem("accessToken", accessToken);
+      localStorage.setItem("refreshToken", refreshToken);
+      const decoded = decodeJwt(accessToken);
+      if (decoded) {
+        localStorage.setItem("userRole", decoded.role || "");
+        localStorage.setItem("userEmail", decoded.email || "");
+      }
+      setIsNew(isNewUser);
+      setStatus("success");
+      const target = decoded?.role === "Employee" ? "/portal" : "/dashboard";
+      setTimeout(() => router.push(target), isNewUser ? 2500 : 1200);
+    }
+
+    // Preferred: one-time exchange code (tokens never appear in the URL)
+    if (code) {
+      fetch(`${API}/auth/oauth/exchange`, {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ code }),
+      })
+        .then(async (res) => {
+          if (!res.ok) {
+            const body = await res.json().catch(() => ({}));
+            throw new Error(body.message || "Failed to exchange authorization code");
+          }
+          return res.json();
+        })
+        .then((data) => {
+          // Drop secrets from the address bar as soon as exchange succeeds
+          if (typeof window !== "undefined") {
+            window.history.replaceState({}, "", "/auth/callback");
+          }
+          return complete(data.accessToken, data.refreshToken);
+        })
+        .catch((err) => {
+          setStatus("error");
+          setMessage(err.message || "Authentication failed.");
+        });
       return;
     }
 
-    // Store tokens
-    localStorage.setItem("accessToken", token);
-    localStorage.setItem("refreshToken", refresh);
-
-    const decoded = decodeJwt(token);
-    if (decoded) {
-      localStorage.setItem("userRole", decoded.role || "");
-      localStorage.setItem("userEmail", decoded.email || "");
-    }
-
-    setIsNew(isNewUser);
-    setStatus("success");
-
-    // Redirect after a brief moment
-    const target = decoded?.role === "Employee" ? "/portal" : "/dashboard";
-    setTimeout(() => router.push(target), isNewUser ? 2500 : 1200);
+    setStatus("error");
+    setMessage("Authentication failed. No credentials received.");
   }, [searchParams, router]);
 
   return (

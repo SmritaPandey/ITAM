@@ -5,6 +5,7 @@ import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import { useTheme } from "@/components/ThemeProvider";
 import { Shield, CheckCircle2, Lock, Eye, AlertTriangle } from "lucide-react";
+import { apiFetch } from "@/lib/api";
 
 const SECTIONS = [
   { id: "section-1", title: "1. Introduction" },
@@ -20,6 +21,10 @@ const SECTIONS = [
 export default function PrivacyPage() {
   const router = useRouter();
   const [activeSection, setActiveSection] = useState("section-1");
+  const [requestType, setRequestType] = useState("ACCESS");
+  const [subjectEmail, setSubjectEmail] = useState("");
+  const [requestDetails, setRequestDetails] = useState("");
+  const [requestStatus, setRequestStatus] = useState("");
 
   const { theme, toggleTheme } = useTheme();
   const L = theme === "light";
@@ -139,6 +144,36 @@ export default function PrivacyPage() {
                     <strong style={{ color: txt }}>Host Agent System Telemetry:</strong> CPU cores, memory utilization arrays, disk volume limits, running daemon instances, active user sessions, and comprehensive software manifests gathered by the QS Asset Management Agent.
                   </li>
                 </ul>
+                <form
+                  onSubmit={async (event) => {
+                    event.preventDefault();
+                    setRequestStatus("Submitting…");
+                    try {
+                      await apiFetch("/privacy/data-subject-requests", {
+                        method: "POST",
+                        body: JSON.stringify({ type: requestType, subjectEmail, details: requestDetails }),
+                      });
+                      setRequestStatus("Request submitted. Your organization can now track it.");
+                      setRequestDetails("");
+                    } catch (error) {
+                      setRequestStatus(error instanceof Error ? error.message : "Unable to submit request");
+                    }
+                  }}
+                  style={{ marginTop: 20, padding: 18, borderRadius: 12, border: `1px solid ${border}`, background: boxBg, display: "grid", gap: 12 }}
+                >
+                  <strong style={{ color: txt, fontSize: 14 }}>Submit a data subject request</strong>
+                  <select value={requestType} onChange={e => setRequestType(e.target.value)} style={{ padding: 10, borderRadius: 8 }}>
+                    <option value="ACCESS">Access</option>
+                    <option value="CORRECTION">Correction</option>
+                    <option value="ERASURE">Erasure</option>
+                    <option value="PORTABILITY">Portability</option>
+                    <option value="CONSENT_WITHDRAWAL">Withdraw consent</option>
+                  </select>
+                  <input required type="email" value={subjectEmail} onChange={e => setSubjectEmail(e.target.value)} placeholder="Your account email" style={{ padding: 10, borderRadius: 8, border: `1px solid ${border}` }} />
+                  <textarea value={requestDetails} onChange={e => setRequestDetails(e.target.value)} placeholder="Optional request details" rows={3} style={{ padding: 10, borderRadius: 8, border: `1px solid ${border}` }} />
+                  <button type="submit" style={{ padding: "10px 14px", borderRadius: 8, border: 0, background: "#0891b2", color: "white", fontWeight: 700, cursor: "pointer" }}>Submit request</button>
+                  {requestStatus && <span style={{ fontSize: 12, color: muted }}>{requestStatus}</span>}
+                </form>
               </section>
 
               <section id="section-3">

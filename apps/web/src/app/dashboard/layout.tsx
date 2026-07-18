@@ -667,6 +667,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
   return (
     <WalkthroughProvider>
+    <a className="skip-to-content" href="#dashboard-main-content">Skip to main content</a>
     <div className="app-layout">
       {/* Mobile Sidebar Overlay */}
       {mobileSidebarOpen && (
@@ -716,25 +717,25 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       </aside>
 
       {/* Main */}
-      <main className="main-content">
+      <main id="dashboard-main-content" tabIndex={-1} className="main-content">
         {/* Top Bar */}
         <header className="topbar">
-          <button className="topbar-btn mobile-menu-btn" onClick={() => setMobileSidebarOpen(!mobileSidebarOpen)}>
+          <button className="topbar-btn mobile-menu-btn" aria-label={mobileSidebarOpen ? "Close navigation menu" : "Open navigation menu"} aria-expanded={mobileSidebarOpen} onClick={() => setMobileSidebarOpen(!mobileSidebarOpen)}>
             <Menu size={20} />
           </button>
           <div className="topbar-search" onClick={() => setShowSearch(true)} style={{ cursor: "pointer" }}>
             <Search size={15} style={{ color: "var(--text-tertiary)", flexShrink: 0 }} />
-            <input placeholder="Search assets, tickets, users..." readOnly style={{ cursor: "pointer" }} />
+            <input aria-label="Search assets, tickets, users" placeholder="Search assets, tickets, users..." readOnly style={{ cursor: "pointer" }} />
             <span className="topbar-search-kbd">⌘K</span>
           </div>
           <div className="topbar-actions">
             {/* Theme Toggle */}
-            <button className="topbar-btn" title={`Switch to ${theme === 'dark' ? 'light' : 'dark'} mode`} onClick={toggleTheme}>
+            <button className="topbar-btn" aria-label={`Switch to ${theme === 'dark' ? 'light' : 'dark'} mode`} title={`Switch to ${theme === 'dark' ? 'light' : 'dark'} mode`} onClick={toggleTheme}>
               {theme === "dark" ? <Sun size={18} /> : <Moon size={18} />}
             </button>
             {/* Notifications */}
             <div ref={notifRef} style={{ position: "relative" }}>
-              <button className="topbar-btn" title="Notifications" onClick={() => { setShowNotif(!showNotif); setShowProfile(false); }}>
+              <button className="topbar-btn" aria-label="Notifications" aria-expanded={showNotif} title="Notifications" onClick={() => { setShowNotif(!showNotif); setShowProfile(false); }}>
                 <Bell size={18} />
                 {unreadCount > 0 && <span className="notification-dot" />}
               </button>
@@ -1011,6 +1012,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
               <Search size={16} style={{ color: "var(--text-tertiary)", flexShrink: 0 }} />
               <input
                 autoFocus value={searchQuery} onChange={e => setSearchQuery(e.target.value)}
+                aria-label="Search pages, assets, tickets, or users"
                 placeholder="Search pages, assets, tickets..."
                 style={{
                   flex: 1, background: "none", border: "none", outline: "none",
@@ -1130,6 +1132,24 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         </>
       )}
     </div>
+    <style>{`
+      .skip-to-content {
+        position: fixed;
+        left: 16px;
+        top: -80px;
+        z-index: 10000;
+        padding: 10px 14px;
+        border-radius: 8px;
+        background: var(--brand-500, #0891b2);
+        color: white;
+        font-weight: 700;
+        text-decoration: none;
+        transition: top 0.15s ease;
+      }
+      .skip-to-content:focus {
+        top: 16px;
+      }
+    `}</style>
     <AiCopilot />
     </WalkthroughProvider>
   );

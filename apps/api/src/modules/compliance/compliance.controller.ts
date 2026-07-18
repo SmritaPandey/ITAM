@@ -180,6 +180,7 @@ export class ComplianceController {
     const pack = await this.complianceService.exportCisEvidencePack(
       req.user.tenantId,
       fmt,
+      req.user.email || req.user.sub || req.user.id,
     );
     res.setHeader('Content-Type', pack.contentType);
     res.setHeader('Content-Disposition', `attachment; filename="${pack.filename}"`);

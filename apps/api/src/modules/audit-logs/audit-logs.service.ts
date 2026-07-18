@@ -82,6 +82,51 @@ export class AuditLogsService {
     return { valid, totalLogs: logs.length, brokenAt, checkedAt: new Date() };
   }
 
+  async exportLogs(
+    tenantId: string,
+    format: 'json' | 'csv',
+    filters: { startDate?: string; endDate?: string },
+  ): Promise<string> {
+    const where: any = { tenantId };
+    if (filters.startDate || filters.endDate) {
+      where.timestamp = {};
+      if (filters.startDate) where.timestamp.gte = new Date(filters.startDate);
+      if (filters.endDate) where.timestamp.lte = new Date(filters.endDate);
+    }
+    const logs = await this.prisma.auditLog.findMany({
+      where,
+      orderBy: { timestamp: 'asc' },
+      include: { actor: { select: { email: true } } },
+    });
+    const rows = logs.map((log) => ({
+      id: log.id,
+      timestamp: log.timestamp,
+      actor: log.actor?.email || null,
+      actorIp: log.actorIp,
+      action: log.action,
+      resourceType: log.resourceType,
+      resourceId: log.resourceId,
+      outcome: log.outcome,
+      severity: log.severity,
+      module: log.module,
+      hash: log.hash,
+      prevHash: log.prevHash,
+      metadata: log.metadata,
+    }));
+    if (format === 'json') return JSON.stringify(rows, null, 2);
+
+    const columns = [
+      'id', 'timestamp', 'actor', 'actorIp', 'action', 'resourceType', 'resourceId',
+      'outcome', 'severity', 'module', 'hash', 'prevHash', 'metadata',
+    ];
+    const csv = (value: unknown) =>
+      `"${String(value === null || value === undefined ? '' : typeof value === 'object' ? JSON.stringify(value) : value).replace(/"/g, '""')}"`;
+    return [
+      columns.join(','),
+      ...rows.map((row) => columns.map((column) => csv((row as any)[column])).join(',')),
+    ].join('\n');
+  }
+
   /** Nightly hash-chain verification across tenants with hashed audit logs. */
   @Cron(CronExpression.EVERY_DAY_AT_2AM)
   async nightlyVerifyAllTenants() {

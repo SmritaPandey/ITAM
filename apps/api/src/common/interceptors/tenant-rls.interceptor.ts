@@ -1,5 +1,6 @@
 import { CallHandler, ExecutionContext, Injectable, NestInterceptor } from '@nestjs/common';
 import { Observable } from 'rxjs';
+import { finalize } from 'rxjs/operators';
 import { PrismaService } from '../database/prisma.service';
 
 @Injectable()
@@ -16,6 +17,11 @@ export class TenantRlsInterceptor implements NestInterceptor {
         // non-fatal
       }
     }
-    return next.handle();
+    // Always clear session GUC after the request so pooled connections cannot leak tenant A → tenant B
+    return next.handle().pipe(
+      finalize(() => {
+        this.prisma.setCurrentTenant(null).catch(() => {});
+      }),
+    );
   }
 }

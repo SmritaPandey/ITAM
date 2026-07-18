@@ -33,18 +33,10 @@ export class ApiKeyGuard implements CanActivate {
       });
 
       if (!tenant) {
-        // Fallback: check if it's a valid tenant ID (backward compatibility)
-        const tenantById = await this.prisma.tenant.findUnique({
-          where: { id: apiKey },
-        });
-        if (!tenantById) {
-          this.logger.warn(`Invalid API key attempt from ${request.ip}`);
-          throw new UnauthorizedException('Invalid API key');
-        }
-        request.tenantId = tenantById.id;
-      } else {
-        request.tenantId = tenant.id;
+        this.logger.warn(`Invalid API key attempt from ${request.ip}`);
+        throw new UnauthorizedException('Invalid API key');
       }
+      request.tenantId = tenant.id;
 
       return true;
     } catch (error) {

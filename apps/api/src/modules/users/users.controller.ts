@@ -1,10 +1,11 @@
-import { Controller, Get, Post, Patch, Delete, Body, Param, Query, UseGuards, Request } from '@nestjs/common';
+import { Controller, Get, Post, Patch, Delete, Body, Param, Query, UseGuards, Request, ForbiddenException } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth, ApiOperation, ApiQuery } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { UsersService } from './users.service';
 import { CreateUserDto } from './dto/create-user.dto';
+import { AdminResetPasswordDto, ChangePasswordDto } from './dto/change-password.dto';
 
 @ApiTags('users')
 @ApiBearerAuth()
@@ -99,11 +100,45 @@ export class UsersController {
     return this.usersService.changeRole(id, req.user.tenantId, body.roleId);
   }
 
+  @Post('me/change-password')
+  @Roles('*')
+  @ApiOperation({ summary: 'Change the current user password' })
+  async changeOwnPassword(@Request() req: any, @Body() body: ChangePasswordDto) {
+    return this.usersService.changePassword(
+      req.user.sub,
+      req.user.tenantId,
+      body.newPassword,
+      body.oldPassword,
+      false,
+    );
+  }
+
+  @Post(':id/reset-password')
+  @Roles('Tenant Admin')
+  @ApiOperation({ summary: 'Administratively reset a tenant user password' })
+  async adminResetPassword(
+    @Request() req: any,
+    @Param('id') id: string,
+    @Body() body: AdminResetPasswordDto,
+  ) {
+    return this.usersService.changePassword(id, req.user.tenantId, body.newPassword, undefined, true);
+  }
+
   @Post(':id/change-password')
-  @Roles('Tenant Admin', '*')
-  @ApiOperation({ summary: 'Change user password' })
-  async changePassword(@Request() req: any, @Param('id') id: string, @Body() body: { newPassword: string; oldPassword?: string }) {
-    return this.usersService.changePassword(id, req.user.tenantId, body.newPassword, body.oldPassword, req.user.role);
+  @Roles('*')
+  @ApiOperation({ summary: 'Backward-compatible password change; self-service only unless tenant admin' })
+  async changePassword(@Request() req: any, @Param('id') id: string, @Body() body: ChangePasswordDto) {
+    const isAdmin = req.user.role === 'Tenant Admin';
+    if (!isAdmin && id !== req.user.sub) {
+      throw new ForbiddenException('You may only change your own password');
+    }
+    return this.usersService.changePassword(
+      id,
+      req.user.tenantId,
+      body.newPassword,
+      body.oldPassword,
+      isAdmin,
+    );
   }
 
   @Delete(':id')

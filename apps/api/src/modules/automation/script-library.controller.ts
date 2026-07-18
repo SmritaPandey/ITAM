@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Patch, Delete, Body, Param, UseGuards, Request, NotFoundException, BadRequestException } from '@nestjs/common';
+import { Controller, Get, Post, Patch, Delete, Body, Param, UseGuards, Request, NotFoundException, BadRequestException, ForbiddenException } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
@@ -6,6 +6,12 @@ import { Roles } from '../auth/decorators/roles.decorator';
 import { PrismaService } from '../../common/database/prisma.service';
 import { ModuleGuard } from '../../common/guards/module.guard';
 import { RequireModule } from '../../common/decorators/require-module.decorator';
+
+function requiresDualApproval(scriptContent: string, category?: string): boolean {
+  if (['DEPLOYMENT', 'MAINTENANCE'].includes(String(category || '').toUpperCase())) return true;
+  return /(?:sudo|runas|invoke-expression|\biex\b|reg\s+(?:add|delete)|netsh|iptables|firewall-cmd|systemctl|service\s+\S+\s+(?:stop|disable)|rm\s+-|del\s+\/|format\s+|mkfs|shutdown|reboot|useradd|net\s+user)/i
+    .test(scriptContent || '');
+}
 
 @ApiTags('automation')
 @ApiBearerAuth()
@@ -51,6 +57,7 @@ export class ScriptLibraryController {
         category: body.category || 'REMEDIATION',
         timeoutSeconds: body.timeoutSeconds || 300,
         createdById: req.user.sub,
+        requiresDualApproval: requiresDualApproval(body.scriptContent, body.category),
       },
     });
   }
@@ -59,13 +66,32 @@ export class ScriptLibraryController {
   @Roles('Tenant Admin')
   @ApiOperation({ summary: 'Approve a script for execution (security gate)' })
   async approve(@Request() req: any, @Param('id') id: string) {
-    await this.prisma.scriptLibrary.findFirstOrThrow({
+    const script = await this.prisma.scriptLibrary.findFirstOrThrow({
       where: { id, tenantId: req.user.tenantId },
     });
+    if (script.createdById === req.user.sub) {
+      throw new ForbiddenException('Script authors cannot approve their own scripts');
+    }
+    if (script.approvalStatus === 'REJECTED') {
+      throw new BadRequestException('Rejected scripts must be edited before approval');
+    }
+    if (script.requiresDualApproval && script.approvedById) {
+      if (script.approvedById === req.user.sub) {
+        throw new ForbiddenException('A distinct second approver is required');
+      }
+      return this.prisma.scriptLibrary.update({
+        where: { id },
+        data: {
+          approvalStatus: 'APPROVED',
+          secondApprovedById: req.user.sub,
+          secondApprovedAt: new Date(),
+        },
+      });
+    }
     return this.prisma.scriptLibrary.update({
       where: { id },
       data: {
-        approvalStatus: 'APPROVED',
+        approvalStatus: script.requiresDualApproval ? 'PENDING_SECOND_APPROVAL' : 'APPROVED',
         approvedById: req.user.sub,
         approvedAt: new Date(),
       },
@@ -163,14 +189,29 @@ export class ScriptLibraryController {
   @Roles('Tenant Admin')
   @ApiOperation({ summary: 'Update script content (resets approval)' })
   async update(@Request() req: any, @Param('id') id: string, @Body() body: any) {
-    await this.prisma.scriptLibrary.findFirstOrThrow({
+    const existing = await this.prisma.scriptLibrary.findFirstOrThrow({
       where: { id, tenantId: req.user.tenantId },
     });
+    const allowedUpdate: Record<string, unknown> = {};
+    for (const key of ['name', 'description', 'scriptContent', 'platform', 'category', 'timeoutSeconds']) {
+      if (body[key] !== undefined) allowedUpdate[key] = body[key];
+    }
+    const contentChanged = body.scriptContent !== undefined || body.category !== undefined;
     return this.prisma.scriptLibrary.update({
       where: { id },
       data: {
-        ...body,
-        ...(body.scriptContent ? { approvalStatus: 'PENDING', approvedById: null, approvedAt: null } : {}),
+        ...allowedUpdate,
+        ...(contentChanged ? {
+          approvalStatus: 'PENDING',
+          approvedById: null,
+          approvedAt: null,
+          secondApprovedById: null,
+          secondApprovedAt: null,
+          requiresDualApproval: requiresDualApproval(
+            body.scriptContent ?? existing.scriptContent,
+            body.category ?? existing.category,
+          ),
+        } : {}),
       },
     });
   }

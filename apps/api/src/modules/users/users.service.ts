@@ -155,11 +155,15 @@ export class UsersService {
     return { assets, openTickets, resolvedTickets, unreadNotifications: notifications };
   }
 
-  async changePassword(id: string, tenantId: string, newPassword: string, oldPassword?: string, requestingUserRole?: string) {
-    const user = await this.findById(id, tenantId);
+  async changePassword(
+    id: string,
+    tenantId: string,
+    newPassword: string,
+    oldPassword?: string,
+    isAdminReset = false,
+  ) {
+    await this.findById(id, tenantId);
 
-    // Admin-initiated resets skip old password verification
-    const isAdminReset = requestingUserRole === 'Tenant Admin';
     if (!isAdminReset) {
       if (!oldPassword) {
         throw new BadRequestException('Current password is required');
@@ -179,6 +183,10 @@ export class UsersService {
     await this.prisma.user.update({
       where: { id },
       data: { passwordHash },
+    });
+    await this.prisma.refreshToken.updateMany({
+      where: { userId: id, revokedAt: null },
+      data: { revokedAt: new Date() },
     });
     return { message: 'Password updated successfully' };
   }

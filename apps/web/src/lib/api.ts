@@ -39,6 +39,7 @@ async function tryRefreshToken(): Promise<string | null> {
     try {
       const res = await fetch(`${API_BASE}/auth/refresh`, {
         method: "POST",
+        credentials: "include",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ refreshToken }),
       });
@@ -129,7 +130,11 @@ export async function apiFetch<T = any>(path: string, opts?: ApiFetchOptions): P
   let lastError: Error | null = null;
   for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
     try {
-      const res = await fetchWithTimeout(`${API_BASE}${path}`, { ...fetchOpts, headers }, timeoutMs);
+      const res = await fetchWithTimeout(
+        `${API_BASE}${path}`,
+        { ...fetchOpts, credentials: "include", headers },
+        timeoutMs,
+      );
 
       // Handle 429 (Too Many Requests) with retry
       if (res.status === 429 && attempt < MAX_RETRIES) {
@@ -196,6 +201,7 @@ async function handleClientError(res: Response, path: string, opts?: RequestInit
     if (newToken) {
       const retryRes = await fetchWithTimeout(`${API_BASE}${path}`, {
         ...opts,
+        credentials: "include",
         headers: { Authorization: `Bearer ${newToken}`, "Content-Type": "application/json", ...opts?.headers },
       });
       if (retryRes.ok) return retryRes.json();

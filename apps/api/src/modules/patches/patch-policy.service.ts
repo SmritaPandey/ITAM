@@ -90,6 +90,9 @@ export class PatchPolicyService {
     policyId?: string | null,
   ): Promise<string[]> {
     const normalized = (ring || 'ALL').toUpperCase();
+    if (!['PILOT', 'STAGED', 'ALL'].includes(normalized)) {
+      throw new BadRequestException('ring must be PILOT, STAGED, or ALL');
+    }
     let pilotIds: string[] = [];
     let stagedIds: string[] = [];
 
@@ -140,6 +143,9 @@ export class PatchPolicyService {
     const patch = await this.prisma.patch.findFirst({ where: { id: patchId, tenantId } });
     if (!patch) throw new NotFoundException('Patch not found');
     const current = (patch.deployRing || 'ALL').toUpperCase();
+    if (!['PILOT', 'STAGED', 'ALL'].includes(current)) {
+      throw new BadRequestException(`Cannot promote invalid deploy ring ${current}`);
+    }
     const next = current === 'PILOT' ? 'STAGED' : current === 'STAGED' ? 'ALL' : null;
     if (!next) {
       return { patch, promoted: false, message: 'Already at ALL ring' };

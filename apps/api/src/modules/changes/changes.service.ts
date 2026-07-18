@@ -348,6 +348,27 @@ export class ChangesService {
       return this.submit(id, tenantId, userId);
     }
 
+    if (newStatus === 'IN_PROGRESS') {
+      const approvals = Array.isArray(change.approvals) ? change.approvals : [];
+      if (
+        approvals.length === 0 ||
+        approvals.some((approval) => approval.status !== 'APPROVED')
+      ) {
+        throw new BadRequestException(
+          'Cannot implement change until all required approvals are complete',
+        );
+      }
+
+      const requiresCab =
+        ['HIGH', 'CRITICAL'].includes((change.risk || '').toUpperCase()) ||
+        (change.type || '').toUpperCase() === 'EMERGENCY';
+      if (requiresCab && !change.cabMeetingId) {
+        throw new BadRequestException(
+          'Cannot implement high-risk or emergency change without CAB review',
+        );
+      }
+    }
+
     const updates: any = { status: newStatus };
     if (newStatus === 'APPROVED') {
       if (this.isSsdlc(change)) {

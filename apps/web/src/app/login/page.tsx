@@ -237,7 +237,7 @@ function LoginContent() {
         background: dk ? "#09090b" : "#fafafa",
       }}>
         {/* Theme toggle */}
-        <button onClick={toggleTheme} style={{
+        <button onClick={toggleTheme} aria-label={`Switch to ${dk ? "light" : "dark"} mode`} style={{
           position: "absolute", top: 24, right: 24, width: 40, height: 40,
           borderRadius: 10, border: `1px solid ${dk ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.08)"}`,
           background: dk ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.03)",
@@ -270,11 +270,11 @@ function LoginContent() {
           <form onSubmit={handleSubmit} style={{ display: "flex", flexDirection: "column", gap: 20 }}>
             {/* Email */}
             <div>
-              <label style={{
+              <label htmlFor="login-email" style={{
                 display: "block", fontSize: 13, fontWeight: 600, marginBottom: 8,
                 color: dk ? "#a1a1aa" : "#71717a", letterSpacing: "-0.01em",
               }}>Email address</label>
-              <input type="email" value={email} onChange={e => setEmail(e.target.value)}
+              <input id="login-email" type="email" value={email} onChange={e => setEmail(e.target.value)}
                 onFocus={() => setFocused("email")} onBlur={() => setFocused(null)}
                 placeholder="you@company.com" required autoComplete="email"
                 style={{
@@ -290,7 +290,7 @@ function LoginContent() {
             {/* Password */}
             <div>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
-                <label style={{
+                <label htmlFor="login-password" style={{
                   fontSize: 13, fontWeight: 600,
                   color: dk ? "#a1a1aa" : "#71717a", letterSpacing: "-0.01em",
                 }}>Password</label>
@@ -300,7 +300,7 @@ function LoginContent() {
                 }}>Forgot password?</button>
               </div>
               <div style={{ position: "relative" }}>
-                <input type={showPw ? "text" : "password"} value={password}
+                <input id="login-password" type={showPw ? "text" : "password"} value={password}
                   onChange={e => setPassword(e.target.value)}
                   onFocus={() => setFocused("password")} onBlur={() => setFocused(null)}
                   placeholder="Enter your password" required autoComplete="current-password"
@@ -312,7 +312,8 @@ function LoginContent() {
                     color: dk ? "#f1f5f9" : "#0f172a",
                     boxShadow: focused === "password" ? "0 0 0 3px rgba(6,182,212,0.1)" : "none",
                   }} />
-                <button type="button" onClick={() => setShowPw(!showPw)} style={{
+                <button type="button" onClick={() => setShowPw(!showPw)}
+                  aria-label={showPw ? "Hide password" : "Show password"} aria-pressed={showPw} style={{
                   position: "absolute", right: 14, top: "50%", transform: "translateY(-50%)",
                   background: "none", border: "none", cursor: "pointer", padding: 0,
                   color: dk ? "#52525b" : "#a1a1aa",
@@ -324,11 +325,11 @@ function LoginContent() {
 
             {mfaToken && (
               <div>
-                <label style={{
+                <label htmlFor="login-mfa-code" style={{
                   display: "block", fontSize: 13, fontWeight: 600, marginBottom: 8,
                   color: dk ? "#a1a1aa" : "#71717a",
                 }}>Authenticator code</label>
-                <input type="text" inputMode="numeric" pattern="[0-9]*" maxLength={6}
+                <input id="login-mfa-code" type="text" inputMode="numeric" pattern="[0-9]*" maxLength={6}
                   value={mfaCode} onChange={e => setMfaCode(e.target.value)}
                   placeholder="6-digit code" required autoComplete="one-time-code"
                   style={{
@@ -347,7 +348,7 @@ function LoginContent() {
 
             {/* Error */}
             {error && (
-              <div style={{
+              <div role="alert" aria-live="assertive" style={{
                 padding: "12px 16px", borderRadius: 10, fontSize: 13, fontWeight: 500,
                 background: dk ? "rgba(239,68,68,0.08)" : "rgba(239,68,68,0.06)",
                 border: `1px solid ${dk ? "rgba(239,68,68,0.2)" : "rgba(239,68,68,0.15)"}`,
@@ -607,7 +608,7 @@ function LoginContent() {
                 </p>
 
                 {forgotError && (
-                  <div style={{
+                  <div role="alert" aria-live="assertive" style={{
                     width: "100%",
                     padding: "10px 12px",
                     borderRadius: 8,
@@ -625,8 +626,9 @@ function LoginContent() {
                 {/* Form */}
                 <form onSubmit={handleForgotPassword} style={{ width: "100%", display: "flex", flexDirection: "column", gap: 16 }}>
                   <div style={{ display: "flex", flexDirection: "column", gap: 6, textAlign: "left" }}>
-                    <label style={{ fontSize: 11, fontWeight: 700, color: dk ? "#94a3b8" : "#4b5563" }}>Email Address</label>
+                    <label htmlFor="forgot-password-email" style={{ fontSize: 11, fontWeight: 700, color: dk ? "#94a3b8" : "#4b5563" }}>Email Address</label>
                     <input
+                      id="forgot-password-email"
                       required
                       type="email"
                       placeholder="e.g. admin@acme.com"

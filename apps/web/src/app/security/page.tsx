@@ -74,6 +74,13 @@ export default function SecurityPage() {
               <Link href="/privacy" style={{ color: "#0891b2", fontWeight: 600, textDecoration: "none" }}>
                 Privacy Policy
               </Link>
+              <a
+                href="/trust/QS_ASSETS_SECURITY_WHITEPAPER.md"
+                download
+                style={{ color: "#0891b2", fontWeight: 600, textDecoration: "none", marginLeft: 14 }}
+              >
+                Download security whitepaper
+              </a>
             </div>
           </div>
         </div>

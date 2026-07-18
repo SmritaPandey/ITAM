@@ -8,9 +8,16 @@ import { EventsGateway } from './events.gateway';
     JwtModule.registerAsync({
       imports: [ConfigModule],
       inject: [ConfigService],
-      useFactory: (config: ConfigService) => ({
-        secret: config.get('JWT_SECRET', 'supersecret'),
-      }),
+      useFactory: (config: ConfigService) => {
+        const secret = config.get<string>('JWT_SECRET');
+        if (!secret) {
+          if (process.env.NODE_ENV === 'production') {
+            throw new Error('FATAL: JWT_SECRET is required for WebSocket auth in production');
+          }
+          return { secret: 'assetcommand-fallback-jwt-secret' };
+        }
+        return { secret };
+      },
     }),
   ],
   providers: [EventsGateway],

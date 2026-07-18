@@ -31,10 +31,11 @@ export class DataRetentionService {
       this.cleanExpiredTokens(),
       this.cleanOldScanResults(),
       this.cleanOldNotifications(),
+      this.cleanTenantTelemetry(),
     ]);
 
     const summary = results.map((r, i) => {
-      const names = ['MetricsHistory', 'ExpiredTokens', 'ScanResults', 'Notifications'];
+      const names = ['MetricsHistory', 'ExpiredTokens', 'ScanResults', 'Notifications', 'TenantTelemetry'];
       return r.status === 'fulfilled'
         ? `${names[i]}: ${r.value} removed`
         : `${names[i]}: FAILED (${(r as PromiseRejectedResult).reason?.message})`;
@@ -133,14 +134,50 @@ export class DataRetentionService {
   }
 
   /**
+   * Purge personal and GPS telemetry using each tenant's settings.retentionDays.
+   * Audit logs are intentionally excluded: auditRetentionDays is a policy/export
+   * horizon, not an automatic delete switch. Any future purge must archive and
+   * verify an export before deletion to preserve the immutable evidence chain.
+   */
+  private async cleanTenantTelemetry(): Promise<number> {
+    const tenants = await this.prisma.tenant.findMany({
+      select: { id: true, settings: true },
+    });
+    let removed = 0;
+    for (const tenant of tenants) {
+      const settings = (tenant.settings as Record<string, unknown>) || {};
+      const retentionDays = Math.max(1, Number(settings.retentionDays) || 90);
+      const cutoff = new Date(Date.now() - retentionDays * 86_400_000);
+      const [userTelemetry, gpsTelemetry] = await Promise.all([
+        this.prisma.userTelemetry.deleteMany({
+          where: { tenantId: tenant.id, trackedAt: { lt: cutoff } },
+        }),
+        this.prisma.gpsTelemetry.deleteMany({
+          where: { tenantId: tenant.id, collectedAt: { lt: cutoff } },
+        }),
+      ]);
+      removed += userTelemetry.count + gpsTelemetry.count;
+    }
+
+    // Anonymous telemetry has no tenant policy, so apply the documented default.
+    const anonymousCutoff = new Date(Date.now() - 90 * 86_400_000);
+    const anonymous = await this.prisma.userTelemetry.deleteMany({
+      where: { tenantId: null, trackedAt: { lt: anonymousCutoff } },
+    });
+    return removed + anonymous.count;
+  }
+
+  /**
    * Get retention statistics (for admin dashboard)
    */
   async getStats() {
-    const [metricsCount, tokenCount, scanCount, notifCount] = await Promise.all([
+    const [metricsCount, tokenCount, scanCount, notifCount, userTelemetryCount, gpsTelemetryCount] = await Promise.all([
       this.prisma.deviceMetricsHistory.count().catch(() => 0),
       this.prisma.refreshToken.count().catch(() => 0),
       this.prisma.scanResult.count().catch(() => 0),
       this.prisma.notification.count().catch(() => 0),
+      this.prisma.userTelemetry.count().catch(() => 0),
+      this.prisma.gpsTelemetry.count().catch(() => 0),
     ]);
 
     return {
@@ -148,6 +185,12 @@ export class DataRetentionService {
       refreshTokens: { count: tokenCount, retentionDays: this.REFRESH_TOKEN_CLEANUP_DAYS },
       scanResults: { count: scanCount, retentionDays: this.SCAN_RESULT_RETENTION_DAYS },
       notifications: { count: notifCount, retentionDays: this.NOTIFICATION_RETENTION_DAYS },
+      userTelemetry: { count: userTelemetryCount, retentionDays: 90 },
+      gpsTelemetry: { count: gpsTelemetryCount, retentionDays: 90 },
+      auditLogs: {
+        retentionDays: this.AUDIT_LOG_RETENTION_DAYS,
+        deletionPolicy: 'export-and-retain',
+      },
     };
   }
 }

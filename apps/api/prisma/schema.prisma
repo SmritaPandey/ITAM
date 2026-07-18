@@ -316,6 +316,42 @@ model AuditLog {
   @@map("audit_logs")
 }
 
+model AiInteractionLog {
+  id            String   @id @default(uuid()) @db.Uuid
+  tenantId      String   @map("tenant_id") @db.Uuid
+  userId        String?  @map("user_id") @db.Uuid
+  endpoint      String
+  promptHash    String   @map("prompt_hash")
+  promptChars   Int      @map("prompt_chars")
+  responseChars Int      @map("response_chars")
+  model         String
+  toolsUsed     Json     @default("[]") @map("tools_used")
+  latencyMs     Int      @map("latency_ms")
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  @@index([tenantId, createdAt])
+  @@index([userId])
+  @@map("ai_interaction_logs")
+}
+
+model DataSubjectRequest {
+  id          String   @id @default(uuid()) @db.Uuid
+  tenantId    String   @map("tenant_id") @db.Uuid
+  userId      String?  @map("user_id") @db.Uuid
+  type        String
+  status      String   @default("OPEN")
+  subjectEmail String  @map("subject_email")
+  details     String?  @db.Text
+  resolution  String?  @db.Text
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+  completedAt DateTime? @map("completed_at")
+
+  @@index([tenantId, createdAt])
+  @@index([tenantId, status])
+  @@map("data_subject_requests")
+}
+
 // ============================================================================
 // ASSET MANAGEMENT (CMDB Core)
 // ============================================================================
@@ -1230,6 +1266,9 @@ model ScriptLibrary {
   approvalStatus String  @default("PENDING") @map("approval_status") // PENDING, APPROVED, REJECTED
   approvedById  String?  @map("approved_by_id") @db.Uuid
   approvedAt    DateTime? @map("approved_at")
+  requiresDualApproval Boolean @default(false) @map("requires_dual_approval")
+  secondApprovedById String? @map("second_approved_by_id") @db.Uuid
+  secondApprovedAt DateTime? @map("second_approved_at")
   timeoutSeconds Int     @default(300) @map("timeout_seconds")
   runCount      Int      @default(0) @map("run_count")
   lastRunAt     DateTime? @map("last_run_at")

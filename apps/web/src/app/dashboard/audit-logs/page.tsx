@@ -5,7 +5,7 @@ import {
   Loader2, RefreshCw, User, Clock, Filter, ChevronDown,
   MapPin, X, Copy, Check, FileJson, Lock, HelpCircle
 } from "lucide-react";
-import { apiFetch } from "@/lib/api";
+import { apiFetch, apiFetchBlob } from "@/lib/api";
 
 const ACTION_COLORS: Record<string, string> = {
   CREATE: "#06b6d4",      // Cyan
@@ -62,6 +62,16 @@ export default function AuditLogsPage() {
     setTimeout(() => setCopiedText(""), 2000);
   };
 
+  async function exportLogs(format: "json" | "csv") {
+    const blob = await apiFetchBlob(`/admin/audit-logs/export?format=${format}`);
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `audit-logs-${new Date().toISOString().slice(0, 10)}.${format}`;
+    link.click();
+    URL.revokeObjectURL(url);
+  }
+
   function getInitials(actor: any) {
     if (!actor) return "SYS";
     const f = actor.firstName?.[0] || "";
@@ -93,6 +103,12 @@ export default function AuditLogsPage() {
           <p className="page-subtitle" style={{ fontSize: 13, color: "var(--text-tertiary)" }}>Tamper-proof, cryptographically signed ledger verifying chronological compliance</p>
         </div>
         <div style={{ display: "flex", gap: 10 }}>
+          <button className="btn btn-secondary" onClick={() => exportLogs("json")} style={{ display: "flex", alignItems: "center", gap: 6 }}>
+            <FileJson size={15} /> Export JSON
+          </button>
+          <button className="btn btn-secondary" onClick={() => exportLogs("csv")} style={{ display: "flex", alignItems: "center", gap: 6 }}>
+            <FileText size={15} /> Export CSV
+          </button>
           <button className="btn btn-secondary" onClick={() => refresh(page)} style={{ display: "flex", alignItems: "center", justifyContent: "center", width: 36, height: 36, padding: 0, borderRadius: 10 }}>
             <RefreshCw size={15} className={loading ? "spin-animation" : ""} />
           </button>

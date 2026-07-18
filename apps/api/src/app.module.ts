@@ -3,8 +3,8 @@ import { ConfigModule } from '@nestjs/config';
 import { ThrottlerModule } from '@nestjs/throttler';
 import { ScheduleModule } from '@nestjs/schedule';
 import { APP_INTERCEPTOR, APP_GUARD } from '@nestjs/core';
-import { ThrottlerGuard } from '@nestjs/throttler';
 import { PrismaModule } from './common/database/prisma.module';
+import { ApiThrottlerGuard } from './common/guards/api-throttler.guard';
 import { AuditLogInterceptor } from './common/interceptors/audit-log.interceptor';
 import { TenantRlsInterceptor } from './common/interceptors/tenant-rls.interceptor';
 import { SecurityMiddleware } from './common/middleware/security.middleware';
@@ -52,6 +52,7 @@ import { EamModule } from './modules/eam/eam.module';
 import { CmdbModule } from './modules/cmdb/cmdb.module';
 import { ProductLicenseModule } from './modules/product-license/product-license.module';
 import { ModuleGuard } from './common/guards/module.guard';
+import { PrivacyModule } from './modules/privacy/privacy.module';
 
 @Module({
   imports: [
@@ -121,6 +122,7 @@ import { ModuleGuard } from './common/guards/module.guard';
 
     // AI Engine (Gemma 4)
     AiModule,
+    PrivacyModule,
 
     // Real-time WebSocket
     WebSocketModule,
@@ -150,7 +152,7 @@ import { ModuleGuard } from './common/guards/module.guard';
     ModuleGuard,
     { provide: APP_INTERCEPTOR, useClass: AuditLogInterceptor },
     { provide: APP_INTERCEPTOR, useClass: TenantRlsInterceptor },
-    { provide: APP_GUARD, useClass: ThrottlerGuard },
+    { provide: APP_GUARD, useClass: ApiThrottlerGuard },
   ],
 })
 export class AppModule implements NestModule {

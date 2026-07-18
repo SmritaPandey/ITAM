@@ -120,6 +120,19 @@ async function bootstrap() {
   logger.log(`🚀 QS Asset Management API running on http://localhost:${port}`);
   logger.log(`📚 API Docs at http://localhost:${port}/api/docs`);
 
+  // Hard deadline so hung onModuleDestroy hooks cannot leave a zombie process
+  // that still accepts HTTP after Prisma has disconnected (login hangs forever).
+  const SHUTDOWN_MS = parseInt(process.env.SHUTDOWN_TIMEOUT_MS || '15000', 10);
+  const forceExit = (signal: string) => {
+    logger.warn(`${signal} received — forcing exit in ${SHUTDOWN_MS}ms if shutdown hangs`);
+    setTimeout(() => {
+      logger.error('Graceful shutdown timed out — forcing process.exit(1)');
+      process.exit(1);
+    }, SHUTDOWN_MS).unref();
+  };
+  process.once('SIGTERM', () => forceExit('SIGTERM'));
+  process.once('SIGINT', () => forceExit('SIGINT'));
+
   // Handle uncaught exceptions gracefully
   process.on('unhandledRejection', (reason) => {
     logger.error(`Unhandled Rejection: ${reason}`);

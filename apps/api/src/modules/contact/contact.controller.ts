@@ -1,5 +1,6 @@
 import { Controller, Post, Body, Req, HttpCode, BadRequestException } from '@nestjs/common';
 import { ApiTags, ApiOperation } from '@nestjs/swagger';
+import { Throttle } from '@nestjs/throttler';
 import { ContactService } from './contact.service';
 
 class ContactDto {
@@ -16,6 +17,7 @@ export class ContactController {
   constructor(private service: ContactService) {}
 
   @Post()
+  @Throttle({ long: { limit: 5, ttl: 60000 } })
   @HttpCode(200)
   @ApiOperation({ summary: 'Submit contact form (public, rate-limited)' })
   async submit(@Body() body: ContactDto, @Req() req: any) {

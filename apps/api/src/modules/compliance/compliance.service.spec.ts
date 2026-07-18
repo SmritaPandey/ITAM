@@ -25,9 +25,17 @@ describe('ComplianceService', () => {
     notification: {
       create: jest.fn(),
     },
+    tenant: {
+      findUnique: jest.fn(),
+    },
+    agent: {
+      findMany: jest.fn(),
+      findFirst: jest.fn(),
+    },
   };
 
   beforeEach(async () => {
+    jest.clearAllMocks();
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         ComplianceService,
@@ -104,6 +112,53 @@ describe('ComplianceService', () => {
       const portBlocked = changes.find(c => c.category === 'UNAUTHORIZED_ACCESS');
 
       expect(portBlocked).toBeUndefined();
+    });
+  });
+
+  describe('exportCisEvidencePack', () => {
+    beforeEach(() => {
+      const agent = {
+        id: 'agent-1',
+        hostname: 'workstation-1',
+        status: 'ONLINE',
+        systemInfo: {
+          security: { encryptionEnabled: true, firewallEnabled: true, users: [] },
+          screenLockPolicy: { screenLockEnabled: true, idleTimeSeconds: 600 },
+          antivirusStatus: { installed: true, active: true, name: 'Endpoint AV' },
+          listeningPorts: [{ port: 443 }],
+          pendingUpdates: { autoUpdateEnabled: true },
+        },
+      };
+      mockPrisma.tenant.findUnique.mockResolvedValue({ name: 'Acme Corporation' });
+      mockPrisma.agent.findMany.mockResolvedValue([agent]);
+      mockPrisma.agent.findFirst.mockResolvedValue(agent);
+    });
+
+    it('exports the expected CSV evidence headers from assessed telemetry', async () => {
+      const pack = await service.exportCisEvidencePack(
+        'tenant-1',
+        'csv',
+        'auditor@example.com',
+      );
+
+      expect(pack.contentType).toBe('text/csv');
+      expect(pack.body).toEqual(
+        expect.stringContaining(
+          '"Hostname","Agent ID","Score","Check ID","Check Name","Status","Detail","Assessed At"',
+        ),
+      );
+      expect(pack.body).toEqual(expect.stringContaining('"workstation-1"'));
+    });
+
+    it('exports a real PDF document', async () => {
+      const pack = await service.exportCisEvidencePack(
+        'tenant-1',
+        'pdf',
+        'auditor@example.com',
+      );
+
+      expect(Buffer.isBuffer(pack.body)).toBe(true);
+      expect((pack.body as Buffer).subarray(0, 4).toString()).toBe('%PDF');
     });
   });
 });

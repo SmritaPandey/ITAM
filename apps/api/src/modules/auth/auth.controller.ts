@@ -11,6 +11,7 @@ import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import { GoogleAuthGuard, MicrosoftAuthGuard } from './guards/oauth.guard';
 import { LoginDto } from './dto/login.dto';
 import { RegisterDto } from './dto/register.dto';
+import { clearAuthCookies, setAuthCookies, REFRESH_COOKIE } from './auth-cookies';
 
 @ApiTags('auth')
 @Controller('auth')
@@ -40,7 +41,7 @@ export class AuthController {
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Login with email and password (may return mfaRequired)' })
   @ApiBody({ type: LoginDto })
-  async login(@Request() req: any) {
+  async login(@Request() req: any, @Res({ passthrough: true }) res: express.Response) {
     const ip = req.ip || req.connection?.remoteAddress;
     const userAgent = req.headers['user-agent'];
     const challenge = await this.mfaService.beginChallenge(req.user);
@@ -52,23 +53,34 @@ export class AuthController {
       }
       return { mfaRequired: true, mfaToken: (challenge as any).mfaToken };
     }
-    return this.authService.login(req.user, ip, userAgent);
+    const tokens = await this.authService.login(req.user, ip, userAgent);
+    setAuthCookies(res, tokens);
+    return tokens;
   }
 
   @Post('logout')
   @UseGuards(JwtAuthGuard)
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiOperation({ summary: 'Logout and revoke refresh tokens' })
-  async logout(@Request() req: any) {
+  async logout(@Request() req: any, @Res({ passthrough: true }) res: express.Response) {
     await this.authService.logout(req.user.sub);
+    clearAuthCookies(res);
   }
 
   @Post('refresh')
-  @Throttle({ default: { limit: 10, ttl: 60000 } })
+  @Throttle({ long: { limit: 10, ttl: 60000 } })
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Refresh access token using refresh token' })
-  async refresh(@Body() body: { refreshToken: string }, @Request() req: any) {
-    return this.authService.refreshToken(body.refreshToken, req.ip, req.headers['user-agent']);
+  async refresh(
+    @Body() body: { refreshToken?: string },
+    @Request() req: any,
+    @Res({ passthrough: true }) res: express.Response,
+  ) {
+    const refreshToken = body.refreshToken || req.cookies?.[REFRESH_COOKIE];
+    if (!refreshToken) throw new UnauthorizedException('Refresh token required');
+    const tokens = await this.authService.refreshToken(refreshToken, req.ip, req.headers['user-agent']);
+    setAuthCookies(res, tokens);
+    return tokens;
   }
 
   @Get('me')
@@ -96,7 +108,7 @@ export class AuthController {
   }
 
   @Post('resend-verification')
-  @Throttle({ default: { limit: 3, ttl: 60000 } })
+  @Throttle({ long: { limit: 3, ttl: 60000 } })
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Resend verification email (public)' })
   async resendVerification(@Body() body: { email: string }) {
@@ -104,7 +116,7 @@ export class AuthController {
   }
 
   @Post('forgot-password')
-  @Throttle({ default: { limit: 3, ttl: 60000 } })
+  @Throttle({ long: { limit: 3, ttl: 60000 } })
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Initiate password reset (public)' })
   async forgotPassword(@Body() body: { email: string }) {
@@ -112,11 +124,24 @@ export class AuthController {
   }
 
   @Post('reset-password')
-  @Throttle({ default: { limit: 5, ttl: 60000 } })
+  @Throttle({ long: { limit: 5, ttl: 60000 } })
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Complete password reset (public)' })
   async resetPassword(@Body() body: { token: string; password: string }) {
     return this.authService.resetPassword(body);
+  }
+
+  @Post('oauth/exchange')
+  @Throttle({ long: { limit: 10, ttl: 60000 } })
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Exchange one-time OAuth code for tokens (public)' })
+  async oauthExchange(
+    @Body() body: { code: string },
+    @Res({ passthrough: true }) res: express.Response,
+  ) {
+    const tokens = this.authService.consumeOAuthExchangeCode(body.code);
+    setAuthCookies(res, tokens);
+    return tokens;
   }
 
   // ─── MFA TOTP ────────────────────────────────────────────────────
@@ -150,13 +175,18 @@ export class AuthController {
   async mfaChallenge(
     @Body() body: { mfaToken?: string; mfaChallengeToken?: string; code: string },
     @Request() req: any,
+    @Res({ passthrough: true }) res: express.Response,
   ) {
-    return this.mfaService.completeChallenge(
+    const tokens = await this.mfaService.completeChallenge(
       body.mfaToken || body.mfaChallengeToken || '',
       body.code,
       req.ip || req.connection?.remoteAddress,
       req.headers['user-agent'],
     );
+    if (tokens?.accessToken && tokens?.refreshToken) {
+      setAuthCookies(res, tokens);
+    }
+    return tokens;
   }
 
   @Post('mfa/disable')
@@ -197,9 +227,9 @@ export class AuthController {
         return res.redirect(`${this.appUrl}/login?error=google_auth_failed`);
       }
       const result = await this.authService.oauthLogin(req.user);
+      const code = this.authService.createOAuthExchangeCode(result, result.isNewUser);
       const params = new URLSearchParams({
-        token: result.accessToken,
-        refresh: result.refreshToken,
+        code,
         new: result.isNewUser ? '1' : '0',
       });
       return res.redirect(`${this.appUrl}/auth/callback?${params.toString()}`);
@@ -227,9 +257,9 @@ export class AuthController {
         return res.redirect(`${this.appUrl}/login?error=microsoft_auth_failed`);
       }
       const result = await this.authService.oauthLogin(req.user);
+      const code = this.authService.createOAuthExchangeCode(result, result.isNewUser);
       const params = new URLSearchParams({
-        token: result.accessToken,
-        refresh: result.refreshToken,
+        code,
         new: result.isNewUser ? '1' : '0',
       });
       return res.redirect(`${this.appUrl}/auth/callback?${params.toString()}`);

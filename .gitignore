@@ -30,6 +30,10 @@ Thumbs.db
 # Testing
 coverage/
 
+# Supply-chain CI artifacts
+**/sbom.json
+apps/api/.artifacts/
+
 # Prisma
 apps/api/prisma/*.db
 apps/api/prisma/*.db-journal

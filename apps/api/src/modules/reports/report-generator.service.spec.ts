@@ -58,6 +58,7 @@ describe('ReportGeneratorService', () => {
     },
     endpointPolicy: { findMany: jest.fn().mockResolvedValue([]) },
     endpointChange: { findMany: jest.fn().mockResolvedValue([]) },
+    businessService: { findMany: jest.fn().mockResolvedValue([]) },
   };
 
   beforeEach(async () => {

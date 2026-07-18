@@ -1174,8 +1174,7 @@
         const config = {
             server: buildBaseUrl(serverInput.value),
             token: authToken || '',
-            email: emailInput.value.trim(),
-            password: passwordInput.value
+            email: emailInput.value.trim()
         };
 
         const blob = new Blob([JSON.stringify(config, null, 2)], { type: 'application/json' });

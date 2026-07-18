@@ -87,6 +87,12 @@ $configDst = Join-Path $InstallDir "config.json"
 if ((Test-Path $configSrc) -and -not (Test-Path $configDst)) {
   Copy-Item $configSrc $configDst -Force
 }
+if (Test-Path $configDst) {
+  & icacls.exe $configDst /inheritance:r /grant:r "*S-1-5-18:(F)" "*S-1-5-32-544:(F)" | Out-Null
+  if ($LASTEXITCODE -ne 0) {
+    throw "Failed to restrict config.json permissions with icacls."
+  }
+}
 
 # Copy packaging helpers next to the install
 $pkgWin = Join-Path $InstallDir "packaging\windows"

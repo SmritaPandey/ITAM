@@ -1,0 +1,60 @@
+# QS Assets appliance — Caddy reverse proxy
+#
+# Default: serves on :443 with a Caddy-internal (self-signed) certificate so
+# the appliance works out of the box on a bare IP. Browsers will show a
+# certificate warning until you either:
+#   1. Trust the Caddy root CA (extract it from the caddy_data volume:
+#      docker cp qsassets-caddy:/data/caddy/pki/authorities/local/root.crt .)
+#   2. Give the appliance a DNS name and switch the site address to it, e.g.
+#      set QSASSETS_SITE_ADDRESS=assets.example.com in /etc/qsassets/qsassets.env
+#      and remove the `tls internal` line — Caddy will obtain a Let's Encrypt
+#      certificate automatically (requires ports 80/443 reachable from the CA).
+#   3. Bring your own certificate: mount cert+key into the container and use
+#      `tls /etc/caddy/certs/tls.crt /etc/caddy/certs/tls.key`.
+#
+# Routing:
+#   /api/*      -> api:4100  (NestJS serves under the /api/v1 global prefix,
+#                             so paths are forwarded UNCHANGED — no stripping)
+#   /socket.io* -> api:4100  (websocket realtime gateway)
+#   everything else -> web:3100 (Next.js)
+
+{
+	# Appliance default: no ACME account email needed for internal CA.
+	admin off
+}
+
+# Plain-HTTP listener: redirect everything to HTTPS.
+:80 {
+	redir https://{host}{uri} permanent
+}
+
+{$QSASSETS_SITE_ADDRESS::443} {
+	# Self-signed via Caddy's internal CA. Remove this line when using a real
+	# domain so automatic HTTPS (Let's Encrypt) takes over.
+	tls internal
+
+	encode gzip zstd
+
+	# API — the backend already serves under /api/v1 (Nest global prefix),
+	# so /api/v1/health arrives at the container as /api/v1/health.
+	handle /api/* {
+		reverse_proxy api:4100
+	}
+
+	# Socket.IO realtime gateway (websocket upgrade handled automatically).
+	handle /socket.io* {
+		reverse_proxy api:4100
+	}
+
+	# Everything else — Next.js frontend.
+	handle {
+		reverse_proxy web:3100
+	}
+
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		-Server
+	}
+}

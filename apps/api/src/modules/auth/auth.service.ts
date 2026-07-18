@@ -16,6 +16,8 @@ export interface JwtPayload {
   role: string;
   permissions: string[];
   isSuperAdmin: boolean;
+  agentId?: string;
+  jti?: string;
 }
 
 export interface AuthTokens {
@@ -867,7 +869,13 @@ export class AuthService {
    * Short-lived agent enrollment token. JwtStrategy reloads role from DB —
    * keep lifetime bounded and prefer real userId over agent-session.
    */
-  generateAgentToken(tenantId: string, email: string, userId?: string): string {
+  generateAgentToken(
+    tenantId: string,
+    email: string,
+    userId?: string,
+    agentId?: string,
+    jti?: string,
+  ): string {
     const payload: JwtPayload = {
       sub: userId || 'agent-session',
       email: email,
@@ -875,8 +883,9 @@ export class AuthService {
       role: 'agent',
       permissions: ['discovery:ingest', 'discovery:heartbeat'],
       isSuperAdmin: false,
+      ...(agentId ? { agentId, jti: jti || uuidv4() } : {}),
     };
-    return this.jwtService.sign(payload, { expiresIn: '90d' });
+    return this.jwtService.sign(payload, { expiresIn: agentId ? '7d' : '90d' });
   }
 }
 

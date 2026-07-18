@@ -181,6 +181,18 @@ Migrations run in `apps/api` docker-entrypoint (`prisma migrate deploy`). First 
 
 ### Air-gap
 
-- Offline `.lic` only (no `LICENSE_SERVER_URL`).
+- Offline `.lic` or challenge-response activation (Settings → Product License; issuer signs via `/admin/licenses` or `apps/api/scripts/sign-license-challenge.js`).
+- Preferred: signed appliance bundle from GitHub Releases — see [docs/APPLIANCE-INSTALL.md](docs/APPLIANCE-INSTALL.md).
 - Load images from tar if no registry: `docker load < qsasset-api.tar` etc.
 - See [ONPREM-INSTALL.md](ONPREM-INSTALL.md) for bare-metal Node path.
+
+### HA / process roles (on-prem)
+
+| `PROCESS_ROLE` | Runs |
+|---|---|
+| `all` (default) | API + crons + Bull workers + UDP collectors |
+| `api` | HTTP/WebSocket only (`DISABLE_CRON_JOBS` implied) |
+| `worker` | Crons + Bull workers |
+| `collector` | SNMP/syslog/NetFlow UDP only |
+
+Use [`docker-compose.ha.yml`](docker-compose.ha.yml) + [`infra/proxy/Caddyfile`](infra/proxy/Caddyfile). Socket.IO uses a Redis adapter when `REDIS_URL` is set.

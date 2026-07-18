@@ -1,21 +1,19 @@
-# QS Assets — production compose
+# QS Assets — production compose (single-node)
 #
 # Bundled Postgres + Redis (LAN):
-#   export DB_PASSWORD JWT_SECRET JWT_REFRESH_SECRET VAULT_ENCRYPTION_KEY
+#   export DB_PASSWORD JWT_SECRET JWT_REFRESH_SECRET VAULT_ENCRYPTION_KEY OWNER_PASSWORD TENANT_ADMIN_PASSWORD
 #   SERVER_IP=192.168.1.50 docker compose -f docker-compose.prod.yml up -d --build
 #
-# BYO Postgres/Redis (skip local db/cache containers):
-#   EXTERNAL_DATABASE_URL=postgresql://… EXTERNAL_REDIS_URL=redis://… \
-#   SERVER_IP=… DEPLOYMENT_MODE=onprem \
+# BYO Postgres/Redis:
+#   EXTERNAL_DATABASE_URL=… EXTERNAL_REDIS_URL=… DEPLOYMENT_MODE=onprem \
 #   docker compose -f docker-compose.prod.yml up -d --build api web
 #
 # After startup: http://<SERVER_IP>:3100
-# On-prem first boot: set OWNER_PASSWORD / TENANT_ADMIN_PASSWORD explicitly
-# (no ChangeMe defaults).
+# No weak password defaults — OWNER_PASSWORD / TENANT_ADMIN_PASSWORD are required.
 
 services:
   postgres:
-    image: postgres:16-alpine
+    image: postgis/postgis:16-3.4
     container_name: qsasset-db
     restart: unless-stopped
     ports:
@@ -41,9 +39,13 @@ services:
     image: redis:7-alpine
     container_name: qsasset-redis
     restart: unless-stopped
+    # Bind Redis to host loopback only (API uses network_mode: host → localhost:6379).
+    # Not exposed on the LAN. For remote Redis use EXTERNAL_REDIS_URL instead.
     ports:
-      - "6379:6379"
-    command: redis-server --maxmemory 256mb --maxmemory-policy allkeys-lru
+      - "127.0.0.1:6379:6379"
+    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
+    volumes:
+      - redisdata:/data
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 10s
@@ -74,6 +76,7 @@ services:
       NODE_ENV: production
       SEED_DB: ${SEED_DB:-false}
       DEPLOYMENT_MODE: ${DEPLOYMENT_MODE:-onprem}
+      PROCESS_ROLE: ${PROCESS_ROLE:-all}
       DISABLE_PUBLIC_SIGNUP: ${DISABLE_PUBLIC_SIGNUP:-true}
       LICENSE_PUBLIC_KEY: ${LICENSE_PUBLIC_KEY:-}
       LICENSE_PRIVATE_KEY: ${LICENSE_PRIVATE_KEY:-}
@@ -110,4 +113,6 @@ services:
 
 volumes:
   pgdata:
+    driver: local
+  redisdata:
     driver: local

@@ -11,6 +11,7 @@ import * as dns from 'dns';
 import * as net from 'net';
 import * as path from 'path';
 import * as fs from 'fs';
+import { createHash, randomBytes, randomUUID } from 'crypto';
 import AdmZip from 'adm-zip';
 import { SshScanner } from '../../common/scanners/ssh.scanner';
 import { WmiScanner } from '../../common/scanners/wmi.scanner';
@@ -1335,37 +1336,95 @@ export class DiscoveryService {
     return { deleted: true };
   }
 
+  async revokeAgentToken(id: string, tenantId: string) {
+    const agent = await this.prisma.agent.findFirst({
+      where: { id, tenantId },
+      include: { enrollment: true },
+    });
+    if (!agent) throw new NotFoundException('Agent not found');
+    if (!agent.enrollment) return { revoked: false };
+
+    await this.prisma.agentEnrollment.update({
+      where: { id: agent.enrollment.id },
+      data: { revokedAt: new Date() },
+    });
+    return { revoked: true };
+  }
+
   async registerAgent(tenantId: string, data: {
     id?: string;
     hostname: string; platform: string; agentVersion: string;
     ipAddress: string; macAddress?: string; systemInfo?: any;
-  }) {
-    // 1. Check for existing agent by ID first if provided
-    if (data.id) {
-      const existingById = await this.prisma.agent.findFirst({
-        where: { id: data.id, tenantId },
-      });
-      if (existingById) {
-        return this.prisma.agent.update({
-          where: { id: existingById.id },
-          data: { ...data, lastHeartbeat: new Date(), status: 'ONLINE' },
+  }, actorEmail = 'agent@local', actorUserId?: string) {
+    const enrollmentSecret = randomBytes(32).toString('base64url');
+    const tokenJti = randomUUID();
+    let issuedSecret: string | undefined;
+
+    const agent = await this.prisma.$transaction(async (tx) => {
+      const updateData = {
+        hostname: data.hostname,
+        platform: data.platform,
+        agentVersion: data.agentVersion,
+        ipAddress: data.ipAddress,
+        macAddress: data.macAddress,
+        systemInfo: data.systemInfo,
+        lastHeartbeat: new Date(),
+        status: 'ONLINE',
+      };
+      let current = data.id
+        ? await tx.agent.findFirst({
+            where: { id: data.id, tenantId },
+            include: { enrollment: true },
+          })
+        : null;
+      if (!current) {
+        current = await tx.agent.findFirst({
+          where: { tenantId, hostname: data.hostname, ipAddress: data.ipAddress },
+          include: { enrollment: true },
         });
       }
-    }
 
-    // 2. Check for existing agent by hostname + IP (legacy / fallback)
-    const existing = await this.prisma.agent.findFirst({
-      where: { tenantId, hostname: data.hostname, ipAddress: data.ipAddress },
+      let saved = current
+        ? await tx.agent.update({
+            where: { id: current.id },
+            data: updateData,
+            include: { enrollment: true },
+          })
+        : await tx.agent.create({
+            data: { tenantId, ...updateData },
+            include: { enrollment: true },
+          });
+
+      if (!saved.enrollment || saved.enrollment.revokedAt) {
+        const enrollment = await tx.agentEnrollment.create({
+          data: {
+            tenantId,
+            tokenJti,
+            secretHash: createHash('sha256').update(enrollmentSecret).digest('hex'),
+          },
+        });
+        saved = await tx.agent.update({
+          where: { id: saved.id },
+          data: { enrollmentId: enrollment.id },
+          include: { enrollment: true },
+        });
+        issuedSecret = enrollmentSecret;
+      }
+      return saved;
     });
-    if (existing) {
-      return this.prisma.agent.update({
-        where: { id: existing.id },
-        data: { ...data, lastHeartbeat: new Date(), status: 'ONLINE' },
-      });
-    }
-    return this.prisma.agent.create({
-      data: { tenantId, ...data, lastHeartbeat: new Date(), status: 'ONLINE' },
-    });
+
+    const agentToken = this.authService.generateAgentToken(
+      tenantId,
+      actorEmail,
+      actorUserId,
+      agent.id,
+      agent.enrollment!.tokenJti,
+    );
+    return {
+      ...agent,
+      agentToken,
+      ...(issuedSecret ? { enrollmentSecret: issuedSecret } : {}),
+    };
   }
 
   async agentHeartbeat(id: string, tenantId: string, data?: { systemInfo?: any; version?: string }) {

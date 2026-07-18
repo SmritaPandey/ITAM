@@ -20,6 +20,9 @@ export default function AdminLicensesPage() {
   const [showIssue, setShowIssue] = useState(false);
   const [issuing, setIssuing] = useState(false);
   const [issuedResult, setIssuedResult] = useState<any>(null);
+  const [offlineKey, setOfflineKey] = useState("");
+  const [offlineChallenge, setOfflineChallenge] = useState("");
+  const [offlineResponse, setOfflineResponse] = useState("");
   const [form, setForm] = useState({
     customerName: "",
     plan: "ON_PREMISE",
@@ -207,6 +210,34 @@ export default function AdminLicensesPage() {
           </div>
         </div>
       )}
+
+      <div style={{ marginBottom: 16, padding: 16, borderRadius: 12, border: "1px solid var(--border-primary)", background: "var(--bg-card)" }}>
+        <h2 style={{ fontSize: 14, fontWeight: 700, color: "var(--text-primary)", marginBottom: 6 }}>Sign air-gap challenge</h2>
+        <p style={{ fontSize: 12, color: "var(--text-tertiary)", marginBottom: 10 }}>
+          Paste the install challenge and its issued license key to create a one-time signed response.
+        </p>
+        <input value={offlineKey} onChange={(e) => setOfflineKey(e.target.value)} placeholder="QS-XXXX-XXXX-XXXX-XXXX" style={{ width: "100%", padding: 8, marginBottom: 8, borderRadius: 8, border: "1px solid var(--border-primary)", background: "var(--bg-input)", color: "var(--text-primary)", fontFamily: "monospace" }} />
+        <textarea value={offlineChallenge} onChange={(e) => setOfflineChallenge(e.target.value)} placeholder="Challenge JSON or base64…" rows={4} style={{ width: "100%", padding: 8, marginBottom: 8, borderRadius: 8, border: "1px solid var(--border-primary)", background: "var(--bg-input)", color: "var(--text-primary)", fontFamily: "monospace", fontSize: 11 }} />
+        <button
+          disabled={!offlineKey.trim() || !offlineChallenge.trim()}
+          onClick={async () => {
+            try {
+              const response = await apiFetch("/product-licenses/challenge-activate", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ licenseKey: offlineKey.trim(), challenge: offlineChallenge.trim() }),
+              });
+              setOfflineResponse(JSON.stringify(response.licenseFile, null, 2));
+            } catch (err: any) {
+              alert(err?.message || "Failed to sign challenge");
+            }
+          }}
+          style={{ padding: "7px 12px", borderRadius: 8, border: "none", background: "#06b6d4", color: "#fff", fontWeight: 600, cursor: "pointer" }}
+        >
+          Sign response
+        </button>
+        {offlineResponse && <textarea readOnly value={offlineResponse} rows={7} style={{ width: "100%", padding: 8, marginTop: 10, borderRadius: 8, border: "1px solid var(--border-primary)", background: "var(--bg-input)", color: "var(--text-primary)", fontFamily: "monospace", fontSize: 11 }} />}
+      </div>
 
       <div style={{ background: "var(--bg-card)", border: "1px solid var(--border-primary)", borderRadius: 12, overflow: "hidden" }}>
         <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>

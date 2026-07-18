@@ -1,0 +1,128 @@
+name: Release Appliance Bundle
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      with_images:
+        description: "Also build and embed docker images (large artifact)"
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+
+jobs:
+  # Always: assemble the skeleton bundle (compose + installer + CLI + sums).
+  bundle-skeleton:
+    name: Build appliance bundle (skeleton)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # git describe needs tags
+
+      - name: Resolve version
+        id: ver
+        run: |
+          if [[ "${GITHUB_REF}" == refs/tags/* ]]; then
+            echo "version=${GITHUB_REF_NAME}" >> "$GITHUB_OUTPUT"
+          else
+            echo "version=$(git describe --tags --always)" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Build skeleton bundle
+        run: |
+          ./scripts/release/build-appliance-bundle.sh --version "${{ steps.ver.outputs.version }}"
+
+      - name: Verify bundle checksums
+        run: |
+          ./installer/verify-bundle.sh "dist/appliance/qsassets-appliance-${{ steps.ver.outputs.version }}"
+
+      - name: Smoke-check installer scripts (bash -n)
+        run: |
+          bash -n installer/qsassets-install.sh
+          bash -n installer/qsassets
+          bash -n installer/verify-bundle.sh
+          bash -n scripts/release/build-appliance-bundle.sh
+          # Compose config check needs the env file the appliance would have.
+          sudo mkdir -p /etc/qsassets
+          printf 'DB_PASSWORD=x\n' | sudo tee /etc/qsassets/qsassets.env >/dev/null
+          docker compose --env-file /etc/qsassets/qsassets.env \
+            -f installer/bundle/docker-compose.appliance.yml config -q
+
+      - name: Upload bundle artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: qsassets-appliance-${{ steps.ver.outputs.version }}
+          path: |
+            dist/appliance/*.tar.gz
+            dist/appliance/*.tar.gz.sha256
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Attach to GitHub Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/appliance/*.tar.gz
+            dist/appliance/*.tar.gz.sha256
+          generate_release_notes: true
+
+  # Tags and manual runs with with_images: full offline bundle with images.
+  bundle-with-images:
+    name: Build appliance bundle (with images)
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v') || inputs.with_images
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Resolve version
+        id: ver
+        run: |
+          if [[ "${GITHUB_REF}" == refs/tags/* ]]; then
+            echo "version=${GITHUB_REF_NAME}" >> "$GITHUB_OUTPUT"
+          else
+            echo "version=$(git describe --tags --always)" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Build offline bundle (images embedded)
+        run: |
+          ./scripts/release/build-appliance-bundle.sh \
+            --version "${{ steps.ver.outputs.version }}" \
+            --with-images \
+            --platform linux/amd64 \
+            --output dist/appliance-offline
+
+      - name: Rename to offline variant
+        run: |
+          cd dist/appliance-offline
+          for f in qsassets-appliance-*.tar.gz*; do
+            mv "$f" "${f/qsassets-appliance-/qsassets-appliance-offline-}"
+          done
+
+      - name: Upload offline bundle artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: qsassets-appliance-offline-${{ steps.ver.outputs.version }}
+          path: |
+            dist/appliance-offline/*.tar.gz
+            dist/appliance-offline/*.tar.gz.sha256
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Attach to GitHub Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/appliance-offline/*.tar.gz
+            dist/appliance-offline/*.tar.gz.sha256

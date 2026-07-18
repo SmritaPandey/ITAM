@@ -13,14 +13,17 @@ import {
   EntitlementClaims,
   SignedLicenseFile,
   encodeLicenseBlob,
+  encodeLicenseChallenge,
   generateLicenseKey,
+  LicenseChallenge,
+  parseLicenseChallenge,
   parseLicenseInput,
   signEntitlement,
   verifySignedLicense,
 } from './license-crypto';
 import { TenantPlan } from '@prisma/client';
 import * as bcrypt from 'bcryptjs';
-import { createHash, randomUUID } from 'crypto';
+import { createHash, randomBytes, randomUUID } from 'crypto';
 import { PLAN_LIMITS } from '../../common/constants/plan-limits';
 
 export interface EffectiveEntitlement {
@@ -65,8 +68,15 @@ export class ProductLicenseService implements OnModuleInit {
       this.installId = existing.installId;
       return existing.installId;
     }
-    // Placeholder row until first activation (empty payload marked INVALID)
     const installId = process.env.INSTALL_ID?.trim() || `inst-${randomUUID()}`;
+    await this.prisma.instanceEntitlement.create({
+      data: {
+        installId,
+        status: 'PENDING',
+        signedBlob: null,
+        activatedAt: null,
+      },
+    });
     this.installId = installId;
     return installId;
   }
@@ -83,9 +93,27 @@ export class ProductLicenseService implements OnModuleInit {
 
     const orgName = process.env.ONPREM_ORG_NAME || 'Enterprise Organization';
     const ownerEmail = (process.env.OWNER_EMAIL || 'owner@localhost').toLowerCase();
-    const ownerPassword = process.env.OWNER_PASSWORD || 'ChangeMe@123';
+    const ownerPassword = process.env.OWNER_PASSWORD;
     const adminEmail = (process.env.TENANT_ADMIN_EMAIL || 'admin@localhost').toLowerCase();
-    const adminPassword = process.env.TENANT_ADMIN_PASSWORD || 'ChangeMe@123';
+    const adminPassword = process.env.TENANT_ADMIN_PASSWORD;
+
+    if (!ownerPassword || !adminPassword) {
+      this.logger.error(
+        'On-prem first boot refused: OWNER_PASSWORD and TENANT_ADMIN_PASSWORD must be set (no default passwords).',
+      );
+      return;
+    }
+    if (
+      ownerPassword === 'ChangeMe@123' ||
+      adminPassword === 'ChangeMe@123' ||
+      ownerPassword.length < 12 ||
+      adminPassword.length < 12
+    ) {
+      this.logger.error(
+        'On-prem first boot refused: passwords must be at least 12 characters and must not use weak defaults.',
+      );
+      return;
+    }
 
     this.logger.log(`On-prem first boot: creating primary tenant "${orgName}"`);
 
@@ -277,7 +305,7 @@ export class ProductLicenseService implements OnModuleInit {
     allowedModules: unknown;
     expiresAt: Date;
     deploymentFingerprint?: string | null;
-  }): SignedLicenseFile {
+  }, activation?: { installId?: string; nonce?: string }): SignedLicenseFile {
     const claims: EntitlementClaims = {
       licenseKey: record.licenseKey,
       customerName: record.customerName,
@@ -290,6 +318,8 @@ export class ProductLicenseService implements OnModuleInit {
       expiresAt: record.expiresAt.toISOString(),
       iss: 'neurq',
       fingerprint: record.deploymentFingerprint || null,
+      installId: activation?.installId,
+      activationNonce: activation?.nonce,
     };
     return signEntitlement(claims);
   }
@@ -391,13 +421,93 @@ export class ProductLicenseService implements OnModuleInit {
     };
   }
 
+  async createInstanceChallenge() {
+    if (!isOnPrem()) {
+      throw new BadRequestException('License challenges are only created by on-prem instances');
+    }
+    const installId = await this.ensureInstallId();
+    const challenge: LicenseChallenge = {
+      version: 1,
+      installId,
+      fingerprint: this.hashInstall(installId),
+      nonce: randomBytes(24).toString('base64url'),
+      expiresAt: new Date(Date.now() + 15 * 60 * 1000).toISOString(),
+    };
+    await this.prisma.instanceEntitlement.update({
+      where: { installId },
+      data: {
+        challengeNonce: challenge.nonce,
+        challengeExpiresAt: new Date(challenge.expiresAt),
+      },
+    });
+    return {
+      installId,
+      fingerprint: challenge.fingerprint,
+      challenge,
+      challengeBlob: encodeLicenseChallenge(challenge),
+    };
+  }
+
+  async activateChallenge(dto: {
+    licenseKey: string;
+    challenge: string | LicenseChallenge;
+  }) {
+    let challenge: LicenseChallenge;
+    try {
+      challenge = parseLicenseChallenge(dto.challenge);
+    } catch (error: any) {
+      throw new BadRequestException(error?.message || 'Invalid license challenge');
+    }
+    if (new Date(challenge.expiresAt).getTime() <= Date.now()) {
+      throw new BadRequestException('License challenge has expired');
+    }
+    const activated = await this.activateOnline({
+      licenseKey: dto.licenseKey,
+      fingerprint: challenge.fingerprint,
+      installId: challenge.installId,
+    });
+    const lic = await this.prisma.productLicense.findUnique({
+      where: { licenseKey: dto.licenseKey.trim().toUpperCase() },
+    });
+    if (!lic) throw new NotFoundException('Invalid license key');
+    const signed = this.buildSignedFile(lic, {
+      installId: challenge.installId,
+      nonce: challenge.nonce,
+    });
+    return {
+      ...activated,
+      licenseFile: signed,
+      licenseBlob: encodeLicenseBlob(signed),
+    };
+  }
+
+  async activateInstanceResponse(raw: string) {
+    const installId = await this.ensureInstallId();
+    const row = await this.prisma.instanceEntitlement.findUnique({ where: { installId } });
+    if (!row?.challengeNonce || !row.challengeExpiresAt) {
+      throw new BadRequestException('No pending license challenge');
+    }
+    if (row.challengeExpiresAt.getTime() <= Date.now()) {
+      throw new BadRequestException('License challenge has expired');
+    }
+    return this.applySignedLicense(raw, {
+      fingerprint: this.hashInstall(installId),
+      expectedNonce: row.challengeNonce,
+      activationMode: 'AIR_GAP',
+    });
+  }
+
   private hashInstall(raw: string): string {
     return createHash('sha256').update(raw).digest('hex').slice(0, 32);
   }
 
   // ─── On-prem: apply license locally ───────────────────────────
 
-  async applySignedLicense(raw: string, opts?: { fingerprint?: string }) {
+  async applySignedLicense(raw: string, opts?: {
+    fingerprint?: string;
+    expectedNonce?: string;
+    activationMode?: 'ONLINE' | 'AIR_GAP' | 'UPLOAD';
+  }) {
     let file: SignedLicenseFile;
     try {
       file = parseLicenseInput(raw);
@@ -422,6 +532,12 @@ export class ProductLicenseService implements OnModuleInit {
     if (claims.fingerprint && claims.fingerprint !== fingerprint) {
       throw new ForbiddenException('License fingerprint does not match this installation');
     }
+    if (opts?.expectedNonce && claims.activationNonce !== opts.expectedNonce) {
+      throw new ForbiddenException('License challenge nonce does not match');
+    }
+    if (claims.installId && claims.installId !== installId) {
+      throw new ForbiddenException('License response belongs to another installation');
+    }
 
     // Optional SaaS revocation check is not available offline — trust signature + expiry
 
@@ -441,6 +557,10 @@ export class ProductLicenseService implements OnModuleInit {
       allowedModules: modules,
       status: 'ACTIVE',
       activatedAt: new Date(),
+      activationMode: opts?.activationMode || 'UPLOAD',
+      lastValidatedAt: new Date(),
+      challengeNonce: null,
+      challengeExpiresAt: null,
     };
 
     const entitlement = existing
@@ -490,7 +610,7 @@ export class ProductLicenseService implements OnModuleInit {
     if (!blob) throw new BadRequestException('License server returned empty entitlement');
     return this.applySignedLicense(
       typeof blob === 'string' ? blob : JSON.stringify(blob),
-      { fingerprint },
+      { fingerprint, activationMode: 'ONLINE' },
     );
   }
 
@@ -512,6 +632,7 @@ export class ProductLicenseService implements OnModuleInit {
           maxAssets: claims.maxAssets < 0 ? undefined : claims.maxAssets,
           maxUsers: claims.maxUsers < 0 ? undefined : claims.maxUsers,
           customAllowedModules: modules,
+          productLicenseAllowedModules: modules,
           productLicenseKey: claims.licenseKey,
           productLicenseExpiresAt: claims.expiresAt,
         },
@@ -601,6 +722,30 @@ export class ProductLicenseService implements OnModuleInit {
     };
   }
 
+  async getInstanceStatus() {
+    const entitlement = await this.getEffectiveEntitlement();
+    if (!isOnPrem()) return entitlement;
+    const installId = await this.ensureInstallId();
+    const row = await this.prisma.instanceEntitlement.findUnique({ where: { installId } });
+    return {
+      ...entitlement,
+      installId,
+      fingerprint: this.hashInstall(installId),
+      activationMode: row?.activationMode || null,
+      lastValidatedAt: row?.lastValidatedAt || null,
+      challenge: row?.challengeNonce && row.challengeExpiresAt
+        ? {
+            version: 1,
+            installId,
+            fingerprint: this.hashInstall(installId),
+            nonce: row.challengeNonce,
+            pending: row.challengeExpiresAt > new Date(),
+            expiresAt: row.challengeExpiresAt,
+          }
+        : null,
+    };
+  }
+
   async assertOperationalLicense(): Promise<void> {
     if (!isOnPrem()) return;
     const ent = await this.getEffectiveEntitlement();
@@ -616,9 +761,14 @@ export class ProductLicenseService implements OnModuleInit {
     if (!isOnPrem()) {
       return getResolvedModules(plan, settings);
     }
-    // Sync path used by callers that already loaded entitlement into settings
     const base = getResolvedModules(plan, settings);
-    return base;
+    const licensedModules = Array.isArray(settings?.productLicenseAllowedModules)
+      ? settings.productLicenseAllowedModules
+      : Array.isArray(settings?.customAllowedModules)
+        ? settings.customAllowedModules
+        : null;
+    const licensed = licensedModules ? new Set(licensedModules) : null;
+    return licensed ? base.filter((module) => licensed.has(module)) : base;
   }
 
   async getResolvedModulesAsync(plan: TenantPlan, settings: any): Promise<ModuleKey[]> {
@@ -633,11 +783,8 @@ export class ProductLicenseService implements OnModuleInit {
       return getResolvedModules(plan, settings).filter((m) => keep.has(m));
     }
     if (ent.allowedModules?.length) {
-      return getResolvedModules(plan, {
-        ...settings,
-        customAllowedModules: ent.allowedModules,
-        customBlockedModules: [],
-      });
+      const licensed = new Set(ent.allowedModules);
+      return getResolvedModules(plan, settings).filter((module) => licensed.has(module));
     }
     return getResolvedModules(plan, settings);
   }

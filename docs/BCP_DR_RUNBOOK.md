@@ -97,3 +97,13 @@ Run at least annually and after major persistence or hosting changes.
 - [ ] Capture evidence links, timestamps, participants, RTO/RPO results, and exceptions.
 - [ ] Create corrective actions with owners and due dates.
 - [ ] Obtain Infrastructure, Security, and business-owner sign-off.
+
+## On-prem appliance notes
+
+For customer-hosted installs use the signed appliance path in [docs/APPLIANCE-INSTALL.md](APPLIANCE-INSTALL.md):
+
+1. `qsassets backup` before any upgrade or recovery.
+2. Restore with `qsassets restore <file> --no-confirm` after verifying the backup checksum.
+3. Platform updates: verify Ed25519 manifest (`PLATFORM_UPDATE_PUBLIC_KEY`) via `scripts/onprem-updater.sh` before applying compose/image changes; roll back on `/api/v1/health/ready` failure.
+4. HA profiles (`docker-compose.ha.yml`) require Redis AOF, sticky sessions for `/realtime`, and a single `collector` replica for UDP listeners.
+5. Drill annually: backup → wipe → restore → license status → agent heartbeat.

@@ -1,0 +1,21 @@
+:80 {
+	encode zstd gzip
+
+	@realtime path /realtime* /socket.io*
+	handle @realtime {
+		reverse_proxy api:4100 {
+			lb_policy cookie qs_realtime
+			health_uri /api/v1/health/ready
+		}
+	}
+
+	handle /api/* {
+		reverse_proxy api:4100 {
+			health_uri /api/v1/health/ready
+		}
+	}
+
+	handle {
+		reverse_proxy web:3100
+	}
+}

@@ -1,6 +1,7 @@
 import { Injectable, Logger, OnModuleInit, OnModuleDestroy } from '@nestjs/common';
 import { PrismaService } from '../../common/database/prisma.service';
 import { EventBusService } from '../../common/events/event-bus.service';
+import { shouldRunCollectors } from '../../common/process-role';
 import * as dgram from 'dgram';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -60,6 +61,11 @@ export class SnmpTrapReceiverService implements OnModuleInit, OnModuleDestroy {
   ) {}
 
   onModuleInit() {
+    if (!shouldRunCollectors()) {
+      this.logger.log('SNMP trap receiver skipped for this process role.');
+      return;
+    }
+
     // Restore traps from disk before starting the listener
     this.loadTrapsFromFile();
 

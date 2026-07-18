@@ -1,13 +1,16 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../common/database/prisma.service';
-import { getResolvedModules, getActiveModules } from '../../common/utils/modules';
 import { PLAN_LIMITS } from '../../common/constants/plan-limits';
 import { redactSecrets } from '../../common/security/redact';
 import { sealVaultValue } from '../../common/security/vault-crypto';
+import { ProductLicenseService } from '../product-license/product-license.service';
 
 @Injectable()
 export class SettingsService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private productLicense: ProductLicenseService,
+  ) {}
 
   private protectSecrets(value: unknown): unknown {
     if (Array.isArray(value)) return value.map((item) => this.protectSecrets(item));
@@ -40,8 +43,9 @@ export class SettingsService {
 
     const settingsObj = typeof tenant.settings === 'object' ? (tenant.settings as Record<string, any>) : {};
     const publicSettings = redactSecrets(settingsObj, { preservePresence: true });
-    const allowedModules = getResolvedModules(tenant.plan, tenant.settings);
-    const activeModules = getActiveModules(tenant.plan, tenant.settings);
+    const allowedModules = await this.productLicense.getResolvedModulesAsync(tenant.plan, tenant.settings);
+    const userDisabled = Array.isArray(settingsObj.userDisabledModules) ? settingsObj.userDisabledModules : [];
+    const activeModules = allowedModules.filter((module) => !userDisabled.includes(module));
 
     return {
       ...publicSettings,
@@ -145,8 +149,9 @@ export class SettingsService {
     const result = await this.prisma.tenant.update({ where: { id: tenantId }, data: update });
     const settingsObj = typeof result.settings === 'object' ? (result.settings as Record<string, any>) : {};
     const publicSettings = redactSecrets(settingsObj, { preservePresence: true });
-    const allowedModules = getResolvedModules(result.plan, result.settings);
-    const activeModules = getActiveModules(result.plan, result.settings);
+    const allowedModules = await this.productLicense.getResolvedModulesAsync(result.plan, result.settings);
+    const userDisabled = Array.isArray(settingsObj.userDisabledModules) ? settingsObj.userDisabledModules : [];
+    const activeModules = allowedModules.filter((module) => !userDisabled.includes(module));
 
     return {
       ...publicSettings,

@@ -19,7 +19,17 @@ export interface EntitlementClaims {
   expiresAt: string; // ISO
   iss: string;
   fingerprint?: string | null;
+  installId?: string;
+  activationNonce?: string;
   iat?: string;
+}
+
+export interface LicenseChallenge {
+  version: 1;
+  installId: string;
+  fingerprint: string;
+  nonce: string;
+  expiresAt: string;
 }
 
 export interface SignedLicenseFile {
@@ -94,6 +104,8 @@ function canonicalPayload(claims: EntitlementClaims): Buffer {
     expiresAt: claims.expiresAt,
     iss: claims.iss || 'neurq',
     fingerprint: claims.fingerprint ?? null,
+    installId: claims.installId,
+    activationNonce: claims.activationNonce,
     iat: claims.iat,
   };
   return Buffer.from(JSON.stringify(ordered), 'utf8');
@@ -141,6 +153,32 @@ export function parseLicenseInput(raw: string): SignedLicenseFile {
     return JSON.parse(trimmed) as SignedLicenseFile;
   }
   return decodeLicenseBlob(trimmed);
+}
+
+export function encodeLicenseChallenge(challenge: LicenseChallenge): string {
+  return Buffer.from(JSON.stringify(challenge), 'utf8').toString('base64');
+}
+
+export function parseLicenseChallenge(raw: string | LicenseChallenge): LicenseChallenge {
+  const parsed =
+    typeof raw === 'string'
+      ? JSON.parse(
+          raw.trim().startsWith('{')
+            ? raw.trim()
+            : Buffer.from(raw.trim(), 'base64').toString('utf8'),
+        )
+      : raw;
+  if (
+    !parsed ||
+    parsed.version !== 1 ||
+    !parsed.installId ||
+    !parsed.fingerprint ||
+    !parsed.nonce ||
+    !parsed.expiresAt
+  ) {
+    throw new Error('Invalid license challenge');
+  }
+  return parsed as LicenseChallenge;
 }
 
 export function generateLicenseKey(): string {

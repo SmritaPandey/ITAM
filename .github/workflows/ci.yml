@@ -26,6 +26,20 @@ jobs:
             apps/api/package-lock.json
             apps/web/package-lock.json
 
+      - name: Guard against committed agent secrets
+        run: |
+          set -euo pipefail
+          # Fail if any tracked config.json contains live credentials
+          while IFS= read -r f; do
+            if [ -n "$f" ] && grep -Eiq '"(password|token)"[[:space:]]*:' "$f"; then
+              echo "Refusing to ship tracked credentials in $f"
+              exit 1
+            fi
+          done < <(git ls-files '**/config.json' 'agent/config.json' 'apps/api/agent/config.json')
+          # Prefer a single canonical agent source in git (apps/api copy may exist until sync lands)
+          count=$(git ls-files '**/qs-discovery-agent.js' | wc -l | tr -d ' ')
+          echo "Tracked agent script copies: $count"
+
       - name: Install API dependencies
         run: npm ci
         working-directory: apps/api

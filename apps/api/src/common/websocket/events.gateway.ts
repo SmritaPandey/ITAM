@@ -5,8 +5,10 @@ import {
   OnGatewayDisconnect,
   OnGatewayInit,
 } from '@nestjs/websockets';
-import { Logger } from '@nestjs/common';
+import { Logger, OnModuleDestroy } from '@nestjs/common';
 import { Server, Socket } from 'socket.io';
+import { createAdapter } from '@socket.io/redis-adapter';
+import IORedis from 'ioredis';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import { EventBusService, DomainEvent } from '../events/event-bus.service';
@@ -23,13 +25,15 @@ import { PrismaService } from '../database/prisma.service';
   transports: ['websocket', 'polling'],
 })
 export class EventsGateway
-  implements OnGatewayInit, OnGatewayConnection, OnGatewayDisconnect
+  implements OnGatewayInit, OnGatewayConnection, OnGatewayDisconnect, OnModuleDestroy
 {
   @WebSocketServer()
   server: Server;
 
   private readonly logger = new Logger(EventsGateway.name);
   private connectedClients = new Map<string, { tenantId: string; userId: string; email: string }>();
+  private redisPublisher: IORedis | null = null;
+  private redisSubscriber: IORedis | null = null;
 
   constructor(
     private jwtService: JwtService,
@@ -38,8 +42,22 @@ export class EventsGateway
     private prisma: PrismaService,
   ) {}
 
-  afterInit() {
+  async afterInit() {
     this.logger.log('🔌 WebSocket Gateway initialized on /realtime');
+
+    const redisUrl = process.env.REDIS_URL?.trim();
+    if (redisUrl) {
+      try {
+        this.redisPublisher = new IORedis(redisUrl, { maxRetriesPerRequest: null });
+        this.redisSubscriber = this.redisPublisher.duplicate();
+        await Promise.all([this.redisPublisher.ping(), this.redisSubscriber.ping()]);
+        this.server.adapter(createAdapter(this.redisPublisher, this.redisSubscriber));
+        this.logger.log('Socket.IO Redis adapter enabled');
+      } catch (err: any) {
+        this.logger.error(`Socket.IO Redis adapter unavailable: ${err.message}`);
+        await this.closeRedisClients();
+      }
+    }
 
     // Bridge ALL domain events to WebSocket rooms
     this.eventBus.on('*', (event: DomainEvent) => {
@@ -85,6 +103,19 @@ export class EventsGateway
     setInterval(() => {
       this.server?.emit('heartbeat', { serverTime: new Date().toISOString() });
     }, 30000);
+  }
+
+  async onModuleDestroy() {
+    await this.closeRedisClients();
+  }
+
+  private async closeRedisClients() {
+    const clients = [this.redisSubscriber, this.redisPublisher].filter(
+      (client): client is IORedis => client !== null,
+    );
+    this.redisSubscriber = null;
+    this.redisPublisher = null;
+    await Promise.all(clients.map((client) => client.quit().catch(() => client.disconnect())));
   }
 
   async handleConnection(client: Socket) {

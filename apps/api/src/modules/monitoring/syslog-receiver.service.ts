@@ -1,6 +1,7 @@
 import { Injectable, Logger, OnModuleInit, OnModuleDestroy } from '@nestjs/common';
 import { PrismaService } from '../../common/database/prisma.service';
 import { EventBusService } from '../../common/events/event-bus.service';
+import { shouldRunCollectors } from '../../common/process-role';
 import * as dgram from 'dgram';
 import * as crypto from 'crypto';
 
@@ -38,6 +39,11 @@ export class SyslogReceiverService implements OnModuleInit, OnModuleDestroy {
   ) {}
 
   onModuleInit() {
+    if (!shouldRunCollectors()) {
+      this.logger.log('Syslog receiver skipped for this process role.');
+      return;
+    }
+
     if (process.env.ENABLE_SYSLOG === 'true') {
       this.start();
     } else {

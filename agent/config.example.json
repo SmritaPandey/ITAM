@@ -1,0 +1,7 @@
+{
+  "server": "http://localhost:4100",
+  "email": "admin@example.com",
+  "token": "",
+  "agentId": "",
+  "enrollmentSecret": ""
+}

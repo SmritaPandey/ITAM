@@ -116,12 +116,23 @@ export default function SettingsPage() {
   const [productLicense, setProductLicense] = useState<any>(null);
   const [licenseKeyInput, setLicenseKeyInput] = useState("");
   const [licenseFileText, setLicenseFileText] = useState("");
+  const [licenseChallenge, setLicenseChallenge] = useState("");
   const [licenseBusy, setLicenseBusy] = useState(false);
   const [licenseMsg, setLicenseMsg] = useState("");
 
   async function loadProductLicense() {
     try {
-      setProductLicense(await apiFetch("/product-licenses/instance/status"));
+      const status = await apiFetch("/product-licenses/instance/status");
+      setProductLicense(status);
+      if (status?.challenge?.pending) {
+        setLicenseChallenge(JSON.stringify({
+          version: status.challenge.version,
+          installId: status.challenge.installId,
+          fingerprint: status.challenge.fingerprint,
+          nonce: status.challenge.nonce,
+          expiresAt: status.challenge.expiresAt,
+        }, null, 2));
+      }
     } catch {
       setProductLicense(null);
     }
@@ -622,6 +633,8 @@ export default function SettingsPage() {
                     <div>Max users: <strong style={{ color: "var(--text-primary)" }}>{productLicense.maxUsers < 0 ? "Unlimited" : productLicense.maxUsers}</strong></div>
                     <div>Max assets: <strong style={{ color: "var(--text-primary)" }}>{productLicense.maxAssets < 0 ? "Unlimited" : productLicense.maxAssets}</strong></div>
                     <div style={{ gridColumn: "1 / -1" }}>Key: <code>{productLicense.licenseKey || "—"}</code></div>
+                    {productLicense.installId && <div style={{ gridColumn: "1 / -1" }}>Install ID: <code>{productLicense.installId}</code></div>}
+                    {productLicense.fingerprint && <div style={{ gridColumn: "1 / -1" }}>Fingerprint: <code>{productLicense.fingerprint}</code></div>}
                     {Array.isArray(productLicense.allowedModules) && productLicense.allowedModules.length > 0 && (
                       <div style={{ gridColumn: "1 / -1" }}>
                         Modules: {productLicense.allowedModules.slice(0, 12).join(", ")}
@@ -672,6 +685,35 @@ export default function SettingsPage() {
                   </div>
 
                   <div style={{ padding: 16, borderRadius: 12, border: "1px solid var(--border-primary)", background: "var(--bg-elevated)" }}>
+                    <h3 style={{ fontSize: 14, fontWeight: 700, color: "var(--text-primary)", marginBottom: 10 }}>Air-gap challenge</h3>
+                    <p style={{ fontSize: 12, color: "var(--text-tertiary)", marginBottom: 10 }}>
+                      Generate a 15-minute challenge, sign it on the issuer, then paste the signed response below.
+                    </p>
+                    <button
+                      disabled={licenseBusy}
+                      onClick={async () => {
+                        setLicenseBusy(true); setLicenseMsg("");
+                        try {
+                          const result = await apiFetch("/product-licenses/instance/challenge", { method: "POST" });
+                          setLicenseChallenge(JSON.stringify(result.challenge, null, 2));
+                          setLicenseMsg("Challenge generated.");
+                          await loadProductLicense();
+                        } catch (err: any) {
+                          setLicenseMsg(err?.message || "Challenge generation failed");
+                        } finally {
+                          setLicenseBusy(false);
+                        }
+                      }}
+                      style={{ padding: "8px 14px", borderRadius: 8, border: "1px solid var(--border-primary)", background: "var(--bg-card)", color: "var(--text-primary)", fontWeight: 600, fontSize: 13, cursor: "pointer" }}
+                    >
+                      Generate challenge
+                    </button>
+                    {licenseChallenge && (
+                      <textarea readOnly value={licenseChallenge} rows={7} style={{ width: "100%", marginTop: 10, padding: 10, borderRadius: 8, border: "1px solid var(--border-primary)", background: "var(--bg-input)", color: "var(--text-primary)", fontSize: 11, fontFamily: "monospace" }} />
+                    )}
+                  </div>
+
+                  <div style={{ padding: 16, borderRadius: 12, border: "1px solid var(--border-primary)", background: "var(--bg-elevated)" }}>
                     <h3 style={{ fontSize: 14, fontWeight: 700, color: "var(--text-primary)", marginBottom: 10 }}>Upload offline .lic</h3>
                     <textarea
                       value={licenseFileText}
@@ -712,6 +754,30 @@ export default function SettingsPage() {
                     >
                       Apply license file
                     </button>
+                    {productLicense?.challenge?.pending && (
+                      <button
+                        disabled={licenseBusy || !licenseFileText.trim()}
+                        onClick={async () => {
+                          setLicenseBusy(true); setLicenseMsg("");
+                          try {
+                            await apiFetch("/product-licenses/instance/activate-response", {
+                              method: "POST",
+                              headers: { "Content-Type": "application/json" },
+                              body: JSON.stringify({ content: licenseFileText.trim() }),
+                            });
+                            setLicenseMsg("Air-gap response activated.");
+                            await loadProductLicense();
+                          } catch (err: any) {
+                            setLicenseMsg(err?.message || "Response activation failed");
+                          } finally {
+                            setLicenseBusy(false);
+                          }
+                        }}
+                        style={{ marginLeft: 8, padding: "8px 14px", borderRadius: 8, border: "none", background: "#10b981", color: "#fff", fontWeight: 600, fontSize: 13, cursor: "pointer" }}
+                      >
+                        Apply challenge response
+                      </button>
+                    )}
                   </div>
                 </div>
               )}

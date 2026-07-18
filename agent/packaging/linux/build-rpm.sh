@@ -22,6 +22,7 @@ echo ""
 rm -rf "${DIST_DIR}"
 mkdir -p "${DIST_DIR}/SPECS" "${DIST_DIR}/SOURCES" "${BUILDROOT_PREVIEW}" \
   "${DIST_DIR}/BUILDROOT-preview/lib/systemd/system" \
+  "${DIST_DIR}/BUILDROOT-preview/etc/logrotate.d" \
   "${DIST_DIR}/BUILDROOT-preview/var/log/qs-discovery-agent"
 
 cp "${AGENT_ROOT}/qs-discovery-agent.js" "${BUILDROOT_PREVIEW}/"
@@ -29,6 +30,10 @@ cp "${AGENT_ROOT}/run-agent.sh" "${BUILDROOT_PREVIEW}/"
 chmod +x "${BUILDROOT_PREVIEW}/run-agent.sh"
 cp "${SCRIPT_DIR}/qs-discovery-agent.service" \
   "${DIST_DIR}/BUILDROOT-preview/lib/systemd/system/"
+cp "${SCRIPT_DIR}/qs-discovery-agent.logrotate" \
+  "${DIST_DIR}/BUILDROOT-preview/etc/logrotate.d/qs-discovery-agent"
+cp "${SCRIPT_DIR}/qs-discovery-agent.service" "${DIST_DIR}/SOURCES/"
+cp "${SCRIPT_DIR}/qs-discovery-agent.logrotate" "${DIST_DIR}/SOURCES/"
 
 # Source tarball for rpmbuild
 tar -C "${AGENT_ROOT}" -czf "${DIST_DIR}/SOURCES/${NAME}-${VERSION}.tar.gz" \
@@ -62,6 +67,7 @@ to the QS Asset server. Installs a systemd unit at boot.
 rm -rf %{buildroot}
 mkdir -p %{buildroot}/opt/qs-discovery-agent
 mkdir -p %{buildroot}/lib/systemd/system
+mkdir -p %{buildroot}/etc/logrotate.d
 mkdir -p %{buildroot}/var/log/qs-discovery-agent
 cp qs-discovery-agent.js run-agent.sh %{buildroot}/opt/qs-discovery-agent/
 install -m 0755 %{_sourcedir}/../BUILDROOT-preview/opt/qs-discovery-agent/run-agent.sh \\
@@ -75,8 +81,10 @@ if [ -x "\$DIR/.node/bin/node" ]; then exec "\$DIR/.node/bin/node" "\$DIR/qs-dis
 echo "Node.js not found" >&2; exit 1
 EOS
 chmod 755 %{buildroot}/opt/qs-discovery-agent/run-agent-service.sh
-install -m 0644 %{_sourcedir}/../../qs-discovery-agent.service \\
+install -m 0644 %{_sourcedir}/qs-discovery-agent.service \\
   %{buildroot}/lib/systemd/system/qs-discovery-agent.service
+install -m 0644 %{_sourcedir}/qs-discovery-agent.logrotate \\
+  %{buildroot}/etc/logrotate.d/qs-discovery-agent
 
 %post
 systemctl daemon-reload >/dev/null 2>&1 || true
@@ -92,6 +100,7 @@ fi
 %files
 /opt/qs-discovery-agent
 /lib/systemd/system/qs-discovery-agent.service
+/etc/logrotate.d/qs-discovery-agent
 %dir /var/log/qs-discovery-agent
 
 %changelog

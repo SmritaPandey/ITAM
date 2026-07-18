@@ -36,6 +36,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
   async validate(payload: JwtPayload) {
     // Agent enrollment tokens must NOT inherit the pairing user's interactive admin role
     const isAgentToken =
+      !!payload.agentId ||
       payload.role === 'agent' ||
       payload.sub === 'agent-session' ||
       (Array.isArray(payload.permissions) &&
@@ -43,6 +44,40 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
         payload.permissions.every((p) => String(p).startsWith('discovery:')));
 
     if (isAgentToken) {
+      if (payload.agentId) {
+        const agent = await this.prisma.agent.findFirst({
+          where: { id: payload.agentId, tenantId: payload.tenantId },
+          include: { enrollment: true },
+        });
+        if (
+          !agent ||
+          !agent.enrollment ||
+          agent.enrollment.tenantId !== payload.tenantId ||
+          agent.enrollment.revokedAt ||
+          !payload.jti ||
+          agent.enrollment.tokenJti !== payload.jti
+        ) {
+          throw new UnauthorizedException('Agent enrollment is invalid or revoked');
+        }
+        await this.prisma.agentEnrollment.update({
+          where: { id: agent.enrollment.id },
+          data: { lastUsedAt: new Date() },
+        });
+        return {
+          sub: payload.sub,
+          email: payload.email,
+          tenantId: payload.tenantId,
+          role: 'agent',
+          permissions: (payload.permissions?.length
+            ? payload.permissions
+            : ['discovery:ingest', 'discovery:heartbeat']) as string[],
+          isSuperAdmin: false,
+          isAgent: true,
+          agentId: agent.id,
+          enrollmentId: agent.enrollment.id,
+        };
+      }
+
       let user = null;
       if (payload.sub && payload.sub !== 'agent-session') {
         const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;

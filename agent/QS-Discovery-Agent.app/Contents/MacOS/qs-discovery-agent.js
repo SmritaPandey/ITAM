@@ -57,7 +57,6 @@ const SILENT_MODE = args.includes('--silent') || process.env.QS_AGENT_SILENT ===
 
 let tokenFromFile = '';
 let configEmail = '';
-let configPassword = '';
 let updatePublicKey = (process.env.QS_AGENT_UPDATE_PUBLIC_KEY || '').replace(/\\n/g, '\n');
 let agentId = ''; // Declared early for config loading
 const configPath = path.join(__dirname, 'config.json');
@@ -77,9 +76,13 @@ if (fs.existsSync(configPath)) {
     if (config.server) SERVER = config.server;
     if (config.token) tokenFromFile = config.token;
     if (config.email) configEmail = config.email;
-    if (config.password) configPassword = config.password;
     if (config.agentId) agentId = config.agentId;
     if (config.updatePublicKey) updatePublicKey = String(config.updatePublicKey).replace(/\\n/g, '\n');
+    if (Object.prototype.hasOwnProperty.call(config, 'password')) {
+      delete config.password;
+      fs.writeFileSync(configPath, JSON.stringify(config, null, 2), 'utf8');
+      log('security', 'Removed legacy persisted password from config.json');
+    }
     log('info', '📦 Loaded local config.json successfully');
     try { if (process.platform !== 'win32') fs.chmodSync(configPath, 0o600); } catch {}
   } catch (e) {
@@ -140,9 +143,8 @@ function verifyUpdateArtifact(content, expectedChecksum, signature) {
   if (!valid) throw new Error('Update signature verification failed');
 }
 
-// Merge credentials: CLI args > config.json > env vars
+// Credentials are accepted only from CLI/environment and are never persisted.
 if (!USER && configEmail) USER = configEmail;
-if (!PASS && configPassword) PASS = configPassword;
 
 if (!tokenFromFile && (!USER || !PASS)) {
   log('error', '❌ Usage: node qs-discovery-agent.js --server http://SERVER:4100 --user EMAIL --pass PASSWORD');
@@ -151,9 +153,26 @@ if (!tokenFromFile && (!USER || !PASS)) {
 
 let accessToken = '';
 
+function isPrivateOrLoopbackHost(hostname) {
+  const host = hostname.replace(/^\[|\]$/g, '').toLowerCase();
+  if (host === 'localhost' || host === '::1' || host === '0:0:0:0:0:0:0:1') return true;
+  const parts = host.split('.').map(Number);
+  if (parts.length !== 4 || parts.some((part) => !Number.isInteger(part) || part < 0 || part > 255)) return false;
+  return parts[0] === 10 ||
+    parts[0] === 127 ||
+    (parts[0] === 192 && parts[1] === 168) ||
+    (parts[0] === 172 && parts[1] >= 16 && parts[1] <= 31);
+}
+
 if (process.argv.includes('--insecure')) {
+  let serverHost = '';
+  try { serverHost = new URL(SERVER).hostname; } catch {}
+  if (process.env.NODE_ENV === 'production' || !isPrivateOrLoopbackHost(serverHost)) {
+    log('error', '--insecure is allowed only for localhost/RFC1918 servers outside production');
+    process.exit(1);
+  }
   process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
-  log('warn', '⚠️  TLS verification disabled (--insecure flag). Do NOT use in production.');
+  log('warn', '⚠️  TLS verification disabled for a private development server.');
 }
 
 const MAX_RETRIES = 3;
@@ -232,6 +251,7 @@ function saveToConfig(key, value) {
     if (fs.existsSync(configPath)) {
       config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
     }
+    delete config.password;
     config[key] = value;
     fs.writeFileSync(configPath, JSON.stringify(config, null, 2), 'utf8');
     try { if (process.platform !== 'win32') fs.chmodSync(configPath, 0o600); } catch {}
@@ -2163,10 +2183,22 @@ async function registerAgent() {
   log('info', `📡 Registering agent: ${body.hostname} (${body.ipAddress})...`);
   const res = await request('POST', '/discovery/agents/register', body);
 
-  if (res.status === 200 || res.status === 201) {
-    agentId = res.data.id;
+  const applyEnrollment = (response, suffix = '') => {
+    agentId = response.data.id;
     saveToConfig('agentId', agentId);
-    log('success', `Agent registered successfully. ID: ${agentId}`);
+    if (response.data.agentToken) {
+      accessToken = response.data.agentToken;
+      tokenFromFile = accessToken;
+      saveTokenToConfig(accessToken);
+    }
+    if (response.data.enrollmentSecret) {
+      saveToConfig('enrollmentSecret', response.data.enrollmentSecret);
+    }
+    log('success', `Agent registered successfully${suffix}. ID: ${agentId}`);
+  };
+
+  if (res.status === 200 || res.status === 201) {
+    applyEnrollment(res);
     return true;
   }
 
@@ -2178,9 +2210,7 @@ async function registerAgent() {
       // Re-build body since accessToken might have changed
       const retryRes = await request('POST', '/discovery/agents/register', body);
       if (retryRes.status === 200 || retryRes.status === 201) {
-        agentId = retryRes.data.id;
-        saveToConfig('agentId', agentId);
-        log('success', `Agent registered successfully after re-auth. ID: ${agentId}`);
+        applyEnrollment(retryRes, ' after re-auth');
         return true;
       }
       log('error', `Registration retry failed (${retryRes.status}): ${retryRes.data.message || retryRes.data}`);
@@ -2273,7 +2303,13 @@ async function sendHeartbeat() {
   const fimChanges = checkFIM();
   const heartbeatPayload = { systemInfo, version: VERSION, fim: fimChanges };
   try {
-    const res = await request('POST', `/discovery/agents/${agentId}/heartbeat`, heartbeatPayload);
+    let res = await request('POST', `/discovery/agents/${agentId}/heartbeat`, heartbeatPayload);
+    if (res.status === 401) {
+      log('info', '🔑 Heartbeat returned 401 — re-authenticating once...');
+      if (await loginWithCredentials()) {
+        res = await request('POST', `/discovery/agents/${agentId}/heartbeat`, heartbeatPayload);
+      }
+    }
     if (res.status === 200 || res.status === 201) {
       await drainBuffer();
       const mem = systemInfo.hardware;
@@ -3049,14 +3085,7 @@ async function sendHeartbeat() {
         } catch (e) { log('error', `Auto-update failed: ${e.message}`); }
       }
     } else if (res.status === 401) {
-      log('info', '🔑 Token expired, re-authenticating...');
-      const oldToken = accessToken;
-      const loggedIn = await login();
-      if (loggedIn && accessToken !== oldToken) {
-        await sendHeartbeat();
-      } else {
-        log('error', '❌ Re-authentication failed: Pairing token is invalid or expired. Please re-pair your agent via the UI.');
-      }
+      log('error', '❌ Re-authentication failed. Please re-pair the agent; no password is stored on disk.');
     } else {
       log('info', `Heartbeat response status: ${res.status}`);
     }

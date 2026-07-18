@@ -25,7 +25,9 @@
     "db:generate": "npx prisma generate",
     "db:push": "npx prisma db push",
     "agent:sign": "node scripts/sign-agent-release.mjs",
-    "agent:sign:verify": "node scripts/verify-agent-release-signing.mjs"
+    "agent:sign:verify": "node scripts/verify-agent-release-signing.mjs",
+    "platform:sign": "node scripts/sign-platform-release.mjs",
+    "platform:sign:verify": "node scripts/verify-platform-release-signing.mjs"
   },
   "prisma": {
     "seed": "ts-node prisma/seed.ts"
@@ -44,6 +46,7 @@
     "@nestjs/throttler": "^6.5.0",
     "@nestjs/websockets": "^11.1.19",
     "@prisma/client": "^6.19.3",
+    "@socket.io/redis-adapter": "^8.3.0",
     "adm-zip": "^0.6.0",
     "bcryptjs": "^3.0.3",
     "bullmq": "^5.80.2",

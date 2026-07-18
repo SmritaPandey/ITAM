@@ -1,0 +1,20 @@
+[Unit]
+Description=QS Assets appliance (docker compose stack)
+Documentation=file:/opt/qsassets/docker-compose.appliance.yml
+Requires=docker.service
+After=docker.service network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+WorkingDirectory=/opt/qsassets
+# Env file is root-only (600); compose reads it via --env-file, containers via env_file.
+ExecStart=/usr/bin/docker compose --env-file /etc/qsassets/qsassets.env -f /opt/qsassets/docker-compose.appliance.yml up -d --no-build
+ExecStop=/usr/bin/docker compose --env-file /etc/qsassets/qsassets.env -f /opt/qsassets/docker-compose.appliance.yml down
+ExecReload=/usr/bin/docker compose --env-file /etc/qsassets/qsassets.env -f /opt/qsassets/docker-compose.appliance.yml up -d --no-build --remove-orphans
+TimeoutStartSec=600
+TimeoutStopSec=120
+
+[Install]
+WantedBy=multi-user.target

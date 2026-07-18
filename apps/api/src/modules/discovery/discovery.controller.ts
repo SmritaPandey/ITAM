@@ -10,6 +10,7 @@ import {
   UseGuards,
   Request,
   Res,
+  ForbiddenException,
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -33,6 +34,7 @@ import {
   loadAgentSource,
   signAgentArtifact,
 } from '../../common/security/agent-update-crypto';
+import { ProductLicenseService } from '../product-license/product-license.service';
 
 @ApiTags('discovery')
 @ApiBearerAuth()
@@ -45,8 +47,14 @@ export class DiscoveryController {
     private credentialVault: CredentialVaultService,
     private authService: AuthService,
     private adSyncService: AdSyncService,
+    private productLicense: ProductLicenseService,
   ) {}
 
+  private assertAgentIdentity(user: any, agentId: string) {
+    if (user?.agentId && user.agentId !== agentId) {
+      throw new ForbiddenException('Agent token is bound to a different agent');
+    }
+  }
 
   // ─── Subnet Detection ────────────────────────────────────────
 
@@ -295,7 +303,7 @@ export class DiscoveryController {
       'Download the lightweight Node.js discovery agent as a zip package',
   })
   async downloadAgent(@Request() req: any, @Res() res: any) {
-    const { serverUrl, agentToken, userEmail } = this.buildAgentDownloadContext(req);
+    const { serverUrl, agentToken, userEmail } = await this.buildAgentDownloadContext(req);
 
     const buffer = this.discoveryService.getAgentZipPackage(
       serverUrl,
@@ -317,7 +325,7 @@ export class DiscoveryController {
       'Download Desktop App package (Electron tray wrapper sources + paired agent config)',
   })
   async downloadDesktopApp(@Request() req: any, @Res() res: any) {
-    const { serverUrl, agentToken, userEmail } = this.buildAgentDownloadContext(req);
+    const { serverUrl, agentToken, userEmail } = await this.buildAgentDownloadContext(req);
     const buffer = this.discoveryService.getDesktopAppPackage(serverUrl, agentToken, userEmail);
     res.set({
       'Content-Type': 'application/zip',
@@ -333,7 +341,7 @@ export class DiscoveryController {
     summary: 'Download OS service installer package (systemd / launchd / Windows service scripts)',
   })
   async downloadServiceInstaller(@Request() req: any, @Res() res: any) {
-    const { serverUrl, agentToken, userEmail } = this.buildAgentDownloadContext(req);
+    const { serverUrl, agentToken, userEmail } = await this.buildAgentDownloadContext(req);
     const buffer = this.discoveryService.getServiceInstallerPackage(serverUrl, agentToken, userEmail);
     res.set({
       'Content-Type': 'application/zip',
@@ -355,7 +363,8 @@ export class DiscoveryController {
     };
   }
 
-  private buildAgentDownloadContext(req: any) {
+  private async buildAgentDownloadContext(req: any) {
+    await this.productLicense.assertOperationalLicense();
     const configured =
       process.env.API_PUBLIC_URL ||
       process.env.OAUTH_CALLBACK_URL ||
@@ -391,6 +400,13 @@ export class DiscoveryController {
     return this.discoveryService.deleteAgent(id, req.user.tenantId);
   }
 
+  @Post('agents/:id/revoke-token')
+  @Roles('Tenant Admin')
+  @ApiOperation({ summary: 'Revoke the current token enrollment for an agent' })
+  async revokeAgentToken(@Request() req: any, @Param('id') id: string) {
+    return this.discoveryService.revokeAgentToken(id, req.user.tenantId);
+  }
+
   @Throttle({ long: { limit: 20, ttl: 60000 } })
   @Post('agents/register')
   @Roles('Tenant Admin', 'IT Admin', 'agent')
@@ -399,6 +415,7 @@ export class DiscoveryController {
     @Request() req: any,
     @Body()
     body: {
+      id?: string;
       hostname: string;
       platform: string;
       agentVersion: string;
@@ -407,7 +424,17 @@ export class DiscoveryController {
       systemInfo?: any;
     },
   ) {
-    return this.discoveryService.registerAgent(req.user.tenantId, body);
+    await this.productLicense.assertOperationalLicense();
+    if (req.user.agentId) {
+      this.assertAgentIdentity(req.user, body.id || req.user.agentId);
+      body.id = req.user.agentId;
+    }
+    return this.discoveryService.registerAgent(
+      req.user.tenantId,
+      body,
+      req.user.email,
+      req.user.sub,
+    );
   }
 
   @Post('agents/deploy-remote')
@@ -427,6 +454,7 @@ export class DiscoveryController {
       password?: string;
     },
   ) {
+    await this.productLicense.assertOperationalLicense();
     return this.discoveryService.deployRemoteAgent(
       req.user.tenantId,
       req.user.sub,
@@ -462,6 +490,7 @@ export class DiscoveryController {
       method?: 'ssh' | 'winrm' | 'auto';
     },
   ) {
+    await this.productLicense.assertOperationalLicense();
     const results = await Promise.allSettled(
       body.targets.map((t) =>
         this.discoveryService.deployRemoteAgent(
@@ -512,6 +541,7 @@ export class DiscoveryController {
     @Param('id') id: string,
     @Body() body?: { systemInfo?: any },
   ) {
+    this.assertAgentIdentity(req.user, id);
     return this.discoveryService.agentHeartbeat(id, req.user.tenantId, body);
   }
 
@@ -527,6 +557,7 @@ export class DiscoveryController {
     @Param('agentId') agentId: string,
     @Body() body: { scriptId: string; parameters?: any },
   ) {
+    this.assertAgentIdentity(req.user, agentId);
     return this.discoveryService.queueScriptLibraryRun(
       req.user.tenantId,
       req.user.sub,
@@ -546,6 +577,7 @@ export class DiscoveryController {
     @Param('agentId') agentId: string,
     @Body() body: { path: string; maxBytes?: number },
   ) {
+    this.assertAgentIdentity(req.user, agentId);
     return this.discoveryService.queueFilePull(req.user.tenantId, agentId, body);
   }
 

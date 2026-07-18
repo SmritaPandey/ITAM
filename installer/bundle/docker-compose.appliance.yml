@@ -1,0 +1,175 @@
+# QS Assets — Linux appliance compose (single node, behind Caddy TLS)
+#
+# Installed to /opt/qsassets/docker-compose.appliance.yml by qsassets-install.sh.
+# Runtime env lives in /etc/qsassets/qsassets.env (chmod 600, never in the repo).
+#
+# Start (what the systemd unit runs):
+#   docker compose --env-file /etc/qsassets/qsassets.env \
+#     -f /opt/qsassets/docker-compose.appliance.yml up -d
+#
+# Images:
+#   - Offline bundle: images are preloaded with `docker load` by the installer.
+#     Uncomment `pull_policy: never` on api/web to guarantee no registry pulls.
+#   - Source build: set QSASSETS_SRC to the repo checkout (e.g. /opt/qsassets/src)
+#     and run `docker compose ... build`. The build contexts below resolve
+#     relative to QSASSETS_SRC.
+#
+# Networking / discovery:
+#   The api container publishes TCP 4100 for discovery agents and runs on the
+#   bridge network so Caddy can front it. This covers L3 discovery (ping/TCP/
+#   SNMP/SSH/WMI sweeps). Layer-2 discovery (ARP table sweeps of the local
+#   segment) requires the API to share the host network stack. To enable it,
+#   create /opt/qsassets/docker-compose.hostnet.yml with:
+#
+#     services:
+#       api:
+#         network_mode: host
+#         ports: !reset []
+#
+#   change DATABASE_URL/REDIS_URL in /etc/qsassets/qsassets.env to
+#   localhost:5433 / localhost:6379, publish postgres on 127.0.0.1:5433, and add
+#   `-f docker-compose.hostnet.yml` to the compose invocation (Caddy must then
+#   proxy /api* to host-gateway:4100).
+
+name: qsassets
+
+services:
+  postgres:
+    image: postgis/postgis:16-3.4
+    container_name: qsassets-db
+    restart: unless-stopped
+    # Not published to the host — reachable only on the compose network.
+    environment:
+      POSTGRES_DB: assetcommand
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?Set DB_PASSWORD in /etc/qsassets/qsassets.env}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./init-extensions.sql:/docker-entrypoint-initdb.d/init-extensions.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d assetcommand"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+
+  redis:
+    image: redis:7-alpine
+    container_name: qsassets-redis
+    restart: unless-stopped
+    # Loopback only — never exposed on the LAN.
+    ports:
+      - "127.0.0.1:6379:6379"
+    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+    deploy:
+      resources:
+        limits:
+          memory: 300M
+
+  api:
+    image: qsassets/api:${QSASSETS_VERSION:-latest}
+    # pull_policy: never   # uncomment for fully offline appliances (preloaded images)
+    build:
+      context: ${QSASSETS_SRC:-/opt/qsassets/src}/apps/api
+      dockerfile: Dockerfile
+    container_name: qsassets-api
+    restart: unless-stopped
+    # Published so discovery agents can reach TCP 4100 directly. L2 (ARP)
+    # discovery additionally needs the host-network profile described above.
+    ports:
+      - "4100:4100"
+    env_file:
+      - /etc/qsassets/qsassets.env
+    environment:
+      PORT: 4100
+      NODE_ENV: production
+      NODE_OPTIONS: "--max-old-space-size=768"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:4100/api/v1/health >/dev/null"]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+      start_period: 90s
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+
+  web:
+    image: qsassets/web:${QSASSETS_VERSION:-latest}
+    # pull_policy: never   # uncomment for fully offline appliances (preloaded images)
+    build:
+      context: ${QSASSETS_SRC:-/opt/qsassets/src}/apps/web
+      dockerfile: Dockerfile
+      args:
+        # Same-origin through Caddy: the browser calls /api/v1 on port 443.
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-/api/v1}
+    container_name: qsassets-web
+    restart: unless-stopped
+    # Not published — only reachable through Caddy.
+    depends_on:
+      api:
+        condition: service_started
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO /dev/null http://127.0.0.1:3100/"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+
+  caddy:
+    image: caddy:2-alpine
+    container_name: qsassets-caddy
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    environment:
+      # Set QSASSETS_DOMAIN in /etc/qsassets/qsassets.env for a real hostname
+      # + Let's Encrypt. Defaults to serving any host with an internal cert.
+      QSASSETS_SITE_ADDRESS: ${QSASSETS_SITE_ADDRESS:-:443}
+    depends_on:
+      web:
+        condition: service_started
+      api:
+        condition: service_started
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO /dev/null http://127.0.0.1:80/ || true"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+volumes:
+  pgdata:
+    driver: local
+  redisdata:
+    driver: local
+  caddy_data:
+    driver: local
+  caddy_config:
+    driver: local

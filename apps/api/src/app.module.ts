@@ -8,6 +8,8 @@ import { ApiThrottlerGuard } from './common/guards/api-throttler.guard';
 import { AuditLogInterceptor } from './common/interceptors/audit-log.interceptor';
 import { TenantRlsInterceptor } from './common/interceptors/tenant-rls.interceptor';
 import { SecurityMiddleware } from './common/middleware/security.middleware';
+import { validateEnv } from './config/env.validation';
+import { shouldRunCrons, shouldServeHttp } from './common/process-role';
 import { AuthModule } from './modules/auth/auth.module';
 import { UsersModule } from './modules/users/users.module';
 import { TenantsModule } from './modules/tenants/tenants.module';
@@ -53,11 +55,12 @@ import { CmdbModule } from './modules/cmdb/cmdb.module';
 import { ProductLicenseModule } from './modules/product-license/product-license.module';
 import { ModuleGuard } from './common/guards/module.guard';
 import { PrivacyModule } from './modules/privacy/privacy.module';
+import { PlatformUpdateModule } from './modules/platform-update/platform-update.module';
 
 @Module({
   imports: [
     // Config
-    ConfigModule.forRoot({ isGlobal: true }),
+    ConfigModule.forRoot({ isGlobal: true, validate: validateEnv }),
 
     // Rate limiting (High performance for enterprise dashboard)
     ThrottlerModule.forRoot([
@@ -66,8 +69,8 @@ import { PrivacyModule } from './modules/privacy/privacy.module';
       { name: 'long', ttl: 60000, limit: 6000 },    // 6000 requests per minute
     ]),
 
-    // Scheduled tasks (disabled via DISABLE_CRON_JOBS=true to save memory)
-    ...(process.env.DISABLE_CRON_JOBS === 'true' ? [] : [ScheduleModule.forRoot()]),
+    // Scheduled tasks (DISABLE_CRON_JOBS or PROCESS_ROLE=api|collector)
+    ...(shouldRunCrons() ? [ScheduleModule.forRoot()] : []),
 
     // Database
     PrismaModule,
@@ -80,6 +83,7 @@ import { PrivacyModule } from './modules/privacy/privacy.module';
 
     // Product entitlement (SaaS issue + on-prem activate)
     ProductLicenseModule,
+    PlatformUpdateModule,
 
     // Feature modules
     AuthModule,
@@ -125,7 +129,7 @@ import { PrivacyModule } from './modules/privacy/privacy.module';
     PrivacyModule,
 
     // Real-time WebSocket
-    WebSocketModule,
+    ...(shouldServeHttp() ? [WebSocketModule] : []),
 
     // Alerting & Notifications
     AlertsModule,

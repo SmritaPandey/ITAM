@@ -11,6 +11,7 @@ import { GlobalExceptionFilter } from './common/filters/global-exception.filter'
 import { PrismaExceptionFilter } from './common/filters/prisma-exception.filter';
 import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
 import { SanitizePipe } from './common/pipes/sanitize.pipe';
+import { getProcessRole, shouldServeHttp } from './common/process-role';
 
 async function bootstrap() {
   const logger = new Logger('Bootstrap');
@@ -116,9 +117,14 @@ async function bootstrap() {
   }
 
   const port = process.env.PORT || 4100;
-  await app.listen(port);
-  logger.log(`🚀 QS Asset Management API running on http://localhost:${port}`);
-  logger.log(`📚 API Docs at http://localhost:${port}/api/docs`);
+  if (shouldServeHttp()) {
+    await app.listen(port);
+    logger.log(`🚀 QS Asset Management API running on http://localhost:${port}`);
+    logger.log(`📚 API Docs at http://localhost:${port}/api/docs`);
+  } else {
+    await app.init();
+    logger.log(`QS Asset ${getProcessRole()} process initialized without an HTTP listener`);
+  }
 
   // Hard deadline so hung onModuleDestroy hooks cannot leave a zombie process
   // that still accepts HTTP after Prisma has disconnected (login hangs forever).

@@ -189,6 +189,11 @@ export default function SetupPage() {
               </div>
             </div>
 
+            <div style={{ marginBottom: 16, color: "#fbbf24", fontSize: 11, lineHeight: 1.5 }}>
+              <AlertTriangle size={12} style={{ marginRight: 5, verticalAlign: "text-bottom" }} />
+              On-prem installs without an active product license start in restricted mode. Activate from Settings → Product License after setup.
+            </div>
+
             <button type="submit" disabled={submitting}
               style={{
                 width: "100%", padding: "12px 20px", borderRadius: 10, border: "none",

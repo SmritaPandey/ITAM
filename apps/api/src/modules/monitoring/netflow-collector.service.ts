@@ -1,6 +1,7 @@
 import { Injectable, Logger, OnModuleInit, OnModuleDestroy } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { PrismaService } from '../../common/database/prisma.service';
+import { shouldRunCollectors } from '../../common/process-role';
 import * as dgram from 'dgram';
 
 export interface ParsedFlow {
@@ -42,6 +43,11 @@ export class NetflowCollectorService implements OnModuleInit, OnModuleDestroy {
   constructor(private prisma: PrismaService) {}
 
   onModuleInit() {
+    if (!shouldRunCollectors()) {
+      this.logger.log('NetFlow collector skipped for this process role.');
+      return;
+    }
+
     if (process.env.ENABLE_NETFLOW === 'true') {
       this.start();
     } else {

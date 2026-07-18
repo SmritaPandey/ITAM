@@ -14,6 +14,7 @@ DIST_DIR="${SCRIPT_DIR}/dist"
 BUILD_ROOT="${DIST_DIR}/${PKG_NAME}_${VERSION}_${ARCH}"
 OPT_DIR="${BUILD_ROOT}/opt/qs-discovery-agent"
 UNIT_DIR="${BUILD_ROOT}/lib/systemd/system"
+LOGROTATE_DIR="${BUILD_ROOT}/etc/logrotate.d"
 DEBIAN_DIR="${BUILD_ROOT}/DEBIAN"
 
 echo ""
@@ -23,7 +24,7 @@ echo "  ╚═══════════════════════
 echo ""
 
 rm -rf "${BUILD_ROOT}"
-mkdir -p "${OPT_DIR}" "${UNIT_DIR}" "${DEBIAN_DIR}" \
+mkdir -p "${OPT_DIR}" "${UNIT_DIR}" "${LOGROTATE_DIR}" "${DEBIAN_DIR}" \
   "${BUILD_ROOT}/var/log/qs-discovery-agent"
 
 cp "${AGENT_ROOT}/qs-discovery-agent.js" "${OPT_DIR}/"
@@ -53,6 +54,7 @@ EOF
 chmod +x "${OPT_DIR}/run-agent-service.sh"
 
 cp "${SCRIPT_DIR}/qs-discovery-agent.service" "${UNIT_DIR}/qs-discovery-agent.service"
+cp "${SCRIPT_DIR}/qs-discovery-agent.logrotate" "${LOGROTATE_DIR}/qs-discovery-agent"
 
 cat > "${DEBIAN_DIR}/control" << EOF
 Package: ${PKG_NAME}
@@ -100,6 +102,7 @@ if command -v dpkg-deb >/dev/null 2>&1; then
   # Ensure ownership-friendly permissions for packaging
   find "${BUILD_ROOT}" -type d -exec chmod 755 {} \;
   chmod 644 "${UNIT_DIR}/qs-discovery-agent.service"
+  chmod 644 "${LOGROTATE_DIR}/qs-discovery-agent"
   dpkg-deb --build --root-owner-group "${BUILD_ROOT}" "${DEB_OUT}"
   echo ""
   echo "  ✅ Built: ${DEB_OUT}"

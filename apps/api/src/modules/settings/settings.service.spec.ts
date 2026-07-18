@@ -19,7 +19,10 @@ describe('SettingsService secret redaction', () => {
       update: jest.fn().mockResolvedValue(tenant),
     },
   };
-  const service = new SettingsService(prisma);
+  const productLicense: any = {
+    getResolvedModulesAsync: jest.fn().mockResolvedValue(['DASHBOARD', 'SETTINGS']),
+  };
+  const service = new SettingsService(prisma, productLicense);
 
   it('never returns plaintext settings secrets', async () => {
     const result = await service.getSettings('tenant-1');

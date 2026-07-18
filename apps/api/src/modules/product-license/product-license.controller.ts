@@ -46,7 +46,27 @@ export class ProductLicenseController {
   @Roles('Tenant Admin', 'IT Admin', 'Platform Owner')
   @ApiOperation({ summary: 'Current product entitlement status' })
   status() {
-    return this.service.getEffectiveEntitlement();
+    return this.service.getInstanceStatus();
+  }
+
+  @Post('instance/challenge')
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('Tenant Admin', 'Platform Owner')
+  @ApiOperation({ summary: 'Create a short-lived air-gap activation challenge' })
+  challenge() {
+    return this.service.createInstanceChallenge();
+  }
+
+  @Post('instance/activate-response')
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('Tenant Admin', 'Platform Owner')
+  @ApiOperation({ summary: 'Apply a signed response to the pending air-gap challenge' })
+  activateResponse(@Body() body: { licenseFile?: string; licenseBlob?: string; content?: string }) {
+    const raw = body.content || body.licenseBlob || body.licenseFile;
+    if (!raw) throw new BadRequestException('licenseFile or licenseBlob required');
+    return this.service.activateInstanceResponse(raw);
   }
 
   @Post('instance/upload')
@@ -77,6 +97,17 @@ export class ProductLicenseController {
   }
 
   // ─── SuperAdmin ─────────────────────────────────────────────
+  @Post('challenge-activate')
+  @ApiBearerAuth()
+  @UseGuards(AuthGuard('jwt'), SuperAdminGuard)
+  @ApiOperation({ summary: 'Sign an offline activation response for an instance challenge' })
+  challengeActivate(@Body() body: { licenseKey: string; challenge: any }) {
+    if (!body?.licenseKey || !body?.challenge) {
+      throw new BadRequestException('licenseKey and challenge required');
+    }
+    return this.service.activateChallenge(body);
+  }
+
   @Get()
   @ApiBearerAuth()
   @UseGuards(AuthGuard('jwt'), SuperAdminGuard)

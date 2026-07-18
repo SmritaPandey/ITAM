@@ -1,6 +1,7 @@
 import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 import { Queue, Worker, JobsOptions, Job } from 'bullmq';
 import IORedis from 'ioredis';
+import { shouldRunQueueWorkers } from '../process-role';
 
 export type JobName =
   | 'scan.run'
@@ -59,7 +60,7 @@ export class JobQueueService implements OnModuleInit, OnModuleDestroy {
 
   registerHandler(name: JobName, handler: (job: Job) => Promise<unknown>) {
     this.handlers.set(name, handler);
-    if (this.enabled) this.ensureWorker(name);
+    if (this.enabled && shouldRunQueueWorkers()) this.ensureWorker(name);
   }
 
   async enqueue(name: JobName, data: Record<string, unknown>, opts?: JobsOptions) {

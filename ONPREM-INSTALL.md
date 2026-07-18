@@ -1,5 +1,12 @@
 # QS Asset — On-Premises Deployment & Operations Manual
 
+> **Recommended: use the Linux appliance installer.** For new on-prem
+> deployments, follow [docs/APPLIANCE-INSTALL.md](docs/APPLIANCE-INSTALL.md) —
+> a verified bundle with a one-command installer (`qsassets-install.sh`),
+> systemd management, TLS via Caddy, and a `qsassets` CLI for
+> backup/restore/upgrade. The manual options below remain for custom and
+> bare-metal setups.
+
 This manual provides detailed, step-by-step instructions to orchestrate, configure, and maintain a private, secure **on-premises deployment** of the QS Asset Management & Network Discovery platform.
 
 ## Product licensing (required for on-prem)

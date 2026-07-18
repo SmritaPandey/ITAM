@@ -1,6 +1,0 @@
-{
-  "server": "http://localhost:4100",
-  "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJiODQ2N2Y5My1hYTRiLTRhNDktYjE3Ni0xYWQyNmJlNTg0ZjMiLCJlbWFpbCI6ImFkbWluQGFjbWUuY29tIiwidGVuYW50SWQiOiIzOTNlMmI0Yy1mNzIzLTQwOWYtYWYwYi00YjhiOWMzZWI2NzQiLCJyb2xlIjoiVGVuYW50IEFkbWluIiwicGVybWlzc2lvbnMiOlsiKiJdLCJpc1N1cGVyQWRtaW4iOmZhbHNlLCJpYXQiOjE3ODA1NjkwNDAsImV4cCI6MTc4MDU4MzQ0MH0.fxiq_L0EUKjKwjQUsPBBs6d2SDRec_PJj1jY6xodfO4",
-  "email": "admin@acme.com",
-  "password": "Admin@123"
-}

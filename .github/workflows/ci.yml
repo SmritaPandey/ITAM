@@ -22,9 +22,7 @@ jobs:
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: 'npm'
-          cache-dependency-path: |
-            apps/api/package-lock.json
-            apps/web/package-lock.json
+          cache-dependency-path: package-lock.json
 
       - name: Guard against committed agent secrets
         run: |
@@ -40,13 +38,8 @@ jobs:
           count=$(git ls-files '**/qs-discovery-agent.js' | wc -l | tr -d ' ')
           echo "Tracked agent script copies: $count"
 
-      - name: Install API dependencies
+      - name: Install workspace dependencies
         run: npm ci
-        working-directory: apps/api
-
-      - name: Install Web dependencies
-        run: npm ci
-        working-directory: apps/web
 
       - name: Lint API
         continue-on-error: true
@@ -130,7 +123,7 @@ jobs:
             --config p/ci --error --quiet /src || true
 
       - name: Trivy filesystem scan
-        uses: aquasecurity/trivy-action@0.28.0
+        uses: aquasecurity/trivy-action@v0.36.0
         with:
           scan-type: fs
           scan-ref: .
@@ -190,11 +183,10 @@ jobs:
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: 'npm'
-          cache-dependency-path: apps/api/package-lock.json
+          cache-dependency-path: package-lock.json
 
-      - name: Install dependencies
+      - name: Install workspace dependencies
         run: npm ci
-        working-directory: apps/api
 
       - name: Generate Prisma Client
         run: npx prisma generate
@@ -232,21 +224,19 @@ jobs:
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: 'npm'
-          cache-dependency-path: |
-            apps/api/package-lock.json
-            apps/web/package-lock.json
+          cache-dependency-path: package-lock.json
 
-      - name: Install & Build API
+      - name: Install workspace dependencies
+        run: npm ci
+
+      - name: Build API
         run: |
-          npm ci
           npx prisma generate
           npm run build
         working-directory: apps/api
 
-      - name: Install & Build Web
-        run: |
-          npm ci
-          npm run build
+      - name: Build Web
+        run: npm run build
         working-directory: apps/web
         env:
           NEXT_PUBLIC_API_URL: https://api-production-fe27.up.railway.app/api/v1

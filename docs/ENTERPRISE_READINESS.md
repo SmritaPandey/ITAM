@@ -22,13 +22,20 @@ Present: `DEPLOY.md`, `ONPREM-INSTALL.md`, `docs/APPLIANCE-INSTALL.md`,
 `docs/BCP_DR_RUNBOOK.md`, `docs/FEATURE_STATUS_MATRIX.md`,
 `docs/LIVE_INTEGRATION_BLOCKERS.md`, OpenAPI (Swagger) served by the API.
 
-Not yet written (needed for ISO/SOC audits): SRS, HLD/LLD, formal threat model
-(STRIDE), data classification, secure coding standard, incident response plan.
+Audit doc pack now in repo: `docs/THREAT_MODEL.md` (STRIDE),
+`docs/DATA_CLASSIFICATION.md`, `docs/SECURE_CODING_STANDARD.md`,
+`docs/INCIDENT_RESPONSE_PLAN.md`.
+Not yet written (needed for ISO/SOC audits): SRS, HLD/LLD.
 
 ## Phase 3 — Testing
 
-- Unit/acceptance: 219 Jest tests green in CI (`ci.yml` with PostGIS + Redis services).
-- Not yet: load testing (k6/JMeter), HA failover drills, chaos testing.
+- Unit/acceptance: 220 Jest tests green in CI (`ci.yml` with PostGIS + Redis services),
+  gated by a coverage-ratchet threshold (`coverageThreshold` in `apps/api/package.json`).
+- E2E smoke in CI: boots the full API against the CI database and asserts
+  health endpoints + 401 on tenant/owner/agent APIs (`apps/api/test/app.e2e-spec.ts`).
+- Load testing: k6 scripts in `scripts/load/` (prod-safe smoke + staged
+  10/100/1000-VU login-load with SLO thresholds). Runs on demand, not in CI.
+- Not yet: HA failover drills, chaos testing.
   `docker-compose.ha.yml` + `PROCESS_ROLE` split exist and are unit-tested,
   but multi-node failover has not been exercised.
 
@@ -38,7 +45,9 @@ In place: npm audit gating (high), SBOM (CycloneDX) per build, committed-secret
 CI guard, signed agent + platform release artifacts (Ed25519), CI job
 `security-scans` (Gitleaks + Semgrep + Trivy FS + Checkov on Docker/compose),
 non-root container users (`qsasset` UID 10001).
-Not yet: DAST (ZAP) against staging, image-layer cosign, independent VAPT.
+DAST: weekly OWASP ZAP passive baseline against production web + API
+(`.github/workflows/dast-baseline.yml`, findings filed as GitHub issues).
+Not yet: authenticated/active DAST against staging, image-layer cosign, independent VAPT.
 VAPT requires a CERT-In empanelled auditor — cannot be self-performed.
 
 ## Phases 5–6 — Certifications & compliance

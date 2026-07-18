@@ -1,0 +1,35 @@
+name: DAST Baseline (OWASP ZAP)
+
+# Passive baseline scan only — no active attacks. Safe against production.
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "0 2 * * 1" # weekly, Monday 02:00 UTC
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  zap-web:
+    name: ZAP baseline — web
+    runs-on: ubuntu-latest
+    steps:
+      - name: ZAP baseline scan (marketing + app shell)
+        uses: zaproxy/action-baseline@v0.14.0
+        with:
+          target: "https://www.qsasset.com"
+          allow_issue_writing: true
+          artifact_name: zap-web-report
+          cmd_options: "-a"
+
+  zap-api:
+    name: ZAP baseline — API
+    runs-on: ubuntu-latest
+    steps:
+      - name: ZAP baseline scan (API surface)
+        uses: zaproxy/action-baseline@v0.14.0
+        with:
+          target: "https://api-production-fe27.up.railway.app/api/v1/health"
+          allow_issue_writing: true
+          artifact_name: zap-api-report

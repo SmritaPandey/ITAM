@@ -41,6 +41,10 @@ jobs:
       - name: Install workspace dependencies
         run: npm ci
 
+      - name: Generate Prisma Client
+        run: npx prisma generate
+        working-directory: apps/api
+
       - name: Lint API
         continue-on-error: true
         run: npx eslint src --ext .ts --max-warnings 0
@@ -135,7 +139,7 @@ jobs:
         uses: bridgecrewio/checkov-action@v12
         with:
           directory: .
-          framework: dockerfile,docker_compose
+          framework: dockerfile
           soft_fail: true
           output_format: cli
 

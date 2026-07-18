@@ -35,10 +35,11 @@ Not yet written (needed for ISO/SOC audits): SRS, HLD/LLD, formal threat model
 ## Phase 4 — Security testing
 
 In place: npm audit gating (high), SBOM (CycloneDX) per build, committed-secret
-CI guard, signed agent + platform release artifacts (Ed25519).
-Not yet: SAST (Semgrep/Sonar), DAST (ZAP), container scan (Trivy), IaC scan
-(Checkov), independent VAPT. VAPT requires a CERT-In empanelled auditor —
-cannot be self-performed.
+CI guard, signed agent + platform release artifacts (Ed25519), CI job
+`security-scans` (Gitleaks + Semgrep + Trivy FS + Checkov on Docker/compose),
+non-root container users (`qsasset` UID 10001).
+Not yet: DAST (ZAP) against staging, image-layer cosign, independent VAPT.
+VAPT requires a CERT-In empanelled auditor — cannot be self-performed.
 
 ## Phases 5–6 — Certifications & compliance
 

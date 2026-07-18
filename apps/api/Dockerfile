@@ -32,17 +32,20 @@ RUN apk add --no-cache \
     openssh-client \
     net-snmp-tools \
     traceroute \
-    curl
+    curl \
+    && addgroup -g 10001 qsasset \
+    && adduser -u 10001 -G qsasset -h /app -D -s /sbin/nologin qsasset
 
 # Copy built app + prisma + seed + tsconfig (for ts-node seed)
-COPY --from=builder /app/dist ./dist
-COPY --from=builder /app/node_modules ./node_modules
-COPY --from=builder /app/prisma ./prisma
-COPY --from=builder /app/package.json ./
-COPY --from=builder /app/tsconfig.json ./
-COPY --from=builder /app/agent ./agent
-COPY docker-entrypoint.sh /app/docker-entrypoint.sh
+COPY --from=builder --chown=qsasset:qsasset /app/dist ./dist
+COPY --from=builder --chown=qsasset:qsasset /app/node_modules ./node_modules
+COPY --from=builder --chown=qsasset:qsasset /app/prisma ./prisma
+COPY --from=builder --chown=qsasset:qsasset /app/package.json ./
+COPY --from=builder --chown=qsasset:qsasset /app/tsconfig.json ./
+COPY --from=builder --chown=qsasset:qsasset /app/agent ./agent
+COPY --chown=qsasset:qsasset docker-entrypoint.sh /app/docker-entrypoint.sh
 RUN chmod +x /app/docker-entrypoint.sh
 
+USER qsasset
 EXPOSE ${PORT:-4100}
 ENTRYPOINT ["/app/docker-entrypoint.sh"]

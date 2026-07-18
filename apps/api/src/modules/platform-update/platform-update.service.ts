@@ -18,6 +18,42 @@ import {
 export class PlatformUpdateService {
   private readonly logger = new Logger(PlatformUpdateService.name);
 
+  /** SaaS-safe owner view of release-channel / signing readiness. */
+  async ownerStatus() {
+    const platformPublic = Boolean(getPlatformUpdatePublicKeyPem());
+    const platformPrivate = Boolean(process.env.PLATFORM_UPDATE_PRIVATE_KEY?.trim());
+    const agentPublic = Boolean(process.env.AGENT_UPDATE_PUBLIC_KEY?.trim());
+    const agentPrivate = Boolean(process.env.AGENT_UPDATE_PRIVATE_KEY?.trim());
+    const licensePublic = Boolean(process.env.LICENSE_PUBLIC_KEY?.trim());
+    const licensePrivate = Boolean(process.env.LICENSE_PRIVATE_KEY?.trim());
+    const onPrem = isOnPrem();
+    let onPremStatus: Awaited<ReturnType<PlatformUpdateService['status']>> | null = null;
+    if (onPrem) {
+      try {
+        onPremStatus = await this.status();
+      } catch {
+        onPremStatus = null;
+      }
+    }
+    return {
+      deploymentMode: onPrem ? 'onprem' : 'saas',
+      currentVersion: process.env.PLATFORM_VERSION || process.env.npm_package_version || 'unknown',
+      channels: {
+        productLicense: { publicKeyConfigured: licensePublic, privateKeyConfigured: licensePrivate },
+        agentUpdate: { publicKeyConfigured: agentPublic, privateKeyConfigured: agentPrivate },
+        platformUpdate: { publicKeyConfigured: platformPublic, privateKeyConfigured: platformPrivate },
+      },
+      onPrem: onPremStatus,
+      releaseDocs: {
+        applianceInstall: '/docs/APPLIANCE-INSTALL.md',
+        githubReleases: 'https://github.com/SmritaPandey/ITAM/releases',
+      },
+      note: onPrem
+        ? 'On-prem updates are applied via qsassets upgrade / scripts/onprem-updater.sh after verifying the signed manifest.'
+        : 'SaaS hosts do not auto-update via the platform channel. Use this view to confirm signing keys and issue on-prem licenses.',
+    };
+  }
+
   async latest(): Promise<PlatformUpdateManifest> {
     this.assertOnPrem();
     const manifest = await this.loadManifest();

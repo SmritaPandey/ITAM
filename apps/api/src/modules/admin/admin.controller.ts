@@ -147,6 +147,26 @@ export class AdminController {
     return this.service.getSystemHealth();
   }
 
+  @Get('agent-enrollments')
+  @ApiOperation({ summary: 'List agent enrollments across tenants' })
+  listAgentEnrollments(
+    @Query('limit') limit?: number,
+    @Query('offset') offset?: number,
+    @Query('tenantId') tenantId?: string,
+  ) {
+    return this.service.listAgentEnrollments({
+      limit: limit ? parseInt(String(limit)) : undefined,
+      offset: offset ? parseInt(String(offset)) : undefined,
+      tenantId,
+    });
+  }
+
+  @Post('agent-enrollments/:id/revoke')
+  @ApiOperation({ summary: 'Revoke an agent enrollment (forces re-auth)' })
+  revokeAgentEnrollment(@Param('id') id: string) {
+    return this.service.revokeAgentEnrollment(id);
+  }
+
   // ─── Dynamic Pricing Config ──────────────────────────────────
   @Get('pricing')
   @ApiOperation({ summary: 'Get the active system-wide pricing configuration' })

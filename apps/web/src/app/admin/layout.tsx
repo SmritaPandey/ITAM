@@ -2,8 +2,9 @@
 import { useEffect, useState } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import {
-  LayoutDashboard, Building2, Users, MessageSquare, CreditCard, Shield,
-  Activity, LogOut, ChevronRight, ArrowLeft, Sun, Moon, Eye, DollarSign, Key,
+  LayoutDashboard, Building2, Users, MessageSquare, CreditCard,
+  Activity, LogOut, ArrowLeft, Sun, Moon, Eye, DollarSign, Key,
+  Rocket, Cpu,
 } from "lucide-react";
 import { LogoIcon } from "@/components/Logo";
 import { useTheme } from "@/components/ThemeProvider";
@@ -12,6 +13,8 @@ const adminNav = [
   { name: "Dashboard", icon: LayoutDashboard, href: "/admin" },
   { name: "Tenants", icon: Building2, href: "/admin/tenants" },
   { name: "Licenses", icon: Key, href: "/admin/licenses" },
+  { name: "Updates", icon: Rocket, href: "/admin/updates" },
+  { name: "Enrollments", icon: Cpu, href: "/admin/enrollments" },
   { name: "Users", icon: Users, href: "/admin/users" },
   { name: "Support Inbox", icon: MessageSquare, href: "/admin/support" },
   { name: "Payments", icon: CreditCard, href: "/admin/payments" },

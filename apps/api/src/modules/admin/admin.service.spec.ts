@@ -23,6 +23,11 @@ describe('AdminService operational readiness', () => {
         .fn()
         .mockResolvedValueOnce([{ ok: 1 }])
         .mockResolvedValueOnce([{ size: '10 MB' }]),
+      agent: { count: jest.fn().mockResolvedValue(3) },
+      agentEnrollment: {
+        count: jest.fn().mockResolvedValueOnce(2).mockResolvedValueOnce(1),
+      },
+      productLicense: { count: jest.fn().mockResolvedValue(4) },
     };
     const service = new AdminService(prisma);
 

@@ -49,7 +49,8 @@ jobs:
         working-directory: apps/web
 
       - name: Lint API
-        run: npx eslint src --ext .ts --max-warnings 0 || true
+        continue-on-error: true
+        run: npx eslint src --ext .ts --max-warnings 0
         working-directory: apps/api
 
       - name: Type Check API
@@ -57,7 +58,7 @@ jobs:
         working-directory: apps/api
 
       - name: Type Check Web
-        run: npx tsc --noEmit || true
+        run: npx tsc --noEmit
         working-directory: apps/web
 
   # ─── Supply Chain Security ───────────────────────────────────
@@ -106,6 +107,44 @@ jobs:
 
       - name: Audit Web production dependencies
         run: npm audit --omit=dev --audit-level=high --workspace=apps/web
+
+  # ─── SAST / Secrets / Container / IaC ─────────────────────────
+  security-scans:
+    name: SAST Secrets Container IaC
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Gitleaks secrets scan (working tree)
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITLEAKS_ENABLE_COMMENTS: "false"
+        continue-on-error: true
+
+      - name: Semgrep SAST
+        run: |
+          docker run --rm -v "$PWD:/src" returntocorp/semgrep semgrep scan \
+            --config p/ci --error --quiet /src || true
+
+      - name: Trivy filesystem scan
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          scan-type: fs
+          scan-ref: .
+          severity: CRITICAL,HIGH
+          exit-code: "0"
+          ignore-unfixed: true
+
+      - name: Checkov IaC scan (compose + Dockerfiles)
+        uses: bridgecrewio/checkov-action@v12
+        with:
+          directory: .
+          framework: dockerfile,docker_compose
+          soft_fail: true
+          output_format: cli
 
   # ─── Unit Tests ─────────────────────────────────────────────
   test:

@@ -15,11 +15,15 @@ FROM node:20-alpine AS runner
 WORKDIR /app
 ENV NODE_ENV=production
 
-# Standalone output path (monorepo: .next/standalone/apps/web/)
-COPY --from=builder /app/.next/standalone ./
-COPY --from=builder /app/.next/static ./apps/web/.next/static
-COPY --from=builder /app/public ./apps/web/public
+RUN addgroup -g 10001 qsasset \
+  && adduser -u 10001 -G qsasset -h /app -D -s /sbin/nologin qsasset
 
+# Standalone output path (monorepo: .next/standalone/apps/web/)
+COPY --from=builder --chown=qsasset:qsasset /app/.next/standalone ./
+COPY --from=builder --chown=qsasset:qsasset /app/.next/static ./apps/web/.next/static
+COPY --from=builder --chown=qsasset:qsasset /app/public ./apps/web/public
+
+USER qsasset
 EXPOSE 3100
 ENV PORT=3100
 ENV HOSTNAME=0.0.0.0

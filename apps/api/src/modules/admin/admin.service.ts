@@ -570,6 +570,12 @@ export class AdminService {
     const dbSize = await this.prisma.$queryRaw<any[]>`
       SELECT pg_size_pretty(pg_database_size(current_database())) AS size
     `;
+    const [agentCount, enrollmentActive, enrollmentRevoked, productLicenses] = await Promise.all([
+      this.prisma.agent.count(),
+      this.prisma.agentEnrollment.count({ where: { revokedAt: null } }),
+      this.prisma.agentEnrollment.count({ where: { revokedAt: { not: null } } }),
+      this.prisma.productLicense.count(),
+    ]);
 
     return {
       status: 'healthy',
@@ -588,6 +594,12 @@ export class AdminService {
         mode: process.env.DEPLOYMENT_MODE || 'saas',
         processRole: process.env.PROCESS_ROLE || 'all',
         version: process.env.PLATFORM_VERSION || process.env.npm_package_version || 'unknown',
+      },
+      fleet: {
+        agents: agentCount,
+        enrollmentsActive: enrollmentActive,
+        enrollmentsRevoked: enrollmentRevoked,
+        productLicenses,
       },
       operationalReadiness: {
         redis: Boolean(process.env.REDIS_URL),
@@ -608,6 +620,49 @@ export class AdminService {
         ),
       },
     };
+  }
+
+  async listAgentEnrollments(query?: { limit?: number; offset?: number; tenantId?: string }) {
+    const where: any = {};
+    if (query?.tenantId) where.tenantId = query.tenantId;
+    const [data, total] = await Promise.all([
+      this.prisma.agentEnrollment.findMany({
+        where,
+        orderBy: { createdAt: 'desc' },
+        take: query?.limit || 50,
+        skip: query?.offset || 0,
+        select: {
+          id: true,
+          tenantId: true,
+          tokenJti: true,
+          createdAt: true,
+          lastUsedAt: true,
+          revokedAt: true,
+          tenant: { select: { id: true, name: true, slug: true } },
+          agent: {
+            select: {
+              id: true,
+              hostname: true,
+              status: true,
+              lastHeartbeat: true,
+              ipAddress: true,
+            },
+          },
+        },
+      }),
+      this.prisma.agentEnrollment.count({ where }),
+    ]);
+    return { data, total };
+  }
+
+  async revokeAgentEnrollment(id: string) {
+    const row = await this.prisma.agentEnrollment.findUnique({ where: { id } });
+    if (!row) throw new NotFoundException('Enrollment not found');
+    if (row.revokedAt) return row;
+    return this.prisma.agentEnrollment.update({
+      where: { id },
+      data: { revokedAt: new Date() },
+    });
   }
 
   // ─── Dynamic Pricing Config ──────────────────────────────────

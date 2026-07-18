@@ -6,12 +6,21 @@ import { Database, Server, Cpu, HardDrive, Clock, RefreshCw, Shield, CheckCircle
 export default function SystemPage() {
   const [health, setHealth] = useState<any>(null);
   const [logs, setLogs] = useState<any>(null);
+  const [instance, setInstance] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [logsLoading, setLogsLoading] = useState(true);
 
   function loadHealth() {
     setLoading(true);
-    apiFetch("/admin/system").then(d => setHealth(d)).finally(() => setLoading(false));
+    Promise.all([
+      apiFetch("/admin/system"),
+      apiFetch("/product-licenses/instance/status").catch(() => null),
+    ])
+      .then(([h, i]) => {
+        setHealth(h);
+        setInstance(i);
+      })
+      .finally(() => setLoading(false));
   }
 
   function loadLogs() {
@@ -88,6 +97,33 @@ export default function SystemPage() {
               </div>
             ))}
           </div>
+
+          {(health.fleet || instance) && (
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 12, marginBottom: 16 }}>
+              {[
+                { label: "Agents", value: health.fleet?.agents ?? "—" },
+                { label: "Active enrollments", value: health.fleet?.enrollmentsActive ?? "—" },
+                { label: "Product licenses", value: health.fleet?.productLicenses ?? "—" },
+                { label: "Instance entitlement", value: instance?.status || instance?.deploymentMode || "—" },
+              ].map((item) => (
+                <div key={item.label} style={{ padding: 14, borderRadius: 12, border: "1px solid var(--border-primary)", background: "var(--bg-card)" }}>
+                  <div style={{ fontSize: 10, fontWeight: 700, color: "var(--text-tertiary)", textTransform: "uppercase", marginBottom: 6 }}>{item.label}</div>
+                  <div style={{ fontSize: 18, fontWeight: 800, color: "var(--text-primary)" }}>{item.value}</div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {instance && (
+            <div style={{ padding: 16, borderRadius: 12, background: "var(--bg-card)", border: "1px solid var(--border-primary)", marginBottom: 16, fontSize: 12, color: "var(--text-secondary)" }}>
+              <strong style={{ color: "var(--text-primary)" }}>Instance / license</strong>
+              <div style={{ marginTop: 6, fontFamily: "monospace", fontSize: 11 }}>
+                mode={instance.deploymentMode} · plan={instance.plan} · status={instance.status}
+                {instance.licenseKey ? ` · key=${instance.licenseKey}` : ""}
+                {instance.expiresAt ? ` · expires=${new Date(instance.expiresAt).toLocaleDateString()}` : ""}
+              </div>
+            </div>
+          )}
 
           <div style={{ padding: 18, borderRadius: 12, background: "var(--bg-card)", border: "1px solid var(--border-primary)", marginBottom: 24 }}>
             <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "flex-start", marginBottom: 14 }}>

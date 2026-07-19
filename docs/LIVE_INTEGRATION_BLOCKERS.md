@@ -13,7 +13,8 @@ Drill date: 2026-07-18. No customer secrets were available in-session; drills ar
 | Azure / GCP / AWS | Cloud credentials | Blocked | `cloud-connectors.service.ts` present |
 | SMTP report delivery | — | **Shipped** | Hostinger SMTP live on prod API (`support@neurqai.com`); test send verified 2026-07-19 |
 | IMAP ticket ingest | IMAP host + mailbox | Blocked | Requires `imapflow` + mailbox; see `/health/capabilities` |
-| Slack / Teams | Webhook URLs | In progress | Slack signup pending human captcha; Teams needs M365 tenant |
+| Slack | — | **Shipped** | Workspace `neurqai.slack.com` + incoming webhook live; SLACK channel configured in-app and test-verified 2026-07-19 |
+| Teams | M365 tenant + webhook URL | Blocked | Needs a Microsoft 365 tenant to create a Teams incoming webhook |
 | RADIUS CoA | Switch webhook or RADIUS secret | Blocked | Webhook proxy + agent firewall fallback |
 | Traccar GPS | Device + protocol endpoint | Blocked | Ingest endpoint present |
 | ONVIF / HLS | Camera + ffmpeg on API host | Blocked | Probe via `/health/capabilities` |

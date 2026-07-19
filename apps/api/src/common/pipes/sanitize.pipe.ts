@@ -17,6 +17,17 @@ export class SanitizePipe implements PipeTransform {
   }
 
   private sanitize(str: string): string {
+    // HTML-escaping a URL corrupts it (e.g. "/" → "&#x2F;"), breaking webhook
+    // URLs, SSO endpoints, etc. Valid http(s) URLs are stored verbatim; output
+    // encoding is the renderer's responsibility.
+    if (/^https?:\/\/\S+$/i.test(str)) {
+      try {
+        const url = new URL(str);
+        if (url.protocol === 'http:' || url.protocol === 'https:') return str;
+      } catch {
+        // not a parseable URL — fall through to escaping
+      }
+    }
     return str
       .replace(/&/g, '&amp;')
       .replace(/</g, '&lt;')

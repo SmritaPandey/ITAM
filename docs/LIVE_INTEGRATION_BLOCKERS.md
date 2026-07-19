@@ -20,7 +20,7 @@ Drill date: 2026-07-18. No customer secrets were available in-session; drills ar
 | NetFlow exporters | Lab exporter → collector port | Blocked | Collector + top-talkers UI present |
 | Meilisearch | — | **Shipped** | Railway Meilisearch service live; `MEILI_HOST`/`MEILI_MASTER_KEY` on prod API (2026-07-19) |
 | AI assistant | — | **Shipped** | Groq (`llama-3.3-70b-versatile`) live via `AI_*` vars on prod API (2026-07-19) |
-| NVD rate limits | Optional `NVD_API_KEY` | Requested | Key requested 2026-07-19; set `NVD_API_KEY` once activation email arrives |
+| NVD rate limits | — | **Shipped** | `NVD_API_KEY` activated + verified live, set on prod API 2026-07-19 |
 
 ## What was validated without external secrets
 - API Jest suite: 149 tests green (includes MFA/SSO unit flows, CVE→ticket, SLA, CSAT, geofence geometry, cron-parser).
